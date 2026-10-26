@@ -40,6 +40,15 @@ _STUB = 0x256A0E0
 _CALLER = 0x249A01F
 _INIT = 0x2569EF0
 
+# Developer console (see the console entries in PATCHES)
+_CONSOLE_FALLBACK = 0x23DA56B  # public-buffer executor: call to the whitelisted-cvar fallback
+_CONSOLE_STUB = 0x1D37B20      # 32 int3 bytes between a string and a function
+_CBUF_ADDTEXT = 0x23D8710
+_COMPLETION_ON_TEXT = 0x1061AF56    # GameUI: console text changed -> rebuild completion
+_COMPLETION_ON_SUBMIT = 0x10618ED3  # GameUI: command added to history -> rebuild completion
+_COMPLETION_WHITELIST = 0x1061B110
+_COMPLETION_FULL = 0x1061B6D0
+
 # GameUI.dll survey dialog (character select): see the GameUI entries in PATCHES
 _SURVEY_NOT_OK = 0x105A219F    # non-"OK" branch of CUserSurveyDlg::OnCommand
 _SURVEY_EPILOGUE = 0x105A21A7  # OnCommand epilogue right after that branch's call
@@ -180,6 +189,47 @@ PATCHES = [
         bytes.fromhex("753c"),              # jne 0x24f6a2c  (analytics init ok -> continue)
         bytes.fromhex("eb3c"),              # jmp 0x24f6a2c  (never show the "NexonAnalytics Init Failed" fatal error)
         "Analytics removed: init failure is no longer fatal (no analytics at all in this build)",
+    ),
+    # Developer console with every command, as in CS 1.6. GameUI's console sends the typed line through
+    # cl_enginefuncs +0x29c (0x23a8bc0) to Nexon's "public" command buffer, whose executor (0x23da3a0) only knows
+    # the Pcmd list (vxl_do, cl_dt, cl_ut) and, failing that, a short cvar whitelist (0x23e33a0: cl_showfps,
+    # cl_headname...). The engine's own buffer (Cbuf_AddText 0x23d8710, run by Cbuf_Execute 0x23d8760) has every
+    # command, alias and cvar and forwards the rest to the server. Instead of the whitelist, the executor now hands
+    # the line (its buffer at [ebp-0x404]) to that buffer. The stub only uses relative calls (hw.dll is relocated).
+    (
+        "hw.dll",
+        _CONSOLE_FALLBACK,
+        b"\xe8" + _rel32(_CONSOLE_FALLBACK + 5, 0x23E33A0),  # call the whitelisted-cvar fallback
+        b"\xe8" + _rel32(_CONSOLE_FALLBACK + 5, _CONSOLE_STUB),
+        "Console: lines the public command list doesn't know go to the engine's full command buffer",
+    ),
+    (
+        "hw.dll",
+        _CONSOLE_STUB,
+        b"\xcc" * 24,                                       # int3 padding between a string and a function
+        bytes.fromhex("8d85fcfbffff50")                     # lea eax,[ebp-0x404]; push eax  (the executor's line)
+        + b"\xe8" + _rel32(_CONSOLE_STUB + 12, _CBUF_ADDTEXT)  # call Cbuf_AddText
+        + bytes.fromhex("6a0a54")                           # push 0x0a; push esp  ("\n" on the stack)
+        + b"\xe8" + _rel32(_CONSOLE_STUB + 20, _CBUF_ADDTEXT)  # call Cbuf_AddText
+        + bytes.fromhex("83c40cc3"),                        # add esp,0xc; ret
+        "Console stub: Cbuf_AddText(line); Cbuf_AddText(\"\\n\")",
+    ),
+    # The console's completion list (CGameConsolePanel, both __thiscall(text), ret 4) was built from that cvar
+    # whitelist (0x1061b110, via cl_enginefuncs +0x2a0); Valve's builder over every command (+0x19c..+0x1a4) and
+    # every cvar (+0x198, next at +0x14) is still in GameUI (0x1061b6d0) but unused. Both callers now use it.
+    (
+        "GameUI.dll",
+        _COMPLETION_ON_TEXT,
+        b"\xe8" + _rel32(_COMPLETION_ON_TEXT + 5, _COMPLETION_WHITELIST),
+        b"\xe8" + _rel32(_COMPLETION_ON_TEXT + 5, _COMPLETION_FULL),
+        "Console completion while typing: every command and cvar",
+    ),
+    (
+        "GameUI.dll",
+        _COMPLETION_ON_SUBMIT,
+        b"\xe8" + _rel32(_COMPLETION_ON_SUBMIT + 5, _COMPLETION_WHITELIST),
+        b"\xe8" + _rel32(_COMPLETION_ON_SUBMIT + 5, _COMPLETION_FULL),
+        "Console completion after a command (history): every command and cvar",
     ),
     # Character-select survey (CUserSurveyDlg::OnCommand 0x105a1fc0): any button other than "OK" quits the
     # game instead of closing the dialog, so the player can't stay stuck logged out. The quit call is the one
