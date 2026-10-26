@@ -314,3 +314,15 @@ automatic ones join CT. No more kicks in co-op modes.
 - Water (ZgScanWorld): func_water and func_ladder volumes per match; navigation areas under water cost 2000 more;
   soldiers' goals and the rally point move to the closest dry area; a soldier in the water swims to the closest
   ladder leaving it and climbs it (pitch -70, forward), or heads for dry ground.
+- Fix: the state manager is an object inside the player (vtable at player +0x3738), not a pointer: reading it
+  through a pointer faulted, so ZgGiantCombat never ran (giants only broke props). If the pawn can't be read the
+  giant falls back to plain attacks and random skills ("the pawn couldn't be read").
+- Water, second try: zg_splash's navigation mesh has almost no areas in the deep channel, and a giant standing in
+  it has its origin above the surface, so its position didn't count as wet and soldiers walked in after it. Water
+  is now judged at the feet (absmin.z) and, for the next step, at the floor found by a trace down: soldiers don't
+  step, back off or strafe into it, and their goals move to dry ground.
+- Stuck: a jump, then 1.5 s sideways, then another target for 10 s ("can't get to"). A breakable it gave up on is
+  ignored for 20 s; broken ones (solid 0, entvars +0x11c) are skipped.
+- Ammunition (ZgAmmo): player +0x101c active weapon; weapon +0xe4 id, +0x158 primary ammo type, +0x160 clip; player
+  +0x1034 reserve per ammo type. Reload when empty or below half between fights; with no ammunition left: pistol
+  ("slot2") and to the closest zs_supply box: use, "primammo"/"secammo" (money topped up), back to "slot1".

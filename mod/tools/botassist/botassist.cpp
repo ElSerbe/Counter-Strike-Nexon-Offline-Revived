@@ -3126,6 +3126,7 @@ static const int PLAYER_LAST_MOVEMENT = 0xccc;
 // real speed; in this mode the bots and fake players never got it (speed 0..1 while walking). pev->maxspeed is at
 // +0x240 (entvars maxspeed, CSO layout); engine function 107 is pfnSetClientMaxspeed(edict, speed).
 static const int EV_MAXSPEED = 0x240, ENG_SETCLIENTMAXSPEED = 107;
+static const int EV_SOLID = 0x11c; // entvars solid (CSO layout: the standard one + 0x10 up to here)
 typedef void (*SetClientMaxspeedFn)(void* edict, float speed);
 static SetClientMaxspeedFn g_SetClientMaxspeed;
 static float g_zgYourMaxspeed = 0; // yours: once you can move, the freeze is over // idle kick (mp_autokick, 0x114c6b7b) after the rules' idle time
@@ -3146,7 +3147,14 @@ struct ZgPlayer
     float nextRanged = 0, aimUntil = 0, nextBreakScan = 0, breakUntil = 0, nextUse = 0, slowSince = 0;
     float busySince = 0, climbUntil = 0;
     int kitType = 0, pending = -1, ladder = -1; // the giant's kit, an aimed move waiting to face the target
-    bool pendingSkill = false;
+    bool pendingSkill = false, simpleGiant = false;
+    void* ignoreBreak = nullptr; // a breakable it couldn't break (for a while)
+    void* avoidTarget = nullptr; // a target it couldn't reach (for a while)
+    float ignoreBreakUntil = 0, avoidUntil = 0, detourUntil = 0, detourYaw = 0, stuckRoundsSince = 0;
+    int stuckRounds = 0;
+    bool needAmmo = false;
+    float nextReload = 0, supplySince = 0, nextUseBox = 0;
+    std::unordered_map<int, int> maxClip; // the fullest clip seen per weapon id
     void* breakTarget = nullptr; // a zg_breakable / func_breakable in the giant's way
     int stuckCount = 0;
     bool lastMove = false;
@@ -3270,13 +3278,13 @@ static void CreateZgPlayer(ZgPlayer& z)
 }
 
 // the closest living player of the other team, visible ones first
-static void* ZgTarget(void* e, int team)
+static void* ZgTarget(void* e, int team, void* avoid = nullptr)
 {
     V3 me = Eye(e);
     void* best = nullptr;
     float bestScore = 1e30f;
     ForEntitiesNear(me, 8000.0f, [&](void* o) {
-        if (o == e || !(F<int>(Vars(o), EV_FLAGS) & FL_CLIENT) || !Alive(o))
+        if (o == e || o == avoid || !(F<int>(Vars(o), EV_FLAGS) & FL_CLIENT) || !Alive(o))
             return;
         int t = TeamOf(o);
         if ((t != 1 && t != 2) || t == team)
@@ -3323,6 +3331,7 @@ static void ZgWatchClient(void* e, unsigned char* pl, float now, bool census);
 
 static bool ZgSwimming(void* e);
 static V3 ZgDry(V3 p);
+static V3 ZgFeet(void* e);
 
 static void ZgUpdateTeam(float now)
 {
@@ -3352,7 +3361,7 @@ static void ZgUpdateTeam(float now)
             g_zgYourMaxspeed = Alive(e) ? F<float>(Vars(e), EV_MAXSPEED) : g_zgYourMaxspeed;
         if (Alive(e) && *(int*)(pl + PLAYER_TEAM) == 2 && !ZgSwimming(e))
         {
-            sum = sum + Origin(e);
+            sum = sum + ZgFeet(e);
             n++;
         }
     }
@@ -3382,7 +3391,7 @@ static bool ZgBreakable(void* o)
     const char* cls = ClassName(o);
     unsigned char* v = Vars(o);
     return cls && (!strcmp(cls, "zg_breakable") || !strcmp(cls, "func_breakable")) && F<float>(v, EV_HEALTH) > 0.0f &&
-           F<float>(v, EV_TAKEDAMAGE) != 0.0f;
+           F<float>(v, EV_TAKEDAMAGE) != 0.0f && F<int>(v, EV_SOLID) != 0; // broken ones are left not solid
 }
 
 static void ZgBreakThrough(void* e, ZgPlayer& z, V3 me, bool move, float moveYaw, float now, float& lookYaw,
@@ -3398,6 +3407,11 @@ static void ZgBreakThrough(void* e, ZgPlayer& z, V3 me, bool move, float moveYaw
         if (reports++ < 30)
             Log("Zombie Giant: '%s' (giant) %s the %s in its way", String(F<int>(v, EV_NETNAME)),
                 ZgBreakable(z.breakTarget) ? "gives up on" : "broke", ClassName(z.breakTarget));
+        if (ZgBreakable(z.breakTarget))
+        {
+            z.ignoreBreak = z.breakTarget; // it doesn't break (or isn't really in the way): not again soon
+            z.ignoreBreakUntil = now + 20.0f;
+        }
         z.breakTarget = nullptr;
         z.nextPath = 0;
     }
@@ -3409,7 +3423,7 @@ static void ZgBreakThrough(void* e, ZgPlayer& z, V3 me, bool move, float moveYaw
         V3 c = (lo + hi) * 0.5f;
         float best = 1e30f;
         ForEntitiesNear(c, radius + 400.0f, [&](void* o) {
-            if (o == e || !ZgBreakable(o))
+            if (o == e || !ZgBreakable(o) || (o == z.ignoreBreak && now < z.ignoreBreakUntil))
                 return;
             unsigned char* ov = Vars(o);
             V3 olo = Vec((float*)(ov + EV_ABSMIN)), ohi = Vec((float*)(ov + EV_ABSMAX));
@@ -3469,13 +3483,32 @@ static bool InWaterBox(const ZgBox& w, V3 p, float below)
            p.z >= w.lo.z - 80.0f;
 }
 
-// a point (on the floor) under water
+// a point on the floor (feet) under water
 static bool ZgWet(V3 p)
 {
     for (auto& w : g_zgWater)
-        if (InWaterBox(w, p, 16.0f))
+        if (InWaterBox(w, p, 4.0f))
             return true;
     return false;
+}
+
+static V3 ZgFeet(void* e)
+{
+    V3 o = Origin(e);
+    o.z = F<float>(Vars(e), EV_ABSMIN + 8);
+    return o;
+}
+
+// the floor `dist` units away towards yaw is under water (or a drop into it)
+static bool ZgWetAhead(void* e, float yaw, float dist)
+{
+    if (g_zgWater.empty())
+        return false;
+    V3 me = Origin(e);
+    V3 p = me + V3{ cosf(yaw / RAD), sinf(yaw / RAD), 0 } * dist;
+    TraceResult tr;
+    Trace(p, p + V3{ 0, 0, -800.0f }, e, 1, tr);
+    return ZgWet(Vec(tr.vecEndPos));
 }
 
 static void ZgScanWorld()
@@ -3532,7 +3565,7 @@ static V3 ZgDry(V3 p)
 
 static bool ZgSwimming(void* e)
 {
-    return (F<int>(Vars(e), EV_FLAGS) & FL_INWATER) || ZgWet(Origin(e));
+    return (F<int>(Vars(e), EV_FLAGS) & FL_INWATER) || ZgWet(ZgFeet(e));
 }
 
 // a soldier in the water: to the closest ladder that leaves it (or the closest dry ground), and up the ladder.
@@ -3608,7 +3641,7 @@ static bool ZgLeaveWater(void* e, ZgPlayer& z, float now, float& moveYaw, float&
 // points (+0x10, 10 to evolve), the evolved flag (+0x14) and, per skill slot 1..4, "ready" (+0x14 + slot) and the
 // cool down's end (+0x28 + 4 * slot). Each state's data (0x1090c770(state): [0] skill slot, [5] cool down,
 // [6] stamina cost) is what 0x1090e1f0 checks before switching to it. The current state is the state manager's
-// (player +0x3738) vfunc +0x14; 0 is idle. The giant uses a skill as soon as it's ready, it can pay for it and the
+// (player +0x3738, an object inside the player) vfunc +0x14; 0 is idle. The giant uses a skill as soon as it's ready, it can pay for it and the
 // target fits it, and attacks in between.
 enum ZgRole
 {
@@ -3680,8 +3713,8 @@ static bool ReadZgPawn(unsigned char* pl, ZgPawn& out)
         out.evolved = pawn[0x14] != 0;
         for (int s = 1; s <= 4; s++)
             out.ready[s] = pawn[0x14 + s] != 0;
-        void* manager = *(void**)(pl + 0x3738);
-        out.state = manager ? ((CurrentStateFn)(*(void***)manager)[0x14 / 4])(manager, nullptr) : 0;
+        unsigned char* manager = pl + 0x3738; // the state manager is part of the player (its vtable is there)
+        out.state = ((CurrentStateFn)(*(void***)manager)[0x14 / 4])(manager, nullptr);
         out.ok = true;
         return true;
     }
@@ -3737,9 +3770,30 @@ static void ZgGiantCombat(void* e, ZgPlayer& z, unsigned char* pl, float dist, b
         if (k.type == type)
             kit = &k;
     ZgPawn p;
-    if (!kit || !ReadZgPawn(pl, p))
-        return;
     const char* name = String(F<int>(Vars(e), EV_NETNAME));
+    float flat = Len2D(tp - eye);
+    if (!kit || !ReadZgPawn(pl, p))
+    {
+        // the pawn couldn't be read: plain attacks within reach and a random skill now and then
+        if (!z.simpleGiant)
+        {
+            z.simpleGiant = true;
+            Log("Zombie Giant: '%s' (type %d): the pawn couldn't be read, simple attacks", name, type);
+        }
+        if (visible && flat < 320.0f && now >= z.nextAttack)
+        {
+            FakeCommand(e, Rnd() < 0.7f ? "BossAttack1" : "BossAttack2");
+            z.nextAttack = now + 0.8f + Rnd() * 0.5f;
+        }
+        else if (visible && dist < 2200.0f && now >= z.nextSkill)
+        {
+            char skill[16];
+            snprintf(skill, sizeof(skill), "BossSkill_%d", 1 + rand() % 3);
+            FakeCommand(e, skill);
+            z.nextSkill = now + 3.0f + Rnd() * 3.0f;
+        }
+        return;
+    }
     if (z.kitType != type)
     {
         z.kitType = type;
@@ -3767,7 +3821,6 @@ static void ZgGiantCombat(void* e, ZgPlayer& z, unsigned char* pl, float dist, b
     }
     else
         z.busySince = 0;
-    float flat = Len2D(tp - eye);
     int near450 = 0, near700 = 0;
     ForEntitiesNear(Origin(e), 700.0f, [&](void* o) {
         if (o == e || !(F<int>(Vars(o), EV_FLAGS) & FL_CLIENT) || !Alive(o) || TeamOf(o) != 2)
@@ -3844,20 +3897,152 @@ static void ZgGiantCombat(void* e, ZgPlayer& z, unsigned char* pl, float dist, b
     z.nextAttack = now + (skill ? 0.4f : 0.7f + Rnd() * 0.4f);
 }
 
+// ---------------------------------------------------------------- Zombie Giant: ammunition
+// The soldiers' weapon (from CBasePlayerWeapon::UpdateClientData 0x11533920 and the AmmoX loop in 0x114df514):
+// player +0x101c the active item; weapon +0xe4 its id, +0x158 the primary ammo type, +0x160 the clip; player
+// +0x1034 the reserve per ammo type (0x102 types). A soldier reloads when its clip is empty, and between fights when
+// it's below half; with nothing left it takes its pistol and goes to the closest supply box (zs_supply, the mode's
+// resupply points) and uses it / buys ammunition there.
+struct ZgGun
+{
+    bool ok = false;
+    int id = 0, clip = 0, reserve = 0;
+};
+
+static ZgGun ZgWeapon(void* e)
+{
+    ZgGun g;
+    unsigned char* pl = (unsigned char*)PrivateOf(e);
+    if (!pl || !Readable(pl + 0x101c, 4))
+        return g;
+    unsigned char* w = *(unsigned char**)(pl + 0x101c);
+    if (!w || !Readable(w + 0xe4, 4) || !Readable(w + 0x158, 12))
+        return g;
+    int type = *(int*)(w + 0x158);
+    g.clip = *(int*)(w + 0x160);
+    g.id = *(int*)(w + 0xe4);
+    if (type <= 0 || type >= 0x102 || g.clip < 0 || !Readable(pl + 0x1034 + 4 * type, 4))
+        return g; // a knife or a grenade
+    g.reserve = *(int*)(pl + 0x1034 + 4 * type);
+    g.ok = true;
+    return g;
+}
+
+static void* ZgClosestSupply(V3 me)
+{
+    void* best = nullptr;
+    float bestD = 1e30f;
+    ForEntitiesNear(me, 12000.0f, [&](void* o) {
+        const char* cls = ClassName(o);
+        if (!cls || strcmp(cls, "zs_supply"))
+            return;
+        float d = Len(Center(o) - me);
+        if (d < bestD)
+        {
+            bestD = d;
+            best = o;
+        }
+    });
+    return best;
+}
+
+// reloading (buttons) and running out: true while the soldier walks to a supply box (moveYaw / look set)
+static bool ZgAmmo(void* e, ZgPlayer& z, float now, bool fighting, float& moveYaw, float& lookYaw, float& lookPitch,
+                   bool& move, unsigned short& buttons, bool& holdFire)
+{
+    ZgGun g = ZgWeapon(e);
+    const char* name = String(F<int>(Vars(e), EV_NETNAME));
+    if (g.ok)
+    {
+        int& top = z.maxClip[g.id];
+        top = g.clip > top ? g.clip : top;
+        holdFire = g.clip == 0;
+        if (g.reserve > 0 && now >= z.nextReload && (g.clip == 0 || (!fighting && g.clip < top / 2)))
+        {
+            buttons |= IN_RELOAD;
+            z.nextReload = now + (g.clip == 0 ? 0.6f : 2.5f);
+        }
+        if (g.clip == 0 && g.reserve == 0 && !z.needAmmo)
+        {
+            z.needAmmo = true;
+            z.supplySince = 0;
+            FakeCommand(e, "slot2"); // the pistol meanwhile
+            static int reports = 0;
+            if (reports++ < 30)
+                Log("Zombie Giant: '%s' is out of ammunition (weapon %d): to the closest supply box", name, g.id);
+        }
+    }
+    if (!z.needAmmo)
+        return false;
+    V3 me = Origin(e);
+    void* box = ZgClosestSupply(me);
+    if (!box)
+    {
+        FakeCommand(e, "primammo");
+        z.needAmmo = false;
+        return false;
+    }
+    V3 c = Center(box);
+    if (Len2D(c - me) > 90.0f)
+    {
+        move = ZgPathYaw(z, me, ZgDry(c), now, 40.0f, moveYaw);
+        lookYaw = moveYaw;
+        lookPitch = 0;
+        return true;
+    }
+    // at the box: face it, use it and buy ammunition (the mode's money is topped up), then back to the rifle
+    if (z.supplySince <= 0)
+    {
+        z.supplySince = now;
+        unsigned char* pl = (unsigned char*)PrivateOf(e);
+        if (pl && *(int*)(pl + 0xca8) < 16000)
+            *(int*)(pl + 0xca8) = 16000;
+    }
+    lookYaw = YawOf(c - Eye(e));
+    lookPitch = PitchOf(c - Eye(e));
+    if (now >= z.nextUseBox)
+    {
+        buttons |= IN_USE;
+        FakeCommand(e, "primammo");
+        FakeCommand(e, "secammo");
+        z.nextUseBox = now + 0.7f;
+    }
+    if (now - z.supplySince > 1.5f)
+    {
+        FakeCommand(e, "slot1");
+        ZgGun p = ZgWeapon(e);
+        bool done = p.ok && p.reserve > 0;
+        if (done || now - z.supplySince > 10.0f)
+        {
+            z.needAmmo = false;
+            static int reports = 0;
+            if (reports++ < 30)
+                Log("Zombie Giant: '%s' at the supply box: %s (clip %d, reserve %d)", name,
+                    done ? "resupplied" : "nothing to take, back to the fight", p.clip, p.reserve);
+        }
+    }
+    return true;
+}
+
 // one frame of a Zombie Giant fighter: the giant hunts the closest human, soldiers gather and shoot the giant
 static void ZgThink(void* e, ZgPlayer& z, bool giant, int team, float now, float dt, float& fwd, float& side,
                     unsigned short& buttons)
 {
     if (now >= z.nextTarget || (z.target && !Alive(z.target)))
     {
-        z.target = ZgTarget(e, team);
+        z.target = ZgTarget(e, team, now < z.avoidUntil ? z.avoidTarget : nullptr);
+        if (!z.target)
+            z.target = ZgTarget(e, team);
         z.nextTarget = now + 0.4f;
     }
     V3 me = Origin(e), eye = Eye(e);
     float lookYaw = z.yaw, lookPitch = 0, moveYaw = z.yaw;
     bool move = false;
     bool leaving = !giant && !g_zgWater.empty() && ZgLeaveWater(e, z, now, moveYaw, lookYaw, lookPitch, move);
-    if (z.target && !leaving)
+    bool holdFire = false, fighting = z.target && CanSee(e, eye, z.target);
+    bool supplying = !giant && !leaving &&
+                     ZgAmmo(e, z, now, fighting, moveYaw, lookYaw, lookPitch, move, buttons, holdFire);
+    if (z.target && !leaving && !supplying)
     {
         V3 tp = Center(z.target);
         float dist = Len(tp - eye);
@@ -3887,7 +4072,7 @@ static void ZgThink(void* e, ZgPlayer& z, bool giant, int team, float now, float
             // strafing, and shoot it
             bool engaged = visible && dist < 1100.0f;
             float fromGroup = g_zgAllies > 1 ? Len2D(g_zgRally - me) : 0.0f;
-            V3 goal = ZgDry(Origin(z.target)); // a giant in the water: from the bank
+            V3 goal = ZgDry(ZgFeet(z.target)); // a giant in the water: from the bank
             if (!engaged && fromGroup > 500.0f && Len(g_zgRally - Origin(z.target)) < Len(me - Origin(z.target)) + 300.0f)
                 move = ZgPathYaw(z, me, g_zgRally, now, 40.0f, moveYaw);
             else if (!engaged || dist > 850.0f)
@@ -3895,8 +4080,7 @@ static void ZgThink(void* e, ZgPlayer& z, bool giant, int team, float now, float
             else if (dist < 450.0f)
             {
                 moveYaw = YawOf(me - Origin(z.target));
-                V3 back = me + V3{ cosf(moveYaw / RAD), sinf(moveYaw / RAD), 0 } * 150.0f;
-                move = !ZgWet(back); // backing off, but not into the water
+                move = !ZgWetAhead(e, moveYaw, 150.0f); // backing off, but not into the water
             }
             lookYaw = visible ? YawOf(tp - eye) : move ? moveYaw : z.yaw;
             lookPitch = visible ? PitchOf(tp - eye) : 0;
@@ -3905,22 +4089,31 @@ static void ZgThink(void* e, ZgPlayer& z, bool giant, int team, float now, float
                 z.strafe = -z.strafe;
                 z.nextStrafe = now + 0.8f + Rnd() * 1.4f;
             }
-            if (visible && dist < 3000.0f && fabsf(AngleDiff(lookYaw, z.yaw)) < 8.0f && now >= z.nextFire)
+            if (visible && !holdFire && dist < 3000.0f && fabsf(AngleDiff(lookYaw, z.yaw)) < 8.0f && now >= z.nextFire)
             {
                 buttons |= IN_ATTACK;
                 z.nextFire = now + 0.12f;
             }
-            float sy = (z.yaw - 90.0f * z.strafe) / RAD; // strafing right (+1) or left, not into the water
-            if (engaged && ZgWet(me + V3{ cosf(sy), sinf(sy), 0 } * 120.0f))
+            if (engaged && ZgWetAhead(e, z.yaw - 90.0f * z.strafe, 120.0f)) // strafing, not into the water
                 z.strafe = -z.strafe;
             if (engaged)
                 side += z.strafe * 250.0f;
         }
     }
-    else if (!giant && !leaving && g_zgAllies > 1 && Len2D(g_zgRally - me) > 300.0f)
+    else if (!giant && !leaving && !supplying && g_zgAllies > 1 && Len2D(g_zgRally - me) > 300.0f)
         move = ZgPathYaw(z, me, g_zgRally, now, 40.0f, moveYaw); // nobody to fight: gather
     if (giant)
         ZgBreakThrough(e, z, me, move, moveYaw, now, lookYaw, lookPitch);
+    if (now < z.detourUntil)
+    {
+        moveYaw = z.detourYaw; // around what blocked it
+        move = true;
+    }
+    if (!giant && move && !leaving && ZgWetAhead(e, moveYaw, 70.0f))
+    {
+        move = false; // the next step is a drop into the water: another way
+        z.nextPath = 0;
+    }
     float turn = (giant ? 240.0f : 420.0f) * dt;
     z.yaw = Approach(z.yaw, move && !z.target && !z.breakTarget ? moveYaw : lookYaw, turn);
     float k = dt * 6.0f > 1.0f ? 1.0f : dt * 6.0f;
@@ -3951,14 +4144,38 @@ static void ZgThink(void* e, ZgPlayer& z, bool giant, int team, float now, float
             z.stuckCount++;
         else
             z.stuckCount = 0;
-        if (z.stuckCount >= 2)
+        if (z.stuckCount >= 2 && !(giant && z.breakTarget)) // (a giant breaking what's in the way isn't stuck)
         {
-            if (giant && z.breakTarget)
-                ; // busy breaking what's in the way
-            else if (giant)
-                FakeCommand(e, "BossJump");
+            // stuck again and again: a jump, then a way round sideways, then another target
+            if (now - z.stuckRoundsSince > 12.0f)
+            {
+                z.stuckRounds = 0;
+                z.stuckRoundsSince = now;
+            }
+            z.stuckRounds++;
+            if (z.stuckRounds == 1)
+            {
+                if (giant)
+                    FakeCommand(e, "BossJump");
+                else
+                    buttons |= IN_JUMP;
+            }
+            else if (z.stuckRounds == 2 || !z.target)
+            {
+                z.detourYaw = z.yaw + (Rnd() < 0.5f ? 100.0f : -100.0f);
+                z.detourUntil = now + 1.5f;
+            }
             else
-                buttons |= IN_JUMP;
+            {
+                z.avoidTarget = z.target;
+                z.avoidUntil = now + 10.0f;
+                z.nextTarget = 0;
+                z.stuckRounds = 0;
+                static int reports = 0;
+                if (reports++ < 30)
+                    Log("Zombie Giant: '%s' can't get to '%s': another target for a while",
+                        String(F<int>(Vars(e), EV_NETNAME)), String(F<int>(Vars(z.target), EV_NETNAME)));
+            }
             z.strafe = -z.strafe;
             z.nextPath = 0;
             z.stuckCount = 0;
@@ -3983,6 +4200,9 @@ static void ZgSpawned(void* e, ZgPlayer& z, float now)
     z.busySince = 0;
     z.ladder = -1;
     z.climbUntil = 0;
+    z.needAmmo = false;
+    z.detourUntil = 0;
+    z.stuckRounds = 0;
     z.slowSince = now;
     z.yaw = F<float>(Vars(e), EV_VANGLE + 4);
     z.pitch = 0;
