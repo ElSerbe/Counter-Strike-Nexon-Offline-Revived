@@ -300,3 +300,17 @@ automatic ones join CT. No more kicks in co-op modes.
   350..2200 units away every 5..12 s, aimed a little high with the distance. zg_splash has 136 zg_breakable (props
   only giants break) and 34 func_breakable: a giant that barely moves for 0.4 s with one within 120 units in front
   faces it and hits it (BossAttack1) until it breaks (6 s at most). Logged: "is blocked by", "broke", "throws".
+- Giant states (registered in 0x1091b060; the classes' RTTI names): Dione Attack1 3 light, Attack2 4 heavy (whirl),
+  Skill1 5 rolling, Skill2 6 poison missile, Skill3 7 tentacle, Skill4 0x2a air strike (evolved: 0x26..0x29);
+  Titan 10/11/0xc rolling/0xd rocket/0xe mine/0x2f artillery; Revenant 0x14/0x15 own heavy/0x16 rolling/0x17
+  fireball/0x18 inferno/0x34 hellfire; Angra (dragon) 0x20/0x21/0x22 own rolling/0x23 breath/0x24 tentacle/0x39
+  poison fog. BossJump (CommonState::StateJump) leaps towards the movement keys held.
+- Pawn (0x109201f0 fastcall player): +0xc stamina, +0x10 evolution points, +0x14 evolved, +0x14+slot ready,
+  +0x28+4*slot cool down end. State data 0x1090c770(state): [0] slot, [5] cool down, [6] stamina cost (checked
+  by 0x1090e1f0). Current state: state manager (player +0x3738) vfunc +0x14, 0 idle.
+- Giant AI (ZgGiantCombat): per giant kit (role of each move: melee, heavy, mid, charge, projectile, area, around
+  itself, cone); while idle it uses a skill as soon as it's ready and affordable and the target fits its role,
+  otherwise attacks; aimed moves wait until it faces the target. Presses use only with 10 evolution points.
+- Water (ZgScanWorld): func_water and func_ladder volumes per match; navigation areas under water cost 2000 more;
+  soldiers' goals and the rally point move to the closest dry area; a soldier in the water swims to the closest
+  ladder leaving it and climbs it (pitch -70, forward), or heads for dry ground.

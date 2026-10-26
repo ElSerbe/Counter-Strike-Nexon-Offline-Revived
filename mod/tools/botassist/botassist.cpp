@@ -46,7 +46,7 @@ static const int EV_WEAPONMODEL = 0xd0, EV_CLASSNAME = 0x0, EV_ORIGIN = 0x8, EV_
     EV_ABSMAX = 0xe0, EV_HEALTH = 0x178, EV_TAKEDAMAGE = 0x190, EV_DEADFLAG = 0x194, EV_VIEW_OFS = 0x198,
     EV_FLAGS = 0x1c8, EV_TEAM = 0x1d8, EV_ARMORVALUE = 0x1e8, EV_NETNAME = 0x200, EV_CONTAINING_ENTITY = 0x238;
 static const int GV_TIME = 0x0, GV_MAPNAME = 0xc, GV_STRINGBASE = 0x98;
-static const int FL_CLIENT = 0x8, FL_MONSTER = 0x20, FL_FAKECLIENT = 0x2000;
+static const int FL_CLIENT = 0x8, FL_INWATER = 0x10, FL_MONSTER = 0x20, FL_FAKECLIENT = 0x2000;
 static const int IN_ATTACK = 1, IN_JUMP = 2, IN_DUCK = 4, IN_RELOAD = 0x2000;
 static const float RAD = 57.29578f;
 
@@ -618,6 +618,8 @@ static V3 Portal(int ai, int d, int bi)
     return p;
 }
 
+static float NavWetCost(int area); // Zombie Giant: areas under water cost more
+
 // A* over areas; returns the waypoints from the bot's area to the goal
 static bool FindPath(V3 from, V3 to, std::vector<V3>& out)
 {
@@ -654,7 +656,7 @@ static bool FindPath(V3 from, V3 to, std::vector<V3>& out)
             {
                 if (closed[nb])
                     continue;
-                float c = cost[cur] + Len(g_nav.areas[nb].center - g_nav.areas[cur].center);
+                float c = cost[cur] + Len(g_nav.areas[nb].center - g_nav.areas[cur].center) + NavWetCost(nb);
                 if (c < cost[nb])
                 {
                     cost[nb] = c;
@@ -3142,6 +3144,9 @@ struct ZgPlayer
     float nextStrafe = 0, nextFire = 0, sprintUntil = 0, nextSprint = 0, stuckCheck = 0;
     float nextReport = 0, lastThink = 0, lastFwd = 0, lastSide = 0, nextPickReport = 0;
     float nextRanged = 0, aimUntil = 0, nextBreakScan = 0, breakUntil = 0, nextUse = 0, slowSince = 0;
+    float busySince = 0, climbUntil = 0;
+    int kitType = 0, pending = -1, ladder = -1; // the giant's kit, an aimed move waiting to face the target
+    bool pendingSkill = false;
     void* breakTarget = nullptr; // a zg_breakable / func_breakable in the giant's way
     int stuckCount = 0;
     bool lastMove = false;
@@ -3316,6 +3321,9 @@ static bool IsZgPlayerClass(void* pl) { return pl && *(DWORD*)pl == MP_ZOMBIEBOS
 
 static void ZgWatchClient(void* e, unsigned char* pl, float now, bool census);
 
+static bool ZgSwimming(void* e);
+static V3 ZgDry(V3 p);
+
 static void ZgUpdateTeam(float now)
 {
     if (now < g_zgNextRally)
@@ -3342,7 +3350,7 @@ static void ZgUpdateTeam(float now)
         ZgWatchClient(e, pl, now, census);
         if (IsHuman(e))
             g_zgYourMaxspeed = Alive(e) ? F<float>(Vars(e), EV_MAXSPEED) : g_zgYourMaxspeed;
-        if (Alive(e) && *(int*)(pl + PLAYER_TEAM) == 2)
+        if (Alive(e) && *(int*)(pl + PLAYER_TEAM) == 2 && !ZgSwimming(e))
         {
             sum = sum + Origin(e);
             n++;
@@ -3350,7 +3358,7 @@ static void ZgUpdateTeam(float now)
     }
     g_zgAllies = n;
     if (n)
-        g_zgRally = sum * (1.0f / n);
+        g_zgRally = ZgDry(sum * (1.0f / n));
 }
 
 // a soldier left at the joining speed (1) once you can move gets a rifleman's speed
@@ -3441,6 +3449,401 @@ static void ZgBreakThrough(void* e, ZgPlayer& z, V3 me, bool move, float moveYaw
     }
 }
 
+// ---------------------------------------------------------------- Zombie Giant: water and ladders
+// The middle of the Zombie Giant maps is a water channel (zg_splash: func_water from z -256 up to -92, with a
+// trigger_push current) left only by a few ladders (func_ladder), which the navigation mesh doesn't link: soldiers
+// who went in stayed there. The water and the ladders are read from the map's entities once per match; the soldiers'
+// paths avoid the water, their goals (the giant, the group) are moved to the closest dry ground, and a soldier in the
+// water swims to the closest ladder out and climbs it (looking up, walking forward).
+struct ZgBox
+{
+    V3 lo, hi;
+};
+static std::vector<ZgBox> g_zgWater, g_zgLadders;
+static std::vector<char> g_navWet; // per navigation area: its floor is under water (FindPath avoids it)
+static int g_zgWorldLevel = -1, g_navWetLevel = -1;
+
+static bool InWaterBox(const ZgBox& w, V3 p, float below)
+{
+    return p.x >= w.lo.x && p.x <= w.hi.x && p.y >= w.lo.y && p.y <= w.hi.y && p.z <= w.hi.z - below &&
+           p.z >= w.lo.z - 80.0f;
+}
+
+// a point (on the floor) under water
+static bool ZgWet(V3 p)
+{
+    for (auto& w : g_zgWater)
+        if (InWaterBox(w, p, 16.0f))
+            return true;
+    return false;
+}
+
+static void ZgScanWorld()
+{
+    if (g_zgWorldLevel == g_nav.level)
+        return;
+    g_zgWorldLevel = g_nav.level;
+    g_zgWater.clear();
+    g_zgLadders.clear();
+    ForEntitiesNear({ 0, 0, 0 }, 32768.0f, [&](void* o) {
+        const char* cls = ClassName(o);
+        bool water = cls && !strcmp(cls, "func_water"), ladder = cls && !strcmp(cls, "func_ladder");
+        if (!water && !ladder)
+            return;
+        unsigned char* v = Vars(o);
+        ZgBox b{ Vec((float*)(v + EV_ABSMIN)), Vec((float*)(v + EV_ABSMAX)) };
+        (water ? g_zgWater : g_zgLadders).push_back(b);
+    });
+    g_navWet.assign(g_nav.areas.size(), 0);
+    int wet = 0;
+    for (size_t i = 0; i < g_nav.areas.size(); i++)
+        wet += g_navWet[i] = ZgWet(g_nav.areas[i].center);
+    g_navWetLevel = g_nav.level;
+    Log("Zombie Giant: %d water volumes, %d ladders, %d of %d navigation areas under water", (int)g_zgWater.size(),
+        (int)g_zgLadders.size(), wet, (int)g_nav.areas.size());
+}
+
+// extra path cost of an area under water (only while the Zombie Giant water is known)
+static float NavWetCost(int area)
+{
+    return g_navWetLevel == g_nav.level && area < (int)g_navWet.size() && g_navWet[area] ? 2000.0f : 0.0f;
+}
+
+// the closest dry ground to a point under water (the point itself when it's dry)
+static V3 ZgDry(V3 p)
+{
+    if (!ZgWet(p) || g_navWet.size() != g_nav.areas.size())
+        return p;
+    float best = 1e30f;
+    V3 out = p;
+    for (size_t i = 0; i < g_nav.areas.size(); i++)
+    {
+        if (g_navWet[i])
+            continue;
+        float d = Len(g_nav.areas[i].center - p);
+        if (d < best)
+        {
+            best = d;
+            out = g_nav.areas[i].center;
+        }
+    }
+    return out;
+}
+
+static bool ZgSwimming(void* e)
+{
+    return (F<int>(Vars(e), EV_FLAGS) & FL_INWATER) || ZgWet(Origin(e));
+}
+
+// a soldier in the water: to the closest ladder that leaves it (or the closest dry ground), and up the ladder.
+// true: fwd / look set
+static bool ZgLeaveWater(void* e, ZgPlayer& z, float now, float& moveYaw, float& lookYaw, float& lookPitch, bool& move)
+{
+    V3 me = Origin(e);
+    bool swimming = ZgSwimming(e);
+    bool climbing = now < z.climbUntil;
+    if (!swimming && !climbing)
+    {
+        z.ladder = -1;
+        return false;
+    }
+    if (z.ladder < 0 || z.ladder >= (int)g_zgLadders.size())
+    {
+        float best = 1e30f;
+        for (size_t i = 0; i < g_zgLadders.size(); i++)
+        {
+            const ZgBox& l = g_zgLadders[i];
+            V3 foot{ (l.lo.x + l.hi.x) * 0.5f, (l.lo.y + l.hi.y) * 0.5f, l.lo.z };
+            bool fromWater = false;
+            for (auto& w : g_zgWater) // its foot is in the water, its top above the surface
+                fromWater |= InWaterBox(w, foot, 0.0f) && l.hi.z > w.hi.z;
+            float d = Len2D(foot - me);
+            if (fromWater && d < best)
+            {
+                best = d;
+                z.ladder = (int)i;
+            }
+        }
+        static int reports = 0;
+        if (reports++ < 30)
+            Log("Zombie Giant: '%s' is in the water: %s", String(F<int>(Vars(e), EV_NETNAME)),
+                z.ladder >= 0 ? "heading for a ladder" : "no ladder out, heading for dry ground");
+    }
+    move = true;
+    if (z.ladder < 0)
+    {
+        moveYaw = YawOf(ZgDry(me) - me);
+        lookYaw = moveYaw;
+        lookPitch = 0;
+        return true;
+    }
+    const ZgBox& l = g_zgLadders[z.ladder];
+    V3 c{ (l.lo.x + l.hi.x) * 0.5f, (l.lo.y + l.hi.y) * 0.5f, me.z };
+    float gx = fmaxf(0.0f, fmaxf(l.lo.x - me.x, me.x - l.hi.x)), gy = fmaxf(0.0f, fmaxf(l.lo.y - me.y, me.y - l.hi.y));
+    moveYaw = YawOf(c - me);
+    lookYaw = moveYaw;
+    if (sqrtf(gx * gx + gy * gy) < 40.0f || climbing)
+    {
+        // on the ladder: look up and walk into it; a little more once out of the water to step off at the top
+        lookPitch = -70.0f;
+        if (me.z < l.hi.z - 8.0f)
+            z.climbUntil = now + 0.8f;
+    }
+    else
+        lookPitch = 0;
+    return true;
+}
+
+// ---------------------------------------------------------------- Zombie Giant: each giant's moves
+// The giant's commands become monster states (pawn vfunc +0x20; the states are registered in 0x1091b060):
+//   Dione (type 1): Attack1 light, Attack2 heavy (a whirl), Skill1 rolling charge, Skill2 poison missile,
+//                   Skill3 tentacles, Skill4 (evolved) air strike
+//   Titan (2):      Attack1 light, Attack2 heavy, Skill1 rolling charge, Skill2 rockets, Skill3 mines,
+//                   Skill4 (evolved) artillery
+//   Revenant (4):   Attack1 light, Attack2 its heavy attack, Skill1 rolling charge, Skill2 fireball, Skill3 inferno
+//                   (around itself), Skill4 (evolved) hellfire from the sky
+//   Angra (6):      the dragon: Attack1 light, Attack2 heavy, Skill1 its rolling attack (comes down at the target),
+//                   Skill2 breath, Skill3 tentacles, Skill4 (evolved) poison fog
+// The pawn (0x109201f0, fastcall player: the pawn of the current type) holds the stamina (+0xc), the evolution
+// points (+0x10, 10 to evolve), the evolved flag (+0x14) and, per skill slot 1..4, "ready" (+0x14 + slot) and the
+// cool down's end (+0x28 + 4 * slot). Each state's data (0x1090c770(state): [0] skill slot, [5] cool down,
+// [6] stamina cost) is what 0x1090e1f0 checks before switching to it. The current state is the state manager's
+// (player +0x3738) vfunc +0x14; 0 is idle. The giant uses a skill as soon as it's ready, it can pay for it and the
+// target fits it, and attacks in between.
+enum ZgRole
+{
+    ZG_MELEE,      // within reach
+    ZG_HEAVY,      // within reach, slower and stronger
+    ZG_MID,        // aimed, 250..900
+    ZG_CHARGE,     // aimed, 280..1000: closes the gap
+    ZG_PROJECTILE, // aimed, 350..2600
+    ZG_AREA,       // aimed at the target, 200..2200
+    ZG_SELF,       // around the giant: humans close by
+    ZG_CONE,       // aimed, up to 750
+};
+struct ZgMove
+{
+    const char* cmd;
+    int state, evolved; // -1: not available
+    ZgRole role;
+};
+struct ZgKit
+{
+    int type;
+    const char* name;
+    ZgMove moves[6]; // Attack1, Attack2, Skill1..4
+};
+static const ZgKit g_zgKits[] = {
+    { 1, "Dione", { { "BossAttack1", 3, 0x26, ZG_MELEE }, { "BossAttack2", 4, 0x27, ZG_MID }, { "BossSkill_1", 5, 5, ZG_CHARGE },
+                    { "BossSkill_2", 6, 0x28, ZG_PROJECTILE }, { "BossSkill_3", 7, 0x29, ZG_AREA },
+                    { "BossSkill_4", -1, 0x2a, ZG_AREA } } },
+    { 2, "Titan", { { "BossAttack1", 10, 0x2b, ZG_MELEE }, { "BossAttack2", 11, 0x2c, ZG_HEAVY }, { "BossSkill_1", 0xc, 0xc, ZG_CHARGE },
+                    { "BossSkill_2", 0xd, 0x2d, ZG_PROJECTILE }, { "BossSkill_3", 0xe, 0x2e, ZG_SELF },
+                    { "BossSkill_4", -1, 0x2f, ZG_AREA } } },
+    { 4, "Revenant", { { "BossAttack1", 0x14, 0x30, ZG_MELEE }, { "BossAttack2", 0x15, 0x31, ZG_MID },
+                       { "BossSkill_1", 0x16, 0x16, ZG_CHARGE }, { "BossSkill_2", 0x17, 0x32, ZG_PROJECTILE },
+                       { "BossSkill_3", 0x18, 0x33, ZG_SELF }, { "BossSkill_4", -1, 0x34, ZG_AREA } } },
+    { 6, "Angra", { { "BossAttack1", 0x20, 0x35, ZG_MELEE }, { "BossAttack2", 0x21, 0x36, ZG_HEAVY },
+                    { "BossSkill_1", 0x22, 0x22, ZG_CHARGE }, { "BossSkill_2", 0x23, 0x37, ZG_CONE },
+                    { "BossSkill_3", 0x24, 0x38, ZG_AREA }, { "BossSkill_4", -1, 0x39, ZG_SELF } } },
+};
+static const DWORD MP_ZG_PAWN = 0x109201f0, MP_ZG_STATEINFO = 0x1090c770;
+static const DWORD MP_GIANT_PAWN_VTABLES[] = { 0x117c18e8, 0x117c191c, 0x117c1950, 0x117c1984 };
+typedef unsigned char* (__fastcall* PawnOfFn)(void* player);
+typedef int* (*StateInfoFn)(int state);
+typedef int(__fastcall* CurrentStateFn)(void* manager, void* edx);
+
+struct ZgPawn
+{
+    bool ok = false;
+    float stamina = 0;
+    int evolution = 0, state = 0;
+    bool evolved = false;
+    bool ready[5] = {};
+};
+
+static bool ReadZgPawn(unsigned char* pl, ZgPawn& out)
+{
+    __try
+    {
+        unsigned char* pawn = ((PawnOfFn)(MP_ZG_PAWN + g_mpDelta))(pl);
+        if (!pawn)
+            return false;
+        DWORD vt = *(DWORD*)pawn - g_mpDelta;
+        bool giant = false;
+        for (DWORD g : MP_GIANT_PAWN_VTABLES)
+            giant |= vt == g;
+        if (!giant)
+            return false;
+        out.stamina = *(float*)(pawn + 0xc);
+        out.evolution = *(int*)(pawn + 0x10);
+        out.evolved = pawn[0x14] != 0;
+        for (int s = 1; s <= 4; s++)
+            out.ready[s] = pawn[0x14 + s] != 0;
+        void* manager = *(void**)(pl + 0x3738);
+        out.state = manager ? ((CurrentStateFn)(*(void***)manager)[0x14 / 4])(manager, nullptr) : 0;
+        out.ok = true;
+        return true;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        return false;
+    }
+}
+
+// can the giant switch to this state now: its skill slot ready and the stamina to pay for it
+static bool ZgAffordable(const ZgPawn& p, int state)
+{
+    __try
+    {
+        int* info = ((StateInfoFn)(MP_ZG_STATEINFO + g_mpDelta))(state);
+        int slot = info[0];
+        if (slot >= 1 && slot <= 4 && !p.ready[slot])
+            return false;
+        return *(float*)&info[6] <= p.stamina;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        return false;
+    }
+}
+
+// dist: from the giant's eyes; flat: sideways only (the giant is tall: a human at its feet is far from its eyes)
+static bool ZgRoleFits(ZgRole role, float dist, float flat, bool visible, int near450, int near700)
+{
+    switch (role)
+    {
+    case ZG_MELEE: return visible && flat < 320.0f;
+    case ZG_HEAVY: return visible && flat < 360.0f;
+    case ZG_MID: return visible && dist > 250.0f && dist < 900.0f;
+    case ZG_CHARGE: return visible && dist > 280.0f && dist < 1000.0f;
+    case ZG_PROJECTILE: return visible && dist > 350.0f && dist < 2600.0f;
+    case ZG_AREA: return visible && dist > 200.0f && dist < 2200.0f;
+    case ZG_SELF: return near450 >= 1 || near700 >= 2;
+    case ZG_CONE: return visible && flat < 750.0f;
+    }
+    return false;
+}
+
+static bool ZgAimed(ZgRole role) { return role != ZG_SELF; }
+
+// the giant's fighting: picks a move (skills first), turns to the target if the move is aimed, and uses it
+static void ZgGiantCombat(void* e, ZgPlayer& z, unsigned char* pl, float dist, bool visible, V3 tp, V3 eye, float now,
+                          float& lookYaw, float& lookPitch, unsigned short& buttons)
+{
+    int type = *(int*)(pl + ZG_GIANT_TYPE);
+    const ZgKit* kit = nullptr;
+    for (auto& k : g_zgKits)
+        if (k.type == type)
+            kit = &k;
+    ZgPawn p;
+    if (!kit || !ReadZgPawn(pl, p))
+        return;
+    const char* name = String(F<int>(Vars(e), EV_NETNAME));
+    if (z.kitType != type)
+    {
+        z.kitType = type;
+        z.pending = -1;
+        Log("Zombie Giant: '%s' is %s (stamina %.0f, evolution %d%s)", name, kit->name, p.stamina, p.evolution,
+            p.evolved ? ", evolved" : "");
+    }
+    // evolving: with 10 points the pawn evolves when "use" is pressed (0x1090d290: player +0xec0, the buttons
+    // pressed this frame, & IN_USE), which unlocks Skill4 and stronger moves
+    if (!p.evolved && p.evolution >= 10 && now >= z.nextUse)
+    {
+        buttons |= IN_USE;
+        z.nextUse = now + 1.0f;
+        static int reports = 0;
+        if (reports++ < 20)
+            Log("Zombie Giant: '%s' (%s) presses use to evolve", name, kit->name);
+    }
+    // busy with a move: wait (unless a state seems stuck)
+    if (p.state != 0)
+    {
+        if (z.busySince <= 0)
+            z.busySince = now;
+        if (now - z.busySince < 5.0f)
+            return;
+    }
+    else
+        z.busySince = 0;
+    float flat = Len2D(tp - eye);
+    int near450 = 0, near700 = 0;
+    ForEntitiesNear(Origin(e), 700.0f, [&](void* o) {
+        if (o == e || !(F<int>(Vars(o), EV_FLAGS) & FL_CLIENT) || !Alive(o) || TeamOf(o) != 2)
+            return;
+        float d = Len(Center(o) - Center(e));
+        near450 += d < 450.0f;
+        near700 += d < 700.0f;
+    });
+    // a pending aimed move: fire once facing the target, give up after a moment
+    if (z.pending >= 0)
+    {
+        const ZgMove& m = kit->moves[z.pending];
+        if (!visible || now >= z.aimUntil)
+            z.pending = -1;
+        else if (fabsf(AngleDiff(lookYaw, z.yaw)) < (m.role == ZG_PROJECTILE ? 6.0f : 12.0f))
+        {
+            FakeCommand(e, m.cmd);
+            static int reports = 0;
+            if (reports++ < 80)
+                Log("Zombie Giant: '%s' (%s) uses %s at %.0f units (stamina %.0f)", name, kit->name, m.cmd, dist, p.stamina);
+            z.pending = -1;
+            z.nextAttack = now + (z.pendingSkill ? 0.4f : 0.7f + Rnd() * 0.4f);
+            if (!z.pendingSkill)
+                z.nextRanged = now + 4.0f + Rnd() * 5.0f;
+        }
+        return;
+    }
+    if (now < z.nextAttack)
+        return;
+    // the skills that fit, at random
+    int choice = -1, fits = 0;
+    for (int i = 2; i < 6; i++)
+    {
+        const ZgMove& m = kit->moves[i];
+        int state = p.evolved ? m.evolved : m.state;
+        if (state < 0 || !ZgRoleFits(m.role, dist, flat, visible, near450, near700) || !ZgAffordable(p, state))
+            continue;
+        if (rand() % ++fits == 0)
+            choice = i;
+    }
+    bool skill = choice >= 0;
+    if (!skill)
+    {
+        // attacks: within reach the light one mostly; Attack2 from afar now and then when it's a mid-range one
+        const ZgMove& a1 = kit->moves[0];
+        const ZgMove& a2 = kit->moves[1];
+        bool a2fits = ZgRoleFits(a2.role, dist, flat, visible, near450, near700) &&
+                      (a2.role != ZG_MID || flat < 330.0f || now >= z.nextRanged);
+        if (ZgRoleFits(a1.role, dist, flat, visible, near450, near700))
+            choice = a2fits && Rnd() < 0.35f ? 1 : 0;
+        else if (a2fits)
+            choice = 1;
+        if (choice >= 0 && !ZgAffordable(p, p.evolved ? kit->moves[choice].evolved : kit->moves[choice].state))
+            choice = -1;
+    }
+    if (choice < 0)
+        return;
+    const ZgMove& m = kit->moves[choice];
+    if (ZgAimed(m.role) && flat > 330.0f)
+    {
+        z.pending = choice; // turn first (ZgThink looks at the target while one is pending)
+        z.pendingSkill = skill;
+        z.aimUntil = now + 1.2f;
+        return;
+    }
+    FakeCommand(e, m.cmd);
+    if (skill)
+    {
+        static int reports = 0;
+        if (reports++ < 80)
+            Log("Zombie Giant: '%s' (%s) uses %s at %.0f units (stamina %.0f, %d humans close)", name, kit->name,
+                m.cmd, dist, p.stamina, near700);
+    }
+    z.nextAttack = now + (skill ? 0.4f : 0.7f + Rnd() * 0.4f);
+}
+
 // one frame of a Zombie Giant fighter: the giant hunts the closest human, soldiers gather and shoot the giant
 static void ZgThink(void* e, ZgPlayer& z, bool giant, int team, float now, float dt, float& fwd, float& side,
                     unsigned short& buttons)
@@ -3453,7 +3856,8 @@ static void ZgThink(void* e, ZgPlayer& z, bool giant, int team, float now, float
     V3 me = Origin(e), eye = Eye(e);
     float lookYaw = z.yaw, lookPitch = 0, moveYaw = z.yaw;
     bool move = false;
-    if (z.target)
+    bool leaving = !giant && !g_zgWater.empty() && ZgLeaveWater(e, z, now, moveYaw, lookYaw, lookPitch, move);
+    if (z.target && !leaving)
     {
         V3 tp = Center(z.target);
         float dist = Len(tp - eye);
@@ -3461,43 +3865,13 @@ static void ZgThink(void* e, ZgPlayer& z, bool giant, int team, float now, float
         if (giant)
         {
             move = dist > 140.0f && ZgPathYaw(z, me, Origin(z.target), now, 90.0f, moveYaw);
-            // the secondary attacks (Dione's poison, Titan's grenade, Revenant's fireball...) reach far: now and
-            // then the giant turns to a visible human 350..2200 units away and throws one, aiming a little high
-            // the farther it is
-            bool ranged = visible && dist >= 350.0f && dist < 2200.0f;
-            if (ranged && now >= z.nextRanged && now >= z.nextAttack && now >= z.aimUntil)
-                z.aimUntil = now + 1.0f;
+            // aimed moves (ZgGiantCombat) turn the giant to the target first, a little high the farther it is
+            bool aiming = z.pending >= 0 && visible;
             V3 aimAt = tp;
             aimAt.z += dist > 600.0f ? (dist - 600.0f) * 0.06f : 0.0f;
-            bool aiming = now < z.aimUntil && visible;
             lookYaw = (dist < 600.0f && visible) || aiming ? YawOf(aimAt - eye) : move ? moveYaw : z.yaw;
             lookPitch = (dist < 600.0f && visible) || aiming ? PitchOf(aimAt - eye) : 0;
-            if (dist < 330.0f && visible && now >= z.nextAttack)
-            {
-                FakeCommand(e, Rnd() < 0.7f ? "BossAttack1" : "BossAttack2");
-                z.nextAttack = now + 1.0f + Rnd() * 0.8f;
-            }
-            else if (aiming && ranged && fabsf(AngleDiff(lookYaw, z.yaw)) < 8.0f)
-            {
-                FakeCommand(e, "BossAttack2");
-                z.aimUntil = 0;
-                z.nextAttack = now + 1.2f;
-                z.nextRanged = now + 5.0f + Rnd() * 7.0f;
-                static int reports = 0;
-                if (reports++ < 20)
-                    Log("Zombie Giant: '%s' (giant) throws its secondary attack at '%s', %.0f units away",
-                        String(F<int>(Vars(e), EV_NETNAME)), String(F<int>(Vars(z.target), EV_NETNAME)), dist);
-            }
-            if (now >= z.nextSkill && dist < 2500.0f)
-            {
-                char skill[16];
-                snprintf(skill, sizeof(skill), "BossSkill_%d", 1 + rand() % 4);
-                FakeCommand(e, skill);
-                z.nextSkill = now + 6.0f + Rnd() * 8.0f;
-                static int reports = 0;
-                if (reports++ < 20)
-                    Log("Zombie Giant: '%s' (giant) uses %s", String(F<int>(Vars(e), EV_NETNAME)), skill);
-            }
+            ZgGiantCombat(e, z, (unsigned char*)PrivateOf(e), dist, visible, tp, eye, now, lookYaw, lookPitch, buttons);
             if (dist > 1500.0f && now >= z.nextSprint)
             {
                 z.nextSprint = now + 4.0f;
@@ -3513,14 +3887,16 @@ static void ZgThink(void* e, ZgPlayer& z, bool giant, int team, float now, float
             // strafing, and shoot it
             bool engaged = visible && dist < 1100.0f;
             float fromGroup = g_zgAllies > 1 ? Len2D(g_zgRally - me) : 0.0f;
+            V3 goal = ZgDry(Origin(z.target)); // a giant in the water: from the bank
             if (!engaged && fromGroup > 500.0f && Len(g_zgRally - Origin(z.target)) < Len(me - Origin(z.target)) + 300.0f)
                 move = ZgPathYaw(z, me, g_zgRally, now, 40.0f, moveYaw);
             else if (!engaged || dist > 850.0f)
-                move = ZgPathYaw(z, me, Origin(z.target), now, 40.0f, moveYaw);
+                move = ZgPathYaw(z, me, goal, now, 40.0f, moveYaw);
             else if (dist < 450.0f)
             {
                 moveYaw = YawOf(me - Origin(z.target));
-                move = true;
+                V3 back = me + V3{ cosf(moveYaw / RAD), sinf(moveYaw / RAD), 0 } * 150.0f;
+                move = !ZgWet(back); // backing off, but not into the water
             }
             lookYaw = visible ? YawOf(tp - eye) : move ? moveYaw : z.yaw;
             lookPitch = visible ? PitchOf(tp - eye) : 0;
@@ -3534,23 +3910,17 @@ static void ZgThink(void* e, ZgPlayer& z, bool giant, int team, float now, float
                 buttons |= IN_ATTACK;
                 z.nextFire = now + 0.12f;
             }
+            float sy = (z.yaw - 90.0f * z.strafe) / RAD; // strafing right (+1) or left, not into the water
+            if (engaged && ZgWet(me + V3{ cosf(sy), sinf(sy), 0 } * 120.0f))
+                z.strafe = -z.strafe;
             if (engaged)
                 side += z.strafe * 250.0f;
         }
     }
-    else if (!giant && g_zgAllies > 1 && Len2D(g_zgRally - me) > 300.0f)
+    else if (!giant && !leaving && g_zgAllies > 1 && Len2D(g_zgRally - me) > 300.0f)
         move = ZgPathYaw(z, me, g_zgRally, now, 40.0f, moveYaw); // nobody to fight: gather
     if (giant)
-    {
         ZgBreakThrough(e, z, me, move, moveYaw, now, lookYaw, lookPitch);
-        // evolving: with 10 evolution points the pawn evolves when "use" is pressed (0x1090d290: player +0xec0,
-        // the buttons pressed this frame, & IN_USE), which unlocks BossSkill_4 and stronger attacks
-        if (now >= z.nextUse)
-        {
-            buttons |= IN_USE;
-            z.nextUse = now + 2.0f;
-        }
-    }
     float turn = (giant ? 240.0f : 420.0f) * dt;
     z.yaw = Approach(z.yaw, move && !z.target && !z.breakTarget ? moveYaw : lookYaw, turn);
     float k = dt * 6.0f > 1.0f ? 1.0f : dt * 6.0f;
@@ -3577,7 +3947,7 @@ static void ZgThink(void* e, ZgPlayer& z, bool giant, int team, float now, float
     // stuck twice in a row (2 s): a jump and another way round
     if (now >= z.stuckCheck)
     {
-        if (move && Len2D(me - z.stuckFrom) < 30.0f)
+        if (move && Len2D(me - z.stuckFrom) < 30.0f && fabsf(me.z - z.stuckFrom.z) < 30.0f) // climbing isn't stuck
             z.stuckCount++;
         else
             z.stuckCount = 0;
@@ -3608,6 +3978,11 @@ static void ZgSpawned(void* e, ZgPlayer& z, float now)
     z.nextRanged = now + 3.0f + Rnd() * 5.0f;
     z.aimUntil = 0;
     z.breakTarget = nullptr;
+    z.pending = -1;
+    z.kitType = 0;
+    z.busySince = 0;
+    z.ladder = -1;
+    z.climbUntil = 0;
     z.slowSince = now;
     z.yaw = F<float>(Vars(e), EV_VANGLE + 4);
     z.pitch = 0;
@@ -3759,6 +4134,7 @@ static void UpdateZgPlayers()
     }
     if (GameMode() != MODE_ZOMBIE_GIANT || g_edictToVars < 0)
         return;
+    ZgScanWorld();
     ZgUpdateTeam(now);
     if (!g_CreateFakeClient || !g_FreeEntPrivateData)
         return;
