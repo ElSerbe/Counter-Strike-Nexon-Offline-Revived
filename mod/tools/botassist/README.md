@@ -324,5 +324,7 @@ automatic ones join CT. No more kicks in co-op modes.
 - Stuck: a jump, then 1.5 s sideways, then another target for 10 s ("can't get to"). A breakable it gave up on is
   ignored for 20 s; broken ones (solid 0, entvars +0x11c) are skipped.
 - Ammunition (ZgAmmo): player +0x101c active weapon; weapon +0xe4 id, +0x158 primary ammo type, +0x160 clip; player
-  +0x1034 reserve per ammo type. Reload when empty or below half between fights; with no ammunition left: pistol
-  ("slot2") and to the closest zs_supply box: use, "primammo"/"secammo" (money topped up), back to "slot1".
+  +0x1034 reserve per ammo type. Reload when empty or below half between fights. Each weapon held for the first
+  time in a life gets its ammunition: "primammo"/"secammo" (money topped up), and if that gives nothing the reserve
+  is set to three clips (30..300). Empty: pistol ("slot2"), then knife ("slot3"). The zs_supply boxes need a charge
+  earned by dealing damage, so the soldiers don't go there (they stood at them pressing use).

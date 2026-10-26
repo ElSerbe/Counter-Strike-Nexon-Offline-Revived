@@ -3152,8 +3152,9 @@ struct ZgPlayer
     void* avoidTarget = nullptr; // a target it couldn't reach (for a while)
     float ignoreBreakUntil = 0, avoidUntil = 0, detourUntil = 0, detourYaw = 0, stuckRoundsSince = 0;
     int stuckRounds = 0;
-    bool needAmmo = false;
-    float nextReload = 0, supplySince = 0, nextUseBox = 0;
+    float nextReload = 0, stockAt = 0, nextSlot = 0;
+    int stockId = 0, stockBefore = 0, emptyStage = 0;
+    std::vector<int> stocked;             // weapons whose ammunition this life already got
     std::unordered_map<int, int> maxClip; // the fullest clip seen per weapon id
     void* breakTarget = nullptr; // a zg_breakable / func_breakable in the giant's way
     int stuckCount = 0;
@@ -3900,13 +3901,17 @@ static void ZgGiantCombat(void* e, ZgPlayer& z, unsigned char* pl, float dist, b
 // ---------------------------------------------------------------- Zombie Giant: ammunition
 // The soldiers' weapon (from CBasePlayerWeapon::UpdateClientData 0x11533920 and the AmmoX loop in 0x114df514):
 // player +0x101c the active item; weapon +0xe4 its id, +0x158 the primary ammo type, +0x160 the clip; player
-// +0x1034 the reserve per ammo type (0x102 types). A soldier reloads when its clip is empty, and between fights when
-// it's below half; with nothing left it takes its pistol and goes to the closest supply box (zs_supply, the mode's
-// resupply points) and uses it / buys ammunition there.
+// +0x1034 the reserve per ammo type (0x102 types).
+// Each weapon a soldier holds for the first time in a life gets its ammunition bought ("primammo" / "secammo",
+// the mode's money is topped up); when the buy gives nothing (the room's weapons handed over directly have none),
+// the reserve is filled directly: three clips. A soldier reloads when its clip is empty, and between fights when
+// it's below half. With nothing left it takes its pistol, then its knife. (The zs_supply boxes need a charge earned
+// by dealing damage: the soldiers don't go there.)
 struct ZgGun
 {
     bool ok = false;
     int id = 0, clip = 0, reserve = 0;
+    int* reservePtr = nullptr;
 };
 
 static ZgGun ZgWeapon(void* e)
@@ -3923,105 +3928,71 @@ static ZgGun ZgWeapon(void* e)
     g.id = *(int*)(w + 0xe4);
     if (type <= 0 || type >= 0x102 || g.clip < 0 || !Readable(pl + 0x1034 + 4 * type, 4))
         return g; // a knife or a grenade
-    g.reserve = *(int*)(pl + 0x1034 + 4 * type);
+    g.reservePtr = (int*)(pl + 0x1034 + 4 * type);
+    g.reserve = *g.reservePtr;
     g.ok = true;
     return g;
 }
 
-static void* ZgClosestSupply(V3 me)
-{
-    void* best = nullptr;
-    float bestD = 1e30f;
-    ForEntitiesNear(me, 12000.0f, [&](void* o) {
-        const char* cls = ClassName(o);
-        if (!cls || strcmp(cls, "zs_supply"))
-            return;
-        float d = Len(Center(o) - me);
-        if (d < bestD)
-        {
-            bestD = d;
-            best = o;
-        }
-    });
-    return best;
-}
-
-// reloading (buttons) and running out: true while the soldier walks to a supply box (moveYaw / look set)
-static bool ZgAmmo(void* e, ZgPlayer& z, float now, bool fighting, float& moveYaw, float& lookYaw, float& lookPitch,
-                   bool& move, unsigned short& buttons, bool& holdFire)
+// reloading and stocking up (buttons, commands); holdFire while the clip is empty
+static void ZgAmmo(void* e, ZgPlayer& z, float now, bool fighting, unsigned short& buttons, bool& holdFire)
 {
     ZgGun g = ZgWeapon(e);
+    if (!g.ok)
+        return;
     const char* name = String(F<int>(Vars(e), EV_NETNAME));
-    if (g.ok)
+    int& top = z.maxClip[g.id];
+    top = g.clip > top ? g.clip : top;
+    // a weapon held for the first time in this life: its ammunition
+    if (std::find(z.stocked.begin(), z.stocked.end(), g.id) == z.stocked.end())
     {
-        int& top = z.maxClip[g.id];
-        top = g.clip > top ? g.clip : top;
-        holdFire = g.clip == 0;
-        if (g.reserve > 0 && now >= z.nextReload && (g.clip == 0 || (!fighting && g.clip < top / 2)))
+        int want = top * 3 < 30 ? 30 : top * 3 > 300 ? 300 : top * 3;
+        if (z.stockId != g.id)
         {
-            buttons |= IN_RELOAD;
-            z.nextReload = now + (g.clip == 0 ? 0.6f : 2.5f);
+            z.stockId = g.id;
+            z.stockAt = now + 0.6f;
+            z.stockBefore = g.reserve;
+            unsigned char* pl = (unsigned char*)PrivateOf(e);
+            if (pl && *(int*)(pl + 0xca8) < 16000)
+                *(int*)(pl + 0xca8) = 16000;
+            if (g.reserve < want)
+                for (int i = 0; i < 3; i++)
+                {
+                    FakeCommand(e, "primammo");
+                    FakeCommand(e, "secammo");
+                }
         }
-        if (g.clip == 0 && g.reserve == 0 && !z.needAmmo)
+        else if (now >= z.stockAt)
         {
-            z.needAmmo = true;
-            z.supplySince = 0;
-            FakeCommand(e, "slot2"); // the pistol meanwhile
+            bool bought = g.reserve > z.stockBefore;
+            if (g.reserve < want)
+                *g.reservePtr = want; // nothing to buy (or not enough): handed over like the room's weapons
+            z.stocked.push_back(g.id);
+            z.stockId = 0;
             static int reports = 0;
-            if (reports++ < 30)
-                Log("Zombie Giant: '%s' is out of ammunition (weapon %d): to the closest supply box", name, g.id);
+            if (reports++ < 40)
+                Log("Zombie Giant: '%s' ammunition for weapon %d: %d -> %d (%s)", name, g.id, z.stockBefore, *g.reservePtr,
+                    bought ? "bought" : "given");
+            g.reserve = *g.reservePtr;
         }
     }
-    if (!z.needAmmo)
-        return false;
-    V3 me = Origin(e);
-    void* box = ZgClosestSupply(me);
-    if (!box)
+    holdFire = g.clip == 0;
+    if (g.reserve > 0 && now >= z.nextReload && (g.clip == 0 || (!fighting && g.clip < top / 2)))
     {
-        FakeCommand(e, "primammo");
-        z.needAmmo = false;
-        return false;
+        buttons |= IN_RELOAD;
+        z.nextReload = now + (g.clip == 0 ? 0.6f : 2.5f);
     }
-    V3 c = Center(box);
-    if (Len2D(c - me) > 90.0f)
+    if (g.clip == 0 && g.reserve == 0 && now >= z.nextSlot)
     {
-        move = ZgPathYaw(z, me, ZgDry(c), now, 40.0f, moveYaw);
-        lookYaw = moveYaw;
-        lookPitch = 0;
-        return true;
+        // empty: the pistol, then the knife
+        z.emptyStage++;
+        FakeCommand(e, z.emptyStage == 1 ? "slot2" : "slot3");
+        z.nextSlot = now + 1.0f;
+        static int reports = 0;
+        if (reports++ < 30)
+            Log("Zombie Giant: '%s' is out of ammunition (weapon %d): %s", name, g.id,
+                z.emptyStage == 1 ? "the pistol" : "the knife");
     }
-    // at the box: face it, use it and buy ammunition (the mode's money is topped up), then back to the rifle
-    if (z.supplySince <= 0)
-    {
-        z.supplySince = now;
-        unsigned char* pl = (unsigned char*)PrivateOf(e);
-        if (pl && *(int*)(pl + 0xca8) < 16000)
-            *(int*)(pl + 0xca8) = 16000;
-    }
-    lookYaw = YawOf(c - Eye(e));
-    lookPitch = PitchOf(c - Eye(e));
-    if (now >= z.nextUseBox)
-    {
-        buttons |= IN_USE;
-        FakeCommand(e, "primammo");
-        FakeCommand(e, "secammo");
-        z.nextUseBox = now + 0.7f;
-    }
-    if (now - z.supplySince > 1.5f)
-    {
-        FakeCommand(e, "slot1");
-        ZgGun p = ZgWeapon(e);
-        bool done = p.ok && p.reserve > 0;
-        if (done || now - z.supplySince > 10.0f)
-        {
-            z.needAmmo = false;
-            static int reports = 0;
-            if (reports++ < 30)
-                Log("Zombie Giant: '%s' at the supply box: %s (clip %d, reserve %d)", name,
-                    done ? "resupplied" : "nothing to take, back to the fight", p.clip, p.reserve);
-        }
-    }
-    return true;
 }
 
 // one frame of a Zombie Giant fighter: the giant hunts the closest human, soldiers gather and shoot the giant
@@ -4039,10 +4010,10 @@ static void ZgThink(void* e, ZgPlayer& z, bool giant, int team, float now, float
     float lookYaw = z.yaw, lookPitch = 0, moveYaw = z.yaw;
     bool move = false;
     bool leaving = !giant && !g_zgWater.empty() && ZgLeaveWater(e, z, now, moveYaw, lookYaw, lookPitch, move);
-    bool holdFire = false, fighting = z.target && CanSee(e, eye, z.target);
-    bool supplying = !giant && !leaving &&
-                     ZgAmmo(e, z, now, fighting, moveYaw, lookYaw, lookPitch, move, buttons, holdFire);
-    if (z.target && !leaving && !supplying)
+    bool holdFire = false;
+    if (!giant)
+        ZgAmmo(e, z, now, z.target && CanSee(e, eye, z.target), buttons, holdFire);
+    if (z.target && !leaving)
     {
         V3 tp = Center(z.target);
         float dist = Len(tp - eye);
@@ -4100,7 +4071,7 @@ static void ZgThink(void* e, ZgPlayer& z, bool giant, int team, float now, float
                 side += z.strafe * 250.0f;
         }
     }
-    else if (!giant && !leaving && !supplying && g_zgAllies > 1 && Len2D(g_zgRally - me) > 300.0f)
+    else if (!giant && !leaving && g_zgAllies > 1 && Len2D(g_zgRally - me) > 300.0f)
         move = ZgPathYaw(z, me, g_zgRally, now, 40.0f, moveYaw); // nobody to fight: gather
     if (giant)
         ZgBreakThrough(e, z, me, move, moveYaw, now, lookYaw, lookPitch);
@@ -4200,7 +4171,9 @@ static void ZgSpawned(void* e, ZgPlayer& z, float now)
     z.busySince = 0;
     z.ladder = -1;
     z.climbUntil = 0;
-    z.needAmmo = false;
+    z.stocked.clear();
+    z.stockId = 0;
+    z.emptyStage = 0;
     z.detourUntil = 0;
     z.stuckRounds = 0;
     z.slowSince = now;
