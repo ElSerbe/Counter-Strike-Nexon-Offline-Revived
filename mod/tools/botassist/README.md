@@ -328,3 +328,19 @@ automatic ones join CT. No more kicks in co-op modes.
   time in a life gets its ammunition: "primammo"/"secammo" (money topped up), and if that gives nothing the reserve
   is set to three clips (30..300). Empty: pistol ("slot2"), then knife ("slot3"). The zs_supply boxes need a charge
   earned by dealing damage, so the soldiers don't go there (they stood at them pressing use).
+
+## Console: cheats and bot_add
+
+- Nexon's hw.dll registers god, noclip, notarget, fly, kill (and pause, setpause, unpause, save) with an empty
+  handler (`ret`). botassist writes its own handlers into those entries of the engine's command list (head at hw rva
+  0x14aa068; entries {next, name, function, flags}) and adds `give` through AddServerCommand (engine function 146).
+  They act on your player (the first client without FL_FAKECLIENT, PEntityOfEntIndex = engine function 77); all but
+  kill need `sv_cheats 1`. Toggles are applied again every server frame (from the StartFrame detour) until turned off
+  or a new map starts: god = FL_GODMODE + takedamage 0, noclip = movetype 8, fly = movetype 5, notarget =
+  FL_NOTARGET; kill = mp.dll's ClientKill (DLL function 20, 0x113efaf0). `give` takes weapon_x / item_x / ammo_x,
+  a bare name (weapon_ is added) or an item id of botassist_weapons.txt (GiveNamedItem 0x114bac10). Messages go to
+  the console through Con_Printf (hw rva 0x6e0d70); entvars movetype is at 0x118.
+- `bot_add`, `bot_add_t`, `bot_add_ct`: mp.dll registers every bot_* command with the same handler (0x11317980 ->
+  bot manager ServerCommand -> AddBot(2 / 0 / 1)). Their entries get a wrapper that sets g_consoleBotAdd, and
+  RoomBotQuota lets those bots in past the room's AI players.
+- The command list is checked every 2 s of server time (mp.dll's commands are registered when its bot manager starts).

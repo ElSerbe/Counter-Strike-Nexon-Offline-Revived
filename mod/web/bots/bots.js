@@ -99,6 +99,8 @@
     const count = Math.max(1, Math.min(+$("count").value || 1, room.maxPlayers - room.players || 1));
     $("add").disabled = !room.host || full;
     $("fill").disabled = !room.host || full;
+    $("scramble").disabled = !room.host || room.bots.length < 2 || scrambling;
+    $("scramble").classList.toggle("hidden", isCoop());
     $("newteam").classList.toggle("hidden", isCoop());
     document.querySelectorAll("#newteam button").forEach(x => x.classList.toggle("on", +x.dataset.team === newTeam));
     $("add").textContent = "+ Add " + (count > 1 ? count : "bot");
@@ -363,6 +365,37 @@
     }
   }
 
+  // shuffles the AI players between CT and T, half on each team (an odd one goes to either at random); a chosen
+  // character of the other team goes back to random, like a team change in the editor
+  let scrambling = false;
+  async function scramble() {
+    if (scrambling || !room || !room.host || isCoop() || room.bots.length < 2) return;
+    const ids = room.bots.map(b => b.id);
+    for (let i = ids.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [ids[i], ids[j]] = [ids[j], ids[i]];
+    }
+    const ct = Math.floor(ids.length / 2) + (ids.length % 2 && Math.random() < 0.5 ? 1 : 0);
+    const teamOf = new Map(ids.map((id, i) => [id, i < ct ? 2 : 1]));
+    const moves = room.bots.filter(b => b.team !== teamOf.get(b.id)).map(b => {
+      const team = teamOf.get(b.id), ch = byId[b.character];
+      return Object.assign({ action: "update", id: b.id, team }, ch && ch.team && ch.team !== team ? { character: 0 } : {});
+    });
+    scrambling = true;
+    $("scramble").disabled = true;
+    try {
+      for (const m of moves) room = await api(m);
+      lastJson = JSON.stringify(room);
+      toast(`Teams scrambled: ${ct} CT, ${ids.length - ct} T.`);
+    } catch (e) {
+      toast(e.message, true);
+    }
+    scrambling = false;
+    load();
+    renderList();
+    renderEditor();
+  }
+
   async function load() {
     try {
       const fresh = await api();
@@ -409,6 +442,7 @@
   const newBot = () => ({ team: isCoop() ? 2 : newTeam, preset: newPreset });
   $("add").addEventListener("click", () => send(Object.assign({ action: "add", count: Math.max(1, +$("count").value || 1) }, newBot())));
   $("fill").addEventListener("click", () => send(Object.assign({ action: "fill" }, newBot())));
+  $("scramble").addEventListener("click", scramble);
 
   // the selected bot
   $("name").addEventListener("input", () => change({ name: $("name").value.trim() || "Bot" }));

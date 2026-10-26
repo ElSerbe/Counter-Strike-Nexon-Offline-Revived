@@ -2785,11 +2785,17 @@ static AddBotFn g_AddBot;
 // 2 any; returns the team to add (0/1) or -1 to refuse.
 static const int MODE_ZOMBIE_GIANT = 30; // Zombie Giant: see HookZombieGiant
 static void MarkZgPlayers();
+static int g_consoleBotAdd = 0; // inside "bot_add" / "bot_add_t" / "bot_add_ct" typed in the console
 
 static int RoomBotQuota(int team, const char* which)
 {
     if (!cfg.enabled)
         return team;
+    if (g_consoleBotAdd)
+    {
+        Log("console bot_add (%s, team %d): added past the room's AI players", which, team);
+        return team;
+    }
     LoadNav();
     UpdateMatchBots();
     if (g_matchFetch != 2 || !g_matchKnown)
@@ -4640,11 +4646,14 @@ static void HookedMessageBegin(int dest, int type, const float* origin, void* ed
     g_MessageBeginOrig(dest, type, origin, ed);
 }
 
+static void ConsoleFrame();
+
 static void HookedStartFrame()
 {
     g_StartFrameTramp();
     __try
     {
+        ConsoleFrame();
         if (cfg.enabled && g_edictToVars >= 0 && g_pGlobals && *g_pGlobals && (GameMode(), ZgActive()))
         {
             LoadNav();
@@ -4821,6 +4830,305 @@ static void HookBotManager(DWORD delta)
     }
     if (g_AddBot)
         Log("bot manager hooked: no terrorist bots in co-op modes");
+}
+
+// ---------------------------------------------------------------- console: cheats and bot_add
+// Nexon's hw.dll keeps god, noclip, notarget, fly and kill registered but empty (each handler is a bare "ret").
+// botassist puts its own handlers in those entries of the engine's command list (head at hw rva 0x14aa068, entries
+// {next, name, function, flags}) and adds "give" (engine function 146, AddServerCommand). Like in CS 1.6 they act on
+// your player in the server the game hosts, and all but kill need sv_cheats 1. A toggle is applied every server frame
+// (the game resets movetype and takedamage on respawn) until it is turned off or a new map starts.
+// "bot_add", "bot_add_t" and "bot_add_ct" (mp.dll's bot command handler 0x11317980) go past the room's AI players:
+// g_consoleBotAdd is set while they run. The list is checked every 2 s (game commands come and go with mp.dll).
+static const DWORD HW_CMD_LIST = 0x31aa068 - 0x1d00000, HW_CON_PRINTF = 0x23e0d70 - 0x1d00000;
+static const DWORD MP_BOT_COMMAND = 0x11317980, MP_CLIENTKILL = 0x113efaf0;
+static const int ENG_PENTITYOFENTINDEX = 77, ENG_ADDSERVERCOMMAND = 146, GV_MAXCLIENTS = 0x90, EV_MOVETYPE = 0x118;
+static const int FL_GODMODE = 0x40, FL_NOTARGET = 0x80, MOVETYPE_WALK = 3, MOVETYPE_FLY = 5, MOVETYPE_NOCLIP = 8;
+static const float DAMAGE_NO = 0.0f, DAMAGE_AIM = 2.0f;
+struct CmdFunction
+{
+    CmdFunction* next;
+    const char* name;
+    void (*fn)();
+    int flags;
+};
+typedef void* (*EntityOfIndexFn)(int index);
+typedef void (*ConPrintfFn)(const char* fmt, ...);
+typedef void (*AddServerCommandFn)(const char* name, void (*fn)());
+static struct
+{
+    bool god, noclip, notarget, fly;
+    float lastFrame = -1; // gpGlobals->time of the last server frame (it starts again with each map)
+    DWORD lastTick = 0;   // GetTickCount of the last server frame: is a match running?
+} g_cheats;
+static float g_consoleNextCheck = -1;
+static void CalibrateEdict(void* edict);
+
+static void Con(const char* fmt, ...)
+{
+    char buf[512];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+    if (g_hwLo)
+        ((ConPrintfFn)(g_hwLo + HW_CON_PRINTF))("%s", buf);
+}
+
+// your player: the first client that isn't a bot or a fake player
+static void* YourEdict()
+{
+    if (!g_hwLo || !g_mpDelta || !g_pGlobals || !*g_pGlobals || GetTickCount() - g_cheats.lastTick > 2000)
+        return nullptr;
+    void* found = nullptr;
+    __try
+    {
+        auto entOf = (EntityOfIndexFn)((void**)(MP_ENGFUNCS + g_mpDelta))[ENG_PENTITYOFENTINDEX];
+        int maxClients = *(int*)((DWORD)*g_pGlobals + GV_MAXCLIENTS);
+        for (int i = 1; i <= maxClients && i <= 64 && !found; i++)
+        {
+            void* e = entOf(i);
+            if (!e)
+                continue;
+            if (g_edictToVars < 0)
+                CalibrateEdict(e);
+            if (g_edictToVars < 0)
+                return nullptr;
+            int flags = F<int>(Vars(e), EV_FLAGS);
+            if ((flags & FL_CLIENT) && !(flags & FL_FAKECLIENT) && PrivateOf(e))
+                found = e;
+        }
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        found = nullptr;
+    }
+    return found;
+}
+
+static void* CheatTarget(bool cheat)
+{
+    void* e = YourEdict();
+    if (!e)
+        Con("Only in a match you host.\n");
+    else if (cheat && g_CVarGetFloat && g_CVarGetFloat("sv_cheats") == 0.0f)
+    {
+        Con("Cheats are off: type sv_cheats 1 first.\n");
+        e = nullptr;
+    }
+    return e;
+}
+
+static void SetMovetype(void* e)
+{
+    F<int>(Vars(e), EV_MOVETYPE) = g_cheats.noclip ? MOVETYPE_NOCLIP : g_cheats.fly ? MOVETYPE_FLY : MOVETYPE_WALK;
+}
+
+static void CmdGod()
+{
+    void* e = CheatTarget(true);
+    if (!e)
+        return;
+    g_cheats.god = !g_cheats.god;
+    unsigned char* v = Vars(e);
+    if (g_cheats.god)
+    {
+        F<int>(v, EV_FLAGS) |= FL_GODMODE;
+        F<float>(v, EV_TAKEDAMAGE) = DAMAGE_NO;
+    }
+    else
+    {
+        F<int>(v, EV_FLAGS) &= ~FL_GODMODE;
+        if (F<float>(v, EV_TAKEDAMAGE) == DAMAGE_NO)
+            F<float>(v, EV_TAKEDAMAGE) = DAMAGE_AIM;
+    }
+    Con("godmode %s\n", g_cheats.god ? "ON" : "OFF");
+    Log("console: godmode %s", g_cheats.god ? "on" : "off");
+}
+
+static void CmdNoclip()
+{
+    void* e = CheatTarget(true);
+    if (!e)
+        return;
+    g_cheats.noclip = !g_cheats.noclip;
+    SetMovetype(e);
+    Con("noclip %s\n", g_cheats.noclip ? "ON" : "OFF");
+    Log("console: noclip %s", g_cheats.noclip ? "on" : "off");
+}
+
+static void CmdFly()
+{
+    void* e = CheatTarget(true);
+    if (!e)
+        return;
+    g_cheats.fly = !g_cheats.fly;
+    SetMovetype(e);
+    Con("flymode %s\n", g_cheats.fly ? "ON" : "OFF");
+    Log("console: flymode %s", g_cheats.fly ? "on" : "off");
+}
+
+static void CmdNotarget()
+{
+    void* e = CheatTarget(true);
+    if (!e)
+        return;
+    g_cheats.notarget = !g_cheats.notarget;
+    if (g_cheats.notarget)
+        F<int>(Vars(e), EV_FLAGS) |= FL_NOTARGET;
+    else
+        F<int>(Vars(e), EV_FLAGS) &= ~FL_NOTARGET;
+    Con("notarget %s\n", g_cheats.notarget ? "ON" : "OFF");
+    Log("console: notarget %s", g_cheats.notarget ? "on" : "off");
+}
+
+// mp.dll's ClientKill (DLL function 20)
+static void CmdKill()
+{
+    void* e = CheatTarget(false);
+    if (!e)
+        return;
+    unsigned char* fn = (unsigned char*)(MP_CLIENTKILL + g_mpDelta);
+    if (fn[0] != 0x55 || fn[1] != 0x8b || fn[2] != 0xec)
+    {
+        Con("kill: unexpected game code\n");
+        return;
+    }
+    Log("console: kill");
+    ((EdictFn)fn)(e);
+}
+
+static bool GiveItem(void* player, const char* name)
+{
+    __try
+    {
+        ((GiveNamedItemFn)(MP_GIVENAMEDITEM + g_mpDelta))(player, nullptr, name, 1);
+        return true;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        return false;
+    }
+}
+
+// give <weapon_x | item_x | ammo_x | x (weapon_x) | item id from botassist_weapons.txt>
+static void CmdGive()
+{
+    void* e = CheatTarget(true);
+    if (!e)
+        return;
+    const char* a = g_CmdArgv(1);
+    if (!a || !*a)
+    {
+        Con("Usage: give <name> (weapon_ak47, ak47, item_kevlar...) or give <item id>\n");
+        return;
+    }
+    std::string name = a;
+    for (auto& ch : name)
+        ch = (char)tolower(ch);
+    if (name.find_first_not_of("0123456789") == std::string::npos)
+    {
+        auto it = cfg.weaponModel.find(atoi(name.c_str()));
+        if (it == cfg.weaponModel.end() || it->second.size() <= 13)
+        {
+            Con("give: no weapon with item id %s\n", name.c_str());
+            return;
+        }
+        name = "weapon_" + it->second.substr(9, it->second.size() - 13); // models/p_<res>.mdl
+    }
+    else if (name.compare(0, 7, "weapon_") && name.compare(0, 5, "item_") && name.compare(0, 5, "ammo_"))
+        name = "weapon_" + name;
+    static std::vector<char*> names; // the entity's classname may keep pointing at it
+    char* keep = nullptr;
+    for (char* s : names)
+        if (name == s)
+            keep = s;
+    if (!keep)
+        names.push_back(keep = _strdup(name.c_str()));
+    void* pl = PrivateOf(e);
+    bool ok = pl && GiveItem(pl, keep);
+    Con(ok ? "give %s\n" : "give %s: failed\n", keep);
+    Log("console: give %s%s", keep, ok ? "" : " (failed)");
+}
+
+static void ConsoleBotAdd()
+{
+    g_consoleBotAdd++;
+    ((void (*)())(MP_BOT_COMMAND + g_mpDelta))();
+    g_consoleBotAdd--;
+}
+
+static bool IsEmptyHandler(void (*fn)())
+{
+    unsigned char* p = (unsigned char*)fn;
+    return Readable(p, 3) && (p[0] == 0xc3 || (p[0] == 0xc2 && p[1] == 0 && p[2] == 0));
+}
+
+static void InstallConsoleCommands()
+{
+    static const struct { const char* name; void (*fn)(); } cheats[] = {
+        { "god", CmdGod }, { "noclip", CmdNoclip }, { "notarget", CmdNotarget }, { "fly", CmdFly }, { "kill", CmdKill } };
+    static const char* botAdds[] = { "bot_add", "bot_add_t", "bot_add_ct" };
+    void (*botCommand)() = (void (*)())(MP_BOT_COMMAND + g_mpDelta);
+    bool give = false;
+    int n = 0, patched = 0;
+    for (CmdFunction* c = *(CmdFunction**)(g_hwLo + HW_CMD_LIST); c && n < 4096; c = c->next, n++)
+    {
+        if (!Readable(c, sizeof(*c)) || !Readable(c->name, 1))
+            break;
+        give |= !_stricmp(c->name, "give");
+        for (auto& ch : cheats)
+            if (!_stricmp(c->name, ch.name) && c->fn != ch.fn && IsEmptyHandler(c->fn))
+                c->fn = ch.fn, patched++;
+        for (auto b : botAdds)
+            if (!_stricmp(c->name, b) && c->fn == botCommand)
+                c->fn = ConsoleBotAdd, patched++;
+    }
+    if (!give)
+    {
+        auto add = (AddServerCommandFn)((void**)(MP_ENGFUNCS + g_mpDelta))[ENG_ADDSERVERCOMMAND];
+        if (add)
+            add("give", CmdGive), patched++;
+    }
+    if (patched)
+        Log("console: %d commands set up (god, noclip, notarget, fly, kill, give, bot_add*)", patched);
+}
+
+// every server frame: keeps the toggles on your player, checks the command list every 2 s
+static void ConsoleFrame()
+{
+    if (!g_hwLo || !g_mpDelta)
+        return;
+    float now = Now();
+    if (now < g_cheats.lastFrame - 1.0f) // a new map
+    {
+        if (g_cheats.god || g_cheats.noclip || g_cheats.notarget || g_cheats.fly)
+            Log("console: new map, cheats off");
+        g_cheats.god = g_cheats.noclip = g_cheats.notarget = g_cheats.fly = false;
+        g_consoleNextCheck = -1;
+    }
+    g_cheats.lastFrame = now;
+    g_cheats.lastTick = GetTickCount();
+    if (g_consoleNextCheck < 0 || now >= g_consoleNextCheck)
+    {
+        g_consoleNextCheck = now + 2.0f;
+        InstallConsoleCommands();
+    }
+    if (!(g_cheats.god || g_cheats.noclip || g_cheats.notarget || g_cheats.fly))
+        return;
+    void* e = YourEdict();
+    if (!e || !Alive(e))
+        return;
+    unsigned char* v = Vars(e);
+    if (g_cheats.god)
+    {
+        F<int>(v, EV_FLAGS) |= FL_GODMODE;
+        F<float>(v, EV_TAKEDAMAGE) = DAMAGE_NO;
+    }
+    if (g_cheats.notarget)
+        F<int>(v, EV_FLAGS) |= FL_NOTARGET;
+    if (g_cheats.noclip || g_cheats.fly)
+        SetMovetype(e);
 }
 
 // ---------------------------------------------------------------- orders in the other modes
