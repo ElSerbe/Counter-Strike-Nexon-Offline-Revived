@@ -291,3 +291,12 @@ automatic ones join CT. No more kicks in co-op modes.
 - Zombie Giant only: the hooks every mode passes through (StartFrame, client connect/disconnect and server command
   logging, engine drops, room kicks, reliable messages) act only in mode 30 or while its fake players are still
   connected (ZgActive); in the other modes they call the game's code unchanged.
+- Giant commands per pawn (vfunc +0x20 maps the command to a monster state; pawn vtables Human 0x117c18c4, Dione
+  0x117c18e8 type 1, Titan 0x117c191c type 2, Revenant 0x117c1950 type 4, Angra 0x117c1984 type 6, Goliath
+  0x117c19b8 type 3, Comanche 0x117c19dc type 5): BossAttack1/2, BossJump, BossSkill_1..3; BossSkill_4 only once
+  evolved (pawn +0x14). Evolving: 10 points ("zg_gainevol", pawn +0x10) and "use" pressed (0x1090d290: player
+  +0xec0 & IN_USE). The giant AI presses use every 2 s.
+- Giant AI: the secondary attack (mostly ranged: poison, grenade, fireball) is also thrown at visible humans
+  350..2200 units away every 5..12 s, aimed a little high with the distance. zg_splash has 136 zg_breakable (props
+  only giants break) and 34 func_breakable: a giant that barely moves for 0.4 s with one within 120 units in front
+  faces it and hits it (BossAttack1) until it breaks (6 s at most). Logged: "is blocked by", "broke", "throws".

@@ -3118,7 +3118,7 @@ typedef int (*ChooseTeamFn)(void* player, int team);
 static const DWORD MP_ZOMBIEBOSSPLAYER_VT = 0x11958834;
 static const int ENG_CREATEFAKECLIENT = 108, ENG_FREEENTPRIVATEDATA = 70;
 static const int ZG_GIANT_TYPE = 0x3710; // ZombieBossPlayer: 1, 2, 4, 6 giants; 0, 3, 5 humans
-static const int IN_ATTACK2 = 0x800, IN_FORWARD = 0x8, IN_BACK = 0x10, IN_MOVELEFT = 0x200, IN_MOVERIGHT = 0x400;
+static const int IN_ATTACK2 = 0x800, IN_USE = 0x20, IN_FORWARD = 0x8, IN_BACK = 0x10, IN_MOVELEFT = 0x200, IN_MOVERIGHT = 0x400;
 static const int PLAYER_LAST_MOVEMENT = 0xccc;
 // Joining players get maxspeed 1 (ClientPutInServer, like Counter-Strike's freeze) until the game gives them their
 // real speed; in this mode the bots and fake players never got it (speed 0..1 while walking). pev->maxspeed is at
@@ -3141,6 +3141,8 @@ struct ZgPlayer
     float buyAt = 0, deadSince = 0, nextRespawn = 0, nextTarget = 0, nextPath = 0, nextAttack = 0, nextSkill = 0;
     float nextStrafe = 0, nextFire = 0, sprintUntil = 0, nextSprint = 0, stuckCheck = 0;
     float nextReport = 0, lastThink = 0, lastFwd = 0, lastSide = 0, nextPickReport = 0;
+    float nextRanged = 0, aimUntil = 0, nextBreakScan = 0, breakUntil = 0, nextUse = 0, slowSince = 0;
+    void* breakTarget = nullptr; // a zg_breakable / func_breakable in the giant's way
     int stuckCount = 0;
     bool lastMove = false;
     V3 stuckFrom{};
@@ -3364,6 +3366,81 @@ static void ZgUnfreeze(void* e, const char* who)
             String(F<int>(Vars(e), EV_NETNAME)), speed, g_zgYourMaxspeed, F<float>(Vars(e), EV_MAXSPEED));
 }
 
+// What only the giants can break (zg_breakable: forklifts, containers..., 136 of them on zg_splash) and the
+// ordinary func_breakable stop a giant that walks into them. When the giant hardly moves and one is right in front
+// of it (within its reach, towards where it walks), it faces it and hits it (BossAttack1) until it breaks.
+static bool ZgBreakable(void* o)
+{
+    const char* cls = ClassName(o);
+    unsigned char* v = Vars(o);
+    return cls && (!strcmp(cls, "zg_breakable") || !strcmp(cls, "func_breakable")) && F<float>(v, EV_HEALTH) > 0.0f &&
+           F<float>(v, EV_TAKEDAMAGE) != 0.0f;
+}
+
+static void ZgBreakThrough(void* e, ZgPlayer& z, V3 me, bool move, float moveYaw, float now, float& lookYaw,
+                           float& lookPitch)
+{
+    unsigned char* v = Vars(e);
+    float speed = Len2D(Vec((float*)(v + EV_VELOCITY)));
+    if (!move || speed > 90.0f)
+        z.slowSince = now;
+    if (z.breakTarget && (now >= z.breakUntil || !ZgBreakable(z.breakTarget)))
+    {
+        static int reports = 0;
+        if (reports++ < 30)
+            Log("Zombie Giant: '%s' (giant) %s the %s in its way", String(F<int>(v, EV_NETNAME)),
+                ZgBreakable(z.breakTarget) ? "gives up on" : "broke", ClassName(z.breakTarget));
+        z.breakTarget = nullptr;
+        z.nextPath = 0;
+    }
+    if (!z.breakTarget && move && now - z.slowSince > 0.4f && now >= z.nextBreakScan)
+    {
+        z.nextBreakScan = now + 0.3f;
+        V3 lo = Vec((float*)(v + EV_ABSMIN)), hi = Vec((float*)(v + EV_ABSMAX));
+        float radius = (hi.x - lo.x) * 0.5f;
+        V3 c = (lo + hi) * 0.5f;
+        float best = 1e30f;
+        ForEntitiesNear(c, radius + 400.0f, [&](void* o) {
+            if (o == e || !ZgBreakable(o))
+                return;
+            unsigned char* ov = Vars(o);
+            V3 olo = Vec((float*)(ov + EV_ABSMIN)), ohi = Vec((float*)(ov + EV_ABSMAX));
+            V3 oc = (olo + ohi) * 0.5f;
+            if (ohi.z < lo.z + 8.0f || olo.z > hi.z) // under its feet or over its head
+                return;
+            // the gap between the two boxes, sideways
+            float gx = fmaxf(0.0f, fmaxf(olo.x - hi.x, lo.x - ohi.x));
+            float gy = fmaxf(0.0f, fmaxf(olo.y - hi.y, lo.y - ohi.y));
+            float gap = sqrtf(gx * gx + gy * gy);
+            if (gap > 120.0f || fabsf(AngleDiff(YawOf(oc - c), moveYaw)) > 70.0f)
+                return;
+            if (gap < best)
+            {
+                best = gap;
+                z.breakTarget = o;
+            }
+        });
+        if (z.breakTarget)
+        {
+            z.breakUntil = now + 6.0f;
+            static int reports = 0;
+            if (reports++ < 30)
+                Log("Zombie Giant: '%s' (giant) is blocked by a %s (health %.0f, %.0f units away): breaking it",
+                    String(F<int>(v, EV_NETNAME)), ClassName(z.breakTarget), F<float>(Vars(z.breakTarget), EV_HEALTH), best);
+        }
+    }
+    if (!z.breakTarget)
+        return;
+    V3 oc = Center(z.breakTarget), eye = Eye(e);
+    lookYaw = YawOf(oc - eye);
+    lookPitch = PitchOf(oc - eye) * 0.5f;
+    if (fabsf(AngleDiff(lookYaw, z.yaw)) < 25.0f && now >= z.nextAttack)
+    {
+        FakeCommand(e, "BossAttack1");
+        z.nextAttack = now + 0.9f + Rnd() * 0.4f;
+    }
+}
+
 // one frame of a Zombie Giant fighter: the giant hunts the closest human, soldiers gather and shoot the giant
 static void ZgThink(void* e, ZgPlayer& z, bool giant, int team, float now, float dt, float& fwd, float& side,
                     unsigned short& buttons)
@@ -3384,12 +3461,32 @@ static void ZgThink(void* e, ZgPlayer& z, bool giant, int team, float now, float
         if (giant)
         {
             move = dist > 140.0f && ZgPathYaw(z, me, Origin(z.target), now, 90.0f, moveYaw);
-            lookYaw = dist < 600.0f && visible ? YawOf(tp - eye) : move ? moveYaw : z.yaw;
-            lookPitch = dist < 600.0f && visible ? PitchOf(tp - eye) : 0;
+            // the secondary attacks (Dione's poison, Titan's grenade, Revenant's fireball...) reach far: now and
+            // then the giant turns to a visible human 350..2200 units away and throws one, aiming a little high
+            // the farther it is
+            bool ranged = visible && dist >= 350.0f && dist < 2200.0f;
+            if (ranged && now >= z.nextRanged && now >= z.nextAttack && now >= z.aimUntil)
+                z.aimUntil = now + 1.0f;
+            V3 aimAt = tp;
+            aimAt.z += dist > 600.0f ? (dist - 600.0f) * 0.06f : 0.0f;
+            bool aiming = now < z.aimUntil && visible;
+            lookYaw = (dist < 600.0f && visible) || aiming ? YawOf(aimAt - eye) : move ? moveYaw : z.yaw;
+            lookPitch = (dist < 600.0f && visible) || aiming ? PitchOf(aimAt - eye) : 0;
             if (dist < 330.0f && visible && now >= z.nextAttack)
             {
                 FakeCommand(e, Rnd() < 0.7f ? "BossAttack1" : "BossAttack2");
                 z.nextAttack = now + 1.0f + Rnd() * 0.8f;
+            }
+            else if (aiming && ranged && fabsf(AngleDiff(lookYaw, z.yaw)) < 8.0f)
+            {
+                FakeCommand(e, "BossAttack2");
+                z.aimUntil = 0;
+                z.nextAttack = now + 1.2f;
+                z.nextRanged = now + 5.0f + Rnd() * 7.0f;
+                static int reports = 0;
+                if (reports++ < 20)
+                    Log("Zombie Giant: '%s' (giant) throws its secondary attack at '%s', %.0f units away",
+                        String(F<int>(Vars(e), EV_NETNAME)), String(F<int>(Vars(z.target), EV_NETNAME)), dist);
             }
             if (now >= z.nextSkill && dist < 2500.0f)
             {
@@ -3443,8 +3540,19 @@ static void ZgThink(void* e, ZgPlayer& z, bool giant, int team, float now, float
     }
     else if (!giant && g_zgAllies > 1 && Len2D(g_zgRally - me) > 300.0f)
         move = ZgPathYaw(z, me, g_zgRally, now, 40.0f, moveYaw); // nobody to fight: gather
+    if (giant)
+    {
+        ZgBreakThrough(e, z, me, move, moveYaw, now, lookYaw, lookPitch);
+        // evolving: with 10 evolution points the pawn evolves when "use" is pressed (0x1090d290: player +0xec0,
+        // the buttons pressed this frame, & IN_USE), which unlocks BossSkill_4 and stronger attacks
+        if (now >= z.nextUse)
+        {
+            buttons |= IN_USE;
+            z.nextUse = now + 2.0f;
+        }
+    }
     float turn = (giant ? 240.0f : 420.0f) * dt;
-    z.yaw = Approach(z.yaw, move && !z.target ? moveYaw : lookYaw, turn);
+    z.yaw = Approach(z.yaw, move && !z.target && !z.breakTarget ? moveYaw : lookYaw, turn);
     float k = dt * 6.0f > 1.0f ? 1.0f : dt * 6.0f;
     z.pitch += (lookPitch - z.pitch) * k;
     if (move)
@@ -3475,7 +3583,9 @@ static void ZgThink(void* e, ZgPlayer& z, bool giant, int team, float now, float
             z.stuckCount = 0;
         if (z.stuckCount >= 2)
         {
-            if (giant)
+            if (giant && z.breakTarget)
+                ; // busy breaking what's in the way
+            else if (giant)
                 FakeCommand(e, "BossJump");
             else
                 buttons |= IN_JUMP;
@@ -3495,6 +3605,10 @@ static void ZgSpawned(void* e, ZgPlayer& z, float now)
     z.path.clear();
     z.target = nullptr;
     z.nextSkill = now + 4.0f + Rnd() * 6.0f;
+    z.nextRanged = now + 3.0f + Rnd() * 5.0f;
+    z.aimUntil = 0;
+    z.breakTarget = nullptr;
+    z.slowSince = now;
     z.yaw = F<float>(Vars(e), EV_VANGLE + 4);
     z.pitch = 0;
     z.stuckFrom = Origin(e);
