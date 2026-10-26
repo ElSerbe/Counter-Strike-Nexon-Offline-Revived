@@ -288,3 +288,6 @@ automatic ones join CT. No more kicks in co-op modes.
   spots" checks every giant spawn.
 - The room's primary given directly is then selected with "weapon_<resource>" (dropping the AWP doesn't always work:
   weapon_chainmg was given but the AWP stayed in hand).
+- Zombie Giant only: the hooks every mode passes through (StartFrame, client connect/disconnect and server command
+  logging, engine drops, room kicks, reliable messages) act only in mode 30 or while its fake players are still
+  connected (ZgActive); in the other modes they call the game's code unchanged.

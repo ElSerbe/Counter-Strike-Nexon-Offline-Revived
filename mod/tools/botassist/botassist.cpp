@@ -3148,6 +3148,10 @@ struct ZgPlayer
 };
 static std::vector<ZgPlayer> g_zgPlayers;
 static std::vector<std::string> g_zgKickNames; // fake players botassist kicks itself
+
+// everything Zombie Giant only acts in that mode, or while its fake players are still connected (they leave on the
+// next map): the other modes' bots never see it
+static bool ZgActive() { return g_gameMode == MODE_ZOMBIE_GIANT || !g_zgPlayers.empty(); }
 static int g_zgLevel = -1, g_zgMarkLevel = -1;
 static float g_zgFrame = -1, g_zgStart = 0;
 
@@ -3747,14 +3751,14 @@ static void LogClientEvent(const char* what, void* e)
 
 static void HookedClientDisconnect(void* e)
 {
-    __try { if (e && g_edictToVars >= 0) LogClientEvent("disconnects", e); } __except (EXCEPTION_EXECUTE_HANDLER) {}
+    __try { if (e && g_edictToVars >= 0 && ZgActive()) LogClientEvent("disconnects", e); } __except (EXCEPTION_EXECUTE_HANDLER) {}
     g_ClientDisconnectTramp(e);
 }
 
 static void HookedPutInServer(void* e)
 {
     g_PutInServerTramp(e);
-    __try { if (e && g_edictToVars >= 0) LogClientEvent("put in server", e); } __except (EXCEPTION_EXECUTE_HANDLER) {}
+    __try { if (e && g_edictToVars >= 0 && ZgActive()) LogClientEvent("put in server", e); } __except (EXCEPTION_EXECUTE_HANDLER) {}
 }
 
 static void LogServerCommand(const char* cmd)
@@ -3772,7 +3776,7 @@ static void HookedServerCommand(const char* cmd)
     __try
     {
         static int reports = 0;
-        if (cmd && (strstr(cmd, "kick") || reports < 40))
+        if (cmd && ZgActive() && (strstr(cmd, "kick") || reports < 40))
         {
             reports++;
             LogServerCommand(cmd);
@@ -3943,7 +3947,7 @@ static bool IsZgFakeEdict(void* e)
 
 static void HookedMessageBegin(int dest, int type, const float* origin, void* ed)
 {
-    if (dest == MSG_ONE && ed && IsZgFakeEdict(ed))
+    if (dest == MSG_ONE && ed && !g_zgPlayers.empty() && IsZgFakeEdict(ed))
     {
         dest = MSG_ONE_UNRELIABLE;
         static int reports = 0;
@@ -3958,7 +3962,7 @@ static void HookedStartFrame()
     g_StartFrameTramp();
     __try
     {
-        if (cfg.enabled && g_edictToVars >= 0 && g_pGlobals && *g_pGlobals)
+        if (cfg.enabled && g_edictToVars >= 0 && g_pGlobals && *g_pGlobals && (GameMode(), ZgActive()))
         {
             LoadNav();
             UpdateMatchBots();
@@ -4041,7 +4045,7 @@ static void HookedDropClient(void* cl, int crash, const char* fmt, DWORD a1, DWO
 {
     DWORD ret = (DWORD)_ReturnAddress();
     bool keep = false;
-    __try { keep = cl && ZgKeepClient(cl, fmt, ret); } __except (EXCEPTION_EXECUTE_HANDLER) {}
+    __try { keep = cl && ZgActive() && ZgKeepClient(cl, fmt, ret); } __except (EXCEPTION_EXECUTE_HANDLER) {}
     if (!keep)
         g_DropClientTramp(cl, crash, fmt, a1, a2, a3, a4);
 }
@@ -4080,7 +4084,7 @@ static void __fastcall HookedRoomKick(void* self, void* edx, int index)
 {
     DWORD ret = (DWORD)_ReturnAddress();
     bool blocked = false;
-    __try { blocked = ZgRoomKickBlocked(index, ret); } __except (EXCEPTION_EXECUTE_HANDLER) {}
+    __try { blocked = ZgActive() && ZgRoomKickBlocked(index, ret); } __except (EXCEPTION_EXECUTE_HANDLER) {}
     if (!blocked)
         g_RoomKick(self, edx, index);
 }
