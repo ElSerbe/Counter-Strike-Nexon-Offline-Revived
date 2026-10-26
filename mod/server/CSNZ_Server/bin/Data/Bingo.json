@@ -1,0 +1,46 @@
+{
+	// Offline Mileage Bingo (the game's own bingo window) played with Bingo Tickets. Read by CSNZ_Server's
+	// BingoManager at start; boards are kept in Data/BingoState.json.
+	"TicketItemID": 2179,  // bingoticket ("Bingo Tickets Held")
+	"ShuffleItemID": 996,  // BingoShuffle: used from the inventory, shuffles the board
+	"Costs": {
+		"Random": 1,           // any number 1-99 (may not be on the board or already open)
+		"EvenOdd": 2,          // an even / odd number
+		"SpecialBase": 8,      // "Open Special": a random closed cell of the board (original: 3 + 1 per line completed)
+		"SpecialPerLine": 0,
+		"ChangeGrandPrize": 1,
+		"Reset": 1
+	},
+	"GrandPrizeOncePerDay": true,
+	"Shuffle": { "MaxOpened": 10, "BeforeFirstLine": true },
+	"Tickets": {
+		"LevelEvery": 5,           // 1 ticket at levels 5, 10, 15...
+		"LevelTickets": 1,
+		"MatchDropChance": 0.08,   // a finished match drops a ticket: 8% + 0.4% per kill + 4% for a win, at most 30%
+		"MatchDropPerKill": 0.004,
+		"MatchDropPerWin": 0.04,     // +4% for a win
+		"MatchDropMaxChance": 0.3,
+		"MatchDropMinKills": 0
+	},
+	// Prizes of the 12 lines, chosen by weight when a board is made. Types:
+	//   PassItem: a weapon/character of the medal passes the player doesn't own; CostShare = slice of those items
+	//             sorted by medal cost (0 cheapest, 1 most expensive)
+	//   Item:     one of ItemIDs (Count, Days; Days 0 = permanent)
+	//   Medals:   a random amount of medals, shown as IconItemID with the amount as count
+	// Consumables (decoders, boxes, shuffles, tickets) have far lower weights than weapons, parts and medals.
+	"LinePrizes": [
+		{ "Type": "PassItem", "Kinds": ["weapon"], "CostShare": [0.0, 0.7], "Weight": 26 },
+		{ "Type": "PassItem", "Kinds": ["character"], "CostShare": [0.0, 0.7], "Weight": 8 },
+		{ "Type": "Item", "Weight": 28, "ItemIDs": [4001, 4002, 4003, 4006, 4007, 4008, 4011, 4012, 4013, 4016, 4017, 4018, 4021, 4022, 4023, 4026, 4027, 4028, 4031, 4032, 4033, 4036, 4037, 4038, 4041, 4042, 4043, 4046, 4047, 4048, 4051, 4052, 4053, 4056, 4057, 4058, 4061, 4062, 4063, 4066, 4067, 4068, 4071, 4072, 4073, 4076, 4077, 4078, 4081, 4082, 4083, 4086, 4087, 4088, 4091, 4092, 4093] },
+		{ "Type": "Medals", "Medals": [5, 20], "IconItemID": 1030, "Weight": 28 },
+		{ "Type": "Item", "ItemIDs": [165], "Count": 1, "Weight": 3 },
+		{ "Type": "Item", "ItemIDs": [2096], "Count": 1, "Weight": 2 },
+		{ "Type": "Item", "ItemIDs": [996], "Count": 1, "Weight": 2 },
+		{ "Type": "Item", "ItemIDs": [2179], "Count": 2, "Weight": 3 }
+	],
+	// The grand prize (whole board): the best pass weapons and characters the player doesn't own.
+	"GrandPrizes": [
+		{ "Type": "PassItem", "Kinds": ["weapon"], "CostShare": [0.6, 1.0], "Weight": 3 },
+		{ "Type": "PassItem", "Kinds": ["character"], "CostShare": [0.6, 1.0], "Weight": 1 }
+	]
+}

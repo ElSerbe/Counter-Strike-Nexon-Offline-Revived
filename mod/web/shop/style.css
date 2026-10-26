@@ -1,0 +1,258 @@
+:root {
+  --bg: #090b0e;
+  --panel: #11151a;
+  --panel-2: #171c22;
+  --line: #262d35;
+  --line-strong: #3a434d;
+  --text: #e8e4d8;
+  --muted: #8a929b;
+  --accent: #f4d23a;
+  --gold: #f4d23a;
+  --accent-dim: #6b5b16;
+  --owned: #7cc35a;
+  --danger: #e0573f;
+  --font: Bahnschrift, "Segoe UI", Arial, sans-serif;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: var(--font); user-select: none; }
+button { font-family: inherit; cursor: pointer; }
+.hidden { display: none !important; }
+
+/* ---------- top bar ---------- */
+.topbar { height: 56px; display: flex; align-items: center; gap: 18px; padding: 0 20px; border-bottom: 1px solid var(--line); background: linear-gradient(#0e1216, #0a0d10); }
+.topbar h1 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: 4px; text-transform: uppercase; white-space: nowrap; }
+.back { background: none; border: 1px solid var(--line-strong); color: var(--text); padding: 6px 12px; font-size: 13px; letter-spacing: 1px; text-transform: uppercase; }
+.back:hover { border-color: var(--accent); color: var(--accent); }
+.tabs { display: flex; gap: 2px; margin-left: 10px; }
+.tabs button { background: none; border: none; border-bottom: 2px solid transparent; color: var(--muted); padding: 18px 12px 16px; font-size: 13px; letter-spacing: 1.5px; text-transform: uppercase; }
+.tabs button:hover { color: var(--text); }
+.tabs button.active { color: var(--accent); border-bottom-color: var(--accent); }
+.wallet { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 600; color: var(--accent); }
+
+.medal-icon { display: inline-block; width: 18px; height: 18px; flex: none; background: var(--gold);
+  clip-path: polygon(50% 0, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%); position: relative; }
+.medal-icon::after { content: ""; position: absolute; inset: 5px; background: #2b2405; clip-path: polygon(50% 0, 63% 38%, 100% 38%, 69% 60%, 81% 100%, 50% 75%, 19% 100%, 31% 60%, 0 38%, 37% 38%); }
+.medal-icon.small { width: 13px; height: 13px; }
+.medal-icon.small::after { inset: 3px; }
+
+.close { background: none; border: 1px solid var(--line-strong); color: var(--muted); padding: 6px 12px; font-size: 13px; letter-spacing: 1.5px; text-transform: uppercase; }
+.close:hover { border-color: var(--danger); color: var(--text); }
+
+main { height: calc(100% - 56px); }
+
+/* ---------- acquisition centre (pass list) ---------- */
+.centre { display: flex; height: 100%; }
+.pass-list { width: 290px; flex: none; border-right: 1px solid var(--line); overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.pass-card { position: relative; flex: none; height: 92px; border: 1px solid var(--line); background: var(--panel); text-align: left; color: var(--text); padding: 0; overflow: hidden; }
+.pass-card:hover { border-color: var(--line-strong); }
+.pass-card.selected { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
+.pass-card .art { position: absolute; inset: 0; opacity: .55; }
+.pass-card .info { position: relative; padding: 12px 14px; height: 100%; display: flex; flex-direction: column; justify-content: space-between; background: linear-gradient(90deg, rgba(9,11,14,.92) 45%, rgba(9,11,14,.2)); }
+.pass-card .name { font-size: 16px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; }
+.pass-card .meta { font-size: 11px; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+
+.badge { display: inline-block; padding: 2px 7px; font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; border: 1px solid currentColor; }
+.badge.season { color: var(--accent); }
+.badge.event { color: #79c7ff; }
+
+.progress { height: 6px; background: #20262d; position: relative; overflow: hidden; }
+.progress > span { position: absolute; inset: 0 auto 0 0; background: var(--accent); }
+.mini-progress { width: 90px; }
+
+.featured { flex: 1; display: flex; flex-direction: column; padding: 18px 22px; gap: 14px; min-width: 0; }
+.banner { position: relative; height: 300px; border: 1px solid var(--line); overflow: hidden; }
+.banner .art { position: absolute; inset: 0; }
+.banner .caption { position: absolute; left: 0; right: 0; bottom: 0; padding: 18px 22px; background: linear-gradient(transparent, rgba(5,6,8,.92)); }
+.banner .caption h2 { margin: 6px 0 0; font-size: 34px; letter-spacing: 3px; text-transform: uppercase; }
+.featured .desc { color: var(--muted); font-size: 14px; line-height: 1.5; margin: 0; }
+.stats { display: flex; gap: 26px; align-items: flex-end; }
+.stat .label { font-size: 11px; color: var(--muted); letter-spacing: 1.5px; text-transform: uppercase; }
+.stat .value { font-size: 20px; font-weight: 600; margin-top: 4px; display: flex; align-items: center; gap: 6px; }
+.stat.grow { flex: 1; }
+.cta { align-self: flex-start; background: var(--accent); color: #17140a; border: none; padding: 12px 26px; font-size: 14px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; }
+.cta:hover { filter: brightness(1.1); }
+.cta:disabled { background: #2a3038; color: var(--muted); cursor: default; filter: none; }
+
+/* ---------- pass view (pages + preview) ---------- */
+.pass-view { display: flex; height: 100%; }
+.pages { flex: 1; overflow-y: auto; padding: 16px 20px 24px; min-width: 0; }
+.page { margin-bottom: 22px; }
+.page-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; font-size: 13px; letter-spacing: 2px; text-transform: uppercase; }
+.page-head .title { font-weight: 600; }
+.page-head .count { color: var(--muted); margin-left: auto; letter-spacing: 1px; }
+.page-head .lock-note { color: var(--muted); letter-spacing: 1px; text-transform: none; font-size: 12px; }
+.grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.page.locked .grid { opacity: .38; filter: grayscale(1); }
+
+.tile { position: relative; height: 128px; border: 1px solid var(--line); background: var(--panel); color: var(--text); padding: 0; text-align: left; overflow: hidden; }
+.tile:hover { border-color: var(--line-strong); }
+.tile.selected { border-color: var(--accent); }
+.tile .art { position: absolute; inset: 8px 8px 34px; display: flex; align-items: center; justify-content: center; }
+.tile .art svg { width: 100%; height: 100%; }
+.art .icon { max-width: 100%; max-height: 100%; object-fit: contain; filter: drop-shadow(0 4px 8px rgba(0,0,0,.6)); }
+.art .fallback { width: 100%; height: 100%; align-items: center; justify-content: center; }
+.tile.owned .art .icon { opacity: .85; }
+.tile .foot { position: absolute; left: 0; right: 0; bottom: 0; height: 30px; padding: 0 8px; display: flex; align-items: center; justify-content: space-between; gap: 6px; background: var(--panel-2); font-size: 11px; letter-spacing: .5px; }
+.tile .foot .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-transform: uppercase; }
+.tile .foot .cost { display: flex; align-items: center; gap: 4px; color: var(--accent); flex: none; font-weight: 600; }
+.tile.owned .foot .cost { color: var(--owned); }
+/* item unlocked before and gone from the inventory: half price, labelled under the icon */
+.tile.rebuy .art { bottom: 48px; }
+.tile .rebuy-tag { position: absolute; left: 0; right: 0; bottom: 33px; text-align: center; font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--accent); }
+.tile .foot .cost s, .preview .price s { color: var(--muted); font-weight: 400; margin-right: 2px; }
+.tile .check { position: absolute; top: 6px; right: 6px; width: 18px; height: 18px; background: var(--owned); clip-path: polygon(14% 52%, 0 66%, 38% 100%, 100% 22%, 86% 8%, 38% 70%); }
+
+.preview { width: 330px; flex: none; border-left: 1px solid var(--line); padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; background: linear-gradient(180deg, #0d1014, var(--bg)); }
+.preview > * { flex-shrink: 0; }
+.preview .stage { position: relative; height: 220px; flex: none; border: 1px solid var(--line); background: radial-gradient(ellipse at 50% 60%, #1f262e, #0b0e11 72%); overflow: hidden; }
+.preview .stage .stage-canvas { position: absolute; inset: 0; width: 100%; height: 100%; cursor: grab; }
+.preview .stage .stage-canvas:active { cursor: grabbing; }
+.preview .stage > .art { display: none; }
+.preview .stage.no-model > .art { display: flex; height: 100%; border: none; background: none; }
+.preview .stage.no-model .stage-canvas { display: none; }
+.preview .art { height: 220px; border: 1px solid var(--line); background: radial-gradient(circle at 50% 45%, #1d242c, #0c0f12 70%); display: flex; align-items: center; justify-content: center; padding: 20px; }
+.preview .art svg { width: 100%; height: 100%; }
+.preview .category { font-size: 11px; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; }
+.preview h3 { margin: 0; font-size: 24px; letter-spacing: 2px; text-transform: uppercase; word-break: break-word; }
+.preview .price { display: flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 600; color: var(--accent); }
+.preview .note { font-size: 12px; color: var(--muted); line-height: 1.5; min-height: 18px; }
+.preview .cta { align-self: stretch; text-align: center; }
+.preview .empty { color: var(--muted); font-size: 13px; margin: auto 0; text-align: center; line-height: 1.6; }
+
+/* ---------- orders ---------- */
+.orders { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; padding: 20px 22px; height: 100%; overflow-y: auto; }
+.orders h2 { margin: 0 0 12px; font-size: 14px; letter-spacing: 2px; text-transform: uppercase; display: flex; justify-content: space-between; color: var(--accent); }
+.orders h2 small { color: var(--muted); font-weight: 400; letter-spacing: 1px; }
+.order { border: 1px solid var(--line); background: var(--panel); padding: 10px 12px; margin-bottom: 8px; }
+.order.done { border-color: #2f4a24; }
+.order .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 8px; }
+.order .text { font-size: 14px; letter-spacing: .5px; }
+.order .reward { display: flex; align-items: center; gap: 6px; color: var(--accent); font-weight: 600; }
+.order.done .reward { color: var(--owned); }
+.ticket-reward { display: inline-flex; align-items: center; gap: 3px; margin-left: 8px; }
+.ticket-reward img { height: 14px; width: auto; border-radius: 2px; }
+.order .sub { font-size: 11px; color: var(--muted); margin-top: 5px; letter-spacing: 1px; text-transform: uppercase; }
+.orders > div { min-width: 0; }
+.order.done .progress > span { background: var(--owned); }
+
+/* ---------- weapon stats ---------- */
+.stats-list { display: grid; gap: 6px; }
+.stat-row { display: grid; grid-template-columns: 74px 1fr 26px; align-items: center; gap: 8px; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+.stat-row .bar { height: 5px; background: #20262d; position: relative; }
+.stat-row .bar > span { position: absolute; inset: 0 auto 0 0; background: var(--accent); }
+.stat-row .num { text-align: right; color: var(--text); }
+.stat-row.plain .num { color: var(--accent); }
+.grades { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.grade { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 5px 0; border: 1px solid var(--line); background: #0d1013; }
+.grade b { font-size: 18px; letter-spacing: 1px; color: var(--muted); }
+.grade b.g5 { color: #ff6b4a; } .grade b.g4 { color: #f4a63a; } .grade b.g3 { color: var(--accent); } .grade b.g2 { color: #7cc35a; } .grade b.g1 { color: #8fb6d9; }
+.grade span { font-size: 10px; letter-spacing: 1.5px; color: var(--muted); text-transform: uppercase; }
+.sheet-note { font-size: 11px; letter-spacing: 1px; color: var(--muted); text-transform: uppercase; }
+.desc-text { margin: 2px 0 0; font-size: 12px; line-height: 1.5; color: #b9b5aa; letter-spacing: .2px; }
+.team { display: inline-block; margin-left: 8px; padding: 1px 6px; font-size: 10px; letter-spacing: 1.5px; vertical-align: middle; border: 1px solid currentColor; }
+.team.ct { color: #6fb3ff; } .team.tr { color: #ff7a5c; }
+
+.tooltip { position: fixed; z-index: 10; width: 290px; pointer-events: none; background: #13181d; border: 1px solid var(--line-strong); padding: 12px 14px; box-shadow: 0 10px 28px rgba(0,0,0,.6); display: grid; gap: 8px; }
+.tooltip .tt-name { font-size: 14px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; }
+.tooltip .tt-cat { font-size: 10px; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; }
+
+/* ---------- misc ---------- */
+.message { margin: auto; padding: 60px 20px; text-align: center; color: var(--muted); font-size: 15px; line-height: 1.6; }
+.toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: #1b2026; border: 1px solid var(--line-strong); padding: 10px 18px; font-size: 13px; letter-spacing: .5px; box-shadow: 0 8px 24px rgba(0,0,0,.5); }
+.toast.ok { border-color: var(--owned); color: var(--owned); }
+.toast.error { border-color: var(--danger); color: #ff9a86; }
+
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-thumb { background: #2a3139; }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* ---------- battle pass art: promotional picture or a cover made from the pass's item icons ---------- */
+.art img.promo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 35%; }
+.art img.cover-icon { position: absolute; height: auto; filter: drop-shadow(0 6px 10px rgba(0,0,0,.7)); }
+.pass-card .art, .banner .art, .pass-hero .art { z-index: 0; }   /* keeps the cover icons under the captions */
+.pass-card .art img.cover-icon { width: 34% !important; }
+.pass-hero .art img.cover-icon { width: 28% !important; }
+
+/* ---------- inside a pass: its own colours (set by app.js as --theme / --theme-dark / --theme-soft) ---------- */
+.pass-view { --accent: var(--theme); background: radial-gradient(ellipse at 20% -10%, var(--theme-soft), transparent 55%), linear-gradient(180deg, var(--theme-dark) -60%, var(--bg) 45%); }
+.pass-view .page-head { border-bottom: 1px solid var(--theme-soft); padding-bottom: 6px; }
+.pass-view .page-head .title { color: var(--theme); }
+.pass-view .tile { background: linear-gradient(180deg, var(--panel), #0d1115); }
+.pass-view .tile:hover { border-color: var(--theme); }
+.pass-view .tile .foot .cost { color: var(--gold); }
+.pass-view .tile.owned .foot .cost { color: var(--owned); }
+.pass-view .preview { background: linear-gradient(180deg, var(--theme-soft), var(--bg) 40%); }
+.pass-view .preview .price { color: var(--gold); }
+
+.pass-hero { position: relative; height: 128px; border: 1px solid var(--line); overflow: hidden; margin-bottom: 18px; }
+.pass-hero .art { position: absolute; inset: 0; }
+.pass-hero .caption { position: absolute; inset: 0; padding: 14px 18px; display: flex; flex-direction: column; justify-content: flex-end; gap: 6px;
+  background: linear-gradient(90deg, rgba(6,8,10,.92) 30%, rgba(6,8,10,.25) 75%, transparent); }
+.pass-hero .caption .badge { align-self: flex-start; color: var(--theme); }
+.pass-hero .caption p { margin: 0; max-width: 60%; font-size: 13px; line-height: 1.4; color: var(--text); }
+.hero-stats { display: flex; gap: 16px; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+.hero-stats span { display: flex; align-items: center; gap: 5px; }
+
+/* ---------- hold to unlock ---------- */
+.buy-row { display: flex; align-items: center; gap: 12px; }
+.buy-row .price { flex: none; }
+.cta.hold { position: relative; overflow: hidden; flex: 1; padding: 12px 10px; }
+.cta.hold .label { position: relative; }
+.cta.hold .fill { position: absolute; inset: 0 auto 0 0; width: calc(var(--hold, 0) * 100%); background: rgba(255,255,255,.45); }
+.cta.hold.charging { box-shadow: 0 0 calc(var(--hold, 0) * 22px) var(--theme, var(--accent)); }
+.tile .charge { position: absolute; left: 0; bottom: 0; height: 3px; width: calc(var(--hold, 0) * 100%); background: var(--theme); z-index: 2; box-shadow: 0 0 8px var(--theme); }
+.tile.charging { border-color: var(--theme); box-shadow: 0 0 calc(var(--hold, 0) * 24px) var(--theme), inset 0 0 calc(var(--hold, 0) * 40px) var(--theme-soft); }
+.tile.charging .art { filter: brightness(calc(1 + var(--hold, 0) * .7)) drop-shadow(0 0 calc(var(--hold, 0) * 10px) var(--theme)); }
+.tile .hold-hint { position: absolute; top: 6px; left: 8px; font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--theme); animation: hint-pulse 1.6s ease-in-out infinite; }
+@keyframes hint-pulse { 50% { opacity: .35; } }
+.tile.flash, .cta.flash { animation: unlock-flash .6s ease-out; }
+@keyframes unlock-flash { 0% { box-shadow: 0 0 40px #fff, inset 0 0 60px rgba(255,255,255,.6); } 100% { box-shadow: none; } }
+
+/* ---------- buying a battle pass ---------- */
+.badge.core { color: #c9b26b; }
+.pass-tag { display: flex; align-items: center; gap: 4px; margin-left: auto; margin-right: 10px; font-weight: 600; letter-spacing: 1px; }
+.pass-tag.locked { color: var(--gold); }
+.pass-tag.free { color: var(--owned); }
+.pass-card.not-owned .name { color: #c2bdb0; }
+.featured-actions { display: flex; align-items: center; gap: 14px; }
+.featured-actions .price { display: flex; align-items: center; gap: 8px; font-size: 20px; font-weight: 600; color: var(--gold); }
+.featured-actions .cta { align-self: auto; }
+.featured-actions .cta.hold { flex: none; min-width: 270px; }
+.cta.ghost { background: none; border: 1px solid var(--line-strong); color: var(--text); }
+.cta.ghost:hover { border-color: var(--accent); }
+.pass-note { margin: 0; color: var(--muted); font-size: 12px; }
+
+/* ---------- challenge book ---------- */
+.challenges { height: 100%; overflow-y: auto; padding: 18px 22px 26px; }
+.book-head { display: grid; grid-template-columns: 1fr auto; gap: 10px 20px; align-items: end; margin-bottom: 18px; }
+.book-head h2 { margin: 0; font-size: 18px; letter-spacing: 3px; text-transform: uppercase; color: var(--accent); }
+.book-head p { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
+.book-stats { display: flex; gap: 26px; }
+.book-stats > div { display: flex; flex-direction: column; gap: 4px; }
+.book-stats .label { font-size: 10px; color: var(--muted); letter-spacing: 1.5px; text-transform: uppercase; }
+.book-stats .value { display: flex; align-items: center; gap: 6px; font-size: 18px; font-weight: 600; }
+.book-progress { grid-column: 1 / -1; }
+.book-group { margin-bottom: 18px; }
+.book-group h3 { margin: 0 0 10px; font-size: 13px; letter-spacing: 2px; text-transform: uppercase; display: flex; gap: 10px; align-items: baseline;
+  border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+.book-group h3 small { color: var(--muted); font-weight: 400; letter-spacing: 1px; }
+.book-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.challenge { border: 1px solid var(--line); background: var(--panel); padding: 10px 12px; min-width: 0; }
+.challenge .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+.challenge .text { font-size: 13px; }
+.challenge .reward { display: flex; align-items: center; gap: 5px; color: var(--gold); font-weight: 600; flex: none; }
+.challenge .sub { font-size: 10px; color: var(--muted); margin-top: 5px; letter-spacing: 1px; text-transform: uppercase; }
+.challenge.done { border-color: #2f4a24; background: linear-gradient(180deg, #131c12, var(--panel)); }
+.challenge.done .reward { color: var(--owned); }
+.challenge.done .progress > span { background: var(--owned); }
+.badge.faction { color: #ff8f6b; }
+
+/* ---------- supplies: quantity ---------- */
+.tile .foot .cost small { color: var(--muted); font-weight: 400; margin-left: 2px; }
+.qty { display: flex; align-items: center; gap: 6px; }
+.qty .label { font-size: 11px; color: var(--muted); letter-spacing: 1.5px; text-transform: uppercase; margin-right: 4px; }
+.qty button { background: var(--panel-2); border: 1px solid var(--line-strong); color: var(--text); min-width: 30px; height: 28px; font-size: 14px; }
+.qty button:hover { border-color: var(--theme, var(--accent)); }
+.qty .n { min-width: 34px; text-align: center; font-size: 18px; font-weight: 600; }
+.badge.supply { color: #3fd0c9; }

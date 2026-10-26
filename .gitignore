@@ -1,0 +1,43 @@
+# Source control for the offline CSNZ mod: code, configuration, data tables and notes only.
+
+# copies of the game's original files and runtime logs
+mod/backup/
+mod/logs/
+*.log
+
+# third-party tools (downloaded, not ours)
+mod/tools/ghidra/
+mod/tools/rea/
+mod/tools/rea-npm/
+mod/tools/cheatengine-mcp-bridge/
+
+# build outputs (rebuilt from source)
+*.obj
+*.asi
+*.exe
+*.dll
+*.pdb
+*.lib
+*.exp
+*.ilk
+__pycache__/
+*.pyc
+
+# private keys and certificates
+*.pem
+*.key
+
+# server runtime state: user databases and their backups, logs
+*.db3
+mod/server/CSNZ_Server/bin/Logs/
+mod/server/CSNZ_Server/bin/Data/*.before-*
+mod/server/CSNZ_Server/bin/Data/*.broken-*
+
+# shop assets exported from the game's files (mod/tools/export_shop_assets.py)
+mod/web/shop/models/
+mod/web/shop/icons/
+mod/web/shop/sounds/
+mod/web/shop/promo/
+
+# shortcuts
+*.lnk

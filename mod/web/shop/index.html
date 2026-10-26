@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Acquisition Centre</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <button id="back" class="back hidden" type="button">&#8249; Back</button>
+  <h1 id="title">Acquisition Centre</h1>
+  <nav id="tabs" class="tabs">
+    <button type="button" data-tab="passes" class="active">Battle passes</button>
+    <button type="button" data-tab="orders">Orders</button>
+    <button type="button" data-tab="challenges">Challenges</button>
+  </nav>
+  <div class="wallet" title="Medals">
+    <span class="medal-icon"></span><span id="medals">--</span>
+  </div>
+  <button id="close" class="close" type="button" title="Close (Esc)">Close &times;</button>
+</header>
+
+<main id="view"></main>
+
+<div id="toast" class="toast hidden"></div>
+<div id="tooltip" class="tooltip hidden"></div>
+
+<script src="art.js"></script>
+<script src="viewer.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

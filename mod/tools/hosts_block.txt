@@ -1,0 +1,19 @@
+# >>> CSNZ offline mod (begin) - remove this block to restore online DNS
+127.0.0.1 config.na.nexon.com
+127.0.0.1 public.api.nexon.com
+127.0.0.1 dev-public.api.nexon.com
+127.0.0.1 test-public.api.nexon.com
+127.0.0.1 csn-statsapi-csonline.nexon.com
+127.0.0.1 stg-csn-statsapi-csonline.nexon.com
+127.0.0.1 csn-stats.csonline.nexon.com
+127.0.0.1 stg-csn-stats.csonline.nexon.com
+127.0.0.1 apne1-collect.livelog.nexon.com
+127.0.0.1 apne2-collect.livelog.nexon.com
+127.0.0.1 eu.gamelog.nexon.com
+127.0.0.1 game01.csn.nexon.com
+127.0.0.1 game02.csn.nexon.com
+127.0.0.1 game03.csn.nexon.com
+127.0.0.1 platform.nexon.com
+127.0.0.1 note.nexon.com
+127.0.0.1 68bd384lrg.execute-api.ap-northeast-1.amazonaws.com
+# <<< CSNZ offline mod (end)

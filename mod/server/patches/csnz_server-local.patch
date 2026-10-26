@@ -1,0 +1,3961 @@
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index b5e72be..8496851 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -38,6 +38,9 @@ endif()
+ target_sources(PROJECTNAME PRIVATE "main.cpp")
+ target_sources(PROJECTNAME PRIVATE "serverinstance.cpp")
+ target_sources(PROJECTNAME PRIVATE "serverconfig.cpp")
++target_sources(PROJECTNAME PRIVATE "manager/warbondmanager.cpp")
++target_sources(PROJECTNAME PRIVATE "manager/bingomanager.cpp")
++target_sources(PROJECTNAME PRIVATE "net/webserver.cpp")
+ target_sources(PROJECTNAME PRIVATE "command.cpp")
+ target_sources(PROJECTNAME PRIVATE "common/buffer.cpp")
+ target_sources(PROJECTNAME PRIVATE "common/buildnum.cpp")
+diff --git a/src/common/logger.cpp b/src/common/logger.cpp
+index e38a7df..b6ca10d 100644
+--- a/src/common/logger.cpp
++++ b/src/common/logger.cpp
+@@ -1,3 +1,4 @@
++#include <algorithm>
+ #include "logger.h"
+ 
+ #include <time.h>
+@@ -65,7 +66,7 @@ void CCompositeLogger::AddLogger(ILogger* logger)
+ 
+ void CCompositeLogger::RemoveLogger(ILogger* logger)
+ {
+-	m_Loggers.erase(remove(m_Loggers.begin(), m_Loggers.end(), logger), m_Loggers.end());
++	m_Loggers.erase(std::remove(m_Loggers.begin(), m_Loggers.end(), logger), m_Loggers.end());
+ }
+ 
+ void CCompositeLogger::LogVarg(int level, const char* msg, va_list argptr)
+diff --git a/src/common/utils.cpp b/src/common/utils.cpp
+index c342dd1..e1994a9 100644
+--- a/src/common/utils.cpp
++++ b/src/common/utils.cpp
+@@ -1,3 +1,4 @@
++#include <iterator>
+ #include "utils.h"
+ #ifdef WIN32
+ #include <winsock2.h>
+diff --git a/src/definitions.h b/src/definitions.h
+index e96eb5f..c44f949 100644
+--- a/src/definitions.h
++++ b/src/definitions.h
+@@ -1441,6 +1441,36 @@ enum UserSurveyAnswerResult
+ 	ANSWER_DB_ERROR,
+ };
+ 
++/* offline build: in-game "Choose your character" survey shown to local guests */
++#define CHARACTER_SELECT_SURVEY_ID		0x43534E5A	// 'CSNZ'
++#define CHARACTER_SELECT_QUESTION_PICK	1
++#define CHARACTER_SELECT_MAX_ACCOUNTS	198		// answer IDs are 8-bit and must be consecutive: accounts 1..N, "Create new character" N+1, "Delete a character" N+2
++#define CHARACTER_DELETE_SURVEY_ID		0x43534E44	// 'CSND'
++#define CHARACTER_DELETE_QUESTION_PICK	1		// accounts 1..N, "Go back" N+1
++#define CHARACTER_DELETE_QUESTION_CONFIRM	2	// text: the character name (or "DELETE" for a character without name)
++struct LocalAccount_s
++{
++	std::string userName;
++	std::string password;
++	std::string gameName; // empty until the character is created in game
++	int level;
++};
++
++/* offline build: medals and battle passes (warbonds), see manager/warbondmanager.cpp */
++struct WarbondUnlock_s
++{
++	int warbondID;
++	int itemID;
++	int cost;
++};
++struct OrderProgress_s
++{
++	int orderID;
++	int periodStart; // unix time when the daily/weekly period of this progress started
++	int progress;
++	bool completed;
++};
++
+ // ROOM LOW FLAGS
+ #define	ROOM_LOW_ROOMNAME				(1<<0)
+ #define	ROOM_LOW_UNK					(1<<1)
+diff --git a/src/interface/ibingomanager.h b/src/interface/ibingomanager.h
+new file mode 100644
+index 0000000..9232ea8
+--- /dev/null
++++ b/src/interface/ibingomanager.h
+@@ -0,0 +1,24 @@
++#pragma once
++
++#include "imanager.h"
++
++class IUser;
++class CUserInventoryItem;
++
++/**
++ * Offline build: the game's Mileage Bingo (packet 15) played with Bingo Tickets earned by playing (level-ups,
++ * orders, match drops) instead of mileage or cash.
++ */
++class IBingoManager : public IBaseManager
++{
++public:
++	virtual void OnPacket(CReceivePacket* msg, IExtendedSocket* socket) = 0;
++	// Bingo Tickets for levelling up (every Tickets.LevelEvery levels)
++	virtual void OnLevelUp(IUser* user, int oldLevel, int newLevel) = 0;
++	// a finished match may drop a Bingo Ticket
++	virtual void OnMatchResult(IUser* user, int kills, bool won) = 0;
++	// gives Bingo Tickets (orders, rewards); shows a chat notice when reason is set
++	virtual void GiveTickets(IUser* user, int count, const char* reason) = 0;
++	// the "Bingo Shuffle" item used from the inventory; returns true when it was consumed
++	virtual bool UseShuffleItem(IUser* user, CUserInventoryItem& item) = 0;
++};
+diff --git a/src/interface/ipacketmanager.h b/src/interface/ipacketmanager.h
+index 50cc528..f7394eb 100644
+--- a/src/interface/ipacketmanager.h
++++ b/src/interface/ipacketmanager.h
+@@ -63,7 +63,7 @@ public:
+ 	virtual void SendMetadataReinforceMaxEXP(IExtendedSocket* socket) = 0;
+ 	virtual void SendMetadataUnk8(IExtendedSocket* socket) = 0;
+ 	virtual void SendMetadataProgressUnlock(IExtendedSocket* socket) = 0;
+-	virtual void SendMetadataWeaponPaints(IExtendedSocket* socket, std::vector<WeaponPaint>& weaponPaints) = 0;
++	virtual void SendMetadataWeaponPaints(IExtendedSocket* socket, const std::vector<WeaponPaint>& weaponPaints) = 0;
+ 	virtual void SendMetadataUnk3(IExtendedSocket* socket) = 0;
+ 	virtual void SendMetadataReinforceItemsExp(IExtendedSocket* socket) = 0;
+ 	virtual void SendMetadataItemExpireTime(IExtendedSocket* socket) = 0;
+@@ -96,7 +96,7 @@ public:
+ 	virtual void SendMetadataVoxelList(IExtendedSocket* socket) = 0;
+ 	virtual void SendMetadataVoxelItem(IExtendedSocket* socket) = 0;
+ 	virtual void SendMetadataUnk64(IExtendedSocket* socket) = 0;
+-	virtual void SendMetadataVoxelConfigList(IExtendedSocket* socket, std::vector<VoxelConfig>& voxelConfigList) = 0;
++	virtual void SendMetadataVoxelConfigList(IExtendedSocket* socket, const std::vector<VoxelConfig>& voxelConfigList) = 0;
+ 
+ 	virtual void SendGameMatchInfo(IExtendedSocket* socket) = 0;
+ 	virtual void SendGameMatchUnk(IExtendedSocket* socket) = 0;
+diff --git a/src/interface/iuserdatabase.h b/src/interface/iuserdatabase.h
+index 48b869d..ebbb0d0 100644
+--- a/src/interface/iuserdatabase.h
++++ b/src/interface/iuserdatabase.h
+@@ -97,6 +97,12 @@ public:
+ 	virtual int SetAddons(int userID, std::vector<int>& addons) = 0;
+ 
+ 	virtual int GetUsersAssociatedWithIP(const std::string& ip, std::vector<CUserData>& userData) = 0;
++	virtual int GetLocalAccounts(std::vector<LocalAccount_s>& accounts) = 0;
++	virtual int DeleteLocalAccount(const std::string& userName) = 0;
++	virtual int GetWarbondUnlocks(int userID, std::vector<WarbondUnlock_s>& unlocks) = 0;
++	virtual int AddWarbondUnlock(int userID, const WarbondUnlock_s& unlock) = 0;
++	virtual int GetOrderProgress(int userID, std::vector<OrderProgress_s>& orders) = 0;
++	virtual int SetOrderProgress(int userID, const OrderProgress_s& order) = 0;
+ 	virtual int GetUsersAssociatedWithHWID(const std::vector<unsigned char>& hwid, std::vector<CUserData>& userData) = 0;
+ 
+ 	// clan related
+diff --git a/src/interface/iusermanager.h b/src/interface/iusermanager.h
+index e2e0a48..1cf6e1b 100644
+--- a/src/interface/iusermanager.h
++++ b/src/interface/iusermanager.h
+@@ -40,6 +40,7 @@ public:
+ 
+ 	virtual int LoginUser(IExtendedSocket* socket, const std::string& userName, const std::string& password) = 0;
+ 	virtual int RegisterUser(IExtendedSocket* socket, const std::string& userName, const std::string& password) = 0;
++	virtual bool SendCharacterSelect(IExtendedSocket* socket) = 0;
+ 	virtual void DisconnectUser(IUser* user) = 0;
+ 	virtual void DisconnectAllFromServer() = 0;
+ 	virtual IUser* AddUser(IExtendedSocket* socket, int userID, const std::string& userName) = 0;
+diff --git a/src/interface/iwarbondmanager.h b/src/interface/iwarbondmanager.h
+new file mode 100644
+index 0000000..5405ded
+--- /dev/null
++++ b/src/interface/iwarbondmanager.h
+@@ -0,0 +1,24 @@
++#pragma once
++
++#include "imanager.h"
++
++#include <map>
++
++class IUser;
++
++/**
++ * Offline build: medals (stored in the character's points) and battle passes ("warbonds") unlocked with them,
++ * plus daily/weekly orders. The shop UI is a web page served to the in-game browser.
++ */
++class IWarbondManager : public IBaseManager
++{
++public:
++	// medals for a finished match (also advances the player's orders and challenges); returns the medals earned by
++	// the match itself
++	virtual int OnMatchResult(IUser* user, int gameMode, int kills, int headshots, bool won, bool topPlayer) = 0;
++	// headshots among a match's kills, by kill type (victimKillType of the host's kill events), see Telemetry in
++	// Data/Warbonds.json
++	virtual int CountHeadshots(const std::map<int, int>& killTypes) = 0;
++	// medals for levelling up (LevelUpPerLevel x each new level)
++	virtual void OnLevelUp(IUser* user, int oldLevel, int newLevel) = 0;
++};
+diff --git a/src/interface/net/iextendedsocket.h b/src/interface/net/iextendedsocket.h
+index 6768f4e..f62cd69 100644
+--- a/src/interface/net/iextendedsocket.h
++++ b/src/interface/net/iextendedsocket.h
+@@ -42,6 +42,7 @@ public:
+ 	virtual void SetMsg(CReceivePacket* msg) = 0;
+ 	virtual CReceivePacket* GetMsg() = 0;
+ 	virtual int GetReadResult() = 0;
++	virtual bool WouldBlock() = 0;
+ 	virtual int GetBytesReceived() = 0;
+ 	virtual int GetBytesSent() = 0;
+ 	virtual std::vector<CSendPacket*>& GetPacketsToSend() = 0;
+diff --git a/src/manager/bingomanager.cpp b/src/manager/bingomanager.cpp
+new file mode 100644
+index 0000000..b776092
+--- /dev/null
++++ b/src/manager/bingomanager.cpp
+@@ -0,0 +1,712 @@
++#include "bingomanager.h"
++#include "warbondmanager.h"
++#include "usermanager.h"
++#include "userdatabase.h"
++#include "itemmanager.h"
++#include "packetmanager.h"
++#include "serverinstance.h"
++#include "main.h"
++#include "common/utils.h"
++
++#include <fstream>
++#include <random>
++#include <set>
++#include <algorithm>
++#include <ctime>
++
++using namespace std;
++using json = nlohmann::json;
++
++CBingoManager g_BingoManager;
++
++/*
++ * Mileage Bingo protocol (packet 15), from hw.dll Packet_MileageBingo (parser 0x2116820, requests 0x21171f0..) and
++ * GameUI CMileageBingoDlg (OnCommand 0x10361ac0):
++ *
++ * client -> server, first byte the request:
++ *   0      board (the dialog opens)            1 m    open a number: m 0 any, 1 even, 2 odd, 3 special (a new one)
++ *   2      reset the board ("Reset")           3      change the grand prize ("ResetBingoReward")
++ *   4      collect the grand prize             6      tickets / history (lobby)
++ *   7 0/1  free event change / reset ("ResetBingoRewardEvent" / "ResetEvent")
++ *
++ * server -> client, first byte the reply:
++ *   0  board: u8 currency (2 = Bingo Tickets: the *_2 strings), u8 n x (u8 number, u8 opened), u8 n x line prize
++ *      (u16 item, u16 count, u16 days, u8 opened), grand prize (u16 item, u16 count, u16 days), u8 board complete
++ *      (the grand prize can be collected), u32 tickets held, u16 special open cost, 2 x u8 event flags
++ *   1  u16 drawn number                       3  grand prize (u16 item, u16 count, u16 days)
++ *   6  u32 n x (u16, u16, u32, u32) history   7  u8 event flag index, u8 value
++ *   8  u32 tickets held                       99 u16 error: #CSO_Mileage_Error_<code>_<currency>
++ * Lines (prize order): rows 0-4, columns 5-9, diagonals 10 (top left) and 11 (top right).
++ */
++enum BingoError
++{
++	BINGO_ERR_GRAND_NOT_COLLECTED = 1,
++	BINGO_ERR_NOT_COMPLETE = 5,
++	BINGO_ERR_NO_TICKETS = 6,
++	BINGO_ERR_NO_OTHER_PRIZE = 8,
++	BINGO_ERR_NOT_EVENT = 10,
++	BINGO_ERR_ONCE_A_DAY = 14,
++	BINGO_ERR_SYSTEM = 99,
++};
++
++static const int kCells = 25, kLines = 12;
++static const int kLineCells[kLines][5] = {
++	{ 0, 1, 2, 3, 4 }, { 5, 6, 7, 8, 9 }, { 10, 11, 12, 13, 14 }, { 15, 16, 17, 18, 19 }, { 20, 21, 22, 23, 24 },
++	{ 0, 5, 10, 15, 20 }, { 1, 6, 11, 16, 21 }, { 2, 7, 12, 17, 22 }, { 3, 8, 13, 18, 23 }, { 4, 9, 14, 19, 24 },
++	{ 0, 6, 12, 18, 24 }, { 4, 8, 12, 16, 20 },
++};
++
++static mt19937& Rng()
++{
++	static mt19937 rng(random_device{}());
++	return rng;
++}
++
++static int RandomInt(int lo, int hi)
++{
++	return uniform_int_distribution<int>(lo, hi)(Rng());
++}
++
++static string ItemClass(int itemID)
++{
++	string key = to_string(itemID);
++	if (g_pItemTable->GetRowIdx(key) < 0)
++		return "";
++	string value = g_pItemTable->GetCell<string>("ClassName", key);
++	value.erase(value.find_last_not_of(" \t\r\n") + 1);
++	return value;
++}
++
++static json PrizeJson(const BingoPrize& p)
++{
++	return { { "item", p.itemID }, { "count", p.count }, { "days", p.days }, { "medals", p.medals }, { "open", p.opened } };
++}
++
++static BingoPrize PrizeFrom(const json& j)
++{
++	BingoPrize p;
++	p.itemID = j.value("item", 0);
++	p.count = j.value("count", 1);
++	p.days = j.value("days", 0);
++	p.medals = j.value("medals", 0);
++	p.opened = j.value("open", false);
++	return p;
++}
++
++CBingoManager::CBingoManager() : CBaseManager("BingoManager")
++{
++}
++
++bool CBingoManager::Init()
++{
++	LoadConfig(); // without Data/Bingo.json the defaults apply (and prizes are pass items only)
++
++	ifstream f("Data/BingoState.json");
++	m_State = json::parse(f, nullptr, false);
++	if (m_State.is_discarded() || !m_State.is_object())
++		m_State = json::object();
++	return true;
++}
++
++/**
++ * Data/Bingo.json: ticket item, costs, ticket sources and the prize rules.
++ */
++bool CBingoManager::LoadConfig()
++{
++	ifstream f("Data/Bingo.json");
++	json cfg = json::parse(f, nullptr, false, true);
++	if (cfg.is_discarded())
++	{
++		Logger().Warn("BingoManager: couldn't load Data/Bingo.json, using the defaults\n");
++		BingoPrizeRule passItems;
++		passItems.type = "PassItem";
++		passItems.kinds = { "weapon", "character" };
++		m_Rules.linePrizes = { passItems };
++		m_Rules.grandPrizes = m_Rules.linePrizes;
++		return false;
++	}
++
++	try
++	{
++		BingoRules r;
++		r.ticketItemID = cfg.value("TicketItemID", r.ticketItemID);
++		r.shuffleItemID = cfg.value("ShuffleItemID", r.shuffleItemID);
++		json costs = cfg.value("Costs", json::object());
++		r.costRandom = costs.value("Random", r.costRandom);
++		r.costEvenOdd = costs.value("EvenOdd", r.costEvenOdd);
++		r.costSpecialBase = costs.value("SpecialBase", r.costSpecialBase);
++		r.costSpecialPerLine = costs.value("SpecialPerLine", r.costSpecialPerLine);
++		r.costChangeGrandPrize = costs.value("ChangeGrandPrize", r.costChangeGrandPrize);
++		r.costReset = costs.value("Reset", r.costReset);
++		r.grandPrizeOncePerDay = cfg.value("GrandPrizeOncePerDay", r.grandPrizeOncePerDay);
++		json shuffle = cfg.value("Shuffle", json::object());
++		r.shuffleMaxOpened = shuffle.value("MaxOpened", r.shuffleMaxOpened);
++		r.shuffleBeforeFirstLine = shuffle.value("BeforeFirstLine", r.shuffleBeforeFirstLine);
++		json tickets = cfg.value("Tickets", json::object());
++		r.levelEvery = max(0, tickets.value("LevelEvery", r.levelEvery));
++		r.levelTickets = tickets.value("LevelTickets", r.levelTickets);
++		r.dropChance = tickets.value("MatchDropChance", r.dropChance);
++		r.dropPerKill = tickets.value("MatchDropPerKill", r.dropPerKill);
++		r.dropPerWin = tickets.value("MatchDropPerWin", r.dropPerWin);
++		r.dropMaxChance = tickets.value("MatchDropMaxChance", r.dropMaxChance);
++		r.dropMinKills = tickets.value("MatchDropMinKills", r.dropMinKills);
++
++		auto readRules = [](const json& list) {
++			vector<BingoPrizeRule> rules;
++			for (auto& j : list)
++			{
++				BingoPrizeRule rule;
++				rule.type = j.value("Type", "Item");
++				rule.weight = max(0, j.value("Weight", 1));
++				rule.kinds = j.value("Kinds", vector<string>{ "weapon", "character" });
++				json share = j.value("CostShare", json::array({ 0.0, 1.0 }));
++				if (share.is_array() && share.size() == 2)
++				{
++					rule.minCostShare = share[0].get<double>();
++					rule.maxCostShare = share[1].get<double>();
++				}
++				rule.itemIDs = j.value("ItemIDs", vector<int>());
++				rule.count = max(1, j.value("Count", 1));
++				rule.days = max(0, j.value("Days", 0));
++				json medals = j.value("Medals", json::array({ 0, 0 }));
++				if (medals.is_array() && medals.size() == 2)
++				{
++					rule.minMedals = medals[0].get<int>();
++					rule.maxMedals = max(rule.minMedals, medals[1].get<int>());
++				}
++				rule.iconItemID = j.value("IconItemID", 0);
++				if (rule.weight > 0)
++					rules.push_back(rule);
++			}
++			return rules;
++		};
++		r.linePrizes = readRules(cfg.value("LinePrizes", json::array()));
++		r.grandPrizes = readRules(cfg.value("GrandPrizes", json::array()));
++		m_Rules = r;
++	}
++	catch (exception& e)
++	{
++		Logger().Error("BingoManager: Data/Bingo.json: %s\n", e.what());
++		return false;
++	}
++	Logger().Info("BingoManager: ticket item %d, %d line prize rules, %d grand prize rules\n", m_Rules.ticketItemID,
++		(int)m_Rules.linePrizes.size(), (int)m_Rules.grandPrizes.size());
++	return true;
++}
++
++void CBingoManager::Save()
++{
++	ofstream f("Data/BingoState.json");
++	f << m_State.dump(1);
++}
++
++int CBingoManager::Today()
++{
++	time_t now = time(NULL);
++	tm local = *localtime(&now);
++	return (local.tm_year + 1900) * 1000 + local.tm_yday;
++}
++
++json& CBingoManager::State(IUser* user)
++{
++	string key = to_string(user->GetID());
++	json& st = m_State[key];
++	if (!st.is_object() || !st.contains("cells") || st["cells"].size() != kCells || st["prizes"].size() != kLines)
++	{
++		st = json::object();
++		NewBoard(user, st, true);
++		Save();
++	}
++	return st;
++}
++
++// a prize from the rules (weighted), not one of `exclude` (items already on the board)
++bool CBingoManager::PickPrize(IUser* user, const vector<BingoPrizeRule>& rules, const vector<int>& exclude, BingoPrize& out)
++{
++	set<int> owned = g_WarbondManager.OwnedItems(user);
++	vector<pair<int, int>> passItems = g_WarbondManager.PassItems(); // (item, cost)
++	sort(passItems.begin(), passItems.end(), [](const pair<int, int>& a, const pair<int, int>& b) { return a.second < b.second; });
++
++	// candidates per rule; rules without any are skipped
++	vector<pair<const BingoPrizeRule*, vector<int>>> usable;
++	int total = 0;
++	for (auto& rule : rules)
++	{
++		vector<int> items;
++		if (rule.type == "PassItem")
++		{
++			size_t from = (size_t)(rule.minCostShare * passItems.size()), to = (size_t)(rule.maxCostShare * passItems.size() + 0.5);
++			for (size_t i = from; i < to && i < passItems.size(); i++)
++			{
++				int id = passItems[i].first;
++				string cls = ItemClass(id);
++				bool character = cls == "Class";
++				bool weapon = cls == "Equipment";
++				bool wanted = (character && find(rule.kinds.begin(), rule.kinds.end(), "character") != rule.kinds.end()) ||
++					(weapon && find(rule.kinds.begin(), rule.kinds.end(), "weapon") != rule.kinds.end());
++				if (wanted && !owned.count(id) && find(exclude.begin(), exclude.end(), id) == exclude.end())
++					items.push_back(id);
++			}
++		}
++		else if (rule.type == "Medals")
++		{
++			if (rule.iconItemID && rule.maxMedals > 0)
++				items.push_back(rule.iconItemID);
++		}
++		else
++		{
++			for (int id : rule.itemIDs)
++				if (find(exclude.begin(), exclude.end(), id) == exclude.end() || rule.count > 1)
++					items.push_back(id);
++		}
++		if (items.empty())
++			continue;
++		usable.push_back({ &rule, items });
++		total += rule.weight;
++	}
++	if (!total)
++		return false;
++
++	int roll = RandomInt(1, total);
++	for (auto& u : usable)
++	{
++		roll -= u.first->weight;
++		if (roll > 0)
++			continue;
++		const BingoPrizeRule& rule = *u.first;
++		out = BingoPrize();
++		out.itemID = u.second[RandomInt(0, (int)u.second.size() - 1)];
++		out.count = rule.count;
++		out.days = rule.days;
++		if (rule.type == "Medals")
++		{
++			out.medals = RandomInt(rule.minMedals, rule.maxMedals);
++			out.count = out.medals;
++		}
++		return true;
++	}
++	return false;
++}
++
++void CBingoManager::NewBoard(IUser* user, json& st, bool newGrandPrize)
++{
++	// 25 different numbers of 1-99
++	vector<int> numbers;
++	for (int i = 1; i <= 99; i++)
++		numbers.push_back(i);
++	shuffle(numbers.begin(), numbers.end(), Rng());
++	json cells = json::array();
++	for (int i = 0; i < kCells; i++)
++		cells.push_back({ { "n", numbers[i] }, { "open", false } });
++	st["cells"] = cells;
++
++	vector<int> onBoard;
++	json prizes = json::array();
++	for (int i = 0; i < kLines; i++)
++	{
++		BingoPrize p;
++		if (!PickPrize(user, m_Rules.linePrizes, onBoard, p))
++			p.itemID = m_Rules.ticketItemID; // nothing configured: a ticket back
++		onBoard.push_back(p.itemID);
++		prizes.push_back(PrizeJson(p));
++	}
++	st["prizes"] = prizes;
++
++	if (newGrandPrize || !st.contains("grand"))
++	{
++		BingoPrize grand;
++		if (!PickPrize(user, m_Rules.grandPrizes, onBoard, grand))
++			grand.itemID = m_Rules.ticketItemID, grand.count = 5;
++		st["grand"] = PrizeJson(grand);
++	}
++	st["lastNumber"] = 0;
++}
++
++int CBingoManager::Tickets(IUser* user)
++{
++	vector<CUserInventoryItem> items;
++	g_UserDatabase.GetInventoryItemsByID(user->GetID(), m_Rules.ticketItemID, items);
++	int count = 0;
++	for (auto& item : items)
++		if (item.m_nItemID == m_Rules.ticketItemID)
++			count += max(0, item.m_nCount);
++	return count;
++}
++
++bool CBingoManager::SpendTickets(IUser* user, int count)
++{
++	if (count <= 0)
++		return true;
++	if (Tickets(user) < count)
++		return false;
++	vector<CUserInventoryItem> items;
++	g_UserDatabase.GetInventoryItemsByID(user->GetID(), m_Rules.ticketItemID, items);
++	for (auto& item : items)
++	{
++		if (count <= 0)
++			break;
++		int take = min(count, item.m_nCount);
++		if (take > 0 && g_ItemManager.OnItemUse(user, item, take))
++			count -= take;
++	}
++	return count <= 0;
++}
++
++void CBingoManager::GiveTickets(IUser* user, int count, const char* reason)
++{
++	if (count <= 0 || !user)
++		return;
++	int added = g_ItemManager.AddItem(user->GetID(), user, m_Rules.ticketItemID, count, 0);
++	if (added != ITEM_ADD_SUCCESS)
++	{
++		Logger().Warn("BingoManager: couldn't give %d Bingo Tickets to user %d (%d)\n", count, user->GetID(), added);
++		return;
++	}
++	if (reason && *reason)
++		g_PacketManager.SendUMsgNoticeMessageInChat(user->GetExtendedSocket(),
++			va("%s +%d Bingo Ticket%s", reason, count, count == 1 ? "" : "s"));
++	SendTickets(user);
++}
++
++int CBingoManager::CompletedLines(const json& st)
++{
++	int lines = 0;
++	for (auto& line : kLineCells)
++	{
++		bool all = true;
++		for (int c : line)
++			all &= st["cells"][c].value("open", false);
++		lines += all;
++	}
++	return lines;
++}
++
++int CBingoManager::SpecialCost(const json& st)
++{
++	return m_Rules.costSpecialBase + m_Rules.costSpecialPerLine * CompletedLines(st);
++}
++
++bool CBingoManager::BoardComplete(const json& st)
++{
++	for (auto& c : st["cells"])
++		if (!c.value("open", false))
++			return false;
++	return true;
++}
++
++void CBingoManager::GivePrize(IUser* user, const BingoPrize& prize, vector<BingoPrize>& given)
++{
++	if (prize.medals > 0)
++	{
++		user->UpdatePoints(prize.medals);
++		given.push_back(prize);
++		return;
++	}
++	int added = g_ItemManager.AddItem(user->GetID(), user, prize.itemID, prize.count, prize.days);
++	if (added == ITEM_ADD_SUCCESS)
++		given.push_back(prize);
++	else if (added == ITEM_ADD_INVENTORY_FULL)
++		g_PacketManager.SendUMsgNoticeMsgBoxToUuid(user->GetExtendedSocket(), "Your inventory is full: a bingo prize couldn't be given.");
++	else
++		Logger().Warn("BingoManager: couldn't give item %d to user %d (%d)\n", prize.itemID, user->GetID(), added);
++}
++
++void CBingoManager::NoticePrizes(IUser* user, const vector<BingoPrize>& given, const char* title, const char* text)
++{
++	if (given.empty())
++		return;
++	RewardNotice notice = {};
++	notice.status = true;
++	for (auto& p : given)
++	{
++		if (p.medals > 0)
++		{
++			notice.points += p.medals;
++			continue;
++		}
++		RewardItem item;
++		item.itemID = p.itemID;
++		item.count = p.count;
++		item.duration = p.days;
++		notice.items.push_back(item);
++	}
++	g_PacketManager.SendUMsgRewardNotice(user->GetExtendedSocket(), notice, title, text, false);
++}
++
++void CBingoManager::OnPacket(CReceivePacket* msg, IExtendedSocket* socket)
++{
++	IUser* user = g_UserManager.GetUserBySocket(socket);
++	if (!user)
++		return;
++
++	int request = msg->ReadUInt8();
++	switch (request)
++	{
++	case 0:
++		SendState(user);
++		break;
++	case 1:
++		OnOpenNumber(user, msg->ReadUInt8());
++		break;
++	case 2:
++		OnResetBoard(user);
++		break;
++	case 3:
++		OnChangeGrandPrize(user);
++		break;
++	case 4:
++		OnCollectGrandPrize(user);
++		break;
++	case 6:
++		SendHistory(user);
++		SendTickets(user);
++		break;
++	case 7:
++		SendError(user, BINGO_ERR_NOT_EVENT); // no free event resets offline
++		break;
++	default:
++		Logger().Info("[User '%s'] Mileage Bingo request %d is not implemented\n", user->GetLogName(), request);
++	}
++}
++
++void CBingoManager::OnOpenNumber(IUser* user, int mode)
++{
++	json& st = State(user);
++	if (BoardComplete(st))
++	{
++		SendError(user, BINGO_ERR_GRAND_NOT_COLLECTED);
++		return;
++	}
++
++	vector<int> unopened;
++	for (auto& c : st["cells"])
++		if (!c.value("open", false))
++			unopened.push_back(c.value("n", 0));
++
++	int cost = mode == 0 ? m_Rules.costRandom : mode == 3 ? SpecialCost(st) : m_Rules.costEvenOdd;
++	if (!SpendTickets(user, cost))
++	{
++		SendError(user, BINGO_ERR_NO_TICKETS);
++		return;
++	}
++
++	int number;
++	if (mode == 1)
++		number = RandomInt(1, 49) * 2; // 2-98
++	else if (mode == 2)
++		number = RandomInt(0, 49) * 2 + 1; // 1-99
++	else if (mode == 3)
++		number = unopened[RandomInt(0, (int)unopened.size() - 1)];
++	else
++		number = RandomInt(1, 99);
++	st["lastNumber"] = number;
++
++	int linesBefore = CompletedLines(st);
++	for (auto& c : st["cells"])
++		if (c.value("n", 0) == number)
++			c["open"] = true;
++
++	// prizes of the lines this number completed
++	vector<BingoPrize> given;
++	if (CompletedLines(st) > linesBefore)
++	{
++		for (int i = 0; i < kLines; i++)
++		{
++			json& prize = st["prizes"][i];
++			if (prize.value("open", false))
++				continue;
++			bool all = true;
++			for (int c : kLineCells[i])
++				all &= st["cells"][c].value("open", false);
++			if (!all)
++				continue;
++			prize["open"] = true;
++			GivePrize(user, PrizeFrom(prize), given);
++		}
++	}
++	Save();
++
++	Logger().Info("BingoManager: user %d opened %d (mode %d, %d tickets), lines %d, board complete %d\n", user->GetID(),
++		number, mode, cost, CompletedLines(st), BoardComplete(st));
++	SendDrawnNumber(user, number);
++	SendState(user);
++	NoticePrizes(user, given, "Bingo!", "The following has been awarded for completing a bingo line.");
++	if (BoardComplete(st))
++		g_PacketManager.SendUMsgNoticeMessageInChat(user->GetExtendedSocket(), "Bingo Board cleared! Collect your Bingo Grand Prize.");
++}
++
++void CBingoManager::OnResetBoard(IUser* user)
++{
++	json& st = State(user);
++	if (BoardComplete(st))
++	{
++		SendError(user, BINGO_ERR_GRAND_NOT_COLLECTED);
++		return;
++	}
++	if (!SpendTickets(user, m_Rules.costReset))
++	{
++		SendError(user, BINGO_ERR_NO_TICKETS);
++		return;
++	}
++	NewBoard(user, st, true);
++	Save();
++	SendState(user);
++}
++
++void CBingoManager::OnChangeGrandPrize(IUser* user)
++{
++	json& st = State(user);
++	vector<int> exclude = { st["grand"].value("item", 0) };
++	for (auto& p : st["prizes"])
++		exclude.push_back(p.value("item", 0));
++	BingoPrize grand;
++	if (!PickPrize(user, m_Rules.grandPrizes, exclude, grand))
++	{
++		SendError(user, BINGO_ERR_NO_OTHER_PRIZE);
++		return;
++	}
++	if (!SpendTickets(user, m_Rules.costChangeGrandPrize))
++	{
++		SendError(user, BINGO_ERR_NO_TICKETS);
++		return;
++	}
++	st["grand"] = PrizeJson(grand);
++	Save();
++	SendState(user);
++}
++
++void CBingoManager::OnCollectGrandPrize(IUser* user)
++{
++	json& st = State(user);
++	if (!BoardComplete(st))
++	{
++		SendError(user, BINGO_ERR_NOT_COMPLETE);
++		return;
++	}
++	if (m_Rules.grandPrizeOncePerDay && st.value("grandDay", 0) == Today())
++	{
++		SendError(user, BINGO_ERR_ONCE_A_DAY);
++		return;
++	}
++	vector<BingoPrize> given;
++	GivePrize(user, PrizeFrom(st["grand"]), given);
++	if (given.empty())
++		return; // inventory full: the board stays complete, try again later
++	st["grandDay"] = Today();
++	NewBoard(user, st, true);
++	Save();
++	SendState(user);
++	NoticePrizes(user, given, "Bingo Grand Prize!", "The following item has been awarded for completing your Bingo Board.");
++}
++
++bool CBingoManager::UseShuffleItem(IUser* user, CUserInventoryItem& item)
++{
++	json& st = State(user);
++	int opened = 0;
++	for (auto& c : st["cells"])
++		opened += c.value("open", false);
++	if ((m_Rules.shuffleBeforeFirstLine && CompletedLines(st) > 0) || opened > m_Rules.shuffleMaxOpened)
++	{
++		g_PacketManager.SendUMsgNoticeMsgBoxToUuid(user->GetExtendedSocket(),
++			va("Bingo Shuffle can't be used once a line is complete or more than %d numbers are open (reset the board first).",
++				m_Rules.shuffleMaxOpened));
++		return false;
++	}
++	// the numbers move to other cells; opened numbers stay opened
++	vector<json> cells(st["cells"].begin(), st["cells"].end());
++	shuffle(cells.begin(), cells.end(), Rng());
++	st["cells"] = cells;
++	g_ItemManager.OnItemUse(user, item, 1);
++	Save();
++	SendState(user);
++	g_PacketManager.SendUMsgNoticeMessageInChat(user->GetExtendedSocket(), "Bingo Board shuffled.");
++	return true;
++}
++
++void CBingoManager::OnLevelUp(IUser* user, int oldLevel, int newLevel)
++{
++	if (m_Rules.levelEvery <= 0)
++		return;
++	int tickets = 0;
++	for (int level = oldLevel + 1; level <= newLevel; level++)
++		if (level % m_Rules.levelEvery == 0)
++			tickets += m_Rules.levelTickets;
++	GiveTickets(user, tickets, va("Level %d reached!", newLevel));
++}
++
++void CBingoManager::OnMatchResult(IUser* user, int kills, bool won)
++{
++	if (kills < m_Rules.dropMinKills)
++		return;
++	double chance = min(m_Rules.dropMaxChance, m_Rules.dropChance + kills * m_Rules.dropPerKill + (won ? m_Rules.dropPerWin : 0));
++	if (uniform_real_distribution<double>(0, 1)(Rng()) < chance)
++		GiveTickets(user, 1, "You found a Bingo Ticket in this match!");
++}
++
++void CBingoManager::SendState(IUser* user)
++{
++	json& st = State(user);
++	CSendPacket* msg = g_PacketManager.CreatePacket(user->GetExtendedSocket(), PacketId::MileageBingo);
++	msg->BuildHeader();
++	msg->WriteUInt8(0);
++	msg->WriteUInt8(2); // Bingo Tickets
++	msg->WriteUInt8(kCells);
++	for (auto& c : st["cells"])
++	{
++		msg->WriteUInt8(c.value("n", 0));
++		msg->WriteUInt8(c.value("open", false));
++	}
++	msg->WriteUInt8(kLines);
++	for (auto& p : st["prizes"])
++	{
++		msg->WriteUInt16(p.value("item", 0));
++		msg->WriteUInt16(p.value("count", 1));
++		msg->WriteUInt16(p.value("days", 0));
++		msg->WriteUInt8(p.value("open", false));
++	}
++	msg->WriteUInt16(st["grand"].value("item", 0));
++	msg->WriteUInt16(st["grand"].value("count", 1));
++	msg->WriteUInt16(st["grand"].value("days", 0));
++	msg->WriteUInt8(BoardComplete(st));
++	msg->WriteUInt32(Tickets(user));
++	msg->WriteUInt16(SpecialCost(st));
++	msg->WriteUInt8(0); // event flags: no free change / reset
++	msg->WriteUInt8(0);
++	user->GetExtendedSocket()->Send(msg);
++}
++
++void CBingoManager::SendDrawnNumber(IUser* user, int number)
++{
++	CSendPacket* msg = g_PacketManager.CreatePacket(user->GetExtendedSocket(), PacketId::MileageBingo);
++	msg->BuildHeader();
++	msg->WriteUInt8(1);
++	msg->WriteUInt16(number);
++	user->GetExtendedSocket()->Send(msg);
++}
++
++void CBingoManager::SendTickets(IUser* user)
++{
++	CSendPacket* msg = g_PacketManager.CreatePacket(user->GetExtendedSocket(), PacketId::MileageBingo);
++	msg->BuildHeader();
++	msg->WriteUInt8(8);
++	msg->WriteUInt32(Tickets(user));
++	user->GetExtendedSocket()->Send(msg);
++}
++
++void CBingoManager::SendHistory(IUser* user)
++{
++	CSendPacket* msg = g_PacketManager.CreatePacket(user->GetExtendedSocket(), PacketId::MileageBingo);
++	msg->BuildHeader();
++	msg->WriteUInt8(6);
++	msg->WriteUInt32(0);
++	user->GetExtendedSocket()->Send(msg);
++}
++
++void CBingoManager::SendError(IUser* user, int code)
++{
++	CSendPacket* msg = g_PacketManager.CreatePacket(user->GetExtendedSocket(), PacketId::MileageBingo);
++	msg->BuildHeader();
++	msg->WriteUInt8(99);
++	msg->WriteUInt16(code);
++	user->GetExtendedSocket()->Send(msg);
++}
+diff --git a/src/manager/bingomanager.h b/src/manager/bingomanager.h
+new file mode 100644
+index 0000000..e369114
+--- /dev/null
++++ b/src/manager/bingomanager.h
+@@ -0,0 +1,92 @@
++#pragma once
++
++#include <string>
++#include <vector>
++
++#include "interface/ibingomanager.h"
++#include "manager.h"
++#include "nlohmann/json.hpp"
++
++// a prize of the board (a line or the grand prize). Medals have no item: they show as IconItemID with the amount
++// as count and are added to the player's medals instead.
++struct BingoPrize
++{
++	int itemID = 0;
++	int count = 1;
++	int days = 0; // 0: permanent
++	int medals = 0;
++	bool opened = false;
++};
++
++// Data/Bingo.json "LinePrizes" / "GrandPrizes" entries
++struct BingoPrizeRule
++{
++	std::string type; // "PassItem" (weapon/character of a medal pass the player doesn't own), "Item", "Medals"
++	int weight = 1;
++	std::vector<std::string> kinds; // PassItem: "weapon", "character"
++	double minCostShare = 0, maxCostShare = 1; // PassItem: slice of the pass items sorted by medal cost (0 cheapest)
++	std::vector<int> itemIDs;       // Item: one of these
++	int count = 1, days = 0;
++	int minMedals = 0, maxMedals = 0; // Medals
++	int iconItemID = 0;
++};
++
++struct BingoRules
++{
++	int ticketItemID = 2179;
++	int shuffleItemID = 996;
++	int costRandom = 1, costEvenOdd = 2, costSpecialBase = 3, costSpecialPerLine = 1;
++	int costChangeGrandPrize = 1, costReset = 1;
++	bool grandPrizeOncePerDay = true;
++	int shuffleMaxOpened = 10;     // shuffle only with at most this many numbers opened...
++	bool shuffleBeforeFirstLine = true; // ...and no line completed
++	int levelEvery = 5, levelTickets = 1;   // a ticket every N levels
++	double dropChance = 0.08, dropPerKill = 0.004, dropPerWin = 0.04, dropMaxChance = 0.3; // per finished match
++	int dropMinKills = 0;
++	std::vector<BingoPrizeRule> linePrizes, grandPrizes;
++};
++
++class CBingoManager : public CBaseManager<IBingoManager>
++{
++public:
++	CBingoManager();
++
++	virtual bool Init();
++
++	virtual void OnPacket(CReceivePacket* msg, IExtendedSocket* socket);
++	virtual void OnLevelUp(IUser* user, int oldLevel, int newLevel);
++	virtual void OnMatchResult(IUser* user, int kills, bool won);
++	virtual void GiveTickets(IUser* user, int count, const char* reason);
++	virtual bool UseShuffleItem(IUser* user, CUserInventoryItem& item);
++
++private:
++	bool LoadConfig();
++	nlohmann::json& State(IUser* user); // the player's board (created on first use)
++	void Save();
++	void NewBoard(IUser* user, nlohmann::json& st, bool newGrandPrize);
++	bool PickPrize(IUser* user, const std::vector<BingoPrizeRule>& rules, const std::vector<int>& exclude, BingoPrize& out);
++	int Tickets(IUser* user);
++	bool SpendTickets(IUser* user, int count);
++	int CompletedLines(const nlohmann::json& st);
++	int SpecialCost(const nlohmann::json& st);
++	bool BoardComplete(const nlohmann::json& st);
++	void GivePrize(IUser* user, const BingoPrize& prize, std::vector<BingoPrize>& given);
++	void NoticePrizes(IUser* user, const std::vector<BingoPrize>& given, const char* title, const char* text);
++	int Today();
++
++	void OnOpenNumber(IUser* user, int mode);
++	void OnResetBoard(IUser* user);
++	void OnChangeGrandPrize(IUser* user);
++	void OnCollectGrandPrize(IUser* user);
++
++	void SendState(IUser* user);
++	void SendDrawnNumber(IUser* user, int number);
++	void SendTickets(IUser* user);
++	void SendHistory(IUser* user);
++	void SendError(IUser* user, int code);
++
++	BingoRules m_Rules;
++	nlohmann::json m_State; // userID -> board, Data/BingoState.json
++};
++
++extern CBingoManager g_BingoManager;
+diff --git a/src/manager/channelmanager.cpp b/src/manager/channelmanager.cpp
+index 35561e8..f7edea1 100644
+--- a/src/manager/channelmanager.cpp
++++ b/src/manager/channelmanager.cpp
+@@ -121,7 +121,20 @@ bool CChannelManager::OnRoomRequest(CReceivePacket* msg, IExtendedSocket* socket
+ 		g_PacketManager.SendRoomListFull(socket, channelServers[0]->GetChannels()[0]->GetRooms());
+ 		break;
+ 	case 27:
++	{
++		// offline build: unknown room request, logged to find the bot dialog's packet
++		const std::vector<unsigned char>& raw = msg->GetData().getBuffer();
++		size_t from = (size_t)msg->GetData().getReadOffset();
++		std::string hex;
++		char h[4];
++		for (size_t i = from; i < raw.size() && i < from + 64; i++)
++		{
++			snprintf(h, sizeof(h), "%02x ", raw[i]);
++			hex += h;
++		}
++		Logger().Info("Room request 27 from '%s': %s\n", user->GetLogName(), hex.c_str());
+ 		break;
++	}
+ 	case InRoomType::SetZBAddonsRequest:
+ 		return OnRoomSetZBAddonRequest(msg, user);
+ 	case InRoomType::KickRequest:
+@@ -379,7 +392,12 @@ bool CChannelManager::OnCommandHandler(IExtendedSocket* socket, IUser* user, con
+ 
+ 	if (!user)
+ 	{
+-		if (args[0] == (char*)OBFUSCATE("/login"))
++		if (args[0] == "/character") // offline build: reopen the "Choose your character" window
++		{
++			if (!g_UserManager.SendCharacterSelect(socket))
++				g_PacketManager.SendUMsgNoticeMessageInChat(socket, "Could not open the character window.");
++		}
++		else if (args[0] == (char*)OBFUSCATE("/login"))
+ 		{
+ 			if (args.size() == 3)
+ 			{
+@@ -1705,13 +1723,43 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
+ 		return false;
+ 	}
+ 
++	// offline build: dump what the client sends (the bot dialog of the co-op modes didn't reach the bot fields)
++	{
++		const std::vector<unsigned char>& raw = msg->GetData().getBuffer();
++		size_t from = (size_t)msg->GetData().getReadOffset();
++		std::string hex;
++		char h[4];
++		for (size_t i = from; i < raw.size() && i < from + 160; i++)
++		{
++			snprintf(h, sizeof(h), "%02x ", raw[i]);
++			hex += h;
++		}
++		Logger().Info("Room settings packet from '%s' (%d bytes): %s\n", user->GetLogName(), (int)(raw.size() - from), hex.c_str());
++	}
++
+ 	CRoomSettings newSettings(msg->GetData());
++	Logger().Info("Room settings flags: low 0x%x lowMid 0x%x highMid 0x%x high 0x%x; mode %d bots: difficulty %d friendly %d enemy %d balance %d add %d\n",
++		newSettings.lowFlag, newSettings.lowMidFlag, newSettings.highMidFlag, newSettings.highFlag, newSettings.gameModeId,
++		newSettings.botDifficulty, newSettings.friendlyBots, newSettings.enemyBots, newSettings.botBalance, newSettings.botAdd);
+ 	if (!newSettings.CheckNewSettings(user, roomSettings))
+ 	{
+ 		currentRoom->SendUpdateRoomSettings(user, roomSettings, NULL, NULL, NULL, NULL);
+ 		return false;
+ 	}
+ 
++	// offline build: the room's AI settings dialog sends its numbers with botAdd 0, and the game only adds bots
++	// with botAdd set (what /changebotscount does). The co-op modes have CT spawns only: no enemy bots there.
++	if (newSettings.lowMidFlag & ROOM_LOWMID_BOT)
++	{
++		int mode = (newSettings.lowFlag & ROOM_LOW_GAMEMODEID) ? newSettings.gameModeId : roomSettings->gameModeId;
++		if (mode == 15 || mode == 17 || mode == 28 || mode == 52 || mode == 53 || mode == 59)
++			newSettings.enemyBots = 0;
++		newSettings.botAdd = newSettings.friendlyBots + newSettings.enemyBots > 0 ? 1 : 0;
++		Logger().Info("Bot settings for room %d (mode %d): difficulty %d, friendly %d, enemy %d, add %d\n",
++			currentRoom->GetID(), mode, newSettings.botDifficulty, newSettings.friendlyBots, newSettings.enemyBots,
++			newSettings.botAdd);
++	}
++
+ 	if (newSettings.familyBattle)
+ 	{
+ 		CUserCharacter character = user->GetCharacter(UFLAG_LOW_CLAN);
+@@ -1921,7 +1969,12 @@ bool CChannelManager::OnRoomKickRequest(CReceivePacket* msg, IUser* user)
+ 		return false;
+ 	}
+ 
+-	IUser* destUser = g_UserManager.GetUserById(msg->ReadUInt32());
++	int destUserID = msg->ReadUInt32();
++	// offline build: kicking an AI player removes it
++	if (static_cast<CRoom*>(currentRoom)->RemoveBot(destUserID))
++		return true;
++
++	IUser* destUser = g_UserManager.GetUserById(destUserID);
+ 	if (destUser == NULL)
+ 	{
+ 		Logger().Warn("User '%s' tried to kick a user from a room, although destUser == NULL (RID: %d)\n", user->GetLogName(), currentRoom->GetID());
+@@ -2089,7 +2142,7 @@ bool CChannelManager::OnVoxelRoomListRequest(CReceivePacket* msg, IUser* user)
+ {
+ 	string voxel_id = msg->ReadString();
+ 
+-	vector<IRoom*>& rooms = channelServers[0]->GetChannels()[0]->GetRooms();
++	vector<IRoom*> rooms = channelServers[0]->GetChannels()[0]->GetRooms();
+ 
+ 	rooms.erase(
+ 		remove_if(
+diff --git a/src/manager/itemmanager.cpp b/src/manager/itemmanager.cpp
+index ad8d88a..9844970 100644
+--- a/src/manager/itemmanager.cpp
++++ b/src/manager/itemmanager.cpp
+@@ -1,3 +1,4 @@
++#include "bingomanager.h"
+ #include "itemmanager.h"
+ 
+ #include "serverinstance.h"
+@@ -1364,8 +1365,8 @@ int CItemManager::AddItems(int userID, IUser* user, vector<RewardItem>& items)
+ 			}
+ 		}
+ 
+-		CUserInventoryItem item;
+-		item.PushItem(insertedItems, itemID, count, itemStatus, itemInUse, currentTimestamp, duration, 0, 0, 0, 0, 0, {}, 0, 0, lockStatus); // push new items to inventory
++		CUserInventoryItem itemPush;
++		itemPush.PushItem(insertedItems, itemID, count, itemStatus, itemInUse, currentTimestamp, duration, 0, 0, 0, 0, 0, {}, 0, 0, lockStatus); // push new items to inventory
+ 	}
+ 
+ 	if (result == ITEM_ADD_DB_ERROR)
+@@ -1450,6 +1451,8 @@ int CItemManager::UseItem(IUser* user, int slot, int additionalArg, int addition
+ 
+ 	switch (item.m_nItemID)
+ 	{
++	case 996: // Bingo Shuffle (offline Mileage Bingo)
++		return g_BingoManager.UseShuffleItem(user, item) ? ITEM_USE_SUCCESS : ITEM_USE_WRONG_ITEM;
+ 	case 676:
+ 	{
+ 		CUserInventoryItem targetItem;
+diff --git a/src/manager/packetmanager.cpp b/src/manager/packetmanager.cpp
+index 0defb02..94edd28 100644
+--- a/src/manager/packetmanager.cpp
++++ b/src/manager/packetmanager.cpp
+@@ -892,7 +892,7 @@ void CPacketManager::SendMetadataUnk8(IExtendedSocket* socket)
+ 	socket->Send(msg);
+ }
+ 
+-void CPacketManager::SendMetadataWeaponPaints(IExtendedSocket* socket, std::vector<WeaponPaint>& weaponPaints)
++void CPacketManager::SendMetadataWeaponPaints(IExtendedSocket* socket, const std::vector<WeaponPaint>& weaponPaints)
+ {
+ 	CSendPacket* msg = CreatePacket(socket, PacketId::Metadata);
+ 	msg->BuildHeader();
+@@ -1625,7 +1625,7 @@ void CPacketManager::SendMetadataUnk64(IExtendedSocket* socket)
+ 	socket->Send(msg);
+ }
+ 
+-void CPacketManager::SendMetadataVoxelConfigList(IExtendedSocket* socket, std::vector<VoxelConfig>& voxelConfigList)
++void CPacketManager::SendMetadataVoxelConfigList(IExtendedSocket* socket, const std::vector<VoxelConfig>& voxelConfigList)
+ {
+ 	CSendPacket* msg = CreatePacket(socket, PacketId::Metadata);
+ 	msg->BuildHeader();
+@@ -3044,6 +3044,62 @@ void CPacketManager::SendRoomSetHost(IExtendedSocket* socket, IUser* user)
+ 	socket->Send(msg);
+ }
+ 
++// offline build: an AI player in the room list, shown like a player (character data copied from a real user,
++// with its own name and level, no clan, no titles)
++void CPacketManager::SendRoomBotJoin(IExtendedSocket* socket, int botId, const string& name, int team, int level, IUser* templateUser)
++{
++	CSendPacket* msg = CreatePacket(socket, PacketId::Room);
++	msg->BuildHeader();
++
++	msg->WriteUInt8(OutRoomType::PlayerJoin);
++
++	msg->WriteUInt32(botId);
++	msg->WriteUInt32(0);
++	msg->WriteString(name);
++
++	msg->WriteUInt8(team);
++	msg->WriteUInt8(0);
++	msg->WriteUInt8(0);
++	msg->WriteUInt8(0);
++	msg->WriteUInt32(0, false);
++	msg->WriteUInt16(0);
++	msg->WriteUInt16(0);
++	msg->WriteUInt32(0, false);
++	msg->WriteUInt16(0);
++	msg->WriteUInt16(0);
++
++	CUserCharacter character = templateUser->GetCharacter(UFLAG_LOW_ALL, UFLAG_HIGH_ALL);
++	character.gameName = name;
++	character.level = level;
++	character.exp = 0;
++	character.battles = character.win = character.kills = character.deaths = 0;
++	character.clanID = 0;
++	character.clanMarkID = 0;
++	character.clanName = "";
++	character.titles.clear();
++	character.achievementList.clear();
++	character.prefixId = 0;
++	character.nameplateID = 0;
++
++	CPacketHelper_FullUserInfo fullUserInfo;
++	fullUserInfo.Build(msg->m_OutStream, botId, character);
++
++	socket->Send(msg);
++}
++
++void CPacketManager::SendRoomBotReady(IExtendedSocket* socket, int botId, int readyStatus)
++{
++	CSendPacket* msg = CreatePacket(socket, PacketId::Room);
++	msg->BuildHeader();
++
++	msg->WriteUInt8(3);
++
++	msg->WriteUInt32(botId);
++	msg->WriteUInt8(readyStatus);
++
++	socket->Send(msg);
++}
++
+ void CPacketManager::SendRoomPlayerLeave(IExtendedSocket* socket, int userId)
+ {
+ 	CSendPacket* msg = CreatePacket(socket, PacketId::Room);
+@@ -3144,7 +3200,7 @@ void CPacketManager::SendRoomGameResult(IExtendedSocket* socket, IRoom* room, CG
+ 		msg->WriteUInt16(0);
+ 		msg->WriteUInt16(0);
+ 		msg->WriteUInt8(0); // kakaito huita sleva
+-		msg->WriteUInt8(0); // headshots
++		msg->WriteUInt8(min(stat->m_nHeadshots, 255)); // headshots
+ 		msg->WriteUInt8(0); // frag kills
+ 		msg->WriteUInt8(0); // knife kills
+ 
+diff --git a/src/manager/packetmanager.h b/src/manager/packetmanager.h
+index b9ca2f3..76eb9b9 100644
+--- a/src/manager/packetmanager.h
++++ b/src/manager/packetmanager.h
+@@ -96,7 +96,7 @@ public:
+ 	void SendMetadataReinforceMaxEXP(IExtendedSocket* socket);
+ 	void SendMetadataUnk8(IExtendedSocket* socket);
+ 	void SendMetadataProgressUnlock(IExtendedSocket* socket);
+-	void SendMetadataWeaponPaints(IExtendedSocket* socket, std::vector<WeaponPaint>& weaponPaints);
++	void SendMetadataWeaponPaints(IExtendedSocket* socket, const std::vector<WeaponPaint>& weaponPaints);
+ 	void SendMetadataUnk3(IExtendedSocket* socket);
+ 	void SendMetadataReinforceItemsExp(IExtendedSocket* socket);
+ 	void SendMetadataItemExpireTime(IExtendedSocket* socket);
+@@ -129,7 +129,7 @@ public:
+ 	void SendMetadataVoxelList(IExtendedSocket* socket);
+ 	void SendMetadataVoxelItem(IExtendedSocket* socket);
+ 	void SendMetadataUnk64(IExtendedSocket* socket);
+-	void SendMetadataVoxelConfigList(IExtendedSocket* socket, std::vector<VoxelConfig>& voxelConfigList);
++	void SendMetadataVoxelConfigList(IExtendedSocket* socket, const std::vector<VoxelConfig>& voxelConfigList);
+ 
+ 	void SendGameMatchInfo(IExtendedSocket* socket);
+ 	void SendGameMatchUnk(IExtendedSocket* socket);
+@@ -174,6 +174,8 @@ public:
+ 	void SendRoomSetPlayerReady(IExtendedSocket* socket, IUser* user, RoomReadyStatus readyStatus);
+ 	void SendRoomSetHost(IExtendedSocket* socket, IUser* user);
+ 	void SendRoomPlayerLeave(IExtendedSocket* socket, int userId);
++	void SendRoomBotJoin(IExtendedSocket* socket, int botId, const std::string& name, int team, int level, IUser* templateUser);
++	void SendRoomBotReady(IExtendedSocket* socket, int botId, int readyStatus);
+ 	void SendRoomPlayerLeaveIngame(IExtendedSocket* socket);
+ 	void SendRoomInviteUserList(IExtendedSocket* socket, IUser* user);
+ 	void SendRoomGameResult(IExtendedSocket* socket, IRoom* room, CGameMatch* match);
+diff --git a/src/manager/userdatabase.cpp b/src/manager/userdatabase.cpp
+index 0d23de4..161c74b 100644
+--- a/src/manager/userdatabase.cpp
++++ b/src/manager/userdatabase.cpp
+@@ -626,6 +626,54 @@ int CUserDatabaseProxy::GetUsersAssociatedWithIP(const string& ip, vector<CUserD
+ 	return result;
+ }
+ 
++int CUserDatabaseProxy::GetLocalAccounts(vector<LocalAccount_s>& accounts)
++{
++	ExecCalcStart();
++	int result = m_pDatabase->GetLocalAccounts(accounts);
++	ExecCalcEnd(__FUNCTION__);
++	return result;
++}
++
++int CUserDatabaseProxy::DeleteLocalAccount(const string& userName)
++{
++	ExecCalcStart();
++	int result = m_pDatabase->DeleteLocalAccount(userName);
++	ExecCalcEnd(__FUNCTION__);
++	return result;
++}
++
++int CUserDatabaseProxy::GetWarbondUnlocks(int userID, vector<WarbondUnlock_s>& unlocks)
++{
++	ExecCalcStart();
++	int result = m_pDatabase->GetWarbondUnlocks(userID, unlocks);
++	ExecCalcEnd(__FUNCTION__);
++	return result;
++}
++
++int CUserDatabaseProxy::AddWarbondUnlock(int userID, const WarbondUnlock_s& unlock)
++{
++	ExecCalcStart();
++	int result = m_pDatabase->AddWarbondUnlock(userID, unlock);
++	ExecCalcEnd(__FUNCTION__);
++	return result;
++}
++
++int CUserDatabaseProxy::GetOrderProgress(int userID, vector<OrderProgress_s>& orders)
++{
++	ExecCalcStart();
++	int result = m_pDatabase->GetOrderProgress(userID, orders);
++	ExecCalcEnd(__FUNCTION__);
++	return result;
++}
++
++int CUserDatabaseProxy::SetOrderProgress(int userID, const OrderProgress_s& order)
++{
++	ExecCalcStart();
++	int result = m_pDatabase->SetOrderProgress(userID, order);
++	ExecCalcEnd(__FUNCTION__);
++	return result;
++}
++
+ int CUserDatabaseProxy::GetUsersAssociatedWithHWID(const vector<unsigned char>& hwid, vector<CUserData>& userData)
+ {
+ 	ExecCalcStart();
+diff --git a/src/manager/userdatabase.h b/src/manager/userdatabase.h
+index ee72a34..248deb9 100644
+--- a/src/manager/userdatabase.h
++++ b/src/manager/userdatabase.h
+@@ -118,6 +118,12 @@ public:
+ 	virtual int SetAddons(int userID, std::vector<int>& addons);
+ 
+ 	virtual int GetUsersAssociatedWithIP(const std::string& ip, std::vector<CUserData>& userData);
++	virtual int GetLocalAccounts(std::vector<LocalAccount_s>& accounts);
++	virtual int DeleteLocalAccount(const std::string& userName);
++	virtual int GetWarbondUnlocks(int userID, std::vector<WarbondUnlock_s>& unlocks);
++	virtual int AddWarbondUnlock(int userID, const WarbondUnlock_s& unlock);
++	virtual int GetOrderProgress(int userID, std::vector<OrderProgress_s>& orders);
++	virtual int SetOrderProgress(int userID, const OrderProgress_s& order);
+ 	virtual int GetUsersAssociatedWithHWID(const std::vector<unsigned char>& hwid, std::vector<CUserData>& userData);
+ 
+ 	// clan related
+diff --git a/src/manager/userdatabase_sqlite.cpp b/src/manager/userdatabase_sqlite.cpp
+index ed5fefb..31b0bcb 100644
+--- a/src/manager/userdatabase_sqlite.cpp
++++ b/src/manager/userdatabase_sqlite.cpp
+@@ -49,7 +49,7 @@ bool CUserDatabaseSQLite::Init()
+ 		m_Database.exec(OBFUSCATE("PRAGMA synchronous=OFF"));
+ 		m_Database.exec(OBFUSCATE("PRAGMA foreign_keys=ON"));
+ 
+-		if (!CheckForTables())
++		if (!CheckForTables() || !CreateWarbondTables())
+ 			return false;
+ 
+ 		DropSessions();
+@@ -4101,6 +4101,194 @@ int CUserDatabaseSQLite::SetAddons(int userID, vector<int>& addons)
+ 	return 1;
+ }
+ 
++/**
++ * Lists every account with its character (offline build: in-game "Elige personaje" survey)
++ * @param accounts Output, ordered by userID so survey answer IDs stay stable between ask and answer
++ * @return 1 on success, 0 on database error
++ */
++int CUserDatabaseSQLite::GetLocalAccounts(vector<LocalAccount_s>& accounts)
++{
++	try
++	{
++		SQLite::Statement query(m_Database, "SELECT User.userName, User.password, IFNULL(UserCharacter.gameName, ''), IFNULL(UserCharacter.level, 0) "
++			"FROM User LEFT JOIN UserCharacter ON UserCharacter.userID = User.userID ORDER BY User.userID");
++		while (query.executeStep())
++		{
++			LocalAccount_s account;
++			account.userName = query.getColumn(0).getString();
++			account.password = query.getColumn(1).getString();
++			account.gameName = query.getColumn(2).getString();
++			account.level = query.getColumn(3);
++			accounts.push_back(account);
++		}
++	}
++	catch (exception& e)
++	{
++		Logger().Error(OBFUSCATE("CUserDatabaseSQLite::GetLocalAccounts: database internal error: %s, %d\n"), e.what(), m_Database.getErrorCode());
++		return 0;
++	}
++
++	return 1;
++}
++
++/**
++ * Permanently deletes an account and everything stored for it (offline build: "Delete a character").
++ * Every table with a userID column is cleaned, so nothing is left behind even for tables added later.
++ * @return 1 if the account existed and was deleted, 0 otherwise
++ */
++int CUserDatabaseSQLite::DeleteLocalAccount(const string& userName)
++{
++	try
++	{
++		SQLite::Statement find(m_Database, "SELECT userID FROM User WHERE userName = ?");
++		find.bind(1, userName);
++		if (!find.executeStep())
++			return 0;
++		int userID = find.getColumn(0);
++
++		// clans led by this user would be left without a master, so they go too
++		vector<int> clanIDs;
++		SQLite::Statement clans(m_Database, "SELECT clanID FROM Clan WHERE masterUserID = ?");
++		clans.bind(1, userID);
++		while (clans.executeStep())
++			clanIDs.push_back(clans.getColumn(0));
++
++		vector<string> userTables, clanTables;
++		SQLite::Statement list(m_Database, "SELECT name FROM sqlite_master WHERE type = 'table'");
++		while (list.executeStep())
++		{
++			string table = list.getColumn(0).getString();
++			SQLite::Statement columns(m_Database, "SELECT name FROM pragma_table_info(?) WHERE name IN ('userID', 'clanID')");
++			columns.bind(1, table);
++			while (columns.executeStep())
++				(columns.getColumn(0).getString() == "userID" ? userTables : clanTables).push_back(table);
++		}
++
++		SQLite::Transaction transaction(m_Database);
++		for (auto& table : userTables)
++		{
++			SQLite::Statement del(m_Database, "DELETE FROM \"" + table + "\" WHERE userID = ?");
++			del.bind(1, userID);
++			del.exec();
++		}
++		for (int clanID : clanIDs)
++		{
++			for (auto& table : clanTables)
++			{
++				SQLite::Statement del(m_Database, "DELETE FROM \"" + table + "\" WHERE clanID = ?");
++				del.bind(1, clanID);
++				del.exec();
++			}
++		}
++		transaction.commit();
++	}
++	catch (exception& e)
++	{
++		Logger().Error(OBFUSCATE("CUserDatabaseSQLite::DeleteLocalAccount: database internal error: %s, %d\n"), e.what(), m_Database.getErrorCode());
++		return 0;
++	}
++
++	return 1;
++}
++
++/**
++ * Offline build: tables for battle pass (warbond) unlocks and daily/weekly order progress.
++ * Both have a userID column, so DeleteLocalAccount cleans them too.
++ */
++bool CUserDatabaseSQLite::CreateWarbondTables()
++{
++	try
++	{
++		m_Database.exec(OBFUSCATE("CREATE TABLE IF NOT EXISTS UserWarbondUnlock (userID INT NOT NULL, warbondID INT NOT NULL, itemID INT NOT NULL, cost INT NOT NULL, time INT NOT NULL, PRIMARY KEY (userID, warbondID, itemID))"));
++		m_Database.exec(OBFUSCATE("CREATE TABLE IF NOT EXISTS UserOrderProgress (userID INT NOT NULL, orderID INT NOT NULL, periodStart INT NOT NULL, progress INT NOT NULL, completed INT NOT NULL, PRIMARY KEY (userID, orderID))"));
++	}
++	catch (exception& e)
++	{
++		Logger().Fatal(OBFUSCATE("CUserDatabaseSQLite::CreateWarbondTables: database internal error: %s, %d\n"), e.what(), m_Database.getErrorCode());
++		return false;
++	}
++
++	return true;
++}
++
++int CUserDatabaseSQLite::GetWarbondUnlocks(int userID, vector<WarbondUnlock_s>& unlocks)
++{
++	try
++	{
++		SQLite::Statement query(m_Database, OBFUSCATE("SELECT warbondID, itemID, cost FROM UserWarbondUnlock WHERE userID = ?"));
++		query.bind(1, userID);
++		while (query.executeStep())
++			unlocks.push_back({ query.getColumn(0), query.getColumn(1), query.getColumn(2) });
++	}
++	catch (exception& e)
++	{
++		Logger().Error(OBFUSCATE("CUserDatabaseSQLite::GetWarbondUnlocks: database internal error: %s, %d\n"), e.what(), m_Database.getErrorCode());
++		return 0;
++	}
++
++	return 1;
++}
++
++int CUserDatabaseSQLite::AddWarbondUnlock(int userID, const WarbondUnlock_s& unlock)
++{
++	try
++	{
++		SQLite::Statement query(m_Database, OBFUSCATE("INSERT OR IGNORE INTO UserWarbondUnlock VALUES (?, ?, ?, ?, ?)"));
++		query.bind(1, userID);
++		query.bind(2, unlock.warbondID);
++		query.bind(3, unlock.itemID);
++		query.bind(4, unlock.cost);
++		query.bind(5, (int)time(NULL));
++		query.exec();
++	}
++	catch (exception& e)
++	{
++		Logger().Error(OBFUSCATE("CUserDatabaseSQLite::AddWarbondUnlock: database internal error: %s, %d\n"), e.what(), m_Database.getErrorCode());
++		return 0;
++	}
++
++	return 1;
++}
++
++int CUserDatabaseSQLite::GetOrderProgress(int userID, vector<OrderProgress_s>& orders)
++{
++	try
++	{
++		SQLite::Statement query(m_Database, OBFUSCATE("SELECT orderID, periodStart, progress, completed FROM UserOrderProgress WHERE userID = ?"));
++		query.bind(1, userID);
++		while (query.executeStep())
++			orders.push_back({ query.getColumn(0), query.getColumn(1), query.getColumn(2), query.getColumn(3).getInt() != 0 });
++	}
++	catch (exception& e)
++	{
++		Logger().Error(OBFUSCATE("CUserDatabaseSQLite::GetOrderProgress: database internal error: %s, %d\n"), e.what(), m_Database.getErrorCode());
++		return 0;
++	}
++
++	return 1;
++}
++
++int CUserDatabaseSQLite::SetOrderProgress(int userID, const OrderProgress_s& order)
++{
++	try
++	{
++		SQLite::Statement query(m_Database, OBFUSCATE("INSERT OR REPLACE INTO UserOrderProgress VALUES (?, ?, ?, ?, ?)"));
++		query.bind(1, userID);
++		query.bind(2, order.orderID);
++		query.bind(3, order.periodStart);
++		query.bind(4, order.progress);
++		query.bind(5, order.completed ? 1 : 0);
++		query.exec();
++	}
++	catch (exception& e)
++	{
++		Logger().Error(OBFUSCATE("CUserDatabaseSQLite::SetOrderProgress: database internal error: %s, %d\n"), e.what(), m_Database.getErrorCode());
++		return 0;
++	}
++
++	return 1;
++}
++
+ int CUserDatabaseSQLite::GetUsersAssociatedWithIP(const string& ip, vector<CUserData>& userData)
+ {
+ 	try
+@@ -6437,7 +6625,7 @@ int CUserDatabaseSQLite::GetUserClassModLoadOut(int userID, int slot, ClassModIn
+ {
+ 	try
+ 	{
+-		auto lambda = [](string& column) -> std::vector<int>
++		auto lambda = [](const string& column) -> std::vector<int>
+ 			{
+ 				std::vector<int> data;
+ 				std::stringstream ss(column);
+diff --git a/src/manager/userdatabase_sqlite.h b/src/manager/userdatabase_sqlite.h
+index 0e1d7d2..18175e4 100644
+--- a/src/manager/userdatabase_sqlite.h
++++ b/src/manager/userdatabase_sqlite.h
+@@ -109,6 +109,13 @@ public:
+ 	int SetAddons(int userID, std::vector<int>& addons);
+ 
+ 	int GetUsersAssociatedWithIP(const std::string& ip, std::vector<CUserData>& userData);
++	int GetLocalAccounts(std::vector<LocalAccount_s>& accounts);
++	int DeleteLocalAccount(const std::string& userName);
++	int GetWarbondUnlocks(int userID, std::vector<WarbondUnlock_s>& unlocks);
++	int AddWarbondUnlock(int userID, const WarbondUnlock_s& unlock);
++	int GetOrderProgress(int userID, std::vector<OrderProgress_s>& orders);
++	int SetOrderProgress(int userID, const OrderProgress_s& order);
++	bool CreateWarbondTables();
+ 	int GetUsersAssociatedWithHWID(const std::vector<unsigned char>& hwid, std::vector<CUserData>& userData);
+ 
+ 	// clan related
+diff --git a/src/manager/usermanager.cpp b/src/manager/usermanager.cpp
+index b426874..e7233a0 100644
+--- a/src/manager/usermanager.cpp
++++ b/src/manager/usermanager.cpp
+@@ -16,6 +16,8 @@
+ #include "csvtable.h"
+ #include "serverinstance.h"
+ #include "serverconfig.h"
++#include <fstream>
++#include <random>
+ 
+ using namespace std;
+ 
+@@ -316,7 +318,7 @@ bool CUserManager::OnVersionPacket(CReceivePacket* msg, IExtendedSocket* socket)
+ 		GuestData_s& data = socket->GetGuestData();
+ 		if (!data.isGuest)
+ 			g_PacketManager.SendVersion(socket, 0);
+-		else
++		else if (!SendCharacterSelect(socket))
+ 			SendGuestUserPacket(socket);
+ 
+ 		data.isGuest = true;
+@@ -630,6 +632,252 @@ void CUserManager::SendGuestUserPacket(IExtendedSocket* socket)
+ 	g_PacketManager.SendUMsgNoticeMessageInChat(socket, OBFUSCATE("Server developers: Jusic, Hardee, NekoMeow, Smilex_Gamer, xRiseless. Our Discord: https://discord.gg/EvUAY6D"));
+ }
+ 
++/**
++ * Shows the in-game "Choose your character" survey to a local guest: one option per character plus
++ * "Create new character" and "Delete a character" (consecutive answer IDs, the client hides others). Cancel quits the game
++ * (GameUI patch); if the window is closed some other way it is shown again (see OnSecondTick) or
++ * with the /character chat command.
++ * @return false if the survey couldn't be sent (caller falls back to the /login chat messages)
++ */
++bool CUserManager::SendCharacterSelect(IExtendedSocket* socket)
++{
++	if (socket->GetIP() != "127.0.0.1")
++		return false;
++
++	vector<LocalAccount_s> accounts;
++	if (!g_UserDatabase.GetLocalAccounts(accounts))
++		return false;
++
++	socket->GetGuestData().characterSelectSentAt = time(NULL);
++	socket->GetGuestData().characterDeleteOpen = false;
++
++	Survey survey;
++	survey.id = CHARACTER_SELECT_SURVEY_ID;
++	survey.title = "Choose your character";
++
++	SurveyQuestion pick = {};
++	pick.id = CHARACTER_SELECT_QUESTION_PICK;
++	pick.question = "Which character do you want to play? (Cancel closes the game)";
++	pick.answerType = 0; // checkboxes
++	pick.answerCheckBoxType = 1; // single choice
++	size_t shown = min(accounts.size(), (size_t)CHARACTER_SELECT_MAX_ACCOUNTS);
++	for (size_t i = 0; i < shown; i++)
++	{
++		const LocalAccount_s& account = accounts[i];
++		string label = account.gameName.empty()
++			? "New character (no name yet)"
++			: account.gameName + "  -  Lv. " + to_string(account.level);
++		pick.answersCheckBox.push_back({ (int)i + 1, label });
++	}
++	pick.answersCheckBox.push_back({ (int)shown + 1, "Create new character" });
++	if (shown)
++		pick.answersCheckBox.push_back({ (int)shown + 2, "Delete a character" });
++	survey.questions.push_back(pick);
++
++	g_PacketManager.SendUserSurvey(socket, survey);
++	return true;
++}
++
++/**
++ * Shows the "Delete a character" survey: pick the character and type its name (or DELETE for a character
++ * that has no name yet) to confirm. "Go back" returns to "Choose your character".
++ */
++bool CUserManager::SendCharacterDelete(IExtendedSocket* socket)
++{
++	vector<LocalAccount_s> accounts;
++	if (!g_UserDatabase.GetLocalAccounts(accounts))
++		return false;
++
++	socket->GetGuestData().characterSelectSentAt = time(NULL);
++	socket->GetGuestData().characterDeleteOpen = true;
++
++	Survey survey;
++	survey.id = CHARACTER_DELETE_SURVEY_ID;
++	survey.title = "Delete a character";
++
++	SurveyQuestion pick = {};
++	pick.id = CHARACTER_DELETE_QUESTION_PICK;
++	pick.question = "Which character do you want to delete? This can't be undone. (Cancel closes the game)";
++	pick.answerType = 0; // checkboxes
++	pick.answerCheckBoxType = 1; // single choice
++	size_t shown = min(accounts.size(), (size_t)CHARACTER_SELECT_MAX_ACCOUNTS);
++	for (size_t i = 0; i < shown; i++)
++	{
++		const LocalAccount_s& account = accounts[i];
++		string label = account.gameName.empty()
++			? "New character (no name yet)"
++			: account.gameName + "  -  Lv. " + to_string(account.level);
++		pick.answersCheckBox.push_back({ (int)i + 1, label });
++	}
++	pick.answersCheckBox.push_back({ (int)shown + 1, "Go back" });
++	survey.questions.push_back(pick);
++
++	SurveyQuestion confirm = {};
++	confirm.id = CHARACTER_DELETE_QUESTION_CONFIRM;
++	confirm.question = "To delete it permanently, type the character's name exactly (type DELETE for a character with no name yet):";
++	confirm.answerType = 1; // text entry
++	confirm.answerTextEntry.unk = 32;
++	survey.questions.push_back(confirm);
++
++	g_PacketManager.SendUserSurvey(socket, survey);
++	return true;
++}
++
++/**
++ * Handles the "Delete a character" answer: deletes the account only if the typed text matches the
++ * character name exactly, then shows "Choose your character" again.
++ */
++bool CUserManager::OnCharacterDeleteAnswer(IExtendedSocket* socket, int choice, string confirmation)
++{
++	auto back = [&](const char* text)
++	{
++		if (text)
++			g_PacketManager.SendUMsgNoticeMsgBoxToUuid(socket, text);
++		SendCharacterSelect(socket);
++		return true;
++	};
++
++	vector<LocalAccount_s> accounts;
++	if (!g_UserDatabase.GetLocalAccounts(accounts))
++		return back("Could not read the character list.");
++	int shown = (int)min(accounts.size(), (size_t)CHARACTER_SELECT_MAX_ACCOUNTS);
++
++	if (choice == shown + 1) // "Go back"
++		return back(NULL);
++	if (choice < 1 || choice > shown)
++		return back("No character was selected, nothing was deleted.");
++
++	const LocalAccount_s& account = accounts[choice - 1];
++
++	size_t first = confirmation.find_first_not_of(" \t\r\n");
++	size_t last = confirmation.find_last_not_of(" \t\r\n");
++	confirmation = first == string::npos ? "" : confirmation.substr(first, last - first + 1);
++
++	const string& expected = account.gameName.empty() ? string("DELETE") : account.gameName;
++	if (confirmation != expected)
++		return back("The name doesn't match, nothing was deleted.");
++
++	if (GetUserByUsername(account.userName))
++		return back("That character is in use right now, nothing was deleted.");
++
++	if (!g_UserDatabase.DeleteLocalAccount(account.userName))
++		return back("Could not delete the character.");
++
++	Logger().Info("CharacterSelect: deleted account '%s' (character '%s')\n", account.userName.c_str(), account.gameName.c_str());
++	string text = account.gameName.empty()
++		? "The character was deleted permanently."
++		: "\"" + account.gameName + "\" was deleted permanently.";
++	return back(text.c_str());
++}
++
++/**
++ * Handles a guest's answer to the "Choose your character" survey: logs in the chosen account, or registers
++ * a new internal account (random name and password) and logs it in, so the game asks for the
++ * character name with its own dialog. On any problem the guest gets a message box and the survey again.
++ */
++bool CUserManager::OnCharacterSelectAnswer(CReceivePacket* msg, IExtendedSocket* socket)
++{
++	if (socket->GetIP() != "127.0.0.1" || !socket->GetGuestData().isGuest)
++		return false;
++
++	if (msg->ReadUInt8() != 11)
++		return false;
++	int surveyID = (int)msg->ReadUInt32();
++	if (surveyID != CHARACTER_SELECT_SURVEY_ID && surveyID != CHARACTER_DELETE_SURVEY_ID)
++		return false;
++
++	int choice = 0;
++	string text;
++	int questionsCount = msg->ReadUInt8();
++	for (int i = 0; i < questionsCount; i++)
++	{
++		int questionID = msg->ReadUInt8();
++		int answerType = msg->ReadUInt8();
++		if (answerType == 1 || answerType == 2)
++		{
++			string answer = msg->ReadString();
++			if (questionID == CHARACTER_DELETE_QUESTION_CONFIRM)
++				text = answer;
++		}
++		else
++		{
++			int count = msg->ReadUInt8();
++			for (int k = 0; k < count; k++)
++			{
++				int answerID = msg->ReadUInt8();
++				if (questionID == CHARACTER_SELECT_QUESTION_PICK) // same ID in both surveys
++					choice = answerID;
++			}
++		}
++	}
++
++	g_PacketManager.SendUserSurveyReply(socket, ANSWER_OK);
++
++	if (surveyID == CHARACTER_DELETE_SURVEY_ID)
++		return OnCharacterDeleteAnswer(socket, choice, text);
++
++	auto retry = [&](const char* text)
++	{
++		g_PacketManager.SendUMsgNoticeMsgBoxToUuid(socket, text);
++		SendCharacterSelect(socket);
++		return true;
++	};
++
++	vector<LocalAccount_s> accounts;
++	if (!g_UserDatabase.GetLocalAccounts(accounts))
++		return retry("Could not read the character list.");
++	int shown = (int)min(accounts.size(), (size_t)CHARACTER_SELECT_MAX_ACCOUNTS);
++
++	string userName, password;
++	if (choice == shown + 1) // "Create new character"
++	{
++		// The account name is internal (the list shows the character name), so generate it:
++		// "Player" + 6 letters fits the server's 5-15 English letters rule.
++		static const char alphabet[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
++		mt19937 rng(random_device{}());
++		uniform_int_distribution<int> lower(0, 25), letter(0, 51), any(0, sizeof(alphabet) - 2);
++
++		password = alphabet[letter(rng)]; // starts with a letter: never "only numbers"
++		for (int i = 0; i < 11; i++)
++			password += alphabet[any(rng)];
++
++		int regResult = REGISTER_USERNAME_EXIST;
++		for (int attempt = 0; attempt < 10 && regResult == REGISTER_USERNAME_EXIST; attempt++)
++		{
++			userName = "Player";
++			for (int i = 0; i < 6; i++)
++				userName += alphabet[lower(rng)];
++			regResult = RegisterUser(socket, userName, password);
++		}
++		if (regResult != REGISTER_OK)
++			return retry("Could not create the new character.");
++
++		Logger().Info("CharacterSelect: created account '%s'\n", userName.c_str());
++	}
++	else if (choice == shown + 2 && shown) // "Delete a character"
++	{
++		if (!SendCharacterDelete(socket))
++			return retry("Could not read the character list.");
++		return true;
++	}
++	else if (choice >= 1 && choice <= shown)
++	{
++		userName = accounts[choice - 1].userName;
++		password = accounts[choice - 1].password;
++	}
++	else
++	{
++		return retry("Choose a character from the list or \"Create new character\".");
++	}
++
++	if (LoginUser(socket, userName, password) != LOGIN_OK)
++		return retry("Could not log in with that character.");
++
++	socket->GetGuestData().characterSelectSentAt = 0;
++	Logger().Info("CharacterSelect: '%s' logged in\n", userName.c_str());
++	return true;
++}
++
+ void CUserManager::SendLoginPacket(IUser* user, const CUserCharacter& character)
+ {
+ 	IExtendedSocket* socket = user->GetExtendedSocket();
+@@ -659,7 +907,9 @@ void CUserManager::SendLoginPacket(IUser* user, const CUserCharacter& character)
+ 
+ 	g_PacketManager.SendEventUnk(socket);
+ 
+-	g_PacketManager.SendEventAdd(socket, g_pServerConfig->activeMiniGamesFlag);
++	// offline build: event 13 shows the lobby's Mileage Bingo icon (GameUI checks IsEventActive(13) before its
++	// "MileageBingoBtn" command); the bingo itself is CBingoManager, played with Bingo Tickets
++	g_PacketManager.SendEventAdd(socket, g_pServerConfig->activeMiniGamesFlag | kEventFlag_Bingo_NEW);
+ 
+ 	if (g_pServerConfig->activeMiniGamesFlag & kEventFlag_WeaponRelease)
+ 		g_MiniGameManager.SendWeaponReleaseUpdate(user);
+@@ -989,6 +1239,15 @@ void CUserManager::OnSecondTick(time_t curTime)
+ {
+ 	for (auto u : m_Users)
+ 		u->OnTick();
++
++	// offline build: show "Choose your character" again to guests who closed it without picking anyone
++	for (auto socket : g_pServerInstance->GetClients())
++	{
++		const GuestData_s& guest = socket->GetGuestData();
++		int timeout = guest.characterDeleteOpen ? 180 : 45; // leave time to type the name
++		if (guest.characterSelectSentAt && curTime - guest.characterSelectSentAt >= timeout && !GetUserBySocket(socket))
++			SendCharacterSelect(socket);
++	}
+ }
+ 
+ void CUserManager::SendNoticeMessageToAll(const string& msg)
+@@ -1285,7 +1544,7 @@ bool CUserManager::OnUserSurveyPacket(CReceivePacket* msg, IExtendedSocket* sock
+ 
+ 	IUser* user = GetUserBySocket(socket);
+ 	if (user == NULL)
+-		return false;
++		return OnCharacterSelectAnswer(msg, socket);
+ 
+ 	int type = msg->ReadUInt8();
+ 	switch (type)
+diff --git a/src/manager/usermanager.h b/src/manager/usermanager.h
+index 3054001..9c14f6b 100644
+--- a/src/manager/usermanager.h
++++ b/src/manager/usermanager.h
+@@ -41,6 +41,7 @@ public:
+ 
+ 	int LoginUser(IExtendedSocket* socket, const std::string& userName, const std::string& password);
+ 	int RegisterUser(IExtendedSocket* socket, const std::string& userName, const std::string& password);
++	bool SendCharacterSelect(IExtendedSocket* socket);
+ 	void DisconnectUser(IUser* user);
+ 	void DisconnectAllFromServer();
+ 	IUser* AddUser(IExtendedSocket* socket, int userID, const std::string& userName);
+@@ -66,6 +67,9 @@ public:
+ 
+ private:
+ 	void SendGuestUserPacket(IExtendedSocket* socket);
++	bool OnCharacterSelectAnswer(CReceivePacket* msg, IExtendedSocket* socket);
++	bool SendCharacterDelete(IExtendedSocket* socket);
++	bool OnCharacterDeleteAnswer(IExtendedSocket* socket, int choice, std::string confirmation);
+ 	void SendLoginPacket(IUser* user, const CUserCharacter& character);
+ 	void SendUserInventory(IUser* user);
+ 	void SendUserLoadout(IUser* user);
+diff --git a/src/manager/warbondmanager.cpp b/src/manager/warbondmanager.cpp
+new file mode 100644
+index 0000000..a53c1eb
+--- /dev/null
++++ b/src/manager/warbondmanager.cpp
+@@ -0,0 +1,840 @@
++#include "warbondmanager.h"
++#include "usermanager.h"
++#include "userdatabase.h"
++#include "itemmanager.h"
++#include "packetmanager.h"
++#include "serverinstance.h"
++#include "main.h"
++#include "common/utils.h"
++#include "room/room.h"
++#include "bingomanager.h"
++
++#include <fstream>
++#include <set>
++#include <map>
++#include <ctime>
++
++using namespace std;
++using json = nlohmann::json;
++
++CWarbondManager g_WarbondManager;
++
++CWarbondManager::CWarbondManager() : CBaseManager("WarbondManager")
++{
++	m_WebPort = 30080;
++	SetCanReload(false); // the web server keeps running across reloads
++}
++
++bool CWarbondManager::Init()
++{
++	if (!LoadConfig())
++		return false;
++
++	m_WebServer.Start(m_WebIP, m_WebPort, m_WebRoot, [this](const WebRequest& req) { return OnApiRequest(req); });
++	return true;
++}
++
++void CWarbondManager::Shutdown()
++{
++	CBaseManager::Shutdown();
++	m_WebServer.Stop();
++}
++
++/**
++ * Data/Warbonds.json: web server settings, medal rules, orders and the battle passes with their pages.
++ */
++bool CWarbondManager::LoadConfig()
++{
++	ifstream f("Data/Warbonds.json");
++	json cfg = json::parse(f, nullptr, false, true);
++	if (cfg.is_discarded())
++	{
++		Logger().Error("CWarbondManager::LoadConfig: couldn't load Data/Warbonds.json\n");
++		return false;
++	}
++
++	try
++	{
++		json web = cfg.value("Web", json::object());
++		m_WebIP = web.value("IP", "127.0.0.1");
++		m_WebPort = web.value("Port", 30080);
++		m_WebRoot = web.value("Root", "../../../web");
++
++		json medals = cfg.value("Medals", json::object());
++		m_Medals.perMatch = medals.value("PerMatch", 2);
++		m_Medals.perWin = medals.value("PerWin", 2);
++		m_Medals.killsPerMedal = max(1, medals.value("KillsPerMedal", 6));
++		m_Medals.maxKillMedals = medals.value("MaxKillMedals", 0);
++		m_Medals.levelUpPerLevel = medals.value("LevelUpPerLevel", 3);
++		json telemetry = cfg.value("Telemetry", json::object());
++		m_Medals.headshotKillType = telemetry.value("HeadshotKillType", -1);
++		m_Medals.logKills = telemetry.value("LogKills", true);
++
++		m_Orders.clear();
++		for (auto& o : cfg.value("Orders", json::array()))
++		{
++			WarbondOrder order;
++			order.id = o.value("ID", 0);
++			order.period = o.value("Period", "Daily");
++			order.group = o.value("Group", "");
++			order.text = o.value("Text", "");
++			order.type = o.value("Type", "Matches");
++			order.gameModes = o.value("GameModes", vector<int>());
++			order.target = max(1, o.value("Target", 1));
++			order.reward = o.value("Reward", 0);
++			order.tickets = o.value("Tickets", 0);
++			m_Orders.push_back(order);
++		}
++
++		m_Warbonds.clear();
++		for (auto& w : cfg.value("Warbonds", json::array()))
++		{
++			Warbond warbond;
++			warbond.id = w.value("ID", 0);
++			warbond.name = w.value("Name", "");
++			warbond.type = w.value("Type", "");
++			warbond.description = w.value("Description", "");
++			warbond.image = w.value("Image", "");
++			warbond.cost = w.value("Cost", 0);
++			if (w.contains("Theme") && w["Theme"].is_array())
++				for (auto& colour : w["Theme"])
++					if (colour.is_string())
++						warbond.theme.push_back(colour.get<std::string>());
++			for (auto& p : w.value("Pages", json::array()))
++			{
++				WarbondPage page;
++				page.unlockSpent = p.value("Unlock", 0);
++				page.title = p.value("Title", "");
++				for (auto& i : p.value("Items", json::array()))
++					page.items.push_back({ i.value("ItemID", 0), i.value("Cost", 0), i.value("Name", ""),
++						i.value("Repeatable", false), i.value("Days", 0) });
++				warbond.pages.push_back(page);
++			}
++			m_Warbonds.push_back(warbond);
++		}
++	}
++	catch (exception& e)
++	{
++		Logger().Error("CWarbondManager::LoadConfig: Data/Warbonds.json: %s\n", e.what());
++		return false;
++	}
++
++	// optional: written by mod/tools/export_shop_assets.py
++	m_ItemNames.clear();
++	ifstream namesFile("Data/ItemNames.json");
++	json names = json::parse(namesFile, nullptr, false);
++	if (!names.is_discarded())
++		for (auto& entry : names.items())
++			if (entry.value().is_string())
++				m_ItemNames[atoi(entry.key().c_str())] = entry.value().get<string>();
++
++	Logger().Info("WarbondManager: %d battle passes, %d orders, %d item names\n", (int)m_Warbonds.size(), (int)m_Orders.size(), (int)m_ItemNames.size());
++	return true;
++}
++
++/**
++ * Runs on the web server thread: everything that touches users or the database is done under the server lock.
++ */
++WebResponse CWarbondManager::OnApiRequest(const WebRequest& req)
++{
++	// a bad request must never take the server down: errors become an error answer (and a log line)
++	g_ServerCriticalSection.Enter();
++	try
++	{
++		return HandleApiRequest(req);
++	}
++	catch (exception& e)
++	{
++		g_ServerCriticalSection.Leave();
++		Logger().Error("Web API %s %s failed: %s (body: %.300s)\n", req.method.c_str(), req.path.c_str(), e.what(), req.body.c_str());
++		WebResponse resp;
++		resp.status = 500;
++		resp.body = json({ { "error", string("The server couldn't do that: ") + e.what() } }).dump();
++		return resp;
++	}
++}
++
++// runs with g_ServerCriticalSection held; leaves it
++WebResponse CWarbondManager::HandleApiRequest(const WebRequest& req)
++{
++	WebResponse resp;
++	json result;
++
++	IUser* user = FindWebUser(req.clientIP);
++	if (req.method == "GET" && req.path == "/api/matchbots")
++	{
++		// for botassist.asi (runs in the game): the AI players of the last match a host started
++		json bots = json::array();
++		json& presets = BotPresets(g_LastMatchHostID);
++		for (auto& b : g_LastMatchBots)
++		{
++			json bot = { { "name", b.name }, { "team", b.team }, { "primary", b.primary }, { "secondary", b.secondary },
++				{ "melee", b.melee }, { "character", b.character }, { "skill", b.skill } };
++			for (auto& p : presets)
++				if (b.preset && p.value("id", 0) == b.preset)
++				{
++					bot["allowPrimary"] = p.value("primary", json::array());
++					bot["allowSecondary"] = p.value("secondary", json::array());
++					bot["allowMelee"] = p.value("melee", json::array());
++				}
++			bots.push_back(bot);
++		}
++		result = { { "mode", g_LastMatchMode }, { "hostTeam", g_LastMatchHostTeam }, { "bots", bots } };
++	}
++	else if (!user)
++	{
++		resp.status = 403;
++		result = { { "error", "No logged in character for this computer." } };
++	}
++	else if (req.method == "POST" && req.path == "/api/openview")
++	{
++		// botassist.asi: the room's "AI settings" button opens the game's browser window on the AI player editor
++		json body = json::parse(req.body, nullptr, false);
++		m_OpenView[user->GetID()] = body.is_discarded() ? "" : body.value("view", "");
++		result = { { "ok", true } };
++	}
++	else if (req.path == "/api/botpresets")
++	{
++		result = BotPresetsApi(user, req, resp.status);
++	}
++	else if (req.path == "/api/roombots")
++	{
++		result = RoomBotsApi(user, req, resp.status);
++	}
++	else if (req.method == "GET" && req.path == "/api/state")
++	{
++		result = BuildState(user);
++	}
++	else if (req.method == "POST" && req.path == "/api/unlock")
++	{
++		json body = json::parse(req.body, nullptr, false);
++		if (body.is_discarded())
++		{
++			resp.status = 400;
++			result = { { "error", "Invalid request." } };
++		}
++		else
++		{
++			result = Unlock(user, body.value("warbond", 0), body.value("item", 0), body.value("quantity", 1), resp.status);
++		}
++	}
++	else if (req.method == "POST" && req.path == "/api/unlockpass")
++	{
++		json body = json::parse(req.body, nullptr, false);
++		if (body.is_discarded())
++		{
++			resp.status = 400;
++			result = { { "error", "Invalid request." } };
++		}
++		else
++		{
++			result = UnlockPass(user, body.value("warbond", 0), resp.status);
++		}
++	}
++	else
++	{
++		resp.status = 404;
++		result = { { "error", "Unknown API call." } };
++	}
++	g_ServerCriticalSection.Leave();
++
++	resp.body = result.dump(-1, ' ', false, json::error_handler_t::replace);
++	return resp;
++}
++
++// offline build: the room's AI players. GET: the list; POST {action: add|remove|update|move, ...}
++json CWarbondManager::RoomBotsApi(IUser* user, const WebRequest& req, int& status)
++{
++	CRoom* room = static_cast<CRoom*>(user->GetCurrentRoom());
++	if (!room)
++	{
++		status = 409;
++		return { { "error", "You are not in a room." } };
++	}
++	bool host = room->GetHostUser() == user;
++	if (req.method == "POST")
++	{
++		json body = json::parse(req.body, nullptr, false);
++		if (body.is_discarded())
++		{
++			status = 400;
++			return { { "error", "Invalid request." } };
++		}
++		if (!host)
++		{
++			status = 403;
++			return { { "error", "Only the room's host can change the AI players." } };
++		}
++		if (room->GetStatus() != RoomStatus::STATUS_WAITING)
++		{
++			status = 409;
++			return { { "error", "The match already started." } };
++		}
++		string action = body.value("action", "");
++		auto read = [&](RoomBot& b) {
++			b.name = body.value("name", b.name);
++			b.level = body.value("level", b.level);
++			b.team = body.value("team", b.team);
++			b.primary = body.value("primary", b.primary);
++			b.secondary = body.value("secondary", b.secondary);
++			b.melee = body.value("melee", b.melee);
++			b.character = body.value("character", b.character);
++			b.skill = body.value("skill", b.skill);
++			b.preset = body.value("preset", b.preset);
++		};
++		if (action == "add" || action == "fill")
++		{
++			// add one or more (count), or as many as the room has free slots (fill)
++			int count = action == "fill" ? 64 : body.value("count", 1);
++			if (count < 1)
++				count = 1;
++			int added = 0;
++			for (int i = 0; i < count; i++)
++			{
++				RoomBot b;
++				b.team = 0;
++				read(b);
++				if (!room->AddBot(b))
++					break;
++				added++;
++			}
++			if (!added)
++			{
++				status = 409;
++				return { { "error", "The room is full." } };
++			}
++		}
++		else if (action == "remove")
++			room->RemoveBot(body.value("id", 0));
++		else if (action == "update")
++		{
++			RoomBot* cur = room->FindBot(body.value("id", 0));
++			if (!cur)
++			{
++				status = 404;
++				return { { "error", "No such AI player." } };
++			}
++			RoomBot b = *cur;
++			read(b);
++			room->UpdateBot(b);
++		}
++		else if (action == "move")
++			room->MoveBot(body.value("id", 0), body.value("index", 0));
++		else
++		{
++			status = 400;
++			return { { "error", "Unknown action." } };
++		}
++	}
++	json bots = json::array();
++	for (auto& b : room->GetBots())
++		bots.push_back({ { "id", b.id }, { "name", b.name }, { "level", b.level }, { "team", b.team }, { "primary", b.primary },
++			{ "secondary", b.secondary }, { "melee", b.melee }, { "character", b.character }, { "skill", b.skill },
++			{ "preset", b.preset } });
++	return { { "host", host }, { "mode", room->GetSettings()->gameModeId }, { "maxPlayers", room->GetSettings()->maxPlayers },
++		{ "players", room->GetNumOfPlayers() }, { "bots", bots } };
++}
++
++// offline build: weapon filters for the room's AI players, per account (Data/BotPresets.json)
++json& CWarbondManager::BotPresets(int userID)
++{
++	if (!m_BotPresetsLoaded)
++	{
++		m_BotPresetsLoaded = true;
++		ifstream f("Data/BotPresets.json");
++		m_BotPresets = json::parse(f, nullptr, false);
++		if (m_BotPresets.is_discarded() || !m_BotPresets.is_object())
++			m_BotPresets = json::object();
++	}
++	string key = to_string(userID);
++	if (!m_BotPresets.contains(key) || !m_BotPresets[key].is_array())
++		m_BotPresets[key] = json::array();
++	return m_BotPresets[key];
++}
++
++void CWarbondManager::SaveBotPresets()
++{
++	ofstream f("Data/BotPresets.json");
++	f << m_BotPresets.dump(1);
++}
++
++// GET: the presets; POST {action: save, preset: {id?, name, primary, secondary, melee}} | {action: delete, id}
++json CWarbondManager::BotPresetsApi(IUser* user, const WebRequest& req, int& status)
++{
++	json& presets = BotPresets(user->GetID());
++	if (req.method == "POST")
++	{
++		json body = json::parse(req.body, nullptr, false);
++		if (body.is_discarded())
++		{
++			status = 400;
++			return { { "error", "Invalid request." } };
++		}
++		string action = body.value("action", "");
++		if (action == "save")
++		{
++			json in = body.value("preset", json::object());
++			auto ids = [&](const char* key) {
++				json out = json::array();
++				for (auto& v : in.value(key, json::array()))
++					if (v.is_number_integer() && out.size() < 2000)
++						out.push_back(v.get<int>());
++				return out;
++			};
++			string name = in.value("name", "Preset");
++			if (name.size() > 40)
++				name.resize(40);
++			int id = in.value("id", 0);
++			int maxID = 0;
++			for (auto& p : presets)
++				maxID = max(maxID, p.value("id", 0));
++			json* target = NULL;
++			for (auto& p : presets)
++				if (id && p.value("id", 0) == id)
++					target = &p;
++			if (!target)
++			{
++				presets.push_back({ { "id", maxID + 1 } });
++				target = &presets.back();
++			}
++			(*target)["name"] = name;
++			(*target)["primary"] = ids("primary");
++			(*target)["secondary"] = ids("secondary");
++			(*target)["melee"] = ids("melee");
++			SaveBotPresets();
++			json out = { { "presets", presets }, { "saved", (*target)["id"] } };
++			return out;
++		}
++		else if (action == "delete")
++		{
++			int id = body.value("id", 0);
++			for (size_t i = 0; i < presets.size(); i++)
++				if (presets[i].value("id", 0) == id)
++				{
++					presets.erase(presets.begin() + i);
++					break;
++				}
++			SaveBotPresets();
++		}
++		else
++		{
++			status = 400;
++			return { { "error", "Unknown action." } };
++		}
++	}
++	return { { "presets", presets } };
++}
++
++// The shop page is opened by the game's own browser, so the request comes from the player's computer.
++IUser* CWarbondManager::FindWebUser(const string& ip)
++{
++	for (auto user : g_UserManager.GetUsers())
++	{
++		if (user->GetExtendedSocket() && user->GetExtendedSocket()->GetIP() == ip)
++			return user;
++	}
++	return NULL;
++}
++
++static string ItemCell(int itemID, const char* column)
++{
++	string key = to_string(itemID);
++	if (g_pItemTable->GetRowIdx(key) < 0)
++		return "";
++	string value = g_pItemTable->GetCell<string>(column, key);
++	value.erase(value.find_last_not_of(" \t\r\n") + 1);
++	return value;
++}
++
++static string CategoryName(int itemID)
++{
++	if (ItemCell(itemID, "ClassName") == "Class")
++		return "Characters";
++
++	string category = ItemCell(itemID, "Category");
++	int c = category.empty() ? 0 : atoi(category.c_str());
++	switch (c)
++	{
++	case 1: return "Pistols";
++	case 2: return "Shotguns";
++	case 3: return "SMGs";
++	case 4: return "Rifles";
++	case 5: return "Machine guns";
++	case 6: return "Equipment";
++	case 7: return "Characters";
++	case 11: return "Melee";
++	case 12: return "Costumes";
++	default: return "Items";
++	}
++}
++
++// weapon stats as shown by the native shop (0-100 bars); empty for non-weapons
++static json WeaponStats(int itemID)
++{
++	if (ItemCell(itemID, "ClassName") != "Equipment")
++		return nullptr;
++	int category = atoi(ItemCell(itemID, "Category").c_str());
++	if (!(category >= 1 && category <= 5) && category != 11)
++		return nullptr;
++
++	auto num = [&](const char* column) { return atoi(ItemCell(itemID, column).c_str()); };
++	json stats = { { "damage", num("Damage") }, { "accuracy", num("HitRate") }, { "recoil", num("Reaction") },
++		{ "rate", num("FiringSpeed") }, { "weight", num("Weight") } };
++	if (!stats["damage"].get<int>() && !stats["accuracy"].get<int>() && !stats["recoil"].get<int>() && !stats["rate"].get<int>() && !stats["weight"].get<int>())
++		return nullptr; // melee weapons have no values in Item.csv
++	return stats;
++}
++
++// local midnight of today (Daily) or of this week's Monday (Weekly); challenges never reset (0)
++int CWarbondManager::CurrentPeriodStart(const string& period)
++{
++	if (period == "Challenge")
++		return 0;
++	time_t now = time(NULL);
++	tm local = *localtime(&now);
++	local.tm_hour = local.tm_min = local.tm_sec = 0;
++	if (period == "Weekly")
++		local.tm_mday -= (local.tm_wday + 6) % 7;
++	local.tm_isdst = -1;
++	return (int)mktime(&local);
++}
++
++// half price for buying back an item that was unlocked before, rounded up to a multiple of 5 like every price
++int CWarbondManager::RebuyCost(int cost)
++{
++	return ((cost + 1) / 2 + 4) / 5 * 5;
++}
++
++// item IDs in the user's inventory (slots of removed items have itemID 0, expired ones inUse 0)
++set<int> CWarbondManager::OwnedItems(IUser* user)
++{
++	vector<CUserInventoryItem> inventory;
++	g_UserDatabase.GetInventoryItems(user->GetID(), inventory);
++	set<int> owned;
++	for (auto& item : inventory)
++		if (item.m_nItemID && item.m_nInUse)
++			owned.insert(item.m_nItemID);
++	return owned;
++}
++
++json CWarbondManager::BuildState(IUser* user)
++{
++	// a page asked for by the game (once)
++	string openView;
++	auto view = m_OpenView.find(user->GetID());
++	if (view != m_OpenView.end())
++	{
++		openView = view->second;
++		m_OpenView.erase(view);
++	}
++	if (!openView.empty())
++		return { { "openView", openView } };
++
++	CUserCharacter character = user->GetCharacter(UFLAG_LOW_POINTS | UFLAG_LOW_GAMENAME);
++
++	vector<WarbondUnlock_s> unlocks;
++	g_UserDatabase.GetWarbondUnlocks(user->GetID(), unlocks);
++
++	// "owned" means it's in the inventory right now: items unlocked earlier can be gone (used for crafting,
++	// deleted...), and then they can be unlocked again. Unlock records only count the medals spent per pass.
++	set<int> owned = OwnedItems(user);
++	map<int, int> spent;
++	set<int> unlockedBefore, passes;
++	for (auto& u : unlocks)
++	{
++		// itemID 0 records the pass itself being bought; any unlock in a pass also counts as owning it
++		// (items bought before passes had a price)
++		passes.insert(u.warbondID);
++		if (!u.itemID)
++			continue;
++		spent[u.warbondID] += u.cost;
++		unlockedBefore.insert(u.itemID);
++	}
++
++	json state;
++	state["character"] = character.gameName;
++	state["medals"] = character.points;
++	// the character the player has selected, shown holding weapons in the 3D preview
++	state["characterItem"] = user->GetCharacterExtended(EXT_UFLAG_CHARACTERID).characterID;
++
++	state["warbonds"] = json::array();
++	for (auto& w : m_Warbonds)
++	{
++		json jw = { { "id", w.id }, { "name", w.name }, { "type", w.type }, { "description", w.description },
++			{ "image", w.image }, { "spent", spent[w.id] }, { "cost", w.cost }, { "purchased", w.cost <= 0 || passes.count(w.id) > 0 } };
++		if (w.theme.size() == 2)
++			jw["theme"] = w.theme;
++		int total = 0, have = 0;
++		jw["pages"] = json::array();
++		for (size_t p = 0; p < w.pages.size(); p++)
++		{
++			const WarbondPage& page = w.pages[p];
++			json jp = { { "unlock", page.unlockSpent }, { "unlocked", spent[w.id] >= page.unlockSpent }, { "title", page.title } };
++			jp["items"] = json::array();
++			for (auto& item : page.items)
++			{
++				bool isOwned = !item.repeatable && owned.count(item.itemID) > 0;
++				bool rebuy = !item.repeatable && !isOwned && unlockedBefore.count(item.itemID) > 0;
++				total += !item.repeatable;
++				have += isOwned;
++				jp["items"].push_back({ { "id", item.itemID }, { "cost", rebuy ? RebuyCost(item.cost) : item.cost }, { "fullCost", item.cost },
++					{ "owned", isOwned }, { "rebuy", rebuy }, { "repeatable", item.repeatable }, { "days", item.days },
++					{ "name", !item.name.empty() ? item.name : m_ItemNames.count(item.itemID) ? m_ItemNames[item.itemID] : ItemCell(item.itemID, "Name") }, { "category", CategoryName(item.itemID) },
++					{ "resource", ItemCell(item.itemID, "recourcename") }, { "stats", WeaponStats(item.itemID) } });
++			}
++			jw["pages"].push_back(jp);
++		}
++		jw["owned"] = have;
++		jw["total"] = total;
++		state["warbonds"].push_back(jw);
++	}
++
++	AdvanceOrders(user, -1, { { "Level", user->GetCharacter(UFLAG_LOW_LEVEL).level }, { "TotalUnlocks", CountItemUnlocks(user) } });
++
++	vector<OrderProgress_s> progress;
++	g_UserDatabase.GetOrderProgress(user->GetID(), progress);
++	state["orders"] = json::array();
++	for (auto& o : m_Orders)
++	{
++		int periodStart = CurrentPeriodStart(o.period);
++		OrderProgress_s current = { o.id, periodStart, 0, false };
++		for (auto& p : progress)
++			if (p.orderID == o.id && p.periodStart == periodStart)
++				current = p;
++		int periodLength = o.period == "Weekly" ? 7 * 86400 : o.period == "Challenge" ? 0 : 86400;
++		state["orders"].push_back({ { "id", o.id }, { "period", o.period }, { "group", o.group }, { "text", o.text }, { "progress", min(current.progress, o.target) },
++			{ "target", o.target }, { "reward", o.reward }, { "tickets", o.tickets }, { "completed", current.completed },
++			{ "resetsIn", periodLength ? max(0, periodStart + periodLength - (int)time(NULL)) : 0 } });
++	}
++
++	return state;
++}
++
++json CWarbondManager::Unlock(IUser* user, int warbondID, int itemID, int quantity, int& status)
++{
++	auto fail = [&](int code, const char* message)
++	{
++		status = code;
++		return json{ { "error", message } };
++	};
++
++	const Warbond* warbond = NULL;
++	for (auto& w : m_Warbonds)
++		if (w.id == warbondID)
++			warbond = &w;
++	if (!warbond)
++		return fail(400, "Unknown battle pass.");
++
++	const WarbondPage* page = NULL;
++	const WarbondItem* item = NULL;
++	for (auto& p : warbond->pages)
++		for (auto& i : p.items)
++			if (i.itemID == itemID)
++			{
++				page = &p;
++				item = &i;
++			}
++	if (!item)
++		return fail(400, "That item isn't in this battle pass.");
++
++	vector<WarbondUnlock_s> unlocks;
++	g_UserDatabase.GetWarbondUnlocks(user->GetID(), unlocks);
++	int spent = 0;
++	bool rebuy = false, purchased = warbond->cost <= 0;
++	for (auto& u : unlocks)
++	{
++		purchased |= u.warbondID == warbondID;
++		if (u.warbondID == warbondID && u.itemID)
++			spent += u.cost;
++		rebuy |= u.itemID == itemID;
++	}
++	if (!purchased)
++		return fail(409, "Unlock this battle pass first.");
++	if (item->repeatable)
++	{
++		// supplies: any quantity, nothing is recorded (they don't count towards pages or orders)
++		quantity = min(max(quantity, 1), 99);
++		int total = item->cost * quantity;
++		if (spent < page->unlockSpent)
++			return fail(409, "This page is still locked.");
++		if (user->GetCharacter(UFLAG_LOW_POINTS).points < total)
++			return fail(409, "Not enough medals.");
++		int added = item->days ? g_ItemManager.AddItem(user->GetID(), user, itemID, 1, item->days * quantity) : ITEM_ADD_SUCCESS;
++		for (int n = 0; !item->days && n < quantity && added == ITEM_ADD_SUCCESS; n++)
++			added = g_ItemManager.AddItem(user->GetID(), user, itemID, 1, 0);
++		if (added == ITEM_ADD_INVENTORY_FULL)
++			return fail(409, "Your inventory is full.");
++		if (added != ITEM_ADD_SUCCESS)
++			return fail(500, "Couldn't add the item.");
++		user->UpdatePoints(-total);
++		Logger().Info("WarbondManager: user %d bought %d x item %d (supplies) for %d medals\n", user->GetID(), quantity, itemID, total);
++		return BuildState(user);
++	}
++	if (OwnedItems(user).count(itemID))
++		return fail(409, "You already own this item.");
++	// items unlocked before and lost since (used for crafting, deleted...) cost half to get back
++	int cost = rebuy ? RebuyCost(item->cost) : item->cost;
++	if (spent < page->unlockSpent)
++		return fail(409, "This page is still locked.");
++
++	CUserCharacter character = user->GetCharacter(UFLAG_LOW_POINTS);
++	if (character.points < cost)
++		return fail(409, "Not enough medals.");
++
++	int added = g_ItemManager.AddItem(user->GetID(), user, itemID, 1, 0);
++	if (added == ITEM_ADD_INVENTORY_FULL)
++		return fail(409, "Your inventory is full.");
++	if (added != ITEM_ADD_SUCCESS)
++		return fail(500, "Couldn't add the item.");
++
++	user->UpdatePoints(-cost);
++	g_UserDatabase.AddWarbondUnlock(user->GetID(), { warbondID, itemID, cost });
++	Logger().Info("WarbondManager: user %d %s item %d from battle pass %d for %d medals\n", user->GetID(), rebuy ? "bought back" : "unlocked", itemID, warbondID, cost);
++	AdvanceOrders(user, -1, { { "Unlocks", 1 }, { "TotalUnlocks", CountItemUnlocks(user) } });
++
++	return BuildState(user);
++}
++
++json CWarbondManager::UnlockPass(IUser* user, int warbondID, int& status)
++{
++	auto fail = [&](int code, const char* message)
++	{
++		status = code;
++		return json{ { "error", message } };
++	};
++
++	const Warbond* warbond = NULL;
++	for (auto& w : m_Warbonds)
++		if (w.id == warbondID)
++			warbond = &w;
++	if (!warbond)
++		return fail(400, "Unknown battle pass.");
++	if (warbond->cost <= 0)
++		return fail(409, "This battle pass is free.");
++
++	vector<WarbondUnlock_s> unlocks;
++	g_UserDatabase.GetWarbondUnlocks(user->GetID(), unlocks);
++	for (auto& u : unlocks)
++		if (u.warbondID == warbondID)
++			return fail(409, "You already have this battle pass.");
++
++	CUserCharacter character = user->GetCharacter(UFLAG_LOW_POINTS);
++	if (character.points < warbond->cost)
++		return fail(409, "Not enough medals.");
++
++	user->UpdatePoints(-warbond->cost);
++	g_UserDatabase.AddWarbondUnlock(user->GetID(), { warbondID, 0, warbond->cost });
++	Logger().Info("WarbondManager: user %d unlocked battle pass %d for %d medals\n", user->GetID(), warbondID, warbond->cost);
++
++	return BuildState(user);
++}
++
++int CWarbondManager::CountItemUnlocks(IUser* user)
++{
++	vector<WarbondUnlock_s> unlocks;
++	g_UserDatabase.GetWarbondUnlocks(user->GetID(), unlocks);
++	int count = 0;
++	for (auto& u : unlocks)
++		count += u.itemID != 0;
++	return count;
++}
++
++/**
++ * Advances daily/weekly orders and permanent challenges with what just happened. Order types:
++ *   Matches, Wins, Kills, TopPlayer (finished 1st), Unlocks (battle pass items), LevelUps: add up
++ *   BestKills (kills in one match), Level (level reached), TotalUnlocks: the best value counts
++ * gameMode -1: not a match event (only orders without "GameModes" apply).
++ */
++void CWarbondManager::AdvanceOrders(IUser* user, int gameMode, const map<string, int>& events)
++{
++	static const set<string> bestValue = { "BestKills", "Level", "TotalUnlocks" };
++
++	vector<OrderProgress_s> progress;
++	g_UserDatabase.GetOrderProgress(user->GetID(), progress);
++	for (auto& o : m_Orders)
++	{
++		auto event = events.find(o.type);
++		if (event == events.end() || event->second <= 0)
++			continue;
++		if (!o.gameModes.empty() && find(o.gameModes.begin(), o.gameModes.end(), gameMode) == o.gameModes.end())
++			continue;
++
++		int periodStart = CurrentPeriodStart(o.period);
++		OrderProgress_s current = { o.id, periodStart, 0, false };
++		for (auto& p : progress)
++			if (p.orderID == o.id && p.periodStart == periodStart)
++				current = p;
++		if (current.completed)
++			continue;
++
++		int value = bestValue.count(o.type) ? max(current.progress, event->second) : current.progress + event->second;
++		value = min(value, o.target);
++		if (value == current.progress)
++			continue;
++		current.progress = value;
++		if (current.progress >= o.target)
++		{
++			current.completed = true;
++			user->UpdatePoints(o.reward);
++			string reward = o.reward ? va("+%d medals", o.reward) : "";
++			if (o.tickets)
++				reward += string(reward.empty() ? "" : ", ") + va("+%d Bingo Ticket%s", o.tickets, o.tickets == 1 ? "" : "s");
++			g_PacketManager.SendUMsgNoticeMessageInChat(user->GetExtendedSocket(),
++				va("%s complete: %s (%s)", o.period == "Challenge" ? "Challenge" : "Order", o.text.c_str(), reward.c_str()));
++			if (o.tickets)
++				g_BingoManager.GiveTickets(user, o.tickets, NULL);
++		}
++		g_UserDatabase.SetOrderProgress(user->GetID(), current);
++	}
++}
++
++int CWarbondManager::CountHeadshots(const map<int, int>& killTypes)
++{
++	if (m_Medals.headshotKillType < 0)
++		return 0;
++	auto it = killTypes.find(m_Medals.headshotKillType);
++	return it != killTypes.end() ? it->second : 0;
++}
++
++int CWarbondManager::OnMatchResult(IUser* user, int gameMode, int kills, int headshots, bool won, bool topPlayer)
++{
++	int killMedals = kills / m_Medals.killsPerMedal;
++	if (m_Medals.maxKillMedals > 0)
++		killMedals = min(killMedals, m_Medals.maxKillMedals);
++	int medals = m_Medals.perMatch + (won ? m_Medals.perWin : 0) + killMedals;
++
++	if (m_Medals.logKills)
++		Logger().Info("WarbondManager: user %d match result: mode %d, kills %d, headshots %d, won %d, first %d -> %d medals (%d match + %d win + %d kills)\n",
++			user->GetID(), gameMode, kills, headshots, won, topPlayer, medals, m_Medals.perMatch, won ? m_Medals.perWin : 0, killMedals);
++
++	AdvanceOrders(user, gameMode, { { "Matches", 1 }, { "Wins", won ? 1 : 0 }, { "Kills", kills }, { "BestKills", kills },
++		{ "TopPlayer", topPlayer ? 1 : 0 }, { "Headshots", headshots } });
++	g_BingoManager.OnMatchResult(user, kills, won);
++	return medals;
++}
++
++void CWarbondManager::OnLevelUp(IUser* user, int oldLevel, int newLevel)
++{
++	int medals = 0;
++	for (int level = oldLevel + 1; level <= newLevel; level++)
++		medals += level * m_Medals.levelUpPerLevel;
++	if (medals > 0)
++	{
++		user->UpdatePoints(medals);
++		g_PacketManager.SendUMsgNoticeMessageInChat(user->GetExtendedSocket(), va("Level %d reached! +%d medals", newLevel, medals));
++	}
++	AdvanceOrders(user, -1, { { "LevelUps", newLevel - oldLevel }, { "Level", newLevel } });
++	g_BingoManager.OnLevelUp(user, oldLevel, newLevel);
++}
++
++vector<pair<int, int>> CWarbondManager::PassItems() const
++{
++	vector<pair<int, int>> items;
++	set<int> seen;
++	for (auto& w : m_Warbonds)
++		for (auto& p : w.pages)
++			for (auto& i : p.items)
++				if (i.itemID && !i.repeatable && seen.insert(i.itemID).second)
++					items.push_back({ i.itemID, i.cost });
++	return items;
++}
+diff --git a/src/manager/warbondmanager.h b/src/manager/warbondmanager.h
+new file mode 100644
+index 0000000..4c5b4b8
+--- /dev/null
++++ b/src/manager/warbondmanager.h
+@@ -0,0 +1,111 @@
++#pragma once
++
++#include <string>
++#include <vector>
++#include <map>
++#include <set>
++
++#include "interface/iwarbondmanager.h"
++#include "manager.h"
++#include "net/webserver.h"
++#include "nlohmann/json.hpp"
++
++struct WarbondItem
++{
++	int itemID;
++	int cost;
++	std::string name; // optional display name (Item.csv only has internal names)
++	bool repeatable;  // supplies: bought any number of times, never "owned"
++	int days;         // supplies with a duration: days per unit bought (0: the item itself, one per unit)
++};
++
++struct WarbondPage
++{
++	int unlockSpent; // medals that must have been spent in this warbond before the page opens
++	std::string title; // optional, shown instead of "Page N"
++	std::vector<WarbondItem> items;
++};
++
++struct Warbond
++{
++	int id;
++	std::string name;
++	std::string type; // "Season", "Event", ...
++	std::string description;
++	std::string image;
++	int cost; // medals to unlock the pass itself (0 = free)
++	std::vector<std::string> theme; // optional [dark, light] colours of the pass page
++	std::vector<WarbondPage> pages;
++};
++
++struct WarbondOrder
++{
++	int id;
++	std::string period; // "Daily", "Weekly" or "Challenge" (permanent, completed once)
++	std::string group;  // challenge book section
++	std::string text;
++	std::string type;   // see CWarbondManager::AdvanceOrders
++	std::vector<int> gameModes; // empty: any mode
++	int target;
++	int reward;
++	int tickets; // Bingo Tickets given on completion (besides the medals)
++};
++
++struct MedalRules
++{
++	int perMatch = 2;
++	int perWin = 2;
++	int killsPerMedal = 6;
++	int maxKillMedals = 0; // 0: no limit
++	int levelUpPerLevel = 3; // medals for reaching level N: N x this
++	int headshotKillType = -1; // victimKillType value meaning a headshot (-1: unknown yet, see the telemetry log)
++	bool logKills = true; // telemetry: log every kill event and each player's match summary
++};
++
++class CWarbondManager : public CBaseManager<IWarbondManager>
++{
++public:
++	CWarbondManager();
++
++	virtual bool Init();
++	virtual void Shutdown();
++
++	virtual int OnMatchResult(IUser* user, int gameMode, int kills, int headshots, bool won, bool topPlayer);
++	virtual int CountHeadshots(const std::map<int, int>& killTypes);
++	bool LogKills() const { return m_Medals.logKills; }
++	virtual void OnLevelUp(IUser* user, int oldLevel, int newLevel);
++	// non-repeatable items of the battle passes with their medal cost (bingo prizes)
++	std::vector<std::pair<int, int>> PassItems() const;
++	std::set<int> OwnedItems(IUser* user);
++
++private:
++	bool LoadConfig();
++	WebResponse OnApiRequest(const WebRequest& req);
++	WebResponse HandleApiRequest(const WebRequest& req);
++	IUser* FindWebUser(const std::string& ip);
++	static int RebuyCost(int cost);
++	nlohmann::json BuildState(IUser* user);
++	nlohmann::json Unlock(IUser* user, int warbondID, int itemID, int quantity, int& status);
++	nlohmann::json UnlockPass(IUser* user, int warbondID, int& status);
++	nlohmann::json RoomBotsApi(IUser* user, const WebRequest& req, int& status);
++	nlohmann::json BotPresetsApi(IUser* user, const WebRequest& req, int& status);
++	nlohmann::json& BotPresets(int userID);
++	void SaveBotPresets();
++	nlohmann::json m_BotPresets;      // userID -> [{id, name, primary: [...], secondary: [...], melee: [...]}]
++	bool m_BotPresetsLoaded = false;
++	int CurrentPeriodStart(const std::string& period);
++	void AdvanceOrders(IUser* user, int gameMode, const std::map<std::string, int>& events);
++	int CountItemUnlocks(IUser* user);
++
++	std::vector<Warbond> m_Warbonds;
++	std::vector<WarbondOrder> m_Orders;
++	std::map<int, std::string> m_ItemNames; // official English names exported from the game files (Data/ItemNames.json)
++	std::map<int, std::string> m_OpenView;  // page the game's browser window shows next ("bots": the room's AI players)
++	MedalRules m_Medals;
++	std::string m_WebIP;
++	int m_WebPort;
++	std::string m_WebRoot;
++	CWebServer m_WebServer;
++};
++
++extern CWarbondManager g_WarbondManager;
+diff --git a/src/net/extendedsocket.cpp b/src/net/extendedsocket.cpp
+index b380300..6184835 100644
+--- a/src/net/extendedsocket.cpp
++++ b/src/net/extendedsocket.cpp
+@@ -35,6 +35,7 @@ CExtendedSocket::CExtendedSocket(SOCKET socket, unsigned int id)
+ 	memset(m_pCryptKey, 0, 64);
+ 	memset(m_pCryptIV, 0, 64);
+ 	m_pSSL = NULL;
++	m_bWouldBlock = false;
+ }
+ 
+ /**
+@@ -170,7 +171,19 @@ int CExtendedSocket::Read(char* buf, int len)
+ 	int recvResult = 0;
+ 
+ 	if (m_pSSL && !m_bCryptInput)
++	{
+ 		recvResult = wolfSSL_recv(m_pSSL, buf, len, 0);
++		if (recvResult < 0)
++		{
++			// the TLS handshake (done lazily by wolfSSL_recv) or a TLS record is still incomplete
++			int err = wolfSSL_get_error(m_pSSL, recvResult);
++			if (err == WOLFSSL_ERROR_WANT_READ || err == WOLFSSL_ERROR_WANT_WRITE)
++			{
++				m_bWouldBlock = true;
++				return recvResult;
++			}
++		}
++	}
+ 	else
+ 		recvResult = recv(m_Socket, buf, len, 0);
+ 
+@@ -189,6 +202,7 @@ int CExtendedSocket::Read(char* buf, int len)
+ CReceivePacket* CExtendedSocket::Read()
+ {
+ 	m_nReadResult = 0;
++	m_bWouldBlock = false;
+ 	vector<unsigned char> packetDataBuf;
+ 	int recvResult = 0;
+ 
+diff --git a/src/net/tcpserver.cpp b/src/net/tcpserver.cpp
+index d35947b..d6445d7 100644
+--- a/src/net/tcpserver.cpp
++++ b/src/net/tcpserver.cpp
+@@ -235,6 +235,9 @@ void CTCPServer::Listen()
+ 					continue;
+ 
+ 				CReceivePacket* msg = socket->Read();
++				if (socket->WouldBlock())
++					continue; // SSL handshake or record still incomplete, wait for more data
++
+ 				int readResult = socket->GetReadResult();
+ 				if (readResult == 0)
+ 				{
+@@ -330,7 +333,7 @@ void CTCPServer::InitSSLContext()
+ 		return;
+ 
+ 	// Create and initialize WOLFSSL_CTX
+-	m_pCTX = wolfSSL_CTX_new(wolfTLSv1_3_server_method());
++	m_pCTX = wolfSSL_CTX_new(wolfTLSv1_2_server_method());
+ 	if (m_pCTX == NULL)
+ 	{
+ 		Logger().Error("wolfSSL_CTX_new() failed to create WOLFSSL_CTX. Continuing without SSL...\n", m_nResult, WSAGetLastErrorString());
+@@ -405,13 +408,8 @@ IExtendedSocket* CTCPServer::Accept(unsigned int id)
+ 		// Attach wolfSSL to the socket
+ 		wolfSSL_set_fd(newSSL, clientSocket);
+ 
+-		// Establish TLS connection
+-		int ret, err;
+-		do
+-		{
+-			ret = wolfSSL_accept(newSSL);
+-			err = wolfSSL_get_error(newSSL, ret);
+-		} while (err == WOLFSSL_ERROR_WANT_READ || err == WOLFSSL_ERROR_WANT_WRITE);
++		// The TLS handshake is completed lazily by wolfSSL_recv when the client sends data. Blocking here
++		// spun forever on the client's first connection, which never starts TLS, and stalled every other client.
+ 
+ 		newSocket->SetSSLObject(newSSL);
+ 	}
+diff --git a/src/net/webserver.cpp b/src/net/webserver.cpp
+new file mode 100644
+index 0000000..b5867ad
+--- /dev/null
++++ b/src/net/webserver.cpp
+@@ -0,0 +1,223 @@
++#include "webserver.h"
++
++#include <winsock2.h>
++#include <ws2tcpip.h>
++
++#include <fstream>
++#include <sstream>
++#include <algorithm>
++
++#include "common/logger.h"
++
++using namespace std;
++
++CWebServer::CWebServer() : m_Thread(ListenThread, this)
++{
++	m_ListenSocket = INVALID_SOCKET;
++	m_bRunning = false;
++}
++
++CWebServer::~CWebServer()
++{
++	Stop();
++}
++
++bool CWebServer::Start(const string& bindIP, int port, const string& root, const ApiHandler& apiHandler)
++{
++	m_Root = root;
++	m_ApiHandler = apiHandler;
++
++	SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
++	if (s == INVALID_SOCKET)
++		return false;
++
++	sockaddr_in addr = {};
++	addr.sin_family = AF_INET;
++	addr.sin_port = htons((u_short)port);
++	inet_pton(AF_INET, bindIP.c_str(), &addr.sin_addr);
++
++	if (::bind(s, (sockaddr*)&addr, sizeof(addr)) == SOCKET_ERROR || listen(s, SOMAXCONN) == SOCKET_ERROR)
++	{
++		Logger().Error("CWebServer::Start: can't listen on %s:%d (%d)\n", bindIP.c_str(), port, WSAGetLastError());
++		closesocket(s);
++		return false;
++	}
++
++	m_ListenSocket = s;
++	m_bRunning = true;
++	m_Thread.Start();
++
++	Logger().Info("Web shop listening on http://%s:%d/ (files: %s)\n", bindIP.c_str(), port, root.c_str());
++	return true;
++}
++
++void CWebServer::Stop()
++{
++	if (!m_bRunning)
++		return;
++
++	m_bRunning = false;
++	closesocket((SOCKET)m_ListenSocket); // unblocks accept()
++	m_ListenSocket = INVALID_SOCKET;
++	m_Thread.Join();
++}
++
++void* CWebServer::ListenThread(void* data)
++{
++	((CWebServer*)data)->Listen();
++	return NULL;
++}
++
++void CWebServer::Listen()
++{
++	while (m_bRunning)
++	{
++		sockaddr_in from = {};
++		int fromLen = sizeof(from);
++		SOCKET client = accept((SOCKET)m_ListenSocket, (sockaddr*)&from, &fromLen);
++		if (client == INVALID_SOCKET)
++			continue;
++
++		char ip[INET_ADDRSTRLEN] = {};
++		inet_ntop(AF_INET, &from.sin_addr, ip, sizeof(ip));
++
++		DWORD timeout = 5000;
++		setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof(timeout));
++
++		HandleClient(client, ip);
++		closesocket(client);
++	}
++}
++
++static const char* StatusText(int status)
++{
++	switch (status)
++	{
++	case 200: return "OK";
++	case 301: return "Moved Permanently";
++	case 400: return "Bad Request";
++	case 403: return "Forbidden";
++	case 404: return "Not Found";
++	case 409: return "Conflict";
++	default: return "Internal Server Error";
++	}
++}
++
++void CWebServer::HandleClient(unsigned long long clientSocket, const string& clientIP)
++{
++	SOCKET client = (SOCKET)clientSocket;
++
++	// read the headers, then the body announced by Content-Length
++	string data;
++	char buf[8192];
++	size_t headerEnd = string::npos;
++	while ((headerEnd = data.find("\r\n\r\n")) == string::npos)
++	{
++		int n = recv(client, buf, sizeof(buf), 0);
++		if (n <= 0 || data.size() > 65536)
++			return;
++		data.append(buf, n);
++	}
++
++	WebRequest req;
++	req.clientIP = clientIP;
++	istringstream head(data.substr(0, headerEnd));
++	string requestLine;
++	getline(head, requestLine);
++	istringstream rl(requestLine);
++	string target;
++	rl >> req.method >> target;
++	req.path = target.substr(0, target.find('?'));
++
++	size_t contentLength = 0;
++	string line;
++	while (getline(head, line))
++	{
++		string lower = line;
++		transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
++		if (lower.rfind("content-length:", 0) == 0)
++			contentLength = strtoul(line.c_str() + 15, NULL, 10);
++	}
++
++	req.body = data.substr(headerEnd + 4);
++	while (req.body.size() < contentLength && contentLength <= 1024 * 1024)
++	{
++		int n = recv(client, buf, sizeof(buf), 0);
++		if (n <= 0)
++			return;
++		req.body.append(buf, n);
++	}
++
++	WebResponse resp;
++	string extraHeaders;
++	if (req.path.rfind("/api/", 0) == 0)
++	{
++		resp = m_ApiHandler(req);
++	}
++	else if (req.method != "GET")
++	{
++		resp.status = 400;
++		resp.body = "{}";
++	}
++	else if (req.path == "/" || req.path == "/shop")
++	{
++		resp.status = 301;
++		resp.contentType = "text/plain";
++		extraHeaders = "Location: /shop/\r\n";
++	}
++	else
++	{
++		resp = ServeFile(req.path);
++	}
++
++	ostringstream out;
++	out << "HTTP/1.1 " << resp.status << " " << StatusText(resp.status) << "\r\n"
++		<< "Content-Type: " << resp.contentType << "\r\n"
++		<< "Content-Length: " << resp.body.size() << "\r\n"
++		<< "Cache-Control: no-store\r\n"
++		<< extraHeaders
++		<< "Connection: close\r\n\r\n";
++	string headers = out.str();
++	send(client, headers.data(), (int)headers.size(), 0);
++	if (!resp.body.empty())
++		send(client, resp.body.data(), (int)resp.body.size(), 0);
++}
++
++WebResponse CWebServer::ServeFile(const string& urlPath)
++{
++	WebResponse resp;
++	string path = urlPath;
++	if (path.find("..") != string::npos || path.find('\\') != string::npos || path.find(':') != string::npos)
++	{
++		resp.status = 403;
++		resp.contentType = "text/plain";
++		return resp;
++	}
++	if (path.back() == '/')
++		path += "index.html";
++
++	ifstream f(m_Root + path, ios::binary);
++	if (!f)
++	{
++		resp.status = 404;
++		resp.contentType = "text/plain";
++		resp.body = "Not found";
++		return resp;
++	}
++	resp.body.assign(istreambuf_iterator<char>(f), istreambuf_iterator<char>());
++
++	string ext = path.substr(path.find_last_of('.') + 1);
++	transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
++	if (ext == "html") resp.contentType = "text/html; charset=utf-8";
++	else if (ext == "css") resp.contentType = "text/css; charset=utf-8";
++	else if (ext == "js") resp.contentType = "application/javascript; charset=utf-8";
++	else if (ext == "json") resp.contentType = "application/json; charset=utf-8";
++	else if (ext == "png") resp.contentType = "image/png";
++	else if (ext == "jpg" || ext == "jpeg") resp.contentType = "image/jpeg";
++	else if (ext == "svg") resp.contentType = "image/svg+xml";
++	else if (ext == "webp") resp.contentType = "image/webp";
++	else if (ext == "woff2") resp.contentType = "font/woff2";
++	else if (ext == "wav") resp.contentType = "audio/wav";
++	else resp.contentType = "application/octet-stream";
++	return resp;
++}
+diff --git a/src/net/webserver.h b/src/net/webserver.h
+new file mode 100644
+index 0000000..08e7a04
+--- /dev/null
++++ b/src/net/webserver.h
+@@ -0,0 +1,49 @@
++#pragma once
++
++#include <string>
++#include <functional>
++
++#include "common/thread.h"
++
++struct WebRequest
++{
++	std::string clientIP;
++	std::string method;
++	std::string path; // without the query string
++	std::string body;
++};
++
++struct WebResponse
++{
++	int status = 200;
++	std::string contentType = "application/json; charset=utf-8";
++	std::string body;
++};
++
++/**
++ * Offline build: minimal HTTP/1.1 server for the in-game web shop (CEF). Serves static files from a folder and
++ * passes /api/ requests to a handler. One connection at a time, "Connection: close" on every response.
++ */
++class CWebServer
++{
++public:
++	typedef std::function<WebResponse(const WebRequest&)> ApiHandler;
++
++	CWebServer();
++	~CWebServer();
++
++	bool Start(const std::string& bindIP, int port, const std::string& root, const ApiHandler& apiHandler);
++	void Stop();
++
++private:
++	static void* ListenThread(void* data);
++	void Listen();
++	void HandleClient(unsigned long long clientSocket, const std::string& clientIP);
++	WebResponse ServeFile(const std::string& path);
++
++	CThread m_Thread;
++	unsigned long long m_ListenSocket;
++	volatile bool m_bRunning;
++	std::string m_Root;
++	ApiHandler m_ApiHandler;
++};
+diff --git a/src/public/net/extendedsocket.h b/src/public/net/extendedsocket.h
+index 4c688f4..c1e0b2a 100644
+--- a/src/public/net/extendedsocket.h
++++ b/src/public/net/extendedsocket.h
+@@ -11,6 +11,9 @@ struct GuestData_s
+ 	class CChannel* currentChannel;
+ 
+ 	int launcherVersion;
++
++	time_t characterSelectSentAt; // offline build: when the "Choose your character" survey was last shown (0 = never)
++	bool characterDeleteOpen; // offline build: the last survey shown was "Delete a character" (typing takes longer)
+ };
+ 
+ class CSendPacket;
+@@ -53,6 +56,7 @@ public:
+ 	void SetMsg(CReceivePacket* msg);
+ 	CReceivePacket* GetMsg();
+ 	int GetReadResult();
++	bool WouldBlock() { return m_bWouldBlock; }
+ 	int GetBytesReceived();
+ 	int GetBytesSent();
+ 	std::vector<CSendPacket*>& GetPacketsToSend();
+@@ -87,4 +91,5 @@ private:
+ 	unsigned char m_pCryptKey[64];
+ 	unsigned char m_pCryptIV[64];
+ 	WOLFSSL* m_pSSL;
++	bool m_bWouldBlock; // last read hit WOLFSSL_ERROR_WANT_READ/WRITE (non-blocking SSL, retry on next poll)
+ };
+diff --git a/src/room/gamematch.cpp b/src/room/gamematch.cpp
+index 65418d8..2c281d9 100644
+--- a/src/room/gamematch.cpp
++++ b/src/room/gamematch.cpp
+@@ -6,6 +6,7 @@
+ #include "manager/itemmanager.h"
+ #include "manager/hostmanager.h"
+ #include "manager/userdatabase.h"
++#include "manager/warbondmanager.h"
+ 
+ #include "user/userinventoryitem.h"
+ 
+@@ -19,6 +20,7 @@ CGameMatchUserStat::CGameMatchUserStat()
+ 	m_nDeaths = 0;
+ 	m_nPointsEarned = 0;
+ 	m_nBonusPointsEarned = 0;
++	m_nHeadshots = 0;
+ 	m_nExpEarned = 0;
+ 	m_nBonusExpEarned = 0;
+ 	m_nItemBonusPoints = 0;
+@@ -271,6 +273,8 @@ void CGameMatch::OnUpdateKillCounter(IUser* user, int kills)
+ 	if (stat)
+ 	{
+ 		stat->UpdateKillsCount(kills);
++		if (g_WarbondManager.LogKills())
++			Logger().Info("KillCounter: user %d kills %d\n", user->GetID(), kills);
+ 	}
+ }
+ 
+@@ -292,7 +296,13 @@ void CGameMatch::OnKillEvent(IUser* user, GameMatch_KillEvent& killEvent)
+ 
+ 	// don't count player suicide
+ 	if (killEvent.killerUserID != killEvent.victimUserID)
++	{
+ 		stat->IncrementKillCount();
++		stat->m_KillTypes[killEvent.victimKillType]++;
++	}
++	if (g_WarbondManager.LogKills())
++		Logger().Info("KillEvent: killer %d (team %d) gun %d -> victim %d (team %d), killType %d, kills now %d\n", killEvent.killerUserID, killEvent.killerTeam,
++			killEvent.gunID, killEvent.victimUserID, killEvent.victimTeam, killEvent.victimKillType, stat->m_nKills);
+ 
+ 	g_QuestManager.OnKillEvent(stat, this, killEvent);
+ 
+@@ -532,7 +542,6 @@ void CGameMatch::CalculateGameResult()
+ 	CalculateFirstPlace();
+ 
+ 	int expCoef = GetExpCoefficient();
+-	int pointsCoef = GetPointsCoefficient();
+ 
+ 	for (auto stat : m_UserStats)
+ 	{
+@@ -541,8 +550,21 @@ void CGameMatch::CalculateGameResult()
+ 		// calc exp
+ 		stat->m_nExpEarned = stat->m_nKills > 0 ? expCoef * stat->m_nKills : expCoef;
+ 
+-		// calc points
+-		stat->m_nPointsEarned = stat->m_nKills > 0 ? pointsCoef * stat->m_nKills : pointsCoef;
++		// offline build: points are medals now (see CWarbondManager::OnMatchResult, which also advances orders)
++		RoomTeamNum team = m_pParentRoom->GetUserTeam(user);
++		bool won = (team == RoomTeamNum::Terrorist && m_nTerWinCount > m_nCtWinCount) ||
++			(team == RoomTeamNum::CounterTerrorist && m_nCtWinCount > m_nTerWinCount);
++		// m_UserStats is sorted by CalculateFirstPlace
++		bool topPlayer = m_UserStats.size() > 1 && stat == m_UserStats.front();
++		stat->m_nHeadshots = g_WarbondManager.CountHeadshots(stat->m_KillTypes);
++		if (g_WarbondManager.LogKills())
++		{
++			string types;
++			for (auto& kt : stat->m_KillTypes)
++				types += va("%d:%d ", kt.first, kt.second);
++			Logger().Info("KillTypes: user %d -> %s\n", user->GetID(), types.c_str());
++		}
++		stat->m_nPointsEarned = g_WarbondManager.OnMatchResult(user, m_nGameMode, stat->m_nKills, stat->m_nHeadshots, won, topPlayer);
+ 
+ 		// calc bonus exp/points
+ 		auto bonusPercentageClass = find_if(g_pServerConfig->gameMatch.bonusPercentageClasses.begin(), g_pServerConfig->gameMatch.bonusPercentageClasses.end(),
+@@ -601,6 +623,10 @@ void CGameMatch::CalculateGameResult()
+ 			}
+ 		}
+ 
++		// medals have no class/item/co-op bonuses
++		stat->m_nBonusPointsEarned = 0;
++		stat->m_nClassBonusPoints = stat->m_nItemBonusPoints = stat->m_nPlayerCoopBonusPoints = 0;
++
+ 		if (stat->m_nExpEarned > 9999)
+ 		{
+ 			stat->m_nExpEarned = 9999;
+diff --git a/src/room/gamematch.h b/src/room/gamematch.h
+index 68a4dc7..6fa12f4 100644
+--- a/src/room/gamematch.h
++++ b/src/room/gamematch.h
+@@ -57,6 +57,10 @@ public:
+ 
+ 	// zbs
+ 	int m_nRank;
++
++	// offline build: kills by victimKillType (telemetry, headshots) and headshots in this match
++	std::map<int, int> m_KillTypes;
++	int m_nHeadshots;
+ };
+ 
+ class CGameMatch
+diff --git a/src/room/room.cpp b/src/room/room.cpp
+index 616959e..d9f861f 100644
+--- a/src/room/room.cpp
++++ b/src/room/room.cpp
+@@ -57,11 +57,10 @@ void CRoom::Shutdown()
+ 
+ int CRoom::GetNumOfPlayers()
+ {
+-	// TODO: should we count bot players???
++	// offline build: the room's AI players take slots too
+ 	int realPlayers = (int)m_Users.size();
+-	//int botPlayers = m_pSettings->unk39 + m_pSettings->unk40;
+ 
+-	return realPlayers /*+ botPlayers*/;
++	return realPlayers + (int)m_Bots.size();
+ }
+ 
+ int CRoom::GetFreeSlots()
+@@ -239,6 +238,241 @@ void CRoom::SetStatus(RoomStatus newStatus)
+ void CRoom::SendJoinNewRoom(IUser* user)
+ {
+ 	g_PacketManager.SendRoomCreateAndJoin(user->GetExtendedSocket(), this);
++	SendBots(user);
++}
++
++// ---------------------------------------------------------------- offline build: room AI players
++vector<RoomBot> g_LastMatchBots;
++int g_LastMatchMode = 0;
++int g_LastMatchHostTeam = 2;
++int g_LastMatchHostID = 0;
++
++static int g_nNextBotID = 0x40000000;
++static const char* const s_BotNames[] = {
++	"Mike", "Ana", "Viktor", "Kenji", "Lucia", "Omar", "Sasha", "Diego", "Mei", "Hans", "Nadia", "Raul", "Yuki",
++	"Bruno", "Elena", "Tariq", "Ivan", "Chloe", "Marco", "Aiko", "Pablo", "Ingrid", "Dmitri", "Rosa", "Felix",
++	"Leila", "Hugo", "Sora", "Mateo", "Freya", "Kofi", "Carmen", "Axel", "Nina", "Joon", "Vera", "Emil", "Iris",
++	"Santi", "Greta"
++};
++
++const vector<RoomBot>& CRoom::GetBots()
++{
++	return m_Bots;
++}
++
++RoomBot* CRoom::FindBot(int id)
++{
++	for (auto& b : m_Bots)
++		if (b.id == id)
++			return &b;
++	return NULL;
++}
++
++static void SendBotTo(IUser* to, const RoomBot& bot, IUser* templateUser)
++{
++	g_PacketManager.SendRoomBotJoin(to->GetExtendedSocket(), bot.id, "[BOT] " + bot.name, bot.team, bot.level, templateUser);
++	g_PacketManager.SendRoomBotReady(to->GetExtendedSocket(), bot.id, RoomReadyStatus::READY_STATUS_YES);
++}
++
++void CRoom::SendBots(IUser* user)
++{
++	// during a match the game's own bots play them: the list doesn't show them (the game would count them as
++	// players who never connect, e.g. pick one as the first zombie)
++	if (GetStatus() == RoomStatus::STATUS_INGAME)
++		return;
++	for (auto& b : m_Bots)
++		SendBotTo(user, b, m_pHostUser ? m_pHostUser : user);
++}
++
++RoomBot* CRoom::AddBot(RoomBot bot)
++{
++	if (GetNumOfPlayers() >= m_pSettings->maxPlayers)
++		return NULL;
++
++	bot.id = g_nNextBotID++;
++	if (bot.name.empty())
++	{
++		// a random name no other bot of the room has
++		vector<string> free;
++		for (auto n : s_BotNames)
++		{
++			bool used = false;
++			for (auto& b : m_Bots)
++				used |= b.name == n;
++			if (!used)
++				free.push_back(n);
++		}
++		bot.name = free.empty() ? "Bot" + to_string(m_Bots.size() + 1) : free[rand() % free.size()];
++	}
++	if (bot.name.size() > 24)
++		bot.name.resize(24);
++	if (bot.level <= 0)
++		bot.level = 10 + rand() % 51;
++	if (bot.team != RoomTeamNum::Terrorist && bot.team != RoomTeamNum::CounterTerrorist)
++		bot.team = m_pHostUser ? GetUserTeam(m_pHostUser) : RoomTeamNum::CounterTerrorist;
++	if (bot.team != RoomTeamNum::Terrorist && bot.team != RoomTeamNum::CounterTerrorist)
++		bot.team = RoomTeamNum::CounterTerrorist;
++
++	m_Bots.push_back(bot);
++	for (auto u : m_Users)
++		SendBotTo(u, m_Bots.back(), m_pHostUser ? m_pHostUser : u);
++
++	Logger().Info("Room %d: AI player '%s' added (team %d)\n", m_nID, bot.name.c_str(), bot.team);
++	return &m_Bots.back();
++}
++
++bool CRoom::RemoveBot(int id)
++{
++	for (size_t i = 0; i < m_Bots.size(); i++)
++	{
++		if (m_Bots[i].id != id)
++			continue;
++		Logger().Info("Room %d: AI player '%s' removed\n", m_nID, m_Bots[i].name.c_str());
++		m_Bots.erase(m_Bots.begin() + i);
++		for (auto u : m_Users)
++			g_PacketManager.SendRoomPlayerLeave(u->GetExtendedSocket(), id);
++		return true;
++	}
++	return false;
++}
++
++bool CRoom::UpdateBot(const RoomBot& bot)
++{
++	RoomBot* cur = FindBot(bot.id);
++	if (!cur)
++		return false;
++	RoomBot was = *cur;
++	*cur = bot;
++	if (cur->name.empty())
++		cur->name = "Bot";
++	if (cur->name.size() > 24)
++		cur->name.resize(24);
++	if (cur->team != RoomTeamNum::Terrorist && cur->team != RoomTeamNum::CounterTerrorist)
++		cur->team = RoomTeamNum::CounterTerrorist;
++	// the player list shows name, team and level: send the bot again only when one of them changed. Every
++	// leave + join leaves the client's room player list in a worse state (after many of them, e.g. picking
++	// weapons and characters for each bot, its scoreboard crashed while loading the match)
++	if (was.name == cur->name && was.team == cur->team && was.level == cur->level)
++		return true;
++	for (auto u : m_Users)
++	{
++		g_PacketManager.SendRoomPlayerLeave(u->GetExtendedSocket(), cur->id);
++		SendBotTo(u, *cur, m_pHostUser ? m_pHostUser : u);
++	}
++	return true;
++}
++
++bool CRoom::MoveBot(int id, int newIndex)
++{
++	for (size_t i = 0; i < m_Bots.size(); i++)
++	{
++		if (m_Bots[i].id != id)
++			continue;
++		RoomBot bot = m_Bots[i];
++		m_Bots.erase(m_Bots.begin() + i);
++		if (newIndex < 0)
++			newIndex = 0;
++		if (newIndex > (int)m_Bots.size())
++			newIndex = (int)m_Bots.size();
++		m_Bots.insert(m_Bots.begin() + newIndex, bot);
++		// the list keeps the join order: send every bot again in the new order
++		for (auto u : m_Users)
++		{
++			for (auto& b : m_Bots)
++				g_PacketManager.SendRoomPlayerLeave(u->GetExtendedSocket(), b.id);
++			SendBots(u);
++		}
++		return true;
++	}
++	return false;
++}
++
++// the match starts: the game adds as many bots per team as the room has AI players
++void CRoom::ApplyBotsToSettings()
++{
++	int hostTeam = m_pHostUser ? GetUserTeam(m_pHostUser) : RoomTeamNum::CounterTerrorist;
++	if (hostTeam != RoomTeamNum::Terrorist && hostTeam != RoomTeamNum::CounterTerrorist)
++		hostTeam = RoomTeamNum::CounterTerrorist;
++	g_LastMatchBots = m_Bots;
++	g_LastMatchMode = m_pSettings->gameModeId;
++	g_LastMatchHostTeam = hostTeam;
++	g_LastMatchHostID = m_pHostUser ? m_pHostUser->GetID() : 0;
++	if (m_Bots.empty())
++		return;
++
++	int friendly = 0, enemy = 0;
++	for (auto& b : m_Bots)
++		(b.team == hostTeam ? friendly : enemy)++;
++	m_pSettings->lowMidFlag |= ROOM_LOWMID_BOT;
++	m_pSettings->friendlyBots = friendly;
++	m_pSettings->enemyBots = enemy;
++	m_pSettings->botAdd = 1;
++	m_pSettings->botBalance = 0; // only the room's AI players: no automatic filling / balancing
++	for (auto u : m_Users)
++	{
++		g_PacketManager.SendRoomUpdateSettings(u->GetExtendedSocket(), m_pSettings, 0, ROOM_LOWMID_BOT);
++		// the AI players leave the list while the match runs (the game's bots play them); back after it
++		for (auto& b : m_Bots)
++			g_PacketManager.SendRoomPlayerLeave(u->GetExtendedSocket(), b.id);
++	}
++	Logger().Info("Room %d: match with %d AI players (%d friendly, %d enemy)\n", m_nID, (int)m_Bots.size(), friendly, enemy);
++}
++
++// room chat, host only: /addbot [name] [t|ct], /removebot <name>|all, /bots
++bool CRoom::OnBotCommand(IUser* user, const string& message)
++{
++	if (user != m_pHostUser || message.empty() || message[0] != '/')
++		return false;
++
++	istringstream iss(message);
++	vector<string> args((istream_iterator<string>(iss)), istream_iterator<string>());
++	if (args.empty())
++		return false;
++
++	if (args[0] == "/addbot")
++	{
++		RoomBot bot;
++		for (size_t i = 1; i < args.size(); i++)
++		{
++			if (args[i] == "t" || args[i] == "T")
++				bot.team = RoomTeamNum::Terrorist;
++			else if (args[i] == "ct" || args[i] == "CT")
++				bot.team = RoomTeamNum::CounterTerrorist;
++			else
++				bot.name = args[i];
++		}
++		if (!(args.size() > 1 && (args.back() == "t" || args.back() == "T" || args.back() == "ct" || args.back() == "CT")))
++			bot.team = 0; // host's team
++		if (!AddBot(bot))
++			g_PacketManager.SendUMsgNoticeMessageInChat(user->GetExtendedSocket(), "The room is full.");
++		return true;
++	}
++	if (args[0] == "/removebot")
++	{
++		if (args.size() < 2 || args[1] == "all")
++		{
++			while (!m_Bots.empty())
++				RemoveBot(m_Bots.back().id);
++			return true;
++		}
++		for (auto& b : m_Bots)
++			if (b.name == args[1])
++			{
++				RemoveBot(b.id);
++				return true;
++			}
++		g_PacketManager.SendUMsgNoticeMessageInChat(user->GetExtendedSocket(), "No AI player with that name.");
++		return true;
++	}
++	if (args[0] == "/bots")
++	{
++		string list = "AI players:";
++		for (auto& b : m_Bots)
++			list += " " + b.name + (b.team == RoomTeamNum::Terrorist ? "(T)" : "(CT)");
++		g_PacketManager.SendUMsgNoticeMessageInChat(user->GetExtendedSocket(), m_Bots.empty() ? "No AI players. /addbot [name] [t|ct]" : list);
++		return true;
++	}
++	return false;
+ }
+ 
+ void CRoom::UpdateSettings(CRoomSettings& newSettings)
+@@ -575,6 +809,9 @@ void CRoom::OnUserMessage(CReceivePacket* msg, IUser* user)
+ 
+ 	Logger().Info("User '%s' write to room chat: '%s'\n", senderName.c_str(), message.c_str());
+ 
++	if (OnBotCommand(user, message))
++		return;
++
+ 	CUserCharacterExtended characterExtended = user->GetCharacterExtended(EXT_UFLAG_GAMEMASTER);
+ 	if (characterExtended.gameMaster && m_pHostUser == user)
+ 	{
+@@ -1052,6 +1289,8 @@ void CRoom::HostStartGame()
+ 		return;
+ 	}
+ 
++	ApplyBotsToSettings();
++
+ 	SendStartMatch(m_pHostUser);
+ 
+ 	OnGameStart();
+@@ -1096,6 +1335,10 @@ void CRoom::EndGame(bool forcedEnd)
+ 	SetStatus(RoomStatus::STATUS_WAITING);
+ 	ResetStatusIngameUsers();
+ 
++	// the room's AI players come back to the list
++	for (auto u : m_Users)
++		SendBots(u);
++
+ 	if (m_pServer)
+ 		g_PacketManager.SendHostStop(m_pServer->GetSocket());
+ 
+diff --git a/src/room/room.h b/src/room/room.h
+index 13a4ee8..c36e019 100644
+--- a/src/room/room.h
++++ b/src/room/room.h
+@@ -25,6 +25,28 @@ public:
+ 	bool m_bIsIngame;
+ };
+ 
++// offline build: AI players in the room's player list; the game adds them as bots when the match starts and
++// botassist.asi gives each one its name, character, weapons and skill (GET /api/matchbots)
++struct RoomBot
++{
++	int id = 0;
++	std::string name;
++	int level = 0;
++	int team = 2;          // RoomTeamNum
++	int primary = 0;       // item IDs, 0: random
++	int secondary = 0;
++	int melee = 0;
++	int character = 0;
++	int skill = -1;        // 0..7, -1: the room's AI difficulty
++	int preset = 0;        // weapon filter (the host's bot presets, /api/botpresets): random weapons come from it
++};
++
++// bots of the last match a host started (read by botassist.asi through the web API)
++extern std::vector<RoomBot> g_LastMatchBots;
++extern int g_LastMatchMode;
++extern int g_LastMatchHostTeam;
++extern int g_LastMatchHostID;
++
+ class CRoom : public IRoom
+ {
+ public:
+@@ -103,11 +125,22 @@ public:
+ 
+ 	bool IsUserInFamilyBattleUsers(int userId);
+ 
++	const std::vector<RoomBot>& GetBots();
++	RoomBot* AddBot(RoomBot bot);
++	bool RemoveBot(int id);
++	RoomBot* FindBot(int id);
++	bool UpdateBot(const RoomBot& bot);
++	bool MoveBot(int id, int newIndex);
++	void SendBots(IUser* user);
++	void ApplyBotsToSettings();
++	bool OnBotCommand(IUser* user, const std::string& message);
++
+ private:
+ 	IUser* m_pHostUser;
+ 	class CChannel* m_pParentChannel;
+ 	CRoomSettings* m_pSettings;
+ 	std::vector<IUser*> m_Users;
++	std::vector<RoomBot> m_Bots;
+ 	CGameMatch* m_pGameMatch;
+ 	std::vector<int> m_KickedUsers;
+ 	std::vector<int> m_FamilyBattleUsers;
+diff --git a/src/room/roomsettings.cpp b/src/room/roomsettings.cpp
+index 0ba9234..d5d4988 100644
+--- a/src/room/roomsettings.cpp
++++ b/src/room/roomsettings.cpp
+@@ -899,6 +899,15 @@ int CRoomSettings::GetDefaultFriendlyBots(int gameModeId)
+ 		case 58:
+ 			friendlyBots = 8;
+ 			break;
++		// offline build: AI teammates by default in the co-op modes (botassist.asi makes them fight monsters)
++		case 15:
++		case 17:
++		case 28:
++		case 52:
++		case 53:
++		case 59:
++			friendlyBots = 3;
++			break;
+ 	}
+ 
+ 	return friendlyBots;
+@@ -931,7 +940,14 @@ int CRoomSettings::GetDefaultEnemyBots(int gameModeId)
+ 	return enemyBots;
+ }
+ 
++// offline build: every mode can have bots (the room's bot settings button is enabled by this flag)
+ int CRoomSettings::GetDefaultBotAdd(int gameModeId)
++{
++	(void)gameModeId;
++	return 1;
++}
++
++int CRoomSettings::GetDefaultBotBalance(int gameModeId)
+ {
+ 	int botAdd = 0;
+ 
+@@ -1416,7 +1432,7 @@ void CRoomSettings::LoadDefaultSettings(int gameModeId, int mapId)
+ 	botDifficulty = 0;
+ 	friendlyBots = GetDefaultFriendlyBots(gameModeId);
+ 	enemyBots = GetDefaultEnemyBots(gameModeId);
+-	botBalance = GetDefaultBotAdd(gameModeId);
++	botBalance = GetDefaultBotBalance(gameModeId);
+ 	botAdd = GetDefaultBotAdd(gameModeId);
+ 	kdRule = 0;
+ 	startingCash = GetDefaultStartingCash(gameModeId);
+@@ -1530,7 +1546,7 @@ void CRoomSettings::LoadZbCompetitiveSettings(int gameModeId)
+ 	botDifficulty = 0;
+ 	friendlyBots = GetDefaultFriendlyBots(gameModeId);
+ 	enemyBots = GetDefaultEnemyBots(gameModeId);
+-	botBalance = GetDefaultBotAdd(gameModeId);
++	botBalance = GetDefaultBotBalance(gameModeId);
+ 	botAdd = GetDefaultBotAdd(gameModeId);
+ 
+ 	lowMidFlag |= ROOM_LOWMID_KDRULE;
+@@ -1807,7 +1823,7 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
+ 		botDifficulty = 0;
+ 		friendlyBots = GetDefaultFriendlyBots(gameModeId);
+ 		enemyBots = GetDefaultEnemyBots(gameModeId);
+-		botBalance = GetDefaultBotAdd(gameModeId);
++		botBalance = GetDefaultBotBalance(gameModeId);
+ 		botAdd = GetDefaultBotAdd(gameModeId);
+ 
+ 		lowMidFlag |= ROOM_LOWMID_KDRULE;
+@@ -2026,7 +2042,7 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
+ 					Logger().Warn("User '%s' tried to update a room\'s settings with gameModeId that doesn't allow bots, gameModeId: %d\n", user->GetLogName(), gameModeId);
+ 					lowMidFlag &= ~ROOM_LOWMID_BOT;
+ 				}
+-				else if (gameModeId == 3 || gameModeId == 4 || gameModeId == 5 || gameModeId == 24)
++				else // offline build: every mode takes any bot numbers
+ 				{
+ 					if (botDifficulty > 7)
+ 						botDifficulty = 7;
+@@ -2034,31 +2050,22 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
+ 					if (friendlyBots > 15)
+ 						friendlyBots = 15;
+ 
+-					if (enemyBots < 1)
+-						enemyBots = 1;
++					if (enemyBots < 0)
++						enemyBots = 0;
+ 
+ 					if (enemyBots > 16)
+ 						enemyBots = 16;
+-				}
+-				else
+-				{
+-					if (friendlyBots != GetDefaultFriendlyBots(gameModeId))
+-					{
+-						Logger().Warn("User '%s' tried to update a room\'s settings with gameModeId that doesn't use friendlyBots, gameModeId: %d\n", user->GetLogName(), gameModeId);
+-						lowMidFlag &= ~ROOM_LOWMID_BOT;
+-					}
+-					else if (enemyBots != GetDefaultEnemyBots(gameModeId))
+-					{
+-						Logger().Warn("User '%s' tried to update a room\'s settings with gameModeId that doesn't use enemyBots, gameModeId: %d\n", user->GetLogName(), gameModeId);
+-						lowMidFlag &= ~ROOM_LOWMID_BOT;
+-					}
+-					else if (botBalance != GetDefaultBotAdd(gameModeId))
+-					{
+-						Logger().Warn("User '%s' tried to update a room\'s settings with gameModeId that doesn't use botBalance, gameModeId: %d\n", user->GetLogName(), gameModeId);
+-						lowMidFlag &= ~ROOM_LOWMID_BOT;
+-					}
+-					else if (botDifficulty > 2)
+-						botDifficulty = 2;
++
++					Logger().Info("Bot settings from '%s': mode %d, difficulty %d, friendly %d, enemy %d, balance %d, add %d\n",
++						user->GetLogName(), gameModeId, botDifficulty, friendlyBots, enemyBots, botBalance, botAdd);
++
++					// offline build: the co-op modes have no enemy team (the bot dialog can't go below 1)
++					if (gameModeId == 15 || gameModeId == 17 || gameModeId == 28 || gameModeId == 52 || gameModeId == 53 || gameModeId == 59)
++						enemyBots = 0;
++
++					// like /changebotscount: bots join only with botAdd set
++					if (friendlyBots + enemyBots > 0)
++						botAdd = 1;
+ 				}
+ 			}
+ 
+diff --git a/src/room/roomsettings.h b/src/room/roomsettings.h
+index 69a1cd9..823c6f8 100644
+--- a/src/room/roomsettings.h
++++ b/src/room/roomsettings.h
+@@ -34,6 +34,7 @@ public:
+ 	int GetDefaultFriendlyBots(int gameModeId);
+ 	int GetDefaultEnemyBots(int gameModeId);
+ 	int GetDefaultBotAdd(int gameModeId);
++	int GetDefaultBotBalance(int gameModeId);
+ 	int GetDefaultStartingCash(int gameModeId);
+ 	int GetDefaultZbRespawn(int gameModeId);
+ 	int GetDefaultZbBalance(int gameModeId);
+diff --git a/src/serverinstance.cpp b/src/serverinstance.cpp
+index b7b0aaa..524f259 100644
+--- a/src/serverinstance.cpp
++++ b/src/serverinstance.cpp
+@@ -1,3 +1,5 @@
++#include <chrono>
++#include <thread>
+ #include "serverinstance.h"
+ 
+ #include "manager/packetmanager.h"
+@@ -11,6 +13,7 @@
+ #include "manager/dedicatedservermanager.h"
+ #include "manager/questmanager.h"
+ #include "manager/minigamemanager.h"
++#include "manager/bingomanager.h"
+ #include "manager/clanmanager.h"
+ #include "manager/rankmanager.h"
+ #include "manager/voxelmanager.h"
+@@ -305,7 +308,13 @@ void* ReadConsoleThread(void*)
+ 	while (g_pServerInstance->IsServerActive())
+ 	{
+ 		string cmd;
+-		getline(cin, cmd);
++		if (!getline(cin, cmd))
++		{
++			// research build: stdin closed (EOF). Sleep instead of spinning on empty commands.
++			cin.clear();
++			std::this_thread::sleep_for(std::chrono::seconds(1));
++			continue;
++		}
+ 
+ 		// TODO: ignore empty line?
+ 
+@@ -399,6 +408,7 @@ void CServerInstance::OnPackets(IExtendedSocket* s, CReceivePacket* msg)
+ 		g_MiniGameManager.OnPacket(msg, s);
+ 		break;
+ 	case PacketId::MileageBingo:
++		g_BingoManager.OnPacket(msg, s);
+ 		break;
+ 	case PacketId::UpdateInfo:
+ 		g_UserManager.OnUpdateInfoPacket(msg, s);
+diff --git a/src/thirdparty/SQLiteCpp b/src/thirdparty/SQLiteCpp
+index bcb4c78..d07876c 160000
+--- a/src/thirdparty/SQLiteCpp
++++ b/src/thirdparty/SQLiteCpp
+@@ -1 +1 @@
+-Subproject commit bcb4c78fed6628f150c28fa6377c2b0430f7f99b
++Subproject commit d07876c3090fa57f92af9e7fc92bb4b3f3c27390
+diff --git a/src/thirdparty/doctest b/src/thirdparty/doctest
+index ae7a135..d44d4f6 160000
+--- a/src/thirdparty/doctest
++++ b/src/thirdparty/doctest
+@@ -1 +1 @@
+-Subproject commit ae7a13539fb71f270b87eb2e874fbac80bc8dda2
++Subproject commit d44d4f6e66232d716af82f00a063759e9d0e50d6
+diff --git a/src/thirdparty/json b/src/thirdparty/json
+index 6eab7a2..40a6294 160000
+--- a/src/thirdparty/json
++++ b/src/thirdparty/json
+@@ -1 +1 @@
+-Subproject commit 6eab7a2b187b10b2494e39c1961750bfd1bda500
++Subproject commit 40a62947d3e23f46cbc863afdcc6f5c933d5ed10
+diff --git a/src/thirdparty/rapidcsv b/src/thirdparty/rapidcsv
+index f032c52..cbd8a0a 160000
+--- a/src/thirdparty/rapidcsv
++++ b/src/thirdparty/rapidcsv
+@@ -1 +1 @@
+-Subproject commit f032c527caa2533a3b5b17d11d9c29feaa1cca06
++Subproject commit cbd8a0a937b249cc07e2db3bfa9cd2cc1689708f
+diff --git a/src/thirdparty/wolfssl b/src/thirdparty/wolfssl
+index 008d495..7a6e8f8 160000
+--- a/src/thirdparty/wolfssl
++++ b/src/thirdparty/wolfssl
+@@ -1 +1 @@
+-Subproject commit 008d4958bffcafa9e22f21abcf20268b6bbd632a
++Subproject commit 7a6e8f87dea8fe13cf7eba4e5fabe4cc8d0689ae
+diff --git a/src/user/user.cpp b/src/user/user.cpp
+index 079d40e..11bbd25 100644
+--- a/src/user/user.cpp
++++ b/src/user/user.cpp
+@@ -2,6 +2,7 @@
+ #include "manager/userdatabase.h"
+ #include "manager/packetmanager.h"
+ #include "manager/questmanager.h"
++#include "manager/warbondmanager.h"
+ #include "serverconfig.h"
+ 
+ using namespace std;
+@@ -305,6 +306,7 @@ void CUser::UpdateExp(int64_t exp)
+ 
+ 	int newLvl = CheckForLvlUp(character.exp);
+ 
++	int oldLvl = character.level;
+ 	if (newLvl > character.level)
+ 	{
+ 		g_QuestManager.OnLevelUpEvent(this, character.level, newLvl);
+@@ -315,6 +317,10 @@ void CUser::UpdateExp(int64_t exp)
+ 
+ 	// update userinfo on client side
+ 	UpdateClientUserInfo(character);
++
++	// offline build: medals for each level reached
++	if (newLvl > oldLvl)
++		g_WarbondManager.OnLevelUp(this, oldLvl, newLvl);
+ }
+ 
+ int CUser::UpdatePasswordBoxes(int passwordBoxes)

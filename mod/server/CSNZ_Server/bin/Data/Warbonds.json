@@ -1,0 +1,496 @@
+{
+	"Version": 1,
+	"Web": { "IP": "127.0.0.1", "Port": 30080, "Root": "../../../web" },
+
+	// medals per finished match: PerMatch + PerWin (if your team won) + 1 per KillsPerMedal kills (up to MaxKillMedals,
+	// 0 = no limit); reaching level N gives N x LevelUpPerLevel
+	"Medals": { "PerMatch": 2, "PerWin": 2, "KillsPerMedal": 6, "MaxKillMedals": 0, "LevelUpPerLevel": 3 },
+
+	// LogKills: kill events and match results in the server log. HeadshotKillType: the kill events' victimKillType
+	// value that means a headshot (-1 until the telemetry shows which one); headshots show in the match report
+	"Telemetry": { "LogKills": true, "HeadshotKillType": -1 },
+
+	// Period: Daily, Weekly or Challenge (permanent, the challenge book; "Group" is its section).
+	// Type: Matches, Wins, Kills, TopPlayer (finish 1st), Unlocks (battle pass items), LevelUps add up;
+	// BestKills (kills in one match), Level (level reached), TotalUnlocks count the best value.
+	// Optional "GameModes": [ids] limits an order to those modes. Reward in medals.
+	"Orders": [
+		{"ID": 1, "Period": "Daily", "Text": "Play 3 matches", "Type": "Matches", "Target": 3, "Reward": 10},
+		{"ID": 2, "Period": "Daily", "Text": "Win 2 matches", "Type": "Wins", "Target": 2, "Reward": 10},
+		{"ID": 3, "Period": "Daily", "Text": "Get 50 kills", "Type": "Kills", "Target": 50, "Reward": 15},
+		{"ID": 4, "Period": "Daily", "Text": "Play 5 matches", "Type": "Matches", "Target": 5, "Reward": 10, "Tickets": 1},
+		{"ID": 5, "Period": "Daily", "Text": "Win 4 matches", "Type": "Wins", "Target": 4, "Reward": 20},
+		{"ID": 6, "Period": "Daily", "Text": "Get 100 kills", "Type": "Kills", "Target": 100, "Reward": 25},
+		{"ID": 7, "Period": "Daily", "Text": "Get 20 kills in a single match", "Type": "BestKills", "Target": 20, "Reward": 10, "Tickets": 1},
+		{"ID": 8, "Period": "Daily", "Text": "Play a Deathmatch match", "Type": "Matches", "Target": 1, "Reward": 10, "GameModes": [1, 2, 4, 5, 19, 22]},
+		{"ID": 9, "Period": "Daily", "Text": "Win a Zombie match", "Type": "Wins", "Target": 1, "Reward": 15, "GameModes": [8, 9, 14, 15, 20, 24, 28, 29, 30, 32, 35, 37, 43, 44, 45, 54, 56, 58]},
+		{"ID": 10, "Period": "Daily", "Text": "Play 2 Zombie matches", "Type": "Matches", "Target": 2, "Reward": 5, "Tickets": 1, "GameModes": [8, 9, 14, 15, 20, 24, 28, 29, 30, 32, 35, 37, 43, 44, 45, 54, 56, 58]},
+		{"ID": 11, "Period": "Daily", "Text": "Win a Classic match", "Type": "Wins", "Target": 1, "Reward": 15, "GameModes": [0, 3, 6, 42]},
+		{"ID": 12, "Period": "Daily", "Text": "Get 40 kills in Deathmatch modes", "Type": "Kills", "Target": 40, "Reward": 15, "GameModes": [1, 2, 4, 5, 19, 22]},
+		{"ID": 101, "Period": "Weekly", "Text": "Play 15 matches", "Type": "Matches", "Target": 15, "Reward": 30, "Tickets": 2},
+		{"ID": 102, "Period": "Weekly", "Text": "Win 10 matches", "Type": "Wins", "Target": 10, "Reward": 50},
+		{"ID": 103, "Period": "Weekly", "Text": "Get 300 kills", "Type": "Kills", "Target": 300, "Reward": 60},
+		{"ID": 104, "Period": "Weekly", "Text": "Play 25 matches", "Type": "Matches", "Target": 25, "Reward": 60},
+		{"ID": 105, "Period": "Weekly", "Text": "Win 20 matches", "Type": "Wins", "Target": 20, "Reward": 80},
+		{"ID": 106, "Period": "Weekly", "Text": "Get 600 kills", "Type": "Kills", "Target": 600, "Reward": 100},
+		{"ID": 107, "Period": "Weekly", "Text": "Get 1,000 kills", "Type": "Kills", "Target": 1000, "Reward": 150},
+		{"ID": 108, "Period": "Weekly", "Text": "Get 30 kills in a single match", "Type": "BestKills", "Target": 30, "Reward": 30, "Tickets": 2},
+		{"ID": 109, "Period": "Weekly", "Text": "Get 50 kills in a single match", "Type": "BestKills", "Target": 50, "Reward": 80},
+		{"ID": 110, "Period": "Weekly", "Text": "Get 40 kills in a single match", "Type": "BestKills", "Target": 40, "Reward": 60},
+		{"ID": 111, "Period": "Weekly", "Text": "Get 800 kills in Deathmatch modes", "Type": "Kills", "Target": 800, "Reward": 120, "GameModes": [1, 2, 4, 5, 19, 22]},
+		{"ID": 112, "Period": "Weekly", "Text": "Win 5 Zombie matches", "Type": "Wins", "Target": 5, "Reward": 50, "GameModes": [8, 9, 14, 15, 20, 24, 28, 29, 30, 32, 35, 37, 43, 44, 45, 54, 56, 58]},
+		{"ID": 113, "Period": "Weekly", "Text": "Play 10 Zombie matches", "Type": "Matches", "Target": 10, "Reward": 30, "Tickets": 2, "GameModes": [8, 9, 14, 15, 20, 24, 28, 29, 30, 32, 35, 37, 43, 44, 45, 54, 56, 58]},
+		{"ID": 114, "Period": "Weekly", "Text": "Get 200 kills in Zombie modes", "Type": "Kills", "Target": 200, "Reward": 60, "GameModes": [8, 9, 14, 15, 20, 24, 28, 29, 30, 32, 35, 37, 43, 44, 45, 54, 56, 58]},
+		{"ID": 115, "Period": "Weekly", "Text": "Win 5 Classic matches", "Type": "Wins", "Target": 5, "Reward": 50, "GameModes": [0, 3, 6, 42]},
+		{"ID": 116, "Period": "Weekly", "Text": "Play 10 Classic matches", "Type": "Matches", "Target": 10, "Reward": 40, "GameModes": [0, 3, 6, 42]},
+		{"ID": 117, "Period": "Weekly", "Text": "Get 150 kills in Classic modes", "Type": "Kills", "Target": 150, "Reward": 50, "GameModes": [0, 3, 6, 42]},
+		{"ID": 118, "Period": "Weekly", "Text": "Get 25 kills in a single Deathmatch match", "Type": "BestKills", "Target": 25, "Reward": 40, "GameModes": [1, 2, 4, 5, 19, 22]},
+		{"ID": 119, "Period": "Weekly", "Text": "Play 10 Deathmatch matches", "Type": "Matches", "Target": 10, "Reward": 30, "Tickets": 2, "GameModes": [1, 2, 4, 5, 19, 22]},
+		{"ID": 120, "Period": "Weekly", "Text": "Get 300 kills in Deathmatch modes", "Type": "Kills", "Target": 300, "Reward": 70, "GameModes": [1, 2, 4, 5, 19, 22]},
+		{"ID": 121, "Period": "Weekly", "Text": "Play 40 matches", "Type": "Matches", "Target": 40, "Reward": 100},
+		{"ID": 122, "Period": "Weekly", "Text": "Win 30 matches", "Type": "Wins", "Target": 30, "Reward": 120},
+		{"ID": 123, "Period": "Weekly", "Text": "Unlock 2 battle pass items", "Type": "Unlocks", "Target": 2, "Reward": 30},
+		{"ID": 124, "Period": "Weekly", "Text": "Level up", "Type": "LevelUps", "Target": 1, "Reward": 30, "Tickets": 2},
+		{"ID": 125, "Period": "Weekly", "Text": "Get 2,000 kills", "Type": "Kills", "Target": 2000, "Reward": 250},
+		{"ID": 1001, "Period": "Challenge", "Group": "Combat", "Text": "Get 100 kills", "Type": "Kills", "Target": 100, "Reward": 25},
+		{"ID": 1002, "Period": "Challenge", "Group": "Combat", "Text": "Get 500 kills", "Type": "Kills", "Target": 500, "Reward": 50},
+		{"ID": 1003, "Period": "Challenge", "Group": "Combat", "Text": "Get 1,000 kills", "Type": "Kills", "Target": 1000, "Reward": 100},
+		{"ID": 1004, "Period": "Challenge", "Group": "Combat", "Text": "Get 2,500 kills", "Type": "Kills", "Target": 2500, "Reward": 200},
+		{"ID": 1005, "Period": "Challenge", "Group": "Combat", "Text": "Get 5,000 kills", "Type": "Kills", "Target": 5000, "Reward": 400},
+		{"ID": 1006, "Period": "Challenge", "Group": "Combat", "Text": "Get 10,000 kills", "Type": "Kills", "Target": 10000, "Reward": 800},
+		{"ID": 1007, "Period": "Challenge", "Group": "Combat", "Text": "Get 25 kills in a single match", "Type": "BestKills", "Target": 25, "Reward": 30},
+		{"ID": 1008, "Period": "Challenge", "Group": "Combat", "Text": "Get 40 kills in a single match", "Type": "BestKills", "Target": 40, "Reward": 60},
+		{"ID": 1009, "Period": "Challenge", "Group": "Combat", "Text": "Get 60 kills in a single match", "Type": "BestKills", "Target": 60, "Reward": 120},
+		{"ID": 1010, "Period": "Challenge", "Group": "Combat", "Text": "Get 100 kills in a single match", "Type": "BestKills", "Target": 100, "Reward": 250},
+		{"ID": 1011, "Period": "Challenge", "Group": "Victory", "Text": "Win 10 matches", "Type": "Wins", "Target": 10, "Reward": 25},
+		{"ID": 1012, "Period": "Challenge", "Group": "Victory", "Text": "Win 50 matches", "Type": "Wins", "Target": 50, "Reward": 60},
+		{"ID": 1013, "Period": "Challenge", "Group": "Victory", "Text": "Win 100 matches", "Type": "Wins", "Target": 100, "Reward": 120},
+		{"ID": 1014, "Period": "Challenge", "Group": "Victory", "Text": "Win 250 matches", "Type": "Wins", "Target": 250, "Reward": 250},
+		{"ID": 1015, "Period": "Challenge", "Group": "Victory", "Text": "Win 500 matches", "Type": "Wins", "Target": 500, "Reward": 500},
+		{"ID": 1016, "Period": "Challenge", "Group": "Victory", "Text": "Win 1,000 matches", "Type": "Wins", "Target": 1000, "Reward": 800},
+		{"ID": 1017, "Period": "Challenge", "Group": "Career", "Text": "Play 50 Deathmatch matches", "Type": "Matches", "Target": 50, "Reward": 60, "GameModes": [1, 2, 4, 5, 19, 22]},
+		{"ID": 1018, "Period": "Challenge", "Group": "Career", "Text": "Play 50 Zombie matches", "Type": "Matches", "Target": 50, "Reward": 60, "GameModes": [8, 9, 14, 15, 20, 24, 28, 29, 30, 32, 35, 37, 43, 44, 45, 54, 56, 58]},
+		{"ID": 1019, "Period": "Challenge", "Group": "Career", "Text": "Play 10 matches", "Type": "Matches", "Target": 10, "Reward": 15},
+		{"ID": 1020, "Period": "Challenge", "Group": "Career", "Text": "Play 50 matches", "Type": "Matches", "Target": 50, "Reward": 40},
+		{"ID": 1021, "Period": "Challenge", "Group": "Career", "Text": "Play 100 matches", "Type": "Matches", "Target": 100, "Reward": 80},
+		{"ID": 1022, "Period": "Challenge", "Group": "Career", "Text": "Play 250 matches", "Type": "Matches", "Target": 250, "Reward": 150},
+		{"ID": 1023, "Period": "Challenge", "Group": "Career", "Text": "Play 500 matches", "Type": "Matches", "Target": 500, "Reward": 300},
+		{"ID": 1024, "Period": "Challenge", "Group": "Career", "Text": "Play 1,000 matches", "Type": "Matches", "Target": 1000, "Reward": 600},
+		{"ID": 1025, "Period": "Challenge", "Group": "Career", "Text": "Reach level 10", "Type": "Level", "Target": 10, "Reward": 30},
+		{"ID": 1026, "Period": "Challenge", "Group": "Career", "Text": "Reach level 20", "Type": "Level", "Target": 20, "Reward": 60},
+		{"ID": 1027, "Period": "Challenge", "Group": "Career", "Text": "Reach level 30", "Type": "Level", "Target": 30, "Reward": 100},
+		{"ID": 1028, "Period": "Challenge", "Group": "Career", "Text": "Reach level 40", "Type": "Level", "Target": 40, "Reward": 150},
+		{"ID": 1029, "Period": "Challenge", "Group": "Career", "Text": "Reach level 50", "Type": "Level", "Target": 50, "Reward": 250},
+		{"ID": 1030, "Period": "Challenge", "Group": "Career", "Text": "Reach level 60", "Type": "Level", "Target": 60, "Reward": 400},
+		{"ID": 1031, "Period": "Challenge", "Group": "Career", "Text": "Reach level 72", "Type": "Level", "Target": 72, "Reward": 600},
+		{"ID": 1032, "Period": "Challenge", "Group": "Zombie", "Text": "Win 10 Zombie matches", "Type": "Wins", "Target": 10, "Reward": 40, "GameModes": [8, 9, 14, 15, 20, 24, 28, 29, 30, 32, 35, 37, 43, 44, 45, 54, 56, 58]},
+		{"ID": 1033, "Period": "Challenge", "Group": "Zombie", "Text": "Win 50 Zombie matches", "Type": "Wins", "Target": 50, "Reward": 100, "GameModes": [8, 9, 14, 15, 20, 24, 28, 29, 30, 32, 35, 37, 43, 44, 45, 54, 56, 58]},
+		{"ID": 1034, "Period": "Challenge", "Group": "Zombie", "Text": "Win 100 Zombie matches", "Type": "Wins", "Target": 100, "Reward": 200, "GameModes": [8, 9, 14, 15, 20, 24, 28, 29, 30, 32, 35, 37, 43, 44, 45, 54, 56, 58]},
+		{"ID": 1035, "Period": "Challenge", "Group": "Zombie", "Text": "Get 500 kills in Zombie modes", "Type": "Kills", "Target": 500, "Reward": 60, "GameModes": [8, 9, 14, 15, 20, 24, 28, 29, 30, 32, 35, 37, 43, 44, 45, 54, 56, 58]},
+		{"ID": 1036, "Period": "Challenge", "Group": "Zombie", "Text": "Get 2,500 kills in Zombie modes", "Type": "Kills", "Target": 2500, "Reward": 200, "GameModes": [8, 9, 14, 15, 20, 24, 28, 29, 30, 32, 35, 37, 43, 44, 45, 54, 56, 58]},
+		{"ID": 1037, "Period": "Challenge", "Group": "Deathmatch", "Text": "Play 250 Deathmatch matches", "Type": "Matches", "Target": 250, "Reward": 150, "GameModes": [1, 2, 4, 5, 19, 22]},
+		{"ID": 1038, "Period": "Challenge", "Group": "Deathmatch", "Text": "Get 50 kills in a single Deathmatch match", "Type": "BestKills", "Target": 50, "Reward": 100, "GameModes": [1, 2, 4, 5, 19, 22]},
+		{"ID": 1039, "Period": "Challenge", "Group": "Deathmatch", "Text": "Get 500 kills in Deathmatch modes", "Type": "Kills", "Target": 500, "Reward": 60, "GameModes": [1, 2, 4, 5, 19, 22]},
+		{"ID": 1040, "Period": "Challenge", "Group": "Deathmatch", "Text": "Get 2,500 kills in Deathmatch modes", "Type": "Kills", "Target": 2500, "Reward": 200, "GameModes": [1, 2, 4, 5, 19, 22]},
+		{"ID": 1041, "Period": "Challenge", "Group": "Classic", "Text": "Win 25 Classic matches", "Type": "Wins", "Target": 25, "Reward": 60, "GameModes": [0, 3, 6, 42]},
+		{"ID": 1042, "Period": "Challenge", "Group": "Classic", "Text": "Win 100 Classic matches", "Type": "Wins", "Target": 100, "Reward": 150, "GameModes": [0, 3, 6, 42]},
+		{"ID": 1043, "Period": "Challenge", "Group": "Classic", "Text": "Get 500 kills in Classic modes", "Type": "Kills", "Target": 500, "Reward": 60, "GameModes": [0, 3, 6, 42]},
+		{"ID": 1044, "Period": "Challenge", "Group": "Classic", "Text": "Get 2,500 kills in Classic modes", "Type": "Kills", "Target": 2500, "Reward": 200, "GameModes": [0, 3, 6, 42]},
+		{"ID": 1045, "Period": "Challenge", "Group": "Collector", "Text": "Unlock 1 battle pass item", "Type": "TotalUnlocks", "Target": 1, "Reward": 10},
+		{"ID": 1046, "Period": "Challenge", "Group": "Collector", "Text": "Unlock 10 battle pass items", "Type": "TotalUnlocks", "Target": 10, "Reward": 50},
+		{"ID": 1047, "Period": "Challenge", "Group": "Collector", "Text": "Unlock 25 battle pass items", "Type": "TotalUnlocks", "Target": 25, "Reward": 120},
+		{"ID": 1048, "Period": "Challenge", "Group": "Collector", "Text": "Unlock 50 battle pass items", "Type": "TotalUnlocks", "Target": 50, "Reward": 250},
+		{"ID": 1049, "Period": "Challenge", "Group": "Collector", "Text": "Unlock 100 battle pass items", "Type": "TotalUnlocks", "Target": 100, "Reward": 500}
+	],
+
+	// Image: promotional art (shop/promo/warbond-<ID>.png, exported from "Art" = [archive:]game path by
+	// tools/export_shop_assets.py). Passes without one get a cover made from their item icons.
+	// Theme (optional): ["dark", "light"] colours of the pass; without it one is picked from its name.
+	// Cost: medals to unlock the pass itself (0 = free); its items are bought separately.
+	// Items with "Repeatable": true (supplies) can be bought any number of times; "Days": duration per unit
+	// (0: one item per unit). Pages can have a "Title".
+	// Pages open once you've spent "Unlock" medals in that battle pass (page 1 is always open).
+	"Warbonds": [
+		{
+			"ID": 12, "Name": "Standard Issue", "Type": "Core", "Cost": 0,
+			"Description": "Free for every soldier: real-world rifles, SMGs, shotguns and machine guns that fit right next to the classic arsenal.",
+			"Image": "", "Theme": ["#161a10", "#c9b26b"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 36, "Cost": 65 }, { "ItemID": 37, "Cost": 65 }, { "ItemID": 38, "Cost": 70 }, { "ItemID": 149, "Cost": 60 }
+				] },
+				{ "Unlock": 100, "Items": [
+					{ "ItemID": 33, "Cost": 65 }, { "ItemID": 34, "Cost": 65 }, { "ItemID": 307, "Cost": 70 }, { "ItemID": 253, "Cost": 90 }
+				] },
+				{ "Unlock": 210, "Items": [
+					{ "ItemID": 35, "Cost": 75 }, { "ItemID": 39, "Cost": 75 }, { "ItemID": 322, "Cost": 65 }, { "ItemID": 469, "Cost": 60 }
+				] },
+				{ "Unlock": 320, "Items": [
+					{ "ItemID": 343, "Cost": 65 }, { "ItemID": 447, "Cost": 65 }, { "ItemID": 254, "Cost": 90 }, { "ItemID": 356, "Cost": 65 }
+				] },
+				{ "Unlock": 420, "Items": [
+					{ "ItemID": 563, "Cost": 75 }, { "ItemID": 880, "Cost": 65 }, { "ItemID": 32, "Cost": 100 }, { "ItemID": 344, "Cost": 75 }
+				] },
+				{ "Unlock": 530, "Items": [
+					{ "ItemID": 431, "Cost": 100 }, { "ItemID": 384, "Cost": 70 }, { "ItemID": 304, "Cost": 75 }, { "ItemID": 371, "Cost": 60 }
+				] },
+				{ "Unlock": 630, "Items": [
+					{ "ItemID": 157, "Cost": 75 }, { "ItemID": 202, "Cost": 75 }, { "ItemID": 148, "Cost": 100 }, { "ItemID": 716, "Cost": 60 }
+				] },
+				{ "Unlock": 740, "Items": [
+					{ "ItemID": 357, "Cost": 75 }, { "ItemID": 443, "Cost": 75 }, { "ItemID": 724, "Cost": 60 }, { "ItemID": 444, "Cost": 75 }
+				] },
+				{ "Unlock": 850, "Items": [
+					{ "ItemID": 372, "Cost": 100 }, { "ItemID": 768, "Cost": 60 }, { "ItemID": 733, "Cost": 75 }, { "ItemID": 271, "Cost": 100 }
+				] },
+				{ "Unlock": 950, "Items": [
+					{ "ItemID": 868, "Cost": 75 }, { "ItemID": 400, "Cost": 75 }, { "ItemID": 813, "Cost": 100 }, { "ItemID": 824, "Cost": 60 }
+				] },
+				{ "Unlock": 1060, "Items": [
+					{ "ItemID": 721, "Cost": 75 }, { "ItemID": 722, "Cost": 75 }, { "ItemID": 846, "Cost": 100 }, { "ItemID": 509, "Cost": 75 }
+				] },
+				{ "Unlock": 1170, "Items": [
+					{ "ItemID": 187, "Cost": 75 }, { "ItemID": 873, "Cost": 100 }, { "ItemID": 715, "Cost": 65 }, { "ItemID": 169, "Cost": 75 }
+				] },
+				{ "Unlock": 1270, "Items": [
+					{ "ItemID": 714, "Cost": 100 }, { "ItemID": 723, "Cost": 65 }, { "ItemID": 337, "Cost": 75 }, { "ItemID": 382, "Cost": 75 }
+				] },
+				{ "Unlock": 1380, "Items": [
+					{ "ItemID": 608, "Cost": 100 }, { "ItemID": 770, "Cost": 65 }, { "ItemID": 385, "Cost": 75 }, { "ItemID": 448, "Cost": 75 }
+				] },
+				{ "Unlock": 1480, "Items": [
+					{ "ItemID": 197, "Cost": 70 }, { "ItemID": 449, "Cost": 75 }, { "ItemID": 781, "Cost": 75 }, { "ItemID": 493, "Cost": 70 }
+				] }
+			]
+		},
+		{
+			"ID": 21, "Name": "Supply Depot", "Type": "Supply", "Cost": 0,
+			"Description": "Boosters, tools and supplies you can buy again and again. Pick how many you want.",
+			"Image": "", "Theme": ["#0c1a1c", "#3fd0c9"],
+			"Pages": [
+				{ "Unlock": 0, "Title": "Boosters", "Items": [
+					{ "ItemID": 59, "Cost": 5, "Repeatable": true, "Days": 1 }, { "ItemID": 73, "Cost": 6, "Repeatable": true, "Days": 1 }, { "ItemID": 182, "Cost": 4, "Repeatable": true, "Days": 1 }, { "ItemID": 180, "Cost": 5, "Repeatable": true, "Days": 1 }
+				] },
+				{ "Unlock": 0, "Title": "Battlefield tools", "Items": [
+					{ "ItemID": 76, "Cost": 4, "Repeatable": true, "Days": 7 }, { "ItemID": 111, "Cost": 3, "Repeatable": true, "Days": 7 }, { "ItemID": 84, "Cost": 3, "Repeatable": true, "Days": 7 }, { "ItemID": 77, "Cost": 3, "Repeatable": true, "Days": 7 }, { "ItemID": 109, "Cost": 4, "Repeatable": true, "Days": 7 }
+				] },
+				{ "Unlock": 0, "Title": "Zombie Scenario supplies", "Items": [
+					{ "ItemID": 620, "Cost": 2, "Repeatable": true, "Days": 1 }, { "ItemID": 623, "Cost": 2, "Repeatable": true, "Days": 1 }, { "ItemID": 626, "Cost": 2, "Repeatable": true, "Days": 1 }, { "ItemID": 629, "Cost": 2, "Repeatable": true, "Days": 1 }, { "ItemID": 632, "Cost": 2, "Repeatable": true, "Days": 1 }, { "ItemID": 635, "Cost": 2, "Repeatable": true, "Days": 1 }, { "ItemID": 638, "Cost": 2, "Repeatable": true, "Days": 1 }, { "ItemID": 381, "Cost": 3, "Repeatable": true, "Days": 1 }, { "ItemID": 470, "Cost": 3, "Repeatable": true, "Days": 1 }, { "ItemID": 594, "Cost": 3, "Repeatable": true, "Days": 1 }, { "ItemID": 740, "Cost": 3, "Repeatable": true, "Days": 1 }
+				] },
+				{ "Unlock": 0, "Title": "Scenario supplies", "Items": [
+					{ "ItemID": 258, "Cost": 2, "Repeatable": true, "Days": 0 }, { "ItemID": 259, "Cost": 3, "Repeatable": true, "Days": 0 }, { "ItemID": 260, "Cost": 3, "Repeatable": true, "Days": 0 }, { "ItemID": 300, "Cost": 4, "Repeatable": true, "Days": 0 }, { "ItemID": 234, "Cost": 3, "Repeatable": true, "Days": 0 }
+				] },
+				{ "Unlock": 0, "Title": "Account", "Items": [
+					{ "ItemID": 65, "Cost": 15, "Repeatable": true, "Days": 0 }
+				] }
+			]
+		},
+		{
+			"ID": 15, "Name": "Korean 707 Commando", "Type": "Faction", "Cost": 10,
+			"Description": "Gear up like the ROK Army's 707th Special Mission Group, with Korean-made K-series weapons.",
+			"Image": "shop/promo/warbond-15.png", "Art": "gfx/vgui/707.tga", "Theme": ["#0d1626", "#4f8dff"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 54, "Cost": 90 }, { "ItemID": 203, "Cost": 65 }, { "ItemID": 310, "Cost": 70 }
+				] },
+				{ "Unlock": 100, "Items": [
+					{ "ItemID": 725, "Cost": 65 }, { "ItemID": 901, "Cost": 100 }
+				] }
+			]
+		},
+		{
+			"ID": 16, "Name": "Chinese Devils", "Type": "Faction", "Cost": 10,
+			"Description": "China's elite counter-terror unit and its QBZ-family rifles, machine guns and shotguns.",
+			"Image": "shop/promo/warbond-16.png", "Art": "gfx/vgui/magui.tga", "Theme": ["#26130a", "#ffa43a"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 56, "Cost": 90 }, { "ItemID": 413, "Cost": 65 }, { "ItemID": 805, "Cost": 70 }
+				] },
+				{ "Unlock": 110, "Items": [
+					{ "ItemID": 255, "Cost": 100 }, { "ItemID": 902, "Cost": 100 }
+				] }
+			]
+		},
+		{
+			"ID": 17, "Name": "Asian Red Army", "Type": "Faction", "Cost": 10,
+			"Description": "An insurgent cell armed with Kalashnikovs and Eastern Bloc firepower.",
+			"Image": "shop/promo/warbond-17.png", "Art": "gfx/vgui/jra.tga", "Theme": ["#1c0b0b", "#d64545"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 48, "Cost": 90 }, { "ItemID": 553, "Cost": 65 }, { "ItemID": 446, "Cost": 65 }, { "ItemID": 859, "Cost": 65 }
+				] },
+				{ "Unlock": 110, "Items": [
+					{ "ItemID": 588, "Cost": 65 }, { "ItemID": 414, "Cost": 100 }, { "ItemID": 713, "Cost": 65 }, { "ItemID": 909, "Cost": 100 }
+				] }
+			]
+		},
+		{
+			"ID": 18, "Name": "Vigilante Corps", "Type": "Faction", "Cost": 10,
+			"Description": "Irish paramilitaries with Thompsons, Armalites, a .50 calibre rifle and a general-purpose machine gun.",
+			"Image": "shop/promo/warbond-18.png", "Art": "gfx/vgui/ira.tga", "Theme": ["#0f1a12", "#53c27a"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 46, "Cost": 90 }, { "ItemID": 370, "Cost": 65 }, { "ItemID": 486, "Cost": 65 }
+				] },
+				{ "Unlock": 110, "Items": [
+					{ "ItemID": 442, "Cost": 75 }, { "ItemID": 355, "Cost": 100 }
+				] }
+			]
+		},
+		{
+			"ID": 19, "Name": "Red Beret Condottiere", "Type": "Faction", "Cost": 10,
+			"Description": "Italian mercenaries armed with Franchi combat shotguns and the Beretta ARX-160.",
+			"Image": "shop/promo/warbond-19.png", "Art": "gfx/vgui/rb.tga", "Theme": ["#1f0f0c", "#ff6f4f"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 45, "Cost": 90 }, { "ItemID": 422, "Cost": 70 }, { "ItemID": 585, "Cost": 65 }
+				] },
+				{ "Unlock": 100, "Items": [
+					{ "ItemID": 423, "Cost": 70 }, { "ItemID": 430, "Cost": 70 }
+				] }
+			]
+		},
+		{
+			"ID": 20, "Name": "Japanese SAT", "Type": "Faction", "Cost": 10,
+			"Description": "Japan's police Special Assault Team: compact SMGs, a precision rifle and a duty pistol.",
+			"Image": "shop/promo/warbond-20.png", "Art": "gfx/vgui/sdefence.tga", "Theme": ["#10141f", "#9fb8ff"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 57, "Cost": 90 }, { "ItemID": 262, "Cost": 65 }, { "ItemID": 775, "Cost": 60 }
+				] },
+				{ "Unlock": 100, "Items": [
+					{ "ItemID": 233, "Cost": 75 }
+				] }
+			]
+		},
+		{
+			"ID": 1, "Name": "Transcendence", "Type": "Season", "Cost": 75,
+			"Description": "Balrog and Skull weapons forged for the front line.",
+			"Image": "",
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 517, "Cost": 30 }, { "ItemID": 407, "Cost": 30 }, { "ItemID": 532, "Cost": 55 }, { "ItemID": 151, "Cost": 155 }
+				] },
+				{ "Unlock": 130, "Items": [
+					{ "ItemID": 482, "Cost": 80 }, { "ItemID": 367, "Cost": 80 }, { "ItemID": 554, "Cost": 65 }, { "ItemID": 153, "Cost": 155 }
+				] },
+				{ "Unlock": 330, "Items": [
+					{ "ItemID": 466, "Cost": 175 }, { "ItemID": 327, "Cost": 175 }, { "ItemID": 483, "Cost": 90 }, { "ItemID": 154, "Cost": 155 }
+				] }
+			]
+		},
+		{
+			"ID": 2, "Name": "Thanatos Protocol", "Type": "Season", "Cost": 120,
+			"Description": "The full Thanatos series, from sidearm to scythe.",
+			"Image": "", "Theme": ["#240f12", "#ff5a4f"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 812, "Cost": 105 }, { "ItemID": 834, "Cost": 185 }, { "ItemID": 776, "Cost": 210 }
+				] },
+				{ "Unlock": 340, "Items": [
+					{ "ItemID": 784, "Cost": 300 }, { "ItemID": 764, "Cost": 250 }, { "ItemID": 752, "Cost": 660 }
+				] }
+			]
+		},
+		{
+			"ID": 3, "Name": "Winter Holidays", "Type": "Event", "Cost": 45,
+			"Description": "Seasonal gear from the Christmas events.",
+			"Image": "", "Theme": ["#0f1f2c", "#9ad8ff"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 9228, "Cost": 35, "Name": "XM1014 Snow" }, { "ItemID": 9229, "Cost": 30, "Name": "Nata Knife Snow" }, { "ItemID": 591, "Cost": 55 }, { "ItemID": 573, "Cost": 75 }
+				] },
+				{ "Unlock": 120, "Items": [
+					{ "ItemID": 424, "Cost": 85 }, { "ItemID": 268, "Cost": 150 }, { "ItemID": 267, "Cost": 175 }, { "ItemID": 840, "Cost": 190 }
+				] }
+			]
+		},
+		{
+			"ID": 4, "Name": "Janus Arsenal", "Type": "Season", "Cost": 120,
+			"Description": "Transforming JANUS weapons that switch to a devastating second mode.",
+			"Image": "", "Theme": ["#0e1c22", "#4fd1c5"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 598, "Cost": 125 }, { "ItemID": 711, "Cost": 230 }, { "ItemID": 673, "Cost": 210 }
+				] },
+				{ "Unlock": 330, "Items": [
+					{ "ItemID": 587, "Cost": 300 }, { "ItemID": 684, "Cost": 250 }, { "ItemID": 595, "Cost": 660 }
+				] }
+			]
+		},
+		{
+			"ID": 5, "Name": "Hunter-Killer", "Type": "Season", "Cost": 90,
+			"Description": "The X-series: precision hardware built to track and finish the target.",
+			"Image": "",
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 8219, "Cost": 35 }, { "ItemID": 8119, "Cost": 65 }, { "ItemID": 8132, "Cost": 75 }
+				] },
+				{ "Unlock": 100, "Items": [
+					{ "ItemID": 8118, "Cost": 85 }, { "ItemID": 8193, "Cost": 190 }, { "ItemID": 8327, "Cost": 95 }
+				] }
+			]
+		},
+		{
+			"ID": 6, "Name": "Vulcanus Forge", "Type": "Season", "Cost": 120,
+			"Description": "Heat-forged VULCANUS weapons with a burning second mode.",
+			"Image": "", "Theme": ["#2a120a", "#ff5a26"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 858, "Cost": 125 }, { "ItemID": 867, "Cost": 230 }, { "ItemID": 816, "Cost": 210 }
+				] },
+				{ "Unlock": 330, "Items": [
+					{ "ItemID": 804, "Cost": 300 }, { "ItemID": 833, "Cost": 250 }, { "ItemID": 787, "Cost": 660 }
+				] }
+			]
+		},
+		{
+			"ID": 7, "Name": "Halloween Night", "Type": "Event", "Cost": 60,
+			"Description": "Haunted weapons and costumes from the Halloween event.",
+			"Image": "shop/promo/warbond-7.png", "Art": "fstrike:resource/season/bg_season_banner.tga", "Theme": ["#1d1028", "#c48bff"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 8267, "Cost": 35 }, { "ItemID": 8268, "Cost": 55 }, { "ItemID": 8265, "Cost": 65 }, { "ItemID": 8270, "Cost": 155 }
+				] },
+				{ "Unlock": 120, "Items": [
+					{ "ItemID": 8264, "Cost": 85 }, { "ItemID": 8263, "Cost": 85 }, { "ItemID": 8266, "Cost": 175 }, { "ItemID": 8262, "Cost": 95 }, { "ItemID": 8269, "Cost": 155 }
+				] }
+			]
+		},
+		{
+			"ID": 8, "Name": "Summer Splash", "Type": "Event", "Cost": 45,
+			"Description": "Beach-ready Splash weapons and summer outfits.",
+			"Image": "shop/promo/warbond-8.png", "Art": "estrike:resource/season/bg_season_banner.tga", "Theme": ["#0c1d2a", "#3fc6f0"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 8230, "Cost": 35 }, { "ItemID": 8229, "Cost": 65 }, { "ItemID": 8232, "Cost": 65 }, { "ItemID": 8240, "Cost": 155 }
+				] },
+				{ "Unlock": 120, "Items": [
+					{ "ItemID": 8231, "Cost": 85 }, { "ItemID": 8234, "Cost": 85 }, { "ItemID": 8235, "Cost": 175 }, { "ItemID": 8239, "Cost": 155 }
+				] }
+			]
+		},
+		{
+			"ID": 9, "Name": "Elegant Frontier", "Type": "Event", "Cost": 60,
+			"Description": "Engraved Wild West classics for sheriffs and outlaws.",
+			"Image": "", "Theme": ["#1e170c", "#d9a35b"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 8204, "Cost": 35 }, { "ItemID": 8202, "Cost": 35 }, { "ItemID": 8199, "Cost": 45 }, { "ItemID": 8210, "Cost": 155 }
+				] },
+				{ "Unlock": 110, "Items": [
+					{ "ItemID": 8200, "Cost": 75 }, { "ItemID": 8201, "Cost": 75 }, { "ItemID": 8203, "Cost": 85 }, { "ItemID": 8205, "Cost": 190 }, { "ItemID": 8209, "Cost": 155 }
+				] }
+			]
+		},
+		{
+			"ID": 10, "Name": "Apocalypse", "Type": "Season", "Cost": 150,
+			"Description": "Scavenged, rebuilt and overkill: everything a survivor needs when the world has ended.",
+			"Image": "", "Theme": ["#141a0c", "#9bd84a"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 670, "Cost": 45 }, { "ItemID": 671, "Cost": 45 }, { "ItemID": 683, "Cost": 55 }, { "ItemID": 709, "Cost": 155 }
+				] },
+				{ "Unlock": 110, "Items": [
+					{ "ItemID": 672, "Cost": 45 }, { "ItemID": 8088, "Cost": 45 }, { "ItemID": 523, "Cost": 55 }, { "ItemID": 710, "Cost": 155 }
+				] },
+				{ "Unlock": 280, "Items": [
+					{ "ItemID": 706, "Cost": 50 }, { "ItemID": 8320, "Cost": 55 }, { "ItemID": 8323, "Cost": 30 }, { "ItemID": 592, "Cost": 155 }
+				] },
+				{ "Unlock": 480, "Items": [
+					{ "ItemID": 518, "Cost": 50 }, { "ItemID": 8316, "Cost": 55 }, { "ItemID": 769, "Cost": 55 }, { "ItemID": 593, "Cost": 155 }
+				] },
+				{ "Unlock": 710, "Items": [
+					{ "ItemID": 389, "Cost": 55 }, { "ItemID": 8317, "Cost": 65 }, { "ItemID": 8319, "Cost": 85 }, { "ItemID": 759, "Cost": 170 }
+				] },
+				{ "Unlock": 960, "Items": [
+					{ "ItemID": 718, "Cost": 55 }, { "ItemID": 921, "Cost": 65 }, { "ItemID": 8046, "Cost": 55 }, { "ItemID": 760, "Cost": 170 }
+				] },
+				{ "Unlock": 1250, "Items": [
+					{ "ItemID": 8091, "Cost": 55 }, { "ItemID": 8318, "Cost": 175 }, { "ItemID": 8111, "Cost": 55 }, { "ItemID": 376, "Cost": 170 }
+				] }
+			]
+		},
+		{
+			"ID": 11, "Name": "Cyberpunk", "Type": "Season", "Cost": 150,
+			"Description": "Neon, plasma and lasers from the edge of tomorrow's war.",
+			"Image": "shop/promo/warbond-11.png", "Art": "resource/season/bg_season_banner.tga", "Theme": ["#1d1028", "#ff4fd8"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 677, "Cost": 30 }, { "ItemID": 415, "Cost": 55 }, { "ItemID": 565, "Cost": 45 }, { "ItemID": 817, "Cost": 155 }
+				] },
+				{ "Unlock": 130, "Items": [
+					{ "ItemID": 379, "Cost": 80 }, { "ItemID": 783, "Cost": 30 }, { "ItemID": 720, "Cost": 50 }, { "ItemID": 818, "Cost": 155 }
+				] },
+				{ "Unlock": 320, "Items": [
+					{ "ItemID": 548, "Cost": 55 }, { "ItemID": 495, "Cost": 80 }, { "ItemID": 8194, "Cost": 30 }, { "ItemID": 925, "Cost": 155 }
+				] },
+				{ "Unlock": 540, "Items": [
+					{ "ItemID": 564, "Cost": 80 }, { "ItemID": 435, "Cost": 150 }, { "ItemID": 8221, "Cost": 55 }, { "ItemID": 8128, "Cost": 155 }
+				] },
+				{ "Unlock": 790, "Items": [
+					{ "ItemID": 789, "Cost": 175 }, { "ItemID": 899, "Cost": 85 }, { "ItemID": 8381, "Cost": 35 }, { "ItemID": 8129, "Cost": 170 }
+				] },
+				{ "Unlock": 1080, "Items": [
+					{ "ItemID": 8393, "Cost": 85 }, { "ItemID": 8394, "Cost": 85 }, { "ItemID": 8258, "Cost": 85 }, { "ItemID": 8195, "Cost": 170 }
+				] },
+				{ "Unlock": 1400, "Items": [
+					{ "ItemID": 815, "Cost": 175 }, { "ItemID": 924, "Cost": 55 }, { "ItemID": 8385, "Cost": 65 }, { "ItemID": 8288, "Cost": 170 }
+				] }
+			]
+		},
+		{
+			"ID": 13, "Name": "Gold Rush", "Type": "Season", "Cost": 105,
+			"Description": "Every gold-plated edition in the armoury. Pure prestige, at a premium.",
+			"Image": "", "Theme": ["#1f1a08", "#ffd24a"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 341, "Cost": 60 }, { "ItemID": 172, "Cost": 60 }, { "ItemID": 549, "Cost": 60 }, { "ItemID": 416, "Cost": 60 }
+				] },
+				{ "Unlock": 220, "Items": [
+					{ "ItemID": 309, "Cost": 110 }, { "ItemID": 346, "Cost": 110 }, { "ItemID": 496, "Cost": 110 }, { "ItemID": 220, "Cost": 110 }
+				] },
+				{ "Unlock": 560, "Items": [
+					{ "ItemID": 441, "Cost": 110 }, { "ItemID": 583, "Cost": 110 }, { "ItemID": 8055, "Cost": 110 }, { "ItemID": 8106, "Cost": 440 }
+				] },
+				{ "Unlock": 960, "Items": [
+					{ "ItemID": 170, "Cost": 160 }, { "ItemID": 244, "Cost": 160 }, { "ItemID": 221, "Cost": 160 }, { "ItemID": 420, "Cost": 160 }
+				] },
+				{ "Unlock": 1410, "Items": [
+					{ "ItemID": 342, "Cost": 160 }, { "ItemID": 434, "Cost": 160 }, { "ItemID": 380, "Cost": 160 }, { "ItemID": 484, "Cost": 160 }
+				] },
+				{ "Unlock": 1910, "Items": [
+					{ "ItemID": 590, "Cost": 160 }, { "ItemID": 354, "Cost": 330 }, { "ItemID": 406, "Cost": 330 }, { "ItemID": 488, "Cost": 330 }
+				] },
+				{ "Unlock": 2470, "Items": [
+					{ "ItemID": 531, "Cost": 330 }, { "ItemID": 602, "Cost": 330 }
+				] }
+			]
+		},
+		{
+			"ID": 14, "Name": "Eastern Legends", "Type": "Season", "Cost": 135,
+			"Description": "Dragons, tigers and ancient blades: legendary arms and warriors from the East.",
+			"Image": "", "Theme": ["#0b1d17", "#3fd69a"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 8329, "Cost": 30 }, { "ItemID": 8334, "Cost": 45 }, { "ItemID": 519, "Cost": 55 }, { "ItemID": 328, "Cost": 155 }
+				] },
+				{ "Unlock": 100, "Items": [
+					{ "ItemID": 680, "Cost": 30 }, { "ItemID": 520, "Cost": 45 }, { "ItemID": 429, "Cost": 55 }, { "ItemID": 8335, "Cost": 155 }
+				] },
+				{ "Unlock": 260, "Items": [
+					{ "ItemID": 282, "Cost": 55 }, { "ItemID": 681, "Cost": 45 }, { "ItemID": 8330, "Cost": 80 }, { "ItemID": 8336, "Cost": 155 }
+				] },
+				{ "Unlock": 430, "Items": [
+					{ "ItemID": 279, "Cost": 85 }, { "ItemID": 280, "Cost": 85 }, { "ItemID": 405, "Cost": 55 }, { "ItemID": 8110, "Cost": 260 }
+				] },
+				{ "Unlock": 640, "Items": [
+					{ "ItemID": 8331, "Cost": 85 }, { "ItemID": 480, "Cost": 55 }, { "ItemID": 610, "Cost": 65 }, { "ItemID": 8328, "Cost": 55 }
+				] },
+				{ "Unlock": 870, "Items": [
+					{ "ItemID": 428, "Cost": 220 }, { "ItemID": 679, "Cost": 165 }, { "ItemID": 8143, "Cost": 420 }, { "ItemID": 959, "Cost": 220 }
+				] }
+			]
+		}
+	]
+}

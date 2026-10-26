@@ -1,0 +1,13 @@
+diff --git a/src/zip.c b/src/zip.c
+index 733559d..2765db1 100644
+--- a/src/zip.c
++++ b/src/zip.c
+@@ -3121,7 +3121,7 @@ struct zip_t *zip_stream_open_with_password(const char *stream, size_t size,
+ struct zip_t *zip_stream_openwitherror(const char *stream, size_t size,
+                                        int level, char mode, int *errnum) {
+ #if ZIP_ENABLE_DEFLATE
+-  mz_uint wflags = (mode == 'w') ? MZ_ZIP_FLAG_WRITE_ZIP64 : 0;
++  mz_uint wflags = 0; // CSNZ: no ZIP64 - the client's XUnzip (ZipUtils) cannot read zip64 metadata archives
+ #endif
+   struct zip_t *zip = (struct zip_t *)calloc((size_t)1, sizeof(struct zip_t));
+ #if !ZIP_ENABLE_INFLATE && !ZIP_ENABLE_DEFLATE

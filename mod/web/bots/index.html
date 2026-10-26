@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AI Players</title>
+<link rel="stylesheet" href="bots.css">
+</head>
+<body>
+<header class="topbar">
+  <h1>AI Players</h1>
+  <div id="roominfo" class="roominfo"></div>
+  <div class="adder">
+    <span class="toggle" id="newteam" title="Team of the bots you add">
+      <button type="button" data-team="2">CT</button><button type="button" data-team="1">T</button>
+    </span>
+    <span class="counter" title="How many bots to add">
+      <button type="button" id="minus">&minus;</button><input id="count" value="1" maxlength="2" spellcheck="false"><button type="button" id="plus">+</button>
+    </span>
+    <select id="newpreset" class="select" title="Weapon filter of the bots you add"></select>
+    <button id="add" class="cta" type="button">+ Add</button>
+    <button id="fill" class="cta ghost" type="button" title="Add bots until the room is full">Fill room</button>
+  </div>
+  <button id="filters" class="small" type="button">Weapon filters</button>
+  <button id="close" class="close" type="button" title="Close (Esc)">Close &times;</button>
+</header>
+
+<main>
+  <section class="slots">
+    <div class="slots-head"><span>Slot</span><span>Player</span><span>Primary</span><span></span></div>
+    <div id="slots" class="slot-list"></div>
+    <p id="hint" class="hint"></p>
+  </section>
+
+  <section id="editor" class="editor hidden">
+    <!-- the bot's sheet -->
+    <div id="details" class="details">
+      <div class="ed-row">
+        <label class="field grow">
+          <span class="label">Name</span>
+          <span class="name-box">
+            <input id="name" maxlength="24" spellcheck="false" autocomplete="off">
+            <button id="randname" class="small" type="button" title="Random name">&#9860; Random</button>
+          </span>
+        </label>
+        <div id="teamfield" class="field">
+          <span class="label">Team</span>
+          <span class="toggle" id="team">
+            <button type="button" data-team="2">CT</button><button type="button" data-team="1">T</button>
+          </span>
+        </div>
+        <label class="field">
+          <span class="label">Weapon filter</span>
+          <select id="preset" class="select"></select>
+        </label>
+      </div>
+
+      <div class="field">
+        <span class="label">Skill <em id="skilltext"></em></span>
+        <input id="skill" type="range" min="-1" max="7" step="1">
+        <div class="ticks"><span>Room</span><span>Very easy</span><span></span><span>Normal</span><span></span><span>Hard</span><span></span><span></span><span>Expert</span></div>
+      </div>
+
+      <div class="field">
+        <span class="label">Loadout <em>click a slot to choose</em></span>
+        <div class="loadout">
+          <button class="slot-pick" type="button" data-slot="character"><span class="label">Character</span><span class="pick"></span></button>
+          <button class="slot-pick" type="button" data-slot="primary"><span class="label">Primary</span><span class="pick"></span></button>
+          <button class="slot-pick" type="button" data-slot="secondary"><span class="label">Secondary</span><span class="pick"></span></button>
+          <button class="slot-pick" type="button" data-slot="melee"><span class="label">Melee</span><span class="pick"></span></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- choosing one slot: the whole panel -->
+    <div id="picker" class="picker hidden">
+      <div class="picker-top">
+        <button id="pickback" class="small" type="button">&#8249; Back</button>
+        <span id="pickwho" class="pick-who"></span>
+        <nav id="picktabs" class="pick-tabs">
+          <button type="button" data-slot="character"><span class="label">Character</span><span class="pt"></span></button>
+          <button type="button" data-slot="primary"><span class="label">Primary</span><span class="pt"></span></button>
+          <button type="button" data-slot="secondary"><span class="label">Secondary</span><span class="pt"></span></button>
+          <button type="button" data-slot="melee"><span class="label">Melee</span><span class="pt"></span></button>
+        </nav>
+      </div>
+      <div class="picker-head">
+        <nav id="cats" class="cats"></nav>
+        <input id="search" class="search" placeholder="Search" spellcheck="false" autocomplete="off">
+      </div>
+      <div id="grid" class="grid"></div>
+    </div>
+  </section>
+</main>
+
+<!-- weapon filters: sets of allowed weapons, saved on the account -->
+<div id="fm" class="overlay hidden">
+  <div class="fm">
+    <header class="fm-head">
+      <h2>Weapon filters</h2>
+      <span class="fm-help">Bots with a filter pick their random weapons only from it.</span>
+      <button id="fmclose" class="close" type="button">Done</button>
+    </header>
+    <div class="fm-body">
+      <aside class="fm-list">
+        <div id="fmlist"></div>
+        <button id="fmnew" class="small wide" type="button">+ New filter</button>
+        <button id="fmclassic" class="small wide" type="button">+ Counter-Strike classic</button>
+        <button id="fmimport" class="small wide" type="button">Import code&hellip;</button>
+      </aside>
+      <section id="fmedit" class="fm-edit hidden">
+        <div class="fm-row">
+          <input id="fmname" class="search" maxlength="40" placeholder="Filter name" spellcheck="false">
+          <button id="fmsave" class="cta" type="button">Save</button>
+          <button id="fmexport" class="small" type="button">Export code</button>
+          <button id="fmdelete" class="small danger" type="button">Delete</button>
+        </div>
+        <div class="fm-row">
+          <nav id="fmslots" class="cats slots-tabs">
+            <button type="button" data-slot="primary" class="active">Primary</button>
+            <button type="button" data-slot="secondary">Secondary</button>
+            <button type="button" data-slot="melee">Melee</button>
+          </nav>
+          <input id="fmsearch" class="search" placeholder="Search" spellcheck="false" autocomplete="off">
+        </div>
+        <div class="fm-row">
+          <nav id="fmcats" class="cats"></nav>
+        </div>
+        <div class="fm-row small-row">
+          <span id="fmcount" class="fm-count"></span>
+          <button id="fmonly" class="small" type="button">Allowed only</button>
+          <button id="fmallslot" class="small" type="button" title="Allow every weapon of this slot">Allow all</button>
+          <button id="fminvert" class="small" type="button" title="Allowed weapons become blocked and the rest allowed">Invert selection</button>
+          <button id="fmall" class="small" type="button">Allow shown</button>
+          <button id="fmnone" class="small" type="button">Clear shown</button>
+        </div>
+        <div id="fmgrid" class="grid"></div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<div id="codebox" class="overlay hidden">
+  <div class="codebox">
+    <h3 id="codetitle"></h3>
+    <textarea id="code" spellcheck="false"></textarea>
+    <div class="fm-row">
+      <button id="codeok" class="cta" type="button">OK</button>
+      <button id="codecancel" class="small" type="button">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+<script src="bots.js"></script>
+</body>
+</html>
