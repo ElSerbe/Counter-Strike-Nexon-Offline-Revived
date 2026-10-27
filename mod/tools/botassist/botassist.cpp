@@ -4765,6 +4765,8 @@ static void HookedMessageBegin(int dest, int type, const float* origin, void* ed
 }
 
 static void ConsoleFrame();
+static void ZSRiftWatch();
+static void CommandFile();
 
 static void HookedStartFrame()
 {
@@ -4772,6 +4774,8 @@ static void HookedStartFrame()
     __try
     {
         ConsoleFrame();
+        CommandFile();
+        ZSRiftWatch();
         if (cfg.enabled && g_edictToVars >= 0 && g_pGlobals && *g_pGlobals && (GameMode(), ZgActive()))
         {
             LoadNav();
@@ -5275,6 +5279,231 @@ static void ConsoleFrame()
         F<int>(v, EV_FLAGS) |= FL_NOTARGET;
     if (g_cheats.noclip || g_cheats.fly)
         SetMovetype(e);
+}
+
+// ---------------------------------------------------------------- diagnostics
+// botassist_cmd.txt next to botassist.asi: each line runs as a server console command (then the file is deleted),
+// so a test can be driven without input to the (elevated) game window
+static void CommandFile()
+{
+    static DWORD next = 0;
+    if (GetTickCount() < next)
+        return;
+    next = GetTickCount() + 1000;
+    char path[MAX_PATH];
+    snprintf(path, sizeof(path), "%sbotassist_cmd.txt", g_dir);
+    FILE* f = fopen(path, "r");
+    if (!f)
+        return;
+    char line[512];
+    std::vector<std::string> cmds;
+    while (fgets(line, sizeof(line), f))
+    {
+        std::string c = line;
+        while (!c.empty() && (c.back() == '\n' || c.back() == '\r' || c.back() == ' '))
+            c.pop_back();
+        if (!c.empty())
+            cmds.push_back(c);
+    }
+    fclose(f);
+    DeleteFileA(path);
+    for (auto& c : cmds)
+    {
+        Log("command file: %s", c.c_str());
+        if (g_ServerCommand)
+            g_ServerCommand((c + "\n").c_str());
+    }
+}
+
+// Zombie Disaster Zone (mode 59): CSOGameRulesZSRift (vtable 0x1178504c, g_pGameRules = [0x121cac30]) and the
+// object its code reads the round state from ([0x121d3ec4]: +0x27c freeze period, +0x27d, +0x214). Logged when
+// they change: rules +0x21c phase (1 -> 2 when the vote ends), +0x224 vote phase, +0x23c / +0x240 vote times,
+// +0x284 / +0x288, and how many monsters are alive
+static const DWORD MP_CSO_RULES = 0x121d3ec4;
+static std::string VtName(unsigned char* obj)
+{
+    if (!obj || !Readable(obj, 4))
+        return "null";
+    DWORD vt = *(DWORD*)obj;
+    char buf[160];
+    const char* name = "?";
+    DWORD* col = Readable((void*)(vt - 4), 4) ? *(DWORD**)(vt - 4) : nullptr;
+    if (col && Readable(col, 16))
+    {
+        unsigned char* td = (unsigned char*)col[3];
+        if (td && Readable(td + 8, 4))
+            name = (const char*)(td + 8);
+    }
+    snprintf(buf, sizeof(buf), "0x%08lX %.60s", vt - g_mpDelta, name);
+    return buf;
+}
+
+// the match's interface (mp 0x121d3cec returns it): vfunc 0x188 game mode, 0x318 asked by CSOGameRules::Think
+// before its start countdown
+static void MatchIface(int& mode, int& v318, int& v214)
+{
+    __try
+    {
+        typedef void* (*IfaceFn)();
+        IfaceFn get = *(IfaceFn*)(0x121d3cec + g_mpDelta);
+        void* m = get ? get() : nullptr;
+        if (m)
+        {
+            typedef int(__thiscall * IntFn)(void*);
+            typedef char(__thiscall * BoolFn)(void*);
+            void** vt = *(void***)m;
+            mode = ((IntFn)vt[0x188 / 4])(m);
+            v318 = ((BoolFn)vt[0x318 / 4])(m);
+            v214 = ((IntFn)vt[0x214 / 4])(m); // the damage code's encounter level
+            static bool logged = false;
+            if (!logged)
+            {
+                logged = true;
+                Log("match interface %p (hw +0x%lX), vtable hw +0x%lX: 0x188 at +0x%lX, 0x214 at +0x%lX, 0x318 at +0x%lX", m,
+                    (DWORD)m - g_hwLo, (DWORD)vt - g_hwLo, (DWORD)vt[0x188 / 4] - g_hwLo, (DWORD)vt[0x214 / 4] - g_hwLo,
+                    (DWORD)vt[0x318 / 4] - g_hwLo);
+            }
+        }
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+    }
+}
+
+// CSOGameRulesZSRift doesn't start the match the usual way: its CheckWinConditions (rules vfunc 0x100) and
+// "enough players" check (0x104) are stubs, so nothing says "Game Commencing" and the first real round (the rift's
+// vote, buy time, waves) never begins. Offline the room-match branch of CSOGameRules::Think doesn't run either
+// (match interface vfunc 0x318 off), and after 5 minutes it ends the match. Started like CSOGameRules'
+// CheckWinConditions (0x11411850) does: the "#Game_Commencing" message (0x11498f80), round +0x534 1, and
+// TerminateRound(3 s, draw) (0x11491680, cdecl), whose restart makes the first round.
+static const DWORD MP_ROUND_MESSAGE = 0x11498f80, MP_TERMINATE_ROUND = 0x11491680;
+static bool ZSRiftStart(unsigned char* cso)
+{
+    __try
+    {
+        typedef void(__cdecl * MessageFn)(const char*, int);
+        typedef void(__cdecl * TerminateFn)(float, int);
+        ((MessageFn)(MP_ROUND_MESSAGE + g_mpDelta))("#Game_Commencing", 10);
+        ((TerminateFn)(MP_TERMINATE_ROUND + g_mpDelta))(3.0f, 3);
+        cso[0x534] = 1;
+        return true;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        return false;
+    }
+}
+
+// the rules' player stat levels (std::map at +0x288: user ID -> 9 levels, node key +0x10, levels +0x14)
+static void ZSRiftLevels(unsigned char* rules, char* out, size_t size)
+{
+    out[0] = 0;
+    __try
+    {
+        unsigned char* head = *(unsigned char**)(rules + 0x288);
+        unsigned char* stack[64];
+        int sp = 0;
+        unsigned char* node = *(unsigned char**)(head + 4);
+        size_t len = 0;
+        while ((node && !node[0xd]) || sp)
+        {
+            while (node && !node[0xd] && sp < 64)
+            {
+                stack[sp++] = node;
+                node = *(unsigned char**)node;
+            }
+            node = stack[--sp];
+            int* lv = (int*)(node + 0x14);
+            len += snprintf(out + len, size - len, " user %d: %d %d %d %d %d %d %d %d %d;", *(int*)(node + 0x10), lv[0],
+                            lv[1], lv[2], lv[3], lv[4], lv[5], lv[6], lv[7], lv[8]);
+            if (len >= size - 1)
+                return;
+            node = *(unsigned char**)(node + 8);
+        }
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        snprintf(out, size, " (unreadable)");
+    }
+}
+
+static void ZSRiftWatch()
+{
+    static float next = 0;
+    static std::string last;
+    if (!g_mpDelta || !g_pGlobals || !*g_pGlobals || g_edictToVars < 0 || GameMode() != 59)
+        return;
+    float now = Now();
+    if (now >= next - 10.0f && now < next)
+        return;
+    next = now + 1.0f;
+    unsigned char* cso = *(unsigned char**)(MP_CSO_RULES + g_mpDelta);
+    unsigned char* r = *(unsigned char**)(MP_GAMERULES + g_mpDelta);
+    if (!r || !Readable(r, 0x2d0) || !cso || !Readable(cso, 0x560))
+        return;
+    int monsters = 0, players = 0;
+    std::map<std::string, int> classes;
+    std::string health;
+    ForEntitiesNear(V3{ 0, 0, 0 }, 1e6f, [&](void* e) {
+        unsigned char* v = Vars(e);
+        int flags = F<int>(v, EV_FLAGS);
+        char h[96];
+        if (flags & FL_CLIENT)
+        {
+            players++;
+            snprintf(h, sizeof(h), " '%s' %.0f/%.0f", String(F<int>(v, EV_NETNAME)), F<float>(v, EV_HEALTH),
+                     F<float>(v, EV_ARMORVALUE));
+            health += h;
+        }
+        else if ((flags & FL_MONSTER) && F<float>(v, EV_HEALTH) > 0)
+        {
+            if (monsters++ < 3)
+            {
+                snprintf(h, sizeof(h), " %s %.0f", ClassName(e), F<float>(v, EV_HEALTH));
+                health += h;
+            }
+            classes[ClassName(e)]++;
+        }
+    });
+    int mode = -1, v318 = -1, v214 = -1;
+    MatchIface(mode, v318, v214);
+    // start the match once the intro time is over (+4 0) when the game won't
+    static float introOver = -1;
+    if (cso[0x27c] || cso[0x27d] || cso[0x534] || *(int*)(cso + 4) || v318 > 0 || *(DWORD*)r != 0x1178504C + g_mpDelta)
+        introOver = -1;
+    else if (introOver < 0 || now < introOver)
+        introOver = now;
+    else if (now - introOver >= 3.0f)
+    {
+        introOver = -1;
+        bool ok = ZSRiftStart(cso);
+        Log("ZSRift: the match didn't start by itself (room-match check 0x318 off): started it%s", ok ? "" : " - FAILED");
+    }
+    char buf[1024];
+    snprintf(buf, sizeof(buf),
+             "rules %s, round %s: started(+27c) %d over(+27d) %d +4 %d +240 %.1f start(+248) %.1f freeze(+250) %d +254 "
+             "%d +274 %d +2de %d +534 %d +556 %d +214 %d; rules phase(+21c) %d vote(+224) %d +23c %.1f +240 %.1f +284 %d "
+             "+20c %.1f +211 %d +218 %d; iface mode %d 0x318 %d 0x214 %d; %d monsters, %d clients",
+             VtName(r).c_str(), cso == r ? "= rules" : VtName(cso).c_str(), cso[0x27c], cso[0x27d], *(int*)(cso + 4),
+             *(float*)(cso + 0x240), *(float*)(cso + 0x248), *(int*)(cso + 0x250), *(int*)(cso + 0x254),
+             *(int*)(cso + 0x274), cso[0x2de], cso[0x534], cso[0x556], cso[0x214], *(int*)(r + 0x21c),
+             *(int*)(r + 0x224), *(float*)(r + 0x23c), *(float*)(r + 0x240), *(int*)(r + 0x284), *(float*)(r + 0x20c),
+             r[0x211], r[0x218], mode, v318, v214, monsters, players);
+    // logged when the round or the rift's phase changes (not on every kill)
+    char key[96];
+    snprintf(key, sizeof(key), "%d %d %d %d %d %d %d %d", cso[0x27c], cso[0x27d], *(int*)(cso + 4), cso[0x534],
+             *(int*)(r + 0x21c), *(int*)(r + 0x224), v318, v214);
+    std::string state = key;
+    if (state != last)
+    {
+        std::string names;
+        for (auto& c : classes)
+            names += " " + c.first + " x" + std::to_string(c.second);
+        char levels[600];
+        ZSRiftLevels(r, levels, sizeof(levels));
+        Log("ZSRift %.1f: %s%s; levels%s; health/armor%s", now, buf, names.c_str(), levels, health.c_str());
+        last = state;
+    }
 }
 
 // ---------------------------------------------------------------- orders in the other modes

@@ -1258,6 +1258,24 @@ index 35561e8..f7edea1 100644
  
  	rooms.erase(
  		remove_if(
+diff --git a/src/manager/hostmanager.cpp b/src/manager/hostmanager.cpp
+index 24d1ccc..4f813f3 100644
+--- a/src/manager/hostmanager.cpp
++++ b/src/manager/hostmanager.cpp
+@@ -292,6 +292,13 @@ bool CHostManager::OnUpdateUserStatus(CReceivePacket* msg, IExtendedSocket* sock
+ 	int status = msg->ReadUInt8();
+ 	if (status == 1)
+ 	{
++		// Zombie Disaster Zone: the player's stat levels, or the match computes their health, damage... from nothing
++		if (destRoom->GetSettings()->gameModeId == 59)
++		{
++			g_PacketManager.SendHostZSRiftStats(socket, userID, vector<int>(9, 0));
++			Logger().Info("ZS Rift: sent user %d's stat levels to the host\n", userID);
++		}
++
+ 		// send zbs addon info
+ 		if (destRoom->GetSettings()->gameModeId == 15)
+ 		{
 diff --git a/src/manager/itemmanager.cpp b/src/manager/itemmanager.cpp
 index ad8d88a..9844970 100644
 --- a/src/manager/itemmanager.cpp
@@ -2481,7 +2499,7 @@ index 0000000..6175716
 +
 +extern CMissionManager g_MissionManager;
 diff --git a/src/manager/packetmanager.cpp b/src/manager/packetmanager.cpp
-index 0defb02..9f56bb4 100644
+index 0defb02..60785db 100644
 --- a/src/manager/packetmanager.cpp
 +++ b/src/manager/packetmanager.cpp
 @@ -892,7 +892,7 @@ void CPacketManager::SendMetadataUnk8(IExtendedSocket* socket)
@@ -2574,7 +2592,33 @@ index 0defb02..9f56bb4 100644
  		msg->WriteUInt8(0); // frag kills
  		msg->WriteUInt8(0); // knife kills
  
-@@ -6072,7 +6128,82 @@ void CPacketManager::SendTitle(IExtendedSocket* socket, int id)
+@@ -3636,6 +3692,25 @@ void CPacketManager::SendHostGameStart(IExtendedSocket* socket, int userId)
+ 	socket->Send(msg);
+ }
+ 
++// Zombie Disaster Zone (ZS Rift, mode 59): a player's stat levels for the match (hw Packet_Host 14 -> mp event 0x15:
++// u32 user ID, 9 x {u8 stat, u16 level}; stats in resource/ZSRift/ZSRIFT_StatInfo.json order: Health, Armor,
++// DamageRate, Ammo, HealthRegen, Critical, BossDamageRate, StartMoney, RoundMoney; level 0 = the base values)
++void CPacketManager::SendHostZSRiftStats(IExtendedSocket* socket, int userID, const vector<int>& levels)
++{
++	CSendPacket* msg = CreatePacket(socket, PacketId::Host);
++	msg->BuildHeader();
++
++	msg->WriteUInt8(14);
++	msg->WriteUInt32(userID);
++	for (int i = 0; i < 9; i++)
++	{
++		msg->WriteUInt8(i);
++		msg->WriteUInt16(i < (int)levels.size() ? levels[i] : 0);
++	}
++
++	socket->Send(msg);
++}
++
+ void CPacketManager::SendHostZBAddon(IExtendedSocket* socket, int userID, const vector<int>& addons)
+ {
+ 	CSendPacket* msg = CreatePacket(socket, PacketId::Host);
+@@ -6072,7 +6147,82 @@ void CPacketManager::SendTitle(IExtendedSocket* socket, int id)
  
  	msg->WriteUInt8(0);
  	msg->WriteUInt16(id);
@@ -2582,14 +2626,14 @@ index 0defb02..9f56bb4 100644
 +
 +	socket->Send(msg);
 +}
-+
+ 
 +// offline build: the medals as the client's honor quests (hw.dll Packet_Quest type 1, the full quest list): they are
 +// what My Info's Medals tab shows, with a gauge per requirement. Quest ID = 2000 + title ID.
 +void CPacketManager::SendHonorQuests(IExtendedSocket* socket, const vector<HonorQuest_s>& quests, int honorPoints)
 +{
 +	CSendPacket* msg = CreatePacket(socket, PacketId::Quest);
 +	msg->BuildHeader();
- 
++
 +	msg->WriteUInt8(1);
 +	msg->WriteUInt8(0); // kept by the quest manager (+100), unknown
 +	msg->WriteUInt16(quests.size());
@@ -2658,7 +2702,7 @@ index 0defb02..9f56bb4 100644
  }
  
 diff --git a/src/manager/packetmanager.h b/src/manager/packetmanager.h
-index b9ca2f3..a92e620 100644
+index b9ca2f3..86b7f5f 100644
 --- a/src/manager/packetmanager.h
 +++ b/src/manager/packetmanager.h
 @@ -96,7 +96,7 @@ public:
@@ -2688,7 +2732,15 @@ index b9ca2f3..a92e620 100644
  	void SendRoomPlayerLeaveIngame(IExtendedSocket* socket);
  	void SendRoomInviteUserList(IExtendedSocket* socket, IUser* user);
  	void SendRoomGameResult(IExtendedSocket* socket, IRoom* room, CGameMatch* match);
-@@ -232,6 +234,8 @@ public:
+@@ -193,6 +195,7 @@ public:
+ 	void SendHostUserInventory(IExtendedSocket* socket, int userId, const std::vector<CUserInventoryItem>& items);
+ 	void SendHostGameStart(IExtendedSocket* socket, int userId);
+ 	void SendHostZBAddon(IExtendedSocket* socket, int userID, const std::vector<int>& addons);
++	void SendHostZSRiftStats(IExtendedSocket* socket, int userID, const std::vector<int>& levels);
+ 	void SendHostJoin(IExtendedSocket* socket, IUser* host);
+ 	void SendHostFlyerFlock(IExtendedSocket* socket, int type);
+ 	void SendHostAdBalloon(IExtendedSocket* socket);
+@@ -232,6 +235,8 @@ public:
  	void SendUpdateInfoNicknameChangeReply(IExtendedSocket* socket, int replyCode);
  
  	void SendTitle(IExtendedSocket* socket, int id);
@@ -5674,10 +5726,20 @@ index 13a4ee8..c36e019 100644
  	std::vector<int> m_KickedUsers;
  	std::vector<int> m_FamilyBattleUsers;
 diff --git a/src/room/roomsettings.cpp b/src/room/roomsettings.cpp
-index 0ba9234..2452fde 100644
+index 0ba9234..d2a0534 100644
 --- a/src/room/roomsettings.cpp
 +++ b/src/room/roomsettings.cpp
-@@ -775,14 +775,18 @@ int CRoomSettings::GetMapSetting(int mapId, const string& setting)
+@@ -9,6 +9,9 @@
+ 
+ #include "manager/voxelmanager.h"
+ 
++// Zombie Disaster Zone (mode 59): highest rift level a room can pick
++static const int ZSRIFT_MAX_LEVEL = 20;
++
+ using namespace std;
+ 
+ CRoomSettings::CRoomSettings()
+@@ -775,14 +778,18 @@ int CRoomSettings::GetMapSetting(int mapId, const string& setting)
  	return g_pMapListTable->GetCell<int>(setting, to_string(mapId));
  }
  
@@ -5698,7 +5760,7 @@ index 0ba9234..2452fde 100644
  }
  
  int CRoomSettings::GetDefaultBuyTime(int gameModeId)
-@@ -899,6 +903,15 @@ int CRoomSettings::GetDefaultFriendlyBots(int gameModeId)
+@@ -899,6 +906,15 @@ int CRoomSettings::GetDefaultFriendlyBots(int gameModeId)
  		case 58:
  			friendlyBots = 8;
  			break;
@@ -5714,7 +5776,7 @@ index 0ba9234..2452fde 100644
  	}
  
  	return friendlyBots;
-@@ -931,7 +944,14 @@ int CRoomSettings::GetDefaultEnemyBots(int gameModeId)
+@@ -931,7 +947,14 @@ int CRoomSettings::GetDefaultEnemyBots(int gameModeId)
  	return enemyBots;
  }
  
@@ -5729,7 +5791,7 @@ index 0ba9234..2452fde 100644
  {
  	int botAdd = 0;
  
-@@ -1416,7 +1436,7 @@ void CRoomSettings::LoadDefaultSettings(int gameModeId, int mapId)
+@@ -1416,7 +1439,7 @@ void CRoomSettings::LoadDefaultSettings(int gameModeId, int mapId)
  	botDifficulty = 0;
  	friendlyBots = GetDefaultFriendlyBots(gameModeId);
  	enemyBots = GetDefaultEnemyBots(gameModeId);
@@ -5738,7 +5800,18 @@ index 0ba9234..2452fde 100644
  	botAdd = GetDefaultBotAdd(gameModeId);
  	kdRule = 0;
  	startingCash = GetDefaultStartingCash(gameModeId);
-@@ -1530,7 +1550,7 @@ void CRoomSettings::LoadZbCompetitiveSettings(int gameModeId)
+@@ -1425,7 +1448,9 @@ void CRoomSettings::LoadDefaultSettings(int gameModeId, int mapId)
+ 	statusSymbol = 0;
+ 	mapPlaylistIndex = mapPlaylistSize ? 1 : 0;
+ 	enhanceRestrict = (gameModeId == 22 || gameModeId == 32) ? 1 : 0;
+-	if (gameModeId != 15)
++	if (gameModeId == 59)
++		zsDifficulty = max(1, zsDifficulty); // Zombie Disaster Zone: the rift level (CSOGameRulesZSRift reads it, 1+)
++	else if (gameModeId != 15)
+ 	{
+ 		zsDifficulty = 0;
+ 		unk56 = 0;
+@@ -1530,7 +1555,7 @@ void CRoomSettings::LoadZbCompetitiveSettings(int gameModeId)
  	botDifficulty = 0;
  	friendlyBots = GetDefaultFriendlyBots(gameModeId);
  	enemyBots = GetDefaultEnemyBots(gameModeId);
@@ -5747,7 +5820,7 @@ index 0ba9234..2452fde 100644
  	botAdd = GetDefaultBotAdd(gameModeId);
  
  	lowMidFlag |= ROOM_LOWMID_KDRULE;
-@@ -1766,12 +1786,10 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
+@@ -1766,12 +1791,10 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
  		lowFlag |= ROOM_LOW_ROUNDTIME;
  		roundTime = GetGameModeDefaultSetting(gameModeId, "mode_roundtime_id");
  
@@ -5764,7 +5837,7 @@ index 0ba9234..2452fde 100644
  
  		lowFlag |= ROOM_LOW_HOSTAGEKILLLIMIT;
  		hostageKillLimit = 0;
-@@ -1807,7 +1825,7 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
+@@ -1807,7 +1830,7 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
  		botDifficulty = 0;
  		friendlyBots = GetDefaultFriendlyBots(gameModeId);
  		enemyBots = GetDefaultEnemyBots(gameModeId);
@@ -5773,7 +5846,16 @@ index 0ba9234..2452fde 100644
  		botAdd = GetDefaultBotAdd(gameModeId);
  
  		lowMidFlag |= ROOM_LOWMID_KDRULE;
-@@ -2026,7 +2044,7 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
+@@ -1829,7 +1852,7 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
+ 			sd = 0;
+ 
+ 		lowMidFlag |= ROOM_LOWMID_ZSDIFFICULTY;
+-		if (gameModeId != 15)
++		if (gameModeId != 15 && gameModeId != 59)
+ 		{
+ 			zsDifficulty = 0;
+ 			unk56 = 0;
+@@ -2026,7 +2049,7 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
  					Logger().Warn("User '%s' tried to update a room\'s settings with gameModeId that doesn't allow bots, gameModeId: %d\n", user->GetLogName(), gameModeId);
  					lowMidFlag &= ~ROOM_LOWMID_BOT;
  				}
@@ -5782,7 +5864,7 @@ index 0ba9234..2452fde 100644
  				{
  					if (botDifficulty > 7)
  						botDifficulty = 7;
-@@ -2034,31 +2052,22 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
+@@ -2034,31 +2057,22 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
  					if (friendlyBots > 15)
  						friendlyBots = 15;
  
@@ -5827,7 +5909,22 @@ index 0ba9234..2452fde 100644
  				}
  			}
  
-@@ -2364,12 +2373,8 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
+@@ -2094,11 +2108,13 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
+ 
+ 			if (lowMidFlag & ROOM_LOWMID_ZSDIFFICULTY)
+ 			{
+-				if (gameModeId != 15 && gameModeId != 53 && zsDifficulty != 1)
++				if (gameModeId != 15 && gameModeId != 53 && gameModeId != 59 && zsDifficulty != 1)
+ 				{
+ 					Logger().Warn("User '%s' tried to update a room\'s settings with gameModeId that doesn't use zsDifficulty, gameModeId: %d, zsDifficulty: %d\n", user->GetLogName(), gameModeId, zsDifficulty);
+ 					lowMidFlag &= ~ROOM_LOWMID_ZSDIFFICULTY;
+ 				}
++				else if (gameModeId == 59)
++					zsDifficulty = max(1, min(zsDifficulty, ZSRIFT_MAX_LEVEL));
+ 				else if (gameModeId == 15)
+ 				{
+ 					int mapMaxZsDifficulty = g_pMapListTable->GetCell<int>("ZSmaxDifficulty", to_string(mapId));
+@@ -2364,12 +2380,8 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
  			maxPlayers = g_pMapListTable->GetCell<int>("max_player", to_string(mapId));
  		}
  

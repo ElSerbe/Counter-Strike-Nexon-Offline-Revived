@@ -141,14 +141,15 @@ int main(int argc, char** argv)
 	Guard("SetDataDir (+0xe8)", [&] { ((Str1Fn)vt[0xe8 / 4])(fs, dataDir.c_str()); });
 	Guard("Packer (+0xe4)", [&] { ((Str1Fn)vt[0xe4 / 4])(fs, "Packer"); });
 
-	const char* games[] = { "cstrike_na_en", "cstrike_na", "cstrike", "dstrike", "estrike", "fstrike", "valve" };
 	const char* order = getenv("NAR_ORDER") ? getenv("NAR_ORDER") : "nar-dir";
-	// NAR_ONLY=fstrike mounts just that archive, to read one version of a file that several archives contain
+	// NAR_ONLY=fstrike mounts just that archive, to read one version of a file that several archives contain (any
+	// archive of Data, e.g. cstrike_na_es for the Spanish texts)
 	const char* only = getenv("NAR_ONLY");
+	std::vector<const char*> games = { "cstrike_na_en", "cstrike_na", "cstrike", "dstrike", "estrike", "fstrike", "valve" };
+	if (only)
+		games = { only };
 	for (const char* g : games)
 	{
-		if (only && std::string(only) != g)
-			continue;
 		std::string nar = root + "/Data/" + g + ".nar";
 		std::string dir = std::string("/") + g + "/";
 		if (std::string(order) == "dir-nar")
