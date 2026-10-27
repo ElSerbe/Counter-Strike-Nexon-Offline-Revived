@@ -2930,6 +2930,8 @@ static int RoomBotQuota(int team, const char* which)
         want[2] += want[1]; // co-op, Zombie Giant (the giant comes from the CT players): everyone on CT
         want[1] = 0;
     }
+    if (CoopMode() && team == 0)
+        team = 2; // Zombie Disaster Zone asks for its bots as terrorists: they join CT like the others
     if (GameMode() == MODE_ZOMBIE_GIANT)
         team = 1; // its soldier bots (asked for as T or CT) are the room's AI players
     // team index 0 (T) -> 1, 1 (CT) -> 2
@@ -5427,6 +5429,95 @@ static void ZSRiftLevels(unsigned char* rules, char* out, size_t size)
     }
 }
 
+// The rift's rounds never end here. CSOGameRulesZSRift's monster-kill handler (rules vfunc 0x334, 0x10767a20)
+// counts the round's kills at rules +0x284, capped at the round's target (short +0xc of the round entry 0x1135bbc0
+// returns from the zombie round manager [[0x121d3ec4] + 0xc]), but nothing compares the two, and its
+// CheckWinConditions (0x100) is a stub. The other zombie modes clear a round with the manager's RoundEnd(2 = the
+// humans win, 0) (0x1135f190, thiscall, once per round: manager +0x12c8): for mode 59 it counts the round won and
+// either ends the match after the last one ("#CSO_CongAllRoundClear") or calls TerminateRound(.., 1); the next
+// round's start pays the rift's round money.
+static const DWORD MP_ZS_ROUND_ENTRY = 0x1135bbc0, MP_ZS_ROUND_END = 0x1135f190;
+static int ZSRiftTarget(unsigned char* zsm)
+{
+    __try
+    {
+        typedef unsigned char*(__fastcall * EntryFn)(void*);
+        unsigned char* e = ((EntryFn)(MP_ZS_ROUND_ENTRY + g_mpDelta))(zsm);
+        return e && Readable(e + 0xc, 2) ? *(short*)(e + 0xc) : -1;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        return -1;
+    }
+}
+
+static bool ZSRiftClearRound(unsigned char* zsm)
+{
+    __try
+    {
+        typedef void(__thiscall * EndFn)(void*, int, char);
+        ((EndFn)(MP_ZS_ROUND_END + g_mpDelta))(zsm, 2, 0);
+        return true;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        return false;
+    }
+}
+
+// A player who dies while a teammate lives becomes a spectator (0x114d5de0) until the rift's respawn time (player
+// +0xf74): the rules' death think (vfunc 0x118, 0x10768180) turns dead flag 2 into 5 once it passes (not while the
+// buy menu is open, player +0xe10 14) and respawns on the next one. Bots that died that way stayed spectators: one
+// still dead 3 s after its respawn time goes through CBasePlayer::PlayerDeathThink (0x114c3cb0) from here.
+static const DWORD MP_PLAYER_DEATH_THINK = 0x114c3cb0;
+static bool ZSRiftDeathThink(void* player)
+{
+    __try
+    {
+        typedef void(__thiscall * ThinkFn)(void*);
+        ((ThinkFn)(MP_PLAYER_DEATH_THINK + g_mpDelta))(player);
+        return true;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        return false;
+    }
+}
+
+static std::string ZSRiftDeadState(void* e)
+{
+    unsigned char* v = Vars(e);
+    unsigned char* p = (unsigned char*)PrivateOf(e);
+    char buf[200];
+    snprintf(buf, sizeof(buf), "dead flag %d, health %.0f, respawn at %.1f, buy menu +0xe10 %d, joining +0xcc0 %d, "
+             "observer +0xc7c %d / iuser1 %d, next think %.1f, team %d",
+             F<int>(v, EV_DEADFLAG), F<float>(v, EV_HEALTH), p ? *(float*)(p + 0xf74) : -1.0f, p ? *(int*)(p + 0xe10) : -1,
+             p ? *(int*)(p + 0xcc0) : -1, p ? *(int*)(p + 0xc7c) : -1, F<int>(v, 0x274), F<float>(v, 0x114),
+             p ? *(int*)(p + 0x6c) : -1);
+    return buf;
+}
+
+static void ZSRiftRespawnBots(float now)
+{
+    ForEntitiesNear(V3{ 0, 0, 0 }, 1e6f, [&](void* e) {
+        unsigned char* v = Vars(e);
+        if ((F<int>(v, EV_FLAGS) & (FL_CLIENT | FL_FAKECLIENT)) != (FL_CLIENT | FL_FAKECLIENT))
+            return;
+        int dead = F<int>(v, EV_DEADFLAG);
+        unsigned char* p = (unsigned char*)PrivateOf(e);
+        if ((dead != 2 && dead != 5) || !p || *(float*)(p + 0xf74) <= 0 || now < *(float*)(p + 0xf74) + 3.0f)
+            return;
+        std::string before = ZSRiftDeadState(e);
+        if (*(int*)(p + 0xe10) == 14)
+            *(int*)(p + 0xe10) = 0;
+        bool ok = ZSRiftDeathThink(p);
+        if (ok && F<int>(v, EV_DEADFLAG) == 5)
+            ok = ZSRiftDeathThink(p);
+        Log("ZSRift: bot '%s' still dead after its respawn time (%s): death think%s -> %s", String(F<int>(v, EV_NETNAME)),
+            before.c_str(), ok ? "" : " FAILED", ZSRiftDeadState(e).c_str());
+    });
+}
+
 static void ZSRiftWatch()
 {
     static float next = 0;
@@ -5479,20 +5570,34 @@ static void ZSRiftWatch()
         bool ok = ZSRiftStart(cso);
         Log("ZSRift: the match didn't start by itself (room-match check 0x318 off): started it%s", ok ? "" : " - FAILED");
     }
+    // clear the round once its kills reach the target
+    unsigned char* zsm = *(unsigned char**)(cso + 0xc);
+    int target = zsm && Readable(zsm, 0x1300) ? ZSRiftTarget(zsm) : -1;
+    if (cso[0x27c] == 1 && !cso[0x27d] && !*(int*)(cso + 4) && *(DWORD*)r == 0x1178504C + g_mpDelta && target > 0 &&
+        *(int*)(r + 0x284) >= target && !zsm[0x12c8])
+    {
+        bool ok = ZSRiftClearRound(zsm);
+        Log("ZSRift: round %d cleared (%d of %d kills; %d rounds played of %d)%s", *(short*)(zsm + 0x288),
+            *(int*)(r + 0x284), target, *(int*)(cso + 0x4cc), *(int*)(zsm + 0x290), ok ? "" : " - FAILED");
+    }
+    if (cso[0x27c] == 1)
+        ZSRiftRespawnBots(now);
     char buf[1024];
     snprintf(buf, sizeof(buf),
              "rules %s, round %s: started(+27c) %d over(+27d) %d +4 %d +240 %.1f start(+248) %.1f freeze(+250) %d +254 "
              "%d +274 %d +2de %d +534 %d +556 %d +214 %d; rules phase(+21c) %d vote(+224) %d +23c %.1f +240 %.1f +284 %d "
-             "+20c %.1f +211 %d +218 %d; iface mode %d 0x318 %d 0x214 %d; %d monsters, %d clients",
+             "+20c %.1f +211 %d +218 %d; iface mode %d 0x318 %d 0x214 %d; %d monsters, %d clients; round %d, target %d, "
+             "%d played of %d",
              VtName(r).c_str(), cso == r ? "= rules" : VtName(cso).c_str(), cso[0x27c], cso[0x27d], *(int*)(cso + 4),
              *(float*)(cso + 0x240), *(float*)(cso + 0x248), *(int*)(cso + 0x250), *(int*)(cso + 0x254),
              *(int*)(cso + 0x274), cso[0x2de], cso[0x534], cso[0x556], cso[0x214], *(int*)(r + 0x21c),
              *(int*)(r + 0x224), *(float*)(r + 0x23c), *(float*)(r + 0x240), *(int*)(r + 0x284), *(float*)(r + 0x20c),
-             r[0x211], r[0x218], mode, v318, v214, monsters, players);
+             r[0x211], r[0x218], mode, v318, v214, monsters, players, zsm ? *(short*)(zsm + 0x288) : -1, target,
+             *(int*)(cso + 0x4cc), zsm ? *(int*)(zsm + 0x290) : -1);
     // logged when the round or the rift's phase changes (not on every kill)
     char key[96];
-    snprintf(key, sizeof(key), "%d %d %d %d %d %d %d %d", cso[0x27c], cso[0x27d], *(int*)(cso + 4), cso[0x534],
-             *(int*)(r + 0x21c), *(int*)(r + 0x224), v318, v214);
+    snprintf(key, sizeof(key), "%d %d %d %d %d %d %d %d %d %d", cso[0x27c], cso[0x27d], *(int*)(cso + 4), cso[0x534],
+             *(int*)(r + 0x21c), *(int*)(r + 0x224), v318, v214, target, *(int*)(cso + 0x4cc));
     std::string state = key;
     if (state != last)
     {
