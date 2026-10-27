@@ -21,6 +21,7 @@ import export_shop_assets as esa  # noqa: E402
 from gen_medals import (ORIGINAL, TDM, DM, ZOMBIE, ZOMBIE_CLASSIC, ZOMBIE_ALL, ZS, SCENARIO, HUMAN_SCENARIO,  # noqa: E402
                         SOCCER, BOT_MODES, PROP_HUNT, describe)
 
+COSTUME_MIN_PRICE = 300  # Black Badges: cosmetics are the Black Market's expensive goods
 DATA = os.path.join(MOD, "server", "CSNZ_Server", "bin", "Data")
 OUT_JSON = os.path.join(DATA, "Missions.json")
 NPC_DIR = os.path.join(MOD, "web", "missions", "npc")
@@ -160,7 +161,8 @@ def main():
                                      "Conditions": [requirement(r) for r in reqs], "Badges": b, "Medals": m}
                                     for reqs, b, m in missions]})
 
-    # Black Market: the game's black badge shop (weapons 30, costumes 300); names from ItemNames.json / the game
+    # Black Market: the game's black badge shop (weapons 30, costumes at least COSTUME_MIN_PRICE); names from
+    # ItemNames.json / the game
     items = esa.load_items()
     item_names = json.load(open(os.path.join(DATA, "ItemNames.json"), encoding="utf-8"))
     market = []
@@ -173,6 +175,8 @@ def main():
             continue
         res = it.get("resource", "")
         kind = "Weapon" if it.get("class") == "Equipment" else "Costume"
+        if kind == "Costume":
+            price = max(price, COSTUME_MIN_PRICE)  # the game's shop sells zombie skins and tattoos for 30
         name = (item_names.get(str(item_id)) or strings.get(f"cso_item_name_{res.lower()}") or strings.get(f"cso_{res.lower()}")
                 or pretty_name(res, kind))
         market.append({"ItemID": item_id, "Name": name, "Price": price, "Kind": kind})
