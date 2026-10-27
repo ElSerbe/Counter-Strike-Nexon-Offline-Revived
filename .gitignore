@@ -38,6 +38,7 @@ mod/web/shop/models/
 mod/web/shop/icons/
 mod/web/shop/sounds/
 mod/web/shop/promo/
+# medal icons and table exported from the game (mod/tools/gen_medals.py)
 
 # shortcuts
 *.lnk
@@ -48,3 +49,4 @@ mod/server/src-repo/
 # crash dumps
 *.mdmp
 *.dmp
+mod/web/profile/medals/

@@ -5932,6 +5932,47 @@ static void __cdecl OnAiSettingsButton()
         ((OpenWebEventFn)(GAMEUI_OPENWEBEVENT + g_gameUiDelta))(panel, nullptr);
 }
 
+// The taskbar's VIP and Missions buttons (CSOTaskbar::OnCommand "OpenVIPInfo" / "OpenQuestDlg") open a main panel
+// page (0x15 / 0xf, page manager 0x104528c0 vfunc 0x64) the offline game has nothing for: they open the game's
+// browser window instead, on the profile page (statistics, medals) and the missions page.
+static const DWORD GAMEUI_VIP_PAGE = 0x10597976, GAMEUI_VIP_RETURN = 0x10597984;
+static const DWORD GAMEUI_QUEST_PAGE = 0x105972a3, GAMEUI_QUEST_RETURN = 0x105972b1;
+static const DWORD GAMEUI_PAGE_MANAGER = 0x104528c0;
+static DWORD g_vipReturn, g_questReturn;
+
+static void OpenWebView(const char* view)
+{
+    char body[64];
+    snprintf(body, sizeof(body), "{\"view\":\"%s\"}", view);
+    bool told = HttpPost(L"/api/openview", body);
+    Log("taskbar: opening the %s page%s", view, told ? "" : " (server not reachable)");
+    void* panel = *(void**)(GAMEUI_MAINPANEL + g_gameUiDelta);
+    if (panel)
+        ((OpenWebEventFn)(GAMEUI_OPENWEBEVENT + g_gameUiDelta))(panel, nullptr);
+}
+static void __cdecl OnVipButton() { OpenWebView("profile"); }
+static void __cdecl OnMissionsButton() { OpenWebView("missions"); }
+
+static __declspec(naked) void VipStub()
+{
+    __asm {
+        pushad
+        call OnVipButton
+        popad
+        jmp dword ptr [g_vipReturn]
+    }
+}
+
+static __declspec(naked) void MissionsStub()
+{
+    __asm {
+        pushad
+        call OnMissionsButton
+        popad
+        jmp dword ptr [g_questReturn]
+    }
+}
+
 // jumped to from the BotSetting branch: run the C++ side, then leave OnCommand through its own epilogue
 static __declspec(naked) void BotSettingStub()
 {
@@ -6037,6 +6078,27 @@ static void HookAiSettingsButton(HMODULE gameUi)
     VirtualProtect(site, 5, old, &old);
     FlushInstructionCache(GetCurrentProcess(), site, 5);
     Log("room AI settings button opens the AI player editor");
+}
+
+// "call <page manager>" in the button's branch becomes "jmp stub"; the stub jumps back past the page call
+static void HookTaskbarButton(DWORD siteVa, DWORD returnVa, void* stub, DWORD* returnSlot, const char* what)
+{
+    unsigned char* site = (unsigned char*)(siteVa + g_gameUiDelta);
+    if (!Readable(site, 5) || site[0] == 0xe9)
+        return;
+    if (site[0] != 0xe8 || site + 5 + *(int*)(site + 1) != (unsigned char*)(GAMEUI_PAGE_MANAGER + g_gameUiDelta))
+    {
+        Log("GameUI taskbar has unexpected code: %s button left as it is", what);
+        return;
+    }
+    *returnSlot = returnVa + g_gameUiDelta;
+    DWORD old;
+    VirtualProtect(site, 5, PAGE_EXECUTE_READWRITE, &old);
+    site[0] = 0xe9;
+    *(int*)(site + 1) = (int)((unsigned char*)stub - (site + 5));
+    VirtualProtect(site, 5, old, &old);
+    FlushInstructionCache(GetCurrentProcess(), site, 5);
+    Log("taskbar %s button opens its web page", what);
 }
 
 // ---------------------------------------------------------------- create-room mode list: scrolling
@@ -6272,6 +6334,8 @@ static DWORD WINAPI Watcher(LPVOID)
         {
             uiHooked = ui;
             HookAiSettingsButton(ui);
+            HookTaskbarButton(GAMEUI_VIP_PAGE, GAMEUI_VIP_RETURN, (void*)VipStub, &g_vipReturn, "VIP");
+            HookTaskbarButton(GAMEUI_QUEST_PAGE, GAMEUI_QUEST_RETURN, (void*)MissionsStub, &g_questReturn, "Missions");
             HookModeDialog();
         }
         HMODULE mp = GetModuleHandleA("mp.dll");

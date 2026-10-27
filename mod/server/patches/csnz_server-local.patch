@@ -1,18 +1,19 @@
 diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
-index b5e72be..3232287 100644
+index b5e72be..1a31ad0 100644
 --- a/src/CMakeLists.txt
 +++ b/src/CMakeLists.txt
-@@ -38,6 +38,9 @@ endif()
+@@ -38,6 +38,10 @@ endif()
  target_sources(PROJECTNAME PRIVATE "main.cpp")
  target_sources(PROJECTNAME PRIVATE "serverinstance.cpp")
  target_sources(PROJECTNAME PRIVATE "serverconfig.cpp")
 +target_sources(PROJECTNAME PRIVATE "manager/warbondmanager.cpp")
 +target_sources(PROJECTNAME PRIVATE "manager/bingomanager.cpp")
++target_sources(PROJECTNAME PRIVATE "manager/medalmanager.cpp")
 +target_sources(PROJECTNAME PRIVATE "net/webserver.cpp")
  target_sources(PROJECTNAME PRIVATE "command.cpp")
  target_sources(PROJECTNAME PRIVATE "common/buffer.cpp")
  target_sources(PROJECTNAME PRIVATE "common/buildnum.cpp")
-@@ -148,6 +151,8 @@ if (MSVC)
+@@ -148,6 +152,8 @@ if (MSVC)
  else()
  	# don't treat some warnings as errors
  	target_compile_options(PROJECTNAME PRIVATE -Wno-error=sign-compare -Wno-error=unused-variable -Wno-error=delete-non-virtual-dtor -Wno-error=unused-parameter -Wno-error=conversion-null -Wno-error=register -Wno-error=unused-value -Wno-error=reorder -Wno-error=attributes)
@@ -75,10 +76,10 @@ index c342dd1..e1994a9 100644
  #ifdef WIN32
  #include <winsock2.h>
 diff --git a/src/definitions.h b/src/definitions.h
-index e96eb5f..c44f949 100644
+index e96eb5f..557e6db 100644
 --- a/src/definitions.h
 +++ b/src/definitions.h
-@@ -1441,6 +1441,36 @@ enum UserSurveyAnswerResult
+@@ -1441,6 +1441,43 @@ enum UserSurveyAnswerResult
  	ANSWER_DB_ERROR,
  };
  
@@ -110,6 +111,13 @@ index e96eb5f..c44f949 100644
 +	int periodStart; // unix time when the daily/weekly period of this progress started
 +	int progress;
 +	bool completed;
++};
++// offline build: a player's statistic (kills, wins, seconds played...) in one game mode, or in all of them (mode -1)
++struct UserCounter_s
++{
++	int mode;
++	std::string name;
++	long long value;
 +};
 +
  // ROOM LOW FLAGS
@@ -144,6 +152,30 @@ index 0000000..9232ea8
 +	virtual void GiveTickets(IUser* user, int count, const char* reason) = 0;
 +	// the "Bingo Shuffle" item used from the inventory; returns true when it was consumed
 +	virtual bool UseShuffleItem(IUser* user, CUserInventoryItem& item) = 0;
++};
+diff --git a/src/interface/imedalmanager.h b/src/interface/imedalmanager.h
+new file mode 100644
+index 0000000..ebbd422
+--- /dev/null
++++ b/src/interface/imedalmanager.h
+@@ -0,0 +1,18 @@
++#pragma once
++
++#include "imanager.h"
++
++class IUser;
++
++/**
++ * Offline build: the player's statistics (per game mode, Data UserCounter) and the game's medals (title.csv), given
++ * by the conditions of Data/Medals.json instead of Nexon's events, rankings and seasons. Also the profile page.
++ */
++class IMedalManager : public IBaseManager
++{
++public:
++	// medals whose conditions hold now (after a match, a level-up, an unlock...)
++	virtual void CheckMedals(IUser* user) = 0;
++	// adds to a statistic in all modes (mode -1): orders done, black market purchases...
++	virtual void AddCounter(IUser* user, const char* name, long long value) = 0;
 +};
 diff --git a/src/interface/ipacketmanager.h b/src/interface/ipacketmanager.h
 index 50cc528..f7394eb 100644
@@ -198,10 +230,10 @@ index 4e7a9ed..26f10a7 100644
  class IRoom;
  class CRoomUser;
 diff --git a/src/interface/iuserdatabase.h b/src/interface/iuserdatabase.h
-index 48b869d..ebbb0d0 100644
+index 48b869d..87b3a52 100644
 --- a/src/interface/iuserdatabase.h
 +++ b/src/interface/iuserdatabase.h
-@@ -97,6 +97,12 @@ public:
+@@ -97,6 +97,16 @@ public:
  	virtual int SetAddons(int userID, std::vector<int>& addons) = 0;
  
  	virtual int GetUsersAssociatedWithIP(const std::string& ip, std::vector<CUserData>& userData) = 0;
@@ -211,6 +243,10 @@ index 48b869d..ebbb0d0 100644
 +	virtual int AddWarbondUnlock(int userID, const WarbondUnlock_s& unlock) = 0;
 +	virtual int GetOrderProgress(int userID, std::vector<OrderProgress_s>& orders) = 0;
 +	virtual int SetOrderProgress(int userID, const OrderProgress_s& order) = 0;
++	virtual int GetCounters(int userID, std::vector<UserCounter_s>& counters) = 0;
++	// adds each value to its counter; best: keeps the bigger value instead (records like most kills in a match)
++	virtual int AddCounters(int userID, const std::vector<UserCounter_s>& counters, bool best) = 0;
++	virtual int SetCounter(int userID, const UserCounter_s& counter) = 0;
  	virtual int GetUsersAssociatedWithHWID(const std::vector<unsigned char>& hwid, std::vector<CUserData>& userData) = 0;
  
  	// clan related
@@ -1219,6 +1255,416 @@ index ad8d88a..9844970 100644
  	case 676:
  	{
  		CUserInventoryItem targetItem;
+diff --git a/src/manager/medalmanager.cpp b/src/manager/medalmanager.cpp
+new file mode 100644
+index 0000000..3e01378
+--- /dev/null
++++ b/src/manager/medalmanager.cpp
+@@ -0,0 +1,331 @@
++#include "medalmanager.h"
++#include "warbondmanager.h"
++#include "userdatabase.h"
++#include "packetmanager.h"
++#include "serverinstance.h"
++#include "main.h"
++#include "csvtable.h"
++#include "common/utils.h"
++#include "room/gamematch.h"
++
++#include <fstream>
++#include <set>
++#include <ctime>
++#include <algorithm>
++
++using namespace std;
++using json = nlohmann::json;
++
++CMedalManager g_MedalManager;
++
++// every mode with zombies (humans CT, zombies T): kills there are zombie kills or infections
++bool IsZombieModeOffline(int mode)
++{
++	static const int modes[] = { 8, 9, 14, 20, 24, 29, 30, 32, 35, 36, 37, 43, 44, 45, 54, 56, 58 };
++	return find(begin(modes), end(modes), mode) != end(modes);
++}
++
++CMedalManager::CMedalManager() : CBaseManager("MedalManager")
++{
++}
++
++bool CMedalManager::Init()
++{
++	return LoadConfig();
++}
++
++bool CMedalManager::LoadConfig()
++{
++	ifstream f("Data/Medals.json");
++	json cfg = json::parse(f, nullptr, false, true);
++	if (cfg.is_discarded() || !cfg.is_object())
++	{
++		Logger().Error("MedalManager: couldn't load Data/Medals.json, no medals\n");
++		return true;
++	}
++	try
++	{
++		m_Groups = cfg.value("Groups", vector<string>());
++		m_Medals.clear();
++		for (auto& m : cfg.value("Medals", json::array()))
++		{
++			Medal medal;
++			medal.id = m.value("ID", 0);
++			medal.resource = m.value("Resource", "");
++			medal.name = m.value("Name", medal.resource);
++			medal.group = m.value("Group", "");
++			medal.lore = m.value("Lore", "");
++			medal.text = m.value("Text", "");
++			for (auto& c : m.value("Conditions", json::array()))
++			{
++				MedalCondition cond;
++				cond.counter = c.value("Counter", "");
++				cond.target = c.value("Target", 0LL);
++				cond.modes = c.value("Modes", vector<int>());
++				cond.level = c.value("Level", 0);
++				cond.points = c.value("Points", 0);
++				cond.medals = c.value("Medals", 0);
++				if (c.contains("Own"))
++				{
++					cond.own = c.value("Own", vector<int>());
++					cond.count = c.value("Count", 1);
++					cond.ownAny = cond.own.empty();
++				}
++				medal.conditions.push_back(cond);
++			}
++			if (medal.id > 0 && medal.id < 1024 && !medal.conditions.empty())
++				m_Medals.push_back(medal);
++		}
++	}
++	catch (exception& e)
++	{
++		Logger().Error("MedalManager: Data/Medals.json: %s\n", e.what());
++	}
++	Logger().Info("MedalManager: %d medals\n", (int)m_Medals.size());
++	return true;
++}
++
++// ---------------------------------------------------------------- statistics
++
++void CMedalManager::OnKill(CGameMatchUserStat* stat, CGameMatch* match, const GameMatch_KillEvent& ev)
++{
++	auto& c = stat->m_Counters;
++	// victimKillType: the killer's side in the high byte (0x100 / 0x200), flags in the low one (1: headshot)
++	if (ev.victimKillType & 1)
++		c["Headshots"]++;
++	if (ev.victimUserID == 0)
++		c["BotKills"]++;
++	if (ev.gunID > 0 && g_pItemTable->GetRowIdx(to_string(ev.gunID)) >= 0)
++	{
++		switch (g_pItemTable->GetCell<int>("Category", to_string(ev.gunID)))
++		{
++		case 1: c["PistolKills"]++; break;
++		case 2: c["ShotgunKills"]++; break;
++		case 3: c["SmgKills"]++; break;
++		case 4: c["RifleKills"]++; break;
++		case 5: c["MgKills"]++; break;
++		case 6: c["GrenadeKills"]++; break;
++		case 11: c["MeleeKills"]++; break;
++		}
++	}
++	if (IsZombieModeOffline(match->m_nGameMode))
++	{
++		if (ev.killerTeam == 1)
++			c["Infections"]++;
++		else if (ev.killerTeam == 2 && ev.victimTeam == 1)
++			c["ZombieKills"]++;
++	}
++}
++
++void CMedalManager::SaveMatchStats(CGameMatchUserStat* stat, CGameMatch* match, bool finished)
++{
++	if (stat->m_bStatsSaved || !stat->m_pUser)
++		return;
++	stat->m_bStatsSaved = true;
++
++	map<string, long long> counters = stat->m_Counters;
++	counters["Kills"] += stat->m_nKills;
++	counters["Deaths"] += stat->m_nDeaths;
++	if (stat->m_tJoined)
++		counters["Seconds"] += max<long long>(0, time(NULL) - stat->m_tJoined);
++	if (finished)
++		counters["Matches"]++;
++	else
++		counters.erase("Wins"), counters.erase("TopPlayer");
++
++	vector<UserCounter_s> add;
++	for (auto& c : counters)
++		if (c.second)
++		{
++			add.push_back({ match->m_nGameMode, c.first, c.second });
++			add.push_back({ -1, c.first, c.second });
++		}
++	int userID = stat->m_pUser->GetID();
++	g_UserDatabase.AddCounters(userID, add, false);
++	g_UserDatabase.AddCounters(userID, { { match->m_nGameMode, "BestKills", stat->m_nKills }, { -1, "BestKills", stat->m_nKills } }, true);
++
++	// days played: a new calendar day counts once
++	time_t now = time(NULL);
++	tm local = *localtime(&now);
++	long long today = (local.tm_year + 1900) * 1000LL + local.tm_yday;
++	vector<UserCounter_s> all;
++	g_UserDatabase.GetCounters(userID, all);
++	long long last = 0;
++	for (auto& c : all)
++		if (c.mode == -1 && c.name == "LastPlayDay")
++			last = c.value;
++	if (last != today)
++	{
++		g_UserDatabase.SetCounter(userID, { -1, "LastPlayDay", today });
++		g_UserDatabase.AddCounters(userID, { { -1, "DaysPlayed", 1 } }, false);
++	}
++}
++
++void CMedalManager::OnMatchEnd(CGameMatch* match)
++{
++	for (auto stat : match->m_UserStats)
++	{
++		SaveMatchStats(stat, match, true);
++		CheckMedals(stat->m_pUser);
++	}
++}
++
++void CMedalManager::OnMatchLeave(CGameMatchUserStat* stat, CGameMatch* match)
++{
++	SaveMatchStats(stat, match, false);
++	CheckMedals(stat->m_pUser);
++}
++
++void CMedalManager::AddCounter(IUser* user, const char* name, long long value)
++{
++	if (user && value)
++		g_UserDatabase.AddCounters(user->GetID(), { { -1, name, value } }, false);
++}
++
++// battle pass statistics, from the unlocks (not counted as they happen)
++void CMedalManager::AddPassStats(IUser* user, vector<UserCounter_s>& counters)
++{
++	vector<WarbondUnlock_s> unlocks;
++	g_UserDatabase.GetWarbondUnlocks(user->GetID(), unlocks);
++	set<int> passes;
++	long long items = 0;
++	for (auto& u : unlocks)
++	{
++		passes.insert(u.warbondID);
++		items += u.itemID != 0;
++	}
++	counters.push_back({ -1, "Unlocks", items });
++	counters.push_back({ -1, "PassesUnlocked", (long long)passes.size() });
++	counters.push_back({ -1, "PassesCompleted", g_WarbondManager.CompletedPasses(user) });
++}
++
++// a statistic over some modes (all of them: mode -1); the best of one match is the best of those modes
++map<string, long long> CMedalManager::Totals(const vector<UserCounter_s>& counters, const vector<int>& modes) const
++{
++	map<string, long long> totals;
++	for (auto& c : counters)
++	{
++		if (modes.empty() ? c.mode != -1 : find(modes.begin(), modes.end(), c.mode) == modes.end())
++			continue;
++		long long& v = totals[c.name];
++		v = c.name == "BestKills" ? max(v, c.value) : v + c.value;
++	}
++	return totals;
++}
++
++long long CMedalManager::Progress(const MedalCondition& cond, const map<string, long long>& counters, IUser* user,
++	int level, long long points, int earned, const vector<int>& owned) const
++{
++	if (!cond.counter.empty())
++	{
++		auto it = counters.find(cond.counter);
++		return it == counters.end() ? 0 : it->second;
++	}
++	if (cond.level)
++		return level;
++	if (cond.points)
++		return points;
++	if (cond.medals)
++		return earned;
++	if (cond.ownAny)
++		return owned.size();
++	long long n = 0;
++	for (int id : cond.own)
++		n += binary_search(owned.begin(), owned.end(), id);
++	return n;
++}
++
++static long long Target(const MedalCondition& cond)
++{
++	return !cond.counter.empty() ? cond.target : cond.level ? cond.level : cond.points ? cond.points : cond.medals ? cond.medals : cond.count;
++}
++
++void CMedalManager::CheckMedals(IUser* user)
++{
++	if (!user || m_Medals.empty())
++		return;
++	CUserCharacter ch = user->GetCharacter(UFLAG_LOW_LEVEL | UFLAG_LOW_POINTS | UFLAG_LOW_ACHIEVEMENTLIST);
++	vector<UserCounter_s> counters;
++	g_UserDatabase.GetCounters(user->GetID(), counters);
++	AddPassStats(user, counters);
++	set<int> ownedSet = g_WarbondManager.OwnedItems(user);
++	vector<int> owned(ownedSet.begin(), ownedSet.end());
++	set<int> earned(ch.achievementList.begin(), ch.achievementList.end());
++	map<vector<int>, map<string, long long>> totals;
++
++	// a medal can complete another ("earn N medals"): until nothing changes
++	for (bool changed = true; changed;)
++	{
++		changed = false;
++		for (auto& m : m_Medals)
++		{
++			if (earned.count(m.id))
++				continue;
++			bool done = true;
++			for (auto& cond : m.conditions)
++			{
++				auto it = totals.find(cond.modes);
++				if (it == totals.end())
++					it = totals.emplace(cond.modes, Totals(counters, cond.modes)).first;
++				if (Progress(cond, it->second, user, ch.level, ch.points, (int)earned.size(), owned) < Target(cond))
++				{
++					done = false;
++					break;
++				}
++			}
++			if (!done)
++				continue;
++			earned.insert(m.id);
++			changed = true;
++			user->UpdateAchievementList(m.id);
++			g_PacketManager.SendTitle(user->GetExtendedSocket(), m.id);
++			g_PacketManager.SendUMsgNoticeMessageInChat(user->GetExtendedSocket(), va("Medal earned: %s", m.name.c_str()));
++			Logger().Info("MedalManager: user %d earned medal %d (%s)\n", user->GetID(), m.id, m.resource.c_str());
++		}
++	}
++}
++
++// ---------------------------------------------------------------- profile page
++
++json CMedalManager::BuildProfile(IUser* user)
++{
++	CUserCharacter ch = user->GetCharacter(UFLAG_LOW_ALL);
++	vector<UserCounter_s> counters;
++	g_UserDatabase.GetCounters(user->GetID(), counters);
++	AddPassStats(user, counters);
++	set<int> ownedSet = g_WarbondManager.OwnedItems(user);
++	vector<int> owned(ownedSet.begin(), ownedSet.end());
++	set<int> earned(ch.achievementList.begin(), ch.achievementList.end());
++
++	json total = json::object();
++	json modes = json::object();
++	for (auto& c : counters)
++	{
++		if (c.name == "LastPlayDay")
++			continue;
++		if (c.mode == -1)
++			total[c.name] = c.value;
++		else
++			modes[to_string(c.mode)][c.name] = c.value;
++	}
++
++	map<vector<int>, map<string, long long>> totals;
++	json medals = json::array();
++	for (auto& m : m_Medals)
++	{
++		json progress = json::array();
++		for (auto& cond : m.conditions)
++		{
++			auto it = totals.find(cond.modes);
++			if (it == totals.end())
++				it = totals.emplace(cond.modes, Totals(counters, cond.modes)).first;
++			long long have = Progress(cond, it->second, user, ch.level, ch.points, (int)earned.size(), owned);
++			progress.push_back({ { "have", min(have, Target(cond)) }, { "need", Target(cond) } });
++		}
++		medals.push_back({ { "id", m.id }, { "name", m.name }, { "group", m.group }, { "text", m.text }, { "lore", m.lore },
++			{ "earned", earned.count(m.id) > 0 }, { "progress", progress } });
++	}
++
++	return { { "name", ch.gameName }, { "level", ch.level }, { "exp", ch.exp }, { "medals", ch.points },
++		{ "titles", ch.titles }, { "total", total }, { "modes", modes }, { "groups", m_Groups }, { "medalList", medals } };
++}
+diff --git a/src/manager/medalmanager.h b/src/manager/medalmanager.h
+new file mode 100644
+index 0000000..d8db753
+--- /dev/null
++++ b/src/manager/medalmanager.h
+@@ -0,0 +1,67 @@
++#pragma once
++
++#include <string>
++#include <vector>
++#include <map>
++
++#include "interface/imedalmanager.h"
++#include "manager.h"
++#include "nlohmann/json.hpp"
++
++class CGameMatch;
++class CGameMatchUserStat;
++struct GameMatch_KillEvent;
++struct UserCounter_s;
++
++// one requirement of a medal (Data/Medals.json "Conditions"): all of them must hold
++struct MedalCondition
++{
++	std::string counter;     // a statistic (see CMedalManager::OnKill / OnMatchEnd), with target and modes
++	long long target = 0;
++	std::vector<int> modes;  // empty: all modes
++	int level = 0;           // or the character's level
++	int points = 0;          // or medals (the shop currency) held
++	int medals = 0;          // or other medals earned
++	std::vector<int> own;    // or owning `count` of these items (empty list: any items)
++	int count = 0;
++	bool ownAny = false;
++};
++
++struct Medal
++{
++	int id;
++	std::string resource, name, group, lore, text;
++	std::vector<MedalCondition> conditions;
++};
++
++class CMedalManager : public CBaseManager<IMedalManager>
++{
++public:
++	CMedalManager();
++
++	virtual bool Init();
++	virtual void CheckMedals(IUser* user);
++	virtual void AddCounter(IUser* user, const char* name, long long value);
++
++	// match events (CGameMatch): statistics of the match, saved when it ends (or when the player leaves)
++	void OnKill(CGameMatchUserStat* stat, CGameMatch* match, const GameMatch_KillEvent& killEvent);
++	void OnMatchEnd(CGameMatch* match);
++	void OnMatchLeave(CGameMatchUserStat* stat, CGameMatch* match);
++
++	// GET /api/profile
++	nlohmann::json BuildProfile(IUser* user);
++
++private:
++	bool LoadConfig();
++	void SaveMatchStats(CGameMatchUserStat* stat, CGameMatch* match, bool finished);
++	long long Progress(const MedalCondition& cond, const std::map<std::string, long long>& counters, IUser* user,
++		int level, long long points, int earned, const std::vector<int>& owned) const;
++	std::map<std::string, long long> Totals(const std::vector<UserCounter_s>& counters, const std::vector<int>& modes) const;
++	void AddPassStats(IUser* user, std::vector<UserCounter_s>& counters);
++
++	std::vector<Medal> m_Medals;
++	std::vector<std::string> m_Groups;
++};
++
++extern CMedalManager g_MedalManager;
++bool IsZombieModeOffline(int mode);
 diff --git a/src/manager/packetmanager.cpp b/src/manager/packetmanager.cpp
 index 0defb02..94edd28 100644
 --- a/src/manager/packetmanager.cpp
@@ -1345,10 +1791,10 @@ index b9ca2f3..76eb9b9 100644
  	void SendRoomInviteUserList(IExtendedSocket* socket, IUser* user);
  	void SendRoomGameResult(IExtendedSocket* socket, IRoom* room, CGameMatch* match);
 diff --git a/src/manager/userdatabase.cpp b/src/manager/userdatabase.cpp
-index 0d23de4..161c74b 100644
+index 0d23de4..3cae968 100644
 --- a/src/manager/userdatabase.cpp
 +++ b/src/manager/userdatabase.cpp
-@@ -626,6 +626,54 @@ int CUserDatabaseProxy::GetUsersAssociatedWithIP(const string& ip, vector<CUserD
+@@ -626,6 +626,78 @@ int CUserDatabaseProxy::GetUsersAssociatedWithIP(const string& ip, vector<CUserD
  	return result;
  }
  
@@ -1400,14 +1846,38 @@ index 0d23de4..161c74b 100644
 +	return result;
 +}
 +
++int CUserDatabaseProxy::GetCounters(int userID, vector<UserCounter_s>& counters)
++{
++	ExecCalcStart();
++	int result = m_pDatabase->GetCounters(userID, counters);
++	ExecCalcEnd(__FUNCTION__);
++	return result;
++}
++
++int CUserDatabaseProxy::AddCounters(int userID, const vector<UserCounter_s>& counters, bool best)
++{
++	ExecCalcStart();
++	int result = m_pDatabase->AddCounters(userID, counters, best);
++	ExecCalcEnd(__FUNCTION__);
++	return result;
++}
++
++int CUserDatabaseProxy::SetCounter(int userID, const UserCounter_s& counter)
++{
++	ExecCalcStart();
++	int result = m_pDatabase->SetCounter(userID, counter);
++	ExecCalcEnd(__FUNCTION__);
++	return result;
++}
++
  int CUserDatabaseProxy::GetUsersAssociatedWithHWID(const vector<unsigned char>& hwid, vector<CUserData>& userData)
  {
  	ExecCalcStart();
 diff --git a/src/manager/userdatabase.h b/src/manager/userdatabase.h
-index ee72a34..248deb9 100644
+index ee72a34..96c1c79 100644
 --- a/src/manager/userdatabase.h
 +++ b/src/manager/userdatabase.h
-@@ -118,6 +118,12 @@ public:
+@@ -118,6 +118,15 @@ public:
  	virtual int SetAddons(int userID, std::vector<int>& addons);
  
  	virtual int GetUsersAssociatedWithIP(const std::string& ip, std::vector<CUserData>& userData);
@@ -1417,11 +1887,14 @@ index ee72a34..248deb9 100644
 +	virtual int AddWarbondUnlock(int userID, const WarbondUnlock_s& unlock);
 +	virtual int GetOrderProgress(int userID, std::vector<OrderProgress_s>& orders);
 +	virtual int SetOrderProgress(int userID, const OrderProgress_s& order);
++	virtual int GetCounters(int userID, std::vector<UserCounter_s>& counters);
++	virtual int AddCounters(int userID, const std::vector<UserCounter_s>& counters, bool best);
++	virtual int SetCounter(int userID, const UserCounter_s& counter);
  	virtual int GetUsersAssociatedWithHWID(const std::vector<unsigned char>& hwid, std::vector<CUserData>& userData);
  
  	// clan related
 diff --git a/src/manager/userdatabase_sqlite.cpp b/src/manager/userdatabase_sqlite.cpp
-index ed5fefb..31b0bcb 100644
+index ed5fefb..167be39 100644
 --- a/src/manager/userdatabase_sqlite.cpp
 +++ b/src/manager/userdatabase_sqlite.cpp
 @@ -49,7 +49,7 @@ bool CUserDatabaseSQLite::Init()
@@ -1433,7 +1906,7 @@ index ed5fefb..31b0bcb 100644
  			return false;
  
  		DropSessions();
-@@ -4101,6 +4101,194 @@ int CUserDatabaseSQLite::SetAddons(int userID, vector<int>& addons)
+@@ -4101,6 +4101,261 @@ int CUserDatabaseSQLite::SetAddons(int userID, vector<int>& addons)
  	return 1;
  }
  
@@ -1537,6 +2010,7 @@ index ed5fefb..31b0bcb 100644
 +	{
 +		m_Database.exec(OBFUSCATE("CREATE TABLE IF NOT EXISTS UserWarbondUnlock (userID INT NOT NULL, warbondID INT NOT NULL, itemID INT NOT NULL, cost INT NOT NULL, time INT NOT NULL, PRIMARY KEY (userID, warbondID, itemID))"));
 +		m_Database.exec(OBFUSCATE("CREATE TABLE IF NOT EXISTS UserOrderProgress (userID INT NOT NULL, orderID INT NOT NULL, periodStart INT NOT NULL, progress INT NOT NULL, completed INT NOT NULL, PRIMARY KEY (userID, orderID))"));
++		m_Database.exec(OBFUSCATE("CREATE TABLE IF NOT EXISTS UserCounter (userID INT NOT NULL, mode INT NOT NULL, name TEXT NOT NULL, value INT NOT NULL, PRIMARY KEY (userID, mode, name))"));
 +	}
 +	catch (exception& e)
 +	{
@@ -1625,10 +2099,76 @@ index ed5fefb..31b0bcb 100644
 +	return 1;
 +}
 +
++int CUserDatabaseSQLite::GetCounters(int userID, vector<UserCounter_s>& counters)
++{
++	try
++	{
++		SQLite::Statement query(m_Database, OBFUSCATE("SELECT mode, name, value FROM UserCounter WHERE userID = ?"));
++		query.bind(1, userID);
++		while (query.executeStep())
++			counters.push_back({ query.getColumn(0).getInt(), query.getColumn(1).getString(), query.getColumn(2).getInt64() });
++	}
++	catch (exception& e)
++	{
++		Logger().Error(OBFUSCATE("CUserDatabaseSQLite::GetCounters: database internal error: %s, %d\n"), e.what(), m_Database.getErrorCode());
++		return 0;
++	}
++
++	return 1;
++}
++
++int CUserDatabaseSQLite::AddCounters(int userID, const vector<UserCounter_s>& counters, bool best)
++{
++	try
++	{
++		SQLite::Transaction transaction(m_Database);
++		SQLite::Statement query(m_Database, best
++			? "INSERT INTO UserCounter VALUES (?, ?, ?, ?) ON CONFLICT (userID, mode, name) DO UPDATE SET value = MAX(value, excluded.value)"
++			: "INSERT INTO UserCounter VALUES (?, ?, ?, ?) ON CONFLICT (userID, mode, name) DO UPDATE SET value = value + excluded.value");
++		for (auto& c : counters)
++		{
++			query.bind(1, userID);
++			query.bind(2, c.mode);
++			query.bind(3, c.name);
++			query.bind(4, (int64_t)c.value);
++			query.exec();
++			query.reset();
++		}
++		transaction.commit();
++	}
++	catch (exception& e)
++	{
++		Logger().Error(OBFUSCATE("CUserDatabaseSQLite::AddCounters: database internal error: %s, %d\n"), e.what(), m_Database.getErrorCode());
++		return 0;
++	}
++
++	return 1;
++}
++
++int CUserDatabaseSQLite::SetCounter(int userID, const UserCounter_s& counter)
++{
++	try
++	{
++		SQLite::Statement query(m_Database, OBFUSCATE("INSERT OR REPLACE INTO UserCounter VALUES (?, ?, ?, ?)"));
++		query.bind(1, userID);
++		query.bind(2, counter.mode);
++		query.bind(3, counter.name);
++		query.bind(4, (int64_t)counter.value);
++		query.exec();
++	}
++	catch (exception& e)
++	{
++		Logger().Error(OBFUSCATE("CUserDatabaseSQLite::SetCounter: database internal error: %s, %d\n"), e.what(), m_Database.getErrorCode());
++		return 0;
++	}
++
++	return 1;
++}
++
  int CUserDatabaseSQLite::GetUsersAssociatedWithIP(const string& ip, vector<CUserData>& userData)
  {
  	try
-@@ -6437,7 +6625,7 @@ int CUserDatabaseSQLite::GetUserClassModLoadOut(int userID, int slot, ClassModIn
+@@ -6437,7 +6692,7 @@ int CUserDatabaseSQLite::GetUserClassModLoadOut(int userID, int slot, ClassModIn
  {
  	try
  	{
@@ -1638,10 +2178,10 @@ index ed5fefb..31b0bcb 100644
  				std::vector<int> data;
  				std::stringstream ss(column);
 diff --git a/src/manager/userdatabase_sqlite.h b/src/manager/userdatabase_sqlite.h
-index 0e1d7d2..18175e4 100644
+index 0e1d7d2..8a23a7f 100644
 --- a/src/manager/userdatabase_sqlite.h
 +++ b/src/manager/userdatabase_sqlite.h
-@@ -109,6 +109,13 @@ public:
+@@ -109,6 +109,16 @@ public:
  	int SetAddons(int userID, std::vector<int>& addons);
  
  	int GetUsersAssociatedWithIP(const std::string& ip, std::vector<CUserData>& userData);
@@ -1651,15 +2191,23 @@ index 0e1d7d2..18175e4 100644
 +	int AddWarbondUnlock(int userID, const WarbondUnlock_s& unlock);
 +	int GetOrderProgress(int userID, std::vector<OrderProgress_s>& orders);
 +	int SetOrderProgress(int userID, const OrderProgress_s& order);
++	virtual int GetCounters(int userID, std::vector<UserCounter_s>& counters);
++	virtual int AddCounters(int userID, const std::vector<UserCounter_s>& counters, bool best);
++	virtual int SetCounter(int userID, const UserCounter_s& counter);
 +	bool CreateWarbondTables();
  	int GetUsersAssociatedWithHWID(const std::vector<unsigned char>& hwid, std::vector<CUserData>& userData);
  
  	// clan related
 diff --git a/src/manager/usermanager.cpp b/src/manager/usermanager.cpp
-index b426874..e7233a0 100644
+index b426874..7b10fda 100644
 --- a/src/manager/usermanager.cpp
 +++ b/src/manager/usermanager.cpp
-@@ -16,6 +16,8 @@
+@@ -1,3 +1,4 @@
++#include "medalmanager.h"
+ #include "usermanager.h"
+ #include "channelmanager.h"
+ #include "userdatabase.h"
+@@ -16,6 +17,8 @@
  #include "csvtable.h"
  #include "serverinstance.h"
  #include "serverconfig.h"
@@ -1668,7 +2216,7 @@ index b426874..e7233a0 100644
  
  using namespace std;
  
-@@ -316,7 +318,7 @@ bool CUserManager::OnVersionPacket(CReceivePacket* msg, IExtendedSocket* socket)
+@@ -316,7 +319,7 @@ bool CUserManager::OnVersionPacket(CReceivePacket* msg, IExtendedSocket* socket)
  		GuestData_s& data = socket->GetGuestData();
  		if (!data.isGuest)
  			g_PacketManager.SendVersion(socket, 0);
@@ -1677,7 +2225,7 @@ index b426874..e7233a0 100644
  			SendGuestUserPacket(socket);
  
  		data.isGuest = true;
-@@ -630,6 +632,252 @@ void CUserManager::SendGuestUserPacket(IExtendedSocket* socket)
+@@ -630,6 +633,252 @@ void CUserManager::SendGuestUserPacket(IExtendedSocket* socket)
  	g_PacketManager.SendUMsgNoticeMessageInChat(socket, OBFUSCATE("Server developers: Jusic, Hardee, NekoMeow, Smilex_Gamer, xRiseless. Our Discord: https://discord.gg/EvUAY6D"));
  }
  
@@ -1930,7 +2478,7 @@ index b426874..e7233a0 100644
  void CUserManager::SendLoginPacket(IUser* user, const CUserCharacter& character)
  {
  	IExtendedSocket* socket = user->GetExtendedSocket();
-@@ -659,7 +907,9 @@ void CUserManager::SendLoginPacket(IUser* user, const CUserCharacter& character)
+@@ -659,7 +908,9 @@ void CUserManager::SendLoginPacket(IUser* user, const CUserCharacter& character)
  
  	g_PacketManager.SendEventUnk(socket);
  
@@ -1941,7 +2489,15 @@ index b426874..e7233a0 100644
  
  	if (g_pServerConfig->activeMiniGamesFlag & kEventFlag_WeaponRelease)
  		g_MiniGameManager.SendWeaponReleaseUpdate(user);
-@@ -989,6 +1239,15 @@ void CUserManager::OnSecondTick(time_t curTime)
+@@ -879,6 +1130,7 @@ bool CUserManager::OnCharacterPacket(CReceivePacket* msg, IExtendedSocket* socke
+ 	g_QuestManager.OnUserLogin(user);
+ 
+ 	SendLoginPacket(user, character);
++	g_MedalManager.CheckMedals(user); // offline build: medals whose conditions changed (Data/Medals.json)
+ 
+ 	return true;
+ }
+@@ -989,6 +1241,15 @@ void CUserManager::OnSecondTick(time_t curTime)
  {
  	for (auto u : m_Users)
  		u->OnTick();
@@ -1957,7 +2513,15 @@ index b426874..e7233a0 100644
  }
  
  void CUserManager::SendNoticeMessageToAll(const string& msg)
-@@ -1285,7 +1544,7 @@ bool CUserManager::OnUserSurveyPacket(CReceivePacket* msg, IExtendedSocket* sock
+@@ -1082,6 +1343,7 @@ int CUserManager::LoginUser(IExtendedSocket* socket, const string& userName, con
+ 		g_QuestManager.OnUserLogin(newUser);
+ 
+ 		SendLoginPacket(newUser, character);
++		g_MedalManager.CheckMedals(newUser);
+ 	}
+ 
+ 	return LOGIN_OK;
+@@ -1285,7 +1547,7 @@ bool CUserManager::OnUserSurveyPacket(CReceivePacket* msg, IExtendedSocket* sock
  
  	IUser* user = GetUserBySocket(socket);
  	if (user == NULL)
@@ -1990,10 +2554,10 @@ index 3054001..9c14f6b 100644
  	void SendUserLoadout(IUser* user);
 diff --git a/src/manager/warbondmanager.cpp b/src/manager/warbondmanager.cpp
 new file mode 100644
-index 0000000..16208cd
+index 0000000..b621a36
 --- /dev/null
 +++ b/src/manager/warbondmanager.cpp
-@@ -0,0 +1,881 @@
+@@ -0,0 +1,913 @@
 +#include "warbondmanager.h"
 +#include "usermanager.h"
 +#include "userdatabase.h"
@@ -2005,6 +2569,7 @@ index 0000000..16208cd
 +#include "room/room.h"
 +#include "room/gamematch.h"
 +#include "bingomanager.h"
++#include "medalmanager.h"
 +
 +#include <fstream>
 +#include <set>
@@ -2199,6 +2764,10 @@ index 0000000..16208cd
 +				va("sv_cheats is on: this match's medals will be cut by %d%%.", m_Medals.cheatPenalty));
 +		}
 +		result = { { "ok", true }, { "match", match != NULL }, { "penalty", m_Medals.cheatPenalty } };
++	}
++	else if (req.method == "GET" && req.path == "/api/profile")
++	{
++		result = g_MedalManager.BuildProfile(user);
 +	}
 +	else if (req.method == "POST" && req.path == "/api/openview")
 +	{
@@ -2831,6 +3400,32 @@ index 0000000..16208cd
 +	return medals;
 +}
 +
++int CWarbondManager::CompletedPasses(IUser* user)
++{
++	set<int> owned = OwnedItems(user);
++	vector<WarbondUnlock_s> unlocks;
++	g_UserDatabase.GetWarbondUnlocks(user->GetID(), unlocks);
++	set<pair<int, int>> unlocked;
++	for (auto& u : unlocks)
++		unlocked.insert({ u.warbondID, u.itemID });
++	int completed = 0;
++	for (auto& wb : m_Warbonds)
++	{
++		bool any = false, all = true;
++		for (auto& page : wb.pages)
++			for (auto& item : page.items)
++			{
++				if (item.repeatable)
++					continue;
++				any = true;
++				if (!owned.count(item.itemID) && !unlocked.count({ wb.id, item.itemID }))
++					all = false;
++			}
++		completed += any && all;
++	}
++	return completed;
++}
++
 +void CWarbondManager::SetCheatPenalty(IUser* user, bool on)
 +{
 +	if (on)
@@ -2862,6 +3457,7 @@ index 0000000..16208cd
 +	}
 +	AdvanceOrders(user, -1, { { "LevelUps", newLevel - oldLevel }, { "Level", newLevel } });
 +	g_BingoManager.OnLevelUp(user, oldLevel, newLevel);
++	g_MedalManager.CheckMedals(user);
 +}
 +
 +vector<pair<int, int>> CWarbondManager::PassItems() const
@@ -2877,10 +3473,10 @@ index 0000000..16208cd
 +}
 diff --git a/src/manager/warbondmanager.h b/src/manager/warbondmanager.h
 new file mode 100644
-index 0000000..e6ee4e0
+index 0000000..3dda56f
 --- /dev/null
 +++ b/src/manager/warbondmanager.h
-@@ -0,0 +1,117 @@
+@@ -0,0 +1,119 @@
 +#pragma once
 +
 +#include <string>
@@ -2964,6 +3560,8 @@ index 0000000..e6ee4e0
 +	// non-repeatable items of the battle passes with their medal cost (bingo prizes)
 +	std::vector<std::pair<int, int>> PassItems() const;
 +	std::set<int> OwnedItems(IUser* user);
++	// battle passes whose every item (supplies aside) the player owns or has unlocked
++	int CompletedPasses(IUser* user);
 +
 +private:
 +	bool LoadConfig();
@@ -3376,6 +3974,19 @@ index 0000000..08e7a04
 +	std::string m_Root;
 +	ApiHandler m_ApiHandler;
 +};
+diff --git a/src/packet/packethelper_fulluserinfo.cpp b/src/packet/packethelper_fulluserinfo.cpp
+index 2321d64..af77a81 100644
+--- a/src/packet/packethelper_fulluserinfo.cpp
++++ b/src/packet/packethelper_fulluserinfo.cpp
+@@ -201,7 +201,7 @@ void CPacketHelper_FullUserInfo::Build(Buffer& buf, int userID, const CUserChara
+ 	{
+ 		vector<int> list = character.achievementList;
+ 		sort(list.begin(), list.end());
+-		buf.writeArray(PackAchievementList(character.achievementList));
++		buf.writeArray(PackAchievementList(list)); // offline build: the sorted list (the packer walks it in order)
+ 	}
+ 
+ 	if (character.lowFlag & UFLAG_LOW_UNK20)
 diff --git a/src/public/net/extendedsocket.h b/src/public/net/extendedsocket.h
 index 4c688f4..c1e0b2a 100644
 --- a/src/public/net/extendedsocket.h
@@ -3405,18 +4016,19 @@ index 4c688f4..c1e0b2a 100644
 +	bool m_bWouldBlock; // last read hit WOLFSSL_ERROR_WANT_READ/WRITE (non-blocking SSL, retry on next poll)
  };
 diff --git a/src/room/gamematch.cpp b/src/room/gamematch.cpp
-index 65418d8..9b6d2a2 100644
+index 65418d8..57f782e 100644
 --- a/src/room/gamematch.cpp
 +++ b/src/room/gamematch.cpp
-@@ -6,6 +6,7 @@
+@@ -6,6 +6,8 @@
  #include "manager/itemmanager.h"
  #include "manager/hostmanager.h"
  #include "manager/userdatabase.h"
 +#include "manager/warbondmanager.h"
++#include "manager/medalmanager.h"
  
  #include "user/userinventoryitem.h"
  
-@@ -19,6 +20,7 @@ CGameMatchUserStat::CGameMatchUserStat()
+@@ -19,6 +21,7 @@ CGameMatchUserStat::CGameMatchUserStat()
  	m_nDeaths = 0;
  	m_nPointsEarned = 0;
  	m_nBonusPointsEarned = 0;
@@ -3424,7 +4036,23 @@ index 65418d8..9b6d2a2 100644
  	m_nExpEarned = 0;
  	m_nBonusExpEarned = 0;
  	m_nItemBonusPoints = 0;
-@@ -271,6 +273,8 @@ void CGameMatch::OnUpdateKillCounter(IUser* user, int kills)
+@@ -209,6 +212,7 @@ void CGameMatch::Connect(IUser* user)
+ 	{
+ 		CGameMatchUserStat* userStat = new CGameMatchUserStat();
+ 		userStat->m_pUser = user;
++		userStat->m_tJoined = time(NULL);
+ 
+ 		m_UserStats.push_back(userStat);
+ 	}
+@@ -220,6 +224,7 @@ void CGameMatch::Disconnect(IUser* user)
+ 	if (stat)
+ 	{
+ 		g_QuestManager.OnGameMatchLeave(user, stat->m_TempQuestProgress, stat->m_TempQuestEventProgress);
++		g_MedalManager.OnMatchLeave(stat, this); // a player leaving before the end keeps their kills and time
+ 
+ 		delete stat;
+ 		m_UserStats.erase(remove(begin(m_UserStats), end(m_UserStats), stat), end(m_UserStats));
+@@ -271,6 +276,8 @@ void CGameMatch::OnUpdateKillCounter(IUser* user, int kills)
  	if (stat)
  	{
  		stat->UpdateKillsCount(kills);
@@ -3433,13 +4061,14 @@ index 65418d8..9b6d2a2 100644
  	}
  }
  
-@@ -292,7 +296,13 @@ void CGameMatch::OnKillEvent(IUser* user, GameMatch_KillEvent& killEvent)
+@@ -292,7 +299,14 @@ void CGameMatch::OnKillEvent(IUser* user, GameMatch_KillEvent& killEvent)
  
  	// don't count player suicide
  	if (killEvent.killerUserID != killEvent.victimUserID)
 +	{
  		stat->IncrementKillCount();
 +		stat->m_KillTypes[killEvent.victimKillType]++;
++		g_MedalManager.OnKill(stat, this, killEvent);
 +	}
 +	if (g_WarbondManager.LogKills())
 +		Logger().Info("KillEvent: killer %d (team %d) gun %d -> victim %d (team %d), killType %d, kills now %d\n", killEvent.killerUserID, killEvent.killerTeam,
@@ -3447,7 +4076,47 @@ index 65418d8..9b6d2a2 100644
  
  	g_QuestManager.OnKillEvent(stat, this, killEvent);
  
-@@ -430,9 +440,22 @@ void CGameMatch::OnKiteKill(IUser* user)
+@@ -356,6 +370,7 @@ void CGameMatch::OnBombExplode(IUser* user)
+ 	if (!stat)
+ 		return;
+ 
++	stat->m_Counters["Bombs"]++;
+ 	g_QuestManager.OnBombExplode(stat, this);
+ }
+ 
+@@ -365,6 +380,7 @@ void CGameMatch::OnBombDefuse(IUser* user)
+ 	if (!stat)
+ 		return;
+ 
++	stat->m_Counters["Bombs"]++;
+ 	g_QuestManager.OnBombDefuse(stat, this);
+ }
+ 
+@@ -374,6 +390,7 @@ void CGameMatch::OnHostageEscape(IUser* user)
+ 	if (!stat)
+ 		return;
+ 
++	stat->m_Counters["Hostages"]++;
+ 	g_QuestManager.OnHostageEscape(stat, this);
+ }
+ 
+@@ -383,6 +400,7 @@ void CGameMatch::OnMonsterKill(IUser* user, int monsterType)
+ 	if (!stat)
+ 		return;	
+ 
++	stat->m_Counters["MonsterKills"]++;
+ 	g_QuestManager.OnMonsterKill(stat, this, monsterType);
+ }
+ 
+@@ -391,6 +409,7 @@ void CGameMatch::OnDropBoxPickup(IUser* user, int rewardID)
+ 	CGameMatchUserStat* stat = GetGameUserStat(user);
+ 	if (!stat)
+ 		return;
++	stat->m_Counters["DropBoxes"]++;
+ 
+ #ifndef PUBLIC_RELEASE
+ 	if (m_nGameMode != 15 && m_nGameMode != 17 && m_nGameMode != 26 && m_nGameMode != 28)
+@@ -430,8 +449,22 @@ void CGameMatch::OnKiteKill(IUser* user)
  
  void CGameMatch::OnGameMatchEnd()
  {
@@ -3458,7 +4127,8 @@ index 65418d8..9b6d2a2 100644
 +
  	CalculateGameResult();
  	ApplyGameResult();
- 
++	g_MedalManager.OnMatchEnd(this); // statistics and medals
++
 +	if (m_bCheats)
 +		for (auto stat : m_UserStats)
 +		{
@@ -3466,11 +4136,10 @@ index 65418d8..9b6d2a2 100644
 +			g_PacketManager.SendUMsgNoticeMessageInChat(stat->m_pUser->GetExtendedSocket(),
 +				va("sv_cheats was on in this match: its medals were cut by %d%%.", g_WarbondManager.CheatPenalty()));
 +		}
-+
+ 
  	Logger().Info("CGameMatch::OnGameMatchEnd: gamemode: %d, CT rounds win count: %d, T rounds win count: %d\n", m_nGameMode, m_nCtWinCount, m_nTerWinCount);
  }
- 
-@@ -532,7 +555,6 @@ void CGameMatch::CalculateGameResult()
+@@ -532,7 +565,6 @@ void CGameMatch::CalculateGameResult()
  	CalculateFirstPlace();
  
  	int expCoef = GetExpCoefficient();
@@ -3478,7 +4147,7 @@ index 65418d8..9b6d2a2 100644
  
  	for (auto stat : m_UserStats)
  	{
-@@ -541,8 +563,21 @@ void CGameMatch::CalculateGameResult()
+@@ -541,8 +573,23 @@ void CGameMatch::CalculateGameResult()
  		// calc exp
  		stat->m_nExpEarned = stat->m_nKills > 0 ? expCoef * stat->m_nKills : expCoef;
  
@@ -3499,10 +4168,12 @@ index 65418d8..9b6d2a2 100644
 +			Logger().Info("KillTypes: user %d -> %s\n", user->GetID(), types.c_str());
 +		}
 +		stat->m_nPointsEarned = g_WarbondManager.OnMatchResult(user, m_nGameMode, stat->m_nKills, stat->m_nHeadshots, won, topPlayer);
++		stat->m_Counters["Wins"] += won;
++		stat->m_Counters["TopPlayer"] += topPlayer;
  
  		// calc bonus exp/points
  		auto bonusPercentageClass = find_if(g_pServerConfig->gameMatch.bonusPercentageClasses.begin(), g_pServerConfig->gameMatch.bonusPercentageClasses.end(),
-@@ -601,6 +636,10 @@ void CGameMatch::CalculateGameResult()
+@@ -601,6 +648,10 @@ void CGameMatch::CalculateGameResult()
  			}
  		}
  
@@ -3514,10 +4185,10 @@ index 65418d8..9b6d2a2 100644
  		{
  			stat->m_nExpEarned = 9999;
 diff --git a/src/room/gamematch.h b/src/room/gamematch.h
-index 68a4dc7..10628f1 100644
+index 68a4dc7..0dfb2a9 100644
 --- a/src/room/gamematch.h
 +++ b/src/room/gamematch.h
-@@ -57,6 +57,10 @@ public:
+@@ -57,6 +57,14 @@ public:
  
  	// zbs
  	int m_nRank;
@@ -3525,10 +4196,14 @@ index 68a4dc7..10628f1 100644
 +	// offline build: kills by victimKillType (telemetry, headshots) and headshots in this match
 +	std::map<int, int> m_KillTypes;
 +	int m_nHeadshots;
++	// offline build: statistics of this match for the profile and medals (CMedalManager), saved once
++	std::map<std::string, long long> m_Counters;
++	time_t m_tJoined = 0;
++	bool m_bStatsSaved = false;
  };
  
  class CGameMatch
-@@ -102,6 +106,7 @@ public:
+@@ -102,6 +110,7 @@ public:
  
  	int m_nGameMode;
  	int m_nMapID;

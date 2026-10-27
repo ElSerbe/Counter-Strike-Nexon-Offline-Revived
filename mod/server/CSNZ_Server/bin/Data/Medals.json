@@ -1,0 +1,4874 @@
+{
+ "Version": 1,
+ "Groups": [
+  "Account",
+  "Ranking",
+  "Combat",
+  "Original",
+  "Team Deathmatch",
+  "Zombie",
+  "Scenario",
+  "Soccer",
+  "Zombie Z",
+  "Zombie Evolution",
+  "Prop Hunt",
+  "Studio",
+  "Missions",
+  "Collection",
+  "Seasons"
+ ],
+ "Medals": [
+  {
+   "ID": 1,
+   "Resource": "Firststep",
+   "Name": "Great First Step",
+   "Group": "Account",
+   "Lore": "A medal for those who have escaped beginner status to become a true member of CSN:S.",
+   "Text": "Reach level 10",
+   "Conditions": [
+    {
+     "Level": 10
+    }
+   ]
+  },
+  {
+   "ID": 2,
+   "Resource": "Takecare",
+   "Name": "For Your Health",
+   "Group": "Account",
+   "Lore": "A suspicious-medal from the CSN:S Team to those who have played for 24 hours continuously.\n'Excessive game playing may be hazardous to your health.'",
+   "Text": "Play for 24 hours",
+   "Conditions": [
+    {
+     "Counter": "Seconds",
+     "Target": 86400
+    }
+   ]
+  },
+  {
+   "ID": 5,
+   "Resource": "BestClan",
+   "Name": "Family Ties",
+   "Group": "Account",
+   "Lore": "A medal given to players who are members of a Family that is within the top 10 of Family Ranking.",
+   "Text": "Win 500 matches",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 500
+    }
+   ]
+  },
+  {
+   "ID": 9,
+   "Resource": "Olduser",
+   "Name": "Veteran",
+   "Group": "Account",
+   "Lore": "Special thanks to players who have enjoyed Counter-Strike Nexon: Studio for many years!",
+   "Text": "Play on 30 different days",
+   "Conditions": [
+    {
+     "Counter": "DaysPlayed",
+     "Target": 30
+    }
+   ]
+  },
+  {
+   "ID": 11,
+   "Resource": "Csomania",
+   "Name": "CSN:S Fanatic",
+   "Group": "Account",
+   "Lore": "Awarded to dedicated fans for playing CSN:S for 2,000 or more hours.\nThe CSN:S Team is incredibly grateful for your support!",
+   "Text": "Play for 200 hours",
+   "Conditions": [
+    {
+     "Counter": "Seconds",
+     "Target": 720000
+    }
+   ]
+  },
+  {
+   "ID": 47,
+   "Resource": "PcDaily",
+   "Name": "Regular Customer",
+   "Group": "Account",
+   "Lore": "You are different from others! A medal given to regular customers who always receive the most premium service!",
+   "Text": "Play on 7 different days",
+   "Conditions": [
+    {
+     "Counter": "DaysPlayed",
+     "Target": 7
+    }
+   ]
+  },
+  {
+   "ID": 48,
+   "Resource": "HardPlayer",
+   "Name": "Gang",
+   "Group": "Account",
+   "Lore": "A medal given to those who unceasingly run through the map advancements.",
+   "Text": "Play 1,000 matches",
+   "Conditions": [
+    {
+     "Counter": "Matches",
+     "Target": 1000
+    }
+   ]
+  },
+  {
+   "ID": 50,
+   "Resource": "Veteran",
+   "Name": "Warhorse",
+   "Group": "Account",
+   "Lore": "The warhorse of the Family who's been through countless battles and hardships.",
+   "Text": "Play 2,000 matches",
+   "Conditions": [
+    {
+     "Counter": "Matches",
+     "Target": 2000
+    }
+   ]
+  },
+  {
+   "ID": 53,
+   "Resource": "ClanMaster",
+   "Name": "Family Master",
+   "Group": "Account",
+   "Lore": "A special medal given to Family masters who are responsible for 10 or more Family members.",
+   "Text": "Win 1,000 matches",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 1000
+    }
+   ]
+  },
+  {
+   "ID": 65,
+   "Resource": "CSONamed",
+   "Name": "CSN:S Named",
+   "Group": "Account",
+   "Lore": "A medal given to those who contributed internally and externally for the improvement of CSN:S.",
+   "Text": "Earn 50 other medals",
+   "Conditions": [
+    {
+     "Medals": 50
+    }
+   ]
+  },
+  {
+   "ID": 67,
+   "Resource": "Motherofsuccess",
+   "Name": "Failure",
+   "Group": "Account",
+   "Lore": "A medal that will be given to soldiers who have failed to enhance their weapons 3000 times",
+   "Text": "Die 5,000 times",
+   "Conditions": [
+    {
+     "Counter": "Deaths",
+     "Target": 5000
+    }
+   ]
+  },
+  {
+   "ID": 77,
+   "Resource": "ReturnHero",
+   "Name": "Returned Hero",
+   "Group": "Account",
+   "Lore": "A medal created to commemorate the return of the Family who shared in the glory of Counter-Strike Nexon: Studio.",
+   "Text": "Play on 20 different days",
+   "Conditions": [
+    {
+     "Counter": "DaysPlayed",
+     "Target": 20
+    }
+   ]
+  },
+  {
+   "ID": 78,
+   "Resource": "BestClanTop",
+   "Name": "Best Family",
+   "Group": "Account",
+   "Lore": "A special medal given to the best Family in Counter-Strike Nexon: Studio.",
+   "Text": "Win 2,000 matches",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 2000
+    }
+   ]
+  },
+  {
+   "ID": 79,
+   "Resource": "Csofriends",
+   "Name": "CSN:S Chief",
+   "Group": "Account",
+   "Lore": "A medal that will be given to the users who have invited friends and survived severe battle. With friends, there is nothing to be afraid of.",
+   "Text": "Earn 25 other medals",
+   "Conditions": [
+    {
+     "Medals": 25
+    }
+   ]
+  },
+  {
+   "ID": 92,
+   "Resource": "bestmanner",
+   "Name": "A Paragon of Conduct",
+   "Group": "Account",
+   "Lore": "It's a Medal that will be given to soldiers who practice good manners toward others",
+   "Text": "Play 100 matches",
+   "Conditions": [
+    {
+     "Counter": "Matches",
+     "Target": 100
+    }
+   ]
+  },
+  {
+   "ID": 110,
+   "Resource": "limitpass",
+   "Name": "Overcoming the Limit",
+   "Group": "Account",
+   "Lore": "A Ribbon given to those who achieved the rank of General of the Armies",
+   "Text": "Reach level 72",
+   "Conditions": [
+    {
+     "Level": 72
+    }
+   ]
+  },
+  {
+   "ID": 153,
+   "Resource": "10thbirthcelebrate",
+   "Name": "10th Anniversary",
+   "Group": "Account",
+   "Lore": "",
+   "Text": "Play on 10 different days",
+   "Conditions": [
+    {
+     "Counter": "DaysPlayed",
+     "Target": 10
+    }
+   ]
+  },
+  {
+   "ID": 163,
+   "Resource": "csogs2018",
+   "Name": "CSOGS 2018",
+   "Group": "Account",
+   "Lore": "We're giving this medal, along with our deepest gratitude, to all of you enthusiastic Survivors who participated in the CSOGS 2018.",
+   "Text": "Play on 50 different days",
+   "Conditions": [
+    {
+     "Counter": "DaysPlayed",
+     "Target": 50
+    }
+   ]
+  },
+  {
+   "ID": 174,
+   "Resource": "lv10000",
+   "Name": "CSN:S Judge",
+   "Group": "Account",
+   "Lore": "Reach Level 10,000",
+   "Text": "Reach level 50",
+   "Conditions": [
+    {
+     "Level": 50
+    }
+   ]
+  },
+  {
+   "ID": 175,
+   "Resource": "lv20000",
+   "Name": "CSN:S Enforcer",
+   "Group": "Account",
+   "Lore": "Reach Level 20,000",
+   "Text": "Reach level 55",
+   "Conditions": [
+    {
+     "Level": 55
+    }
+   ]
+  },
+  {
+   "ID": 176,
+   "Resource": "lv30000",
+   "Name": "CSN:S Dominator",
+   "Group": "Account",
+   "Lore": "Reach Level 30,000",
+   "Text": "Reach level 60",
+   "Conditions": [
+    {
+     "Level": 60
+    }
+   ]
+  },
+  {
+   "ID": 177,
+   "Resource": "lv40000",
+   "Name": "CSN:S Conquerer",
+   "Group": "Account",
+   "Lore": "Reach Level 40,000",
+   "Text": "Reach level 64",
+   "Conditions": [
+    {
+     "Level": 64
+    }
+   ]
+  },
+  {
+   "ID": 178,
+   "Resource": "lv50000",
+   "Name": "CSN:S Grim Reaper",
+   "Group": "Account",
+   "Lore": "Reach Level 50,000",
+   "Text": "Reach level 68",
+   "Conditions": [
+    {
+     "Level": 68
+    }
+   ]
+  },
+  {
+   "ID": 181,
+   "Resource": "lv100",
+   "Name": "CSN:S Soldier",
+   "Group": "Account",
+   "Lore": "Reach Level 100",
+   "Text": "Reach level 10",
+   "Conditions": [
+    {
+     "Level": 10
+    }
+   ]
+  },
+  {
+   "ID": 182,
+   "Resource": "lv500",
+   "Name": "CSN:S Elite",
+   "Group": "Account",
+   "Lore": "Reach Level 500",
+   "Text": "Reach level 20",
+   "Conditions": [
+    {
+     "Level": 20
+    }
+   ]
+  },
+  {
+   "ID": 183,
+   "Resource": "lv1000",
+   "Name": "CSN:S Ace",
+   "Group": "Account",
+   "Lore": "Reach Level 1,000",
+   "Text": "Reach level 30",
+   "Conditions": [
+    {
+     "Level": 30
+    }
+   ]
+  },
+  {
+   "ID": 184,
+   "Resource": "lv5000",
+   "Name": "CSN:S Master",
+   "Group": "Account",
+   "Lore": "Reach Level 5,000",
+   "Text": "Reach level 40",
+   "Conditions": [
+    {
+     "Level": 40
+    }
+   ]
+  },
+  {
+   "ID": 185,
+   "Resource": "lv60000",
+   "Name": "CSN:S Overlord",
+   "Group": "Account",
+   "Lore": "Reach Level 60,000",
+   "Text": "Reach level 70",
+   "Conditions": [
+    {
+     "Level": 70
+    }
+   ]
+  },
+  {
+   "ID": 186,
+   "Resource": "lv70000",
+   "Name": "CSN:S Hero",
+   "Group": "Account",
+   "Lore": "Reach Level 70,000",
+   "Text": "Reach level 71",
+   "Conditions": [
+    {
+     "Level": 71
+    }
+   ]
+  },
+  {
+   "ID": 187,
+   "Resource": "lv80000",
+   "Name": "CSN:S Transcendent",
+   "Group": "Account",
+   "Lore": "Reach Level 80,000",
+   "Text": "Reach level 72",
+   "Conditions": [
+    {
+     "Level": 72
+    }
+   ]
+  },
+  {
+   "ID": 188,
+   "Resource": "lv90000",
+   "Name": "CSN:S Incarnate",
+   "Group": "Account",
+   "Lore": "Reach Level 90,000",
+   "Text": "Reach level 72; Win 1,000 matches",
+   "Conditions": [
+    {
+     "Level": 72
+    },
+    {
+     "Counter": "Wins",
+     "Target": 1000
+    }
+   ]
+  },
+  {
+   "ID": 196,
+   "Resource": "richking",
+   "Name": "Rich King",
+   "Group": "Account",
+   "Lore": "",
+   "Text": "Hold 2,000 medals at once",
+   "Conditions": [
+    {
+     "Points": 2000
+    }
+   ]
+  },
+  {
+   "ID": 248,
+   "Resource": "kingdomtitle",
+   "Name": "Kingdom",
+   "Group": "Account",
+   "Lore": "A medal that proves your devotion to Kingdom",
+   "Text": "Play on 100 different days",
+   "Conditions": [
+    {
+     "Counter": "DaysPlayed",
+     "Target": 100
+    }
+   ]
+  },
+  {
+   "ID": 4,
+   "Resource": "Rank100",
+   "Name": "Rank 100",
+   "Group": "Ranking",
+   "Lore": "A medal given to players who are within the top 100 in Personal Ranking.",
+   "Text": "Finish first 100 times",
+   "Conditions": [
+    {
+     "Counter": "TopPlayer",
+     "Target": 100
+    }
+   ]
+  },
+  {
+   "ID": 35,
+   "Resource": "1stPlace",
+   "Name": "Battlefield God",
+   "Group": "Ranking",
+   "Lore": "A medal given to the person with the highest amount of cumulative EXP.",
+   "Text": "Finish first 500 times",
+   "Conditions": [
+    {
+     "Counter": "TopPlayer",
+     "Target": 500
+    }
+   ]
+  },
+  {
+   "ID": 36,
+   "Resource": "2ndPlace",
+   "Name": "Battlefield Legend",
+   "Group": "Ranking",
+   "Lore": "A medal given to the person with the 2nd highest amount of cumulative EXP.",
+   "Text": "Finish first 300 times",
+   "Conditions": [
+    {
+     "Counter": "TopPlayer",
+     "Target": 300
+    }
+   ]
+  },
+  {
+   "ID": 37,
+   "Resource": "3rdPlace",
+   "Name": "Battlefield Lord",
+   "Group": "Ranking",
+   "Lore": "A medal given to the person with the 3rd highest amount of cumulative EXP.",
+   "Text": "Finish first 150 times",
+   "Conditions": [
+    {
+     "Counter": "TopPlayer",
+     "Target": 150
+    }
+   ]
+  },
+  {
+   "ID": 38,
+   "Resource": "4thPlace",
+   "Name": "Battlefield Hero",
+   "Group": "Ranking",
+   "Lore": "A medal given to the person with the 4th highest amount of cumulative EXP.",
+   "Text": "Finish first 50 times",
+   "Conditions": [
+    {
+     "Counter": "TopPlayer",
+     "Target": 50
+    }
+   ]
+  },
+  {
+   "ID": 39,
+   "Resource": "5thPlace",
+   "Name": "Battlefield Protector",
+   "Group": "Ranking",
+   "Lore": "A medal given to the person with the 5th highest amount of cumulative EXP.",
+   "Text": "Finish first 25 times",
+   "Conditions": [
+    {
+     "Counter": "TopPlayer",
+     "Target": 25
+    }
+   ]
+  },
+  {
+   "ID": 54,
+   "Resource": "Rookie",
+   "Name": "CSN:S Challenger",
+   "Group": "Ranking",
+   "Lore": "An honorable medal given to those who made the finals at CSN:S League.",
+   "Text": "Finish first 200 times",
+   "Conditions": [
+    {
+     "Counter": "TopPlayer",
+     "Target": 200
+    }
+   ]
+  },
+  {
+   "ID": 55,
+   "Resource": "Champ",
+   "Name": "CSN:S Champ",
+   "Group": "Ranking",
+   "Lore": "The most honorable of medals given to CSN:S League winners to officially recognize them as a CSN:S champion.",
+   "Text": "Finish first 1,000 times",
+   "Conditions": [
+    {
+     "Counter": "TopPlayer",
+     "Target": 1000
+    }
+   ]
+  },
+  {
+   "ID": 99,
+   "Resource": "2014nationalChamp",
+   "Name": "National Champion 2014",
+   "Group": "Ranking",
+   "Lore": "",
+   "Text": "Finish first 750 times",
+   "Conditions": [
+    {
+     "Counter": "TopPlayer",
+     "Target": 750
+    }
+   ]
+  },
+  {
+   "ID": 100,
+   "Resource": "2014WorldChamp",
+   "Name": "World Champion 2014",
+   "Group": "Ranking",
+   "Lore": "",
+   "Text": "Finish first 2,000 times",
+   "Conditions": [
+    {
+     "Counter": "TopPlayer",
+     "Target": 2000
+    }
+   ]
+  },
+  {
+   "ID": 123,
+   "Resource": "ex_rookie",
+   "Name": "Challenger Expert",
+   "Group": "Ranking",
+   "Lore": "",
+   "Text": "Finish first 400 times",
+   "Conditions": [
+    {
+     "Counter": "TopPlayer",
+     "Target": 400
+    }
+   ]
+  },
+  {
+   "ID": 124,
+   "Resource": "ex_champ",
+   "Name": "Champion Expert",
+   "Group": "Ranking",
+   "Lore": "",
+   "Text": "Finish first 1,500 times",
+   "Conditions": [
+    {
+     "Counter": "TopPlayer",
+     "Target": 1500
+    }
+   ]
+  },
+  {
+   "ID": 125,
+   "Resource": "2016nationalChamp",
+   "Name": "National Champion 2016",
+   "Group": "Ranking",
+   "Lore": "",
+   "Text": "Finish first 1,250 times",
+   "Conditions": [
+    {
+     "Counter": "TopPlayer",
+     "Target": 1250
+    }
+   ]
+  },
+  {
+   "ID": 126,
+   "Resource": "2016WorldChamp",
+   "Name": "World Champion 2016",
+   "Group": "Ranking",
+   "Lore": "",
+   "Text": "Finish first 3,000 times",
+   "Conditions": [
+    {
+     "Counter": "TopPlayer",
+     "Target": 3000
+    }
+   ]
+  },
+  {
+   "ID": 127,
+   "Resource": "bronze",
+   "Name": "Bronze",
+   "Group": "Ranking",
+   "Lore": "A ribbon given to users who have achieved the rank of Bronze",
+   "Text": "Win 25 matches",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 25
+    }
+   ]
+  },
+  {
+   "ID": 128,
+   "Resource": "silver",
+   "Name": "Silver",
+   "Group": "Ranking",
+   "Lore": "A ribbon given to users who have achieves the rank of Silver",
+   "Text": "Win 75 matches",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 75
+    }
+   ]
+  },
+  {
+   "ID": 129,
+   "Resource": "gold",
+   "Name": "Gold",
+   "Group": "Ranking",
+   "Lore": "A ribbon given to users who have achieves the rank of Gold",
+   "Text": "Win 150 matches",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 150
+    }
+   ]
+  },
+  {
+   "ID": 130,
+   "Resource": "platinum",
+   "Name": "Platinum",
+   "Group": "Ranking",
+   "Lore": "A ribbon given to users who have achieves the rank of Platinum",
+   "Text": "Win 300 matches",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 300
+    }
+   ]
+  },
+  {
+   "ID": 131,
+   "Resource": "diamond",
+   "Name": "Diamond",
+   "Group": "Ranking",
+   "Lore": "A ribbon given to users who have achieves the rank of Diamond",
+   "Text": "Win 600 matches",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 600
+    }
+   ]
+  },
+  {
+   "ID": 132,
+   "Resource": "vip",
+   "Name": "VIP",
+   "Group": "Ranking",
+   "Lore": "A ribbon given to users who have achieves the rank of VIP",
+   "Text": "Win 1,200 matches",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 1200
+    }
+   ]
+  },
+  {
+   "ID": 133,
+   "Resource": "vvip",
+   "Name": "VVIP",
+   "Group": "Ranking",
+   "Lore": "A ribbon given to users who have achieves the rank of VVIP",
+   "Text": "Win 2,500 matches",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 2500
+    }
+   ]
+  },
+  {
+   "ID": 263,
+   "Resource": "leaguemaster",
+   "Name": "Master League",
+   "Group": "Ranking",
+   "Lore": "A medal granted to players who maintained a Master Rank when the league ended.",
+   "Text": "Win 5,000 matches",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 5000
+    }
+   ]
+  },
+  {
+   "ID": 264,
+   "Resource": "leaguediamond",
+   "Name": "Diamond League",
+   "Group": "Ranking",
+   "Lore": "A medal granted to players who maintained a Diamond Rank when the league ended.",
+   "Text": "Win 3,000 matches",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 3000
+    }
+   ]
+  },
+  {
+   "ID": 3,
+   "Resource": "Headhunter",
+   "Name": "Head Hunter",
+   "Group": "Combat",
+   "Lore": "A medal given to players who have scored 1,000 or more headshots.",
+   "Text": "Score 1,000 headshots",
+   "Conditions": [
+    {
+     "Counter": "Headshots",
+     "Target": 1000
+    }
+   ]
+  },
+  {
+   "ID": 10,
+   "Resource": "SwordMaster",
+   "Name": "Close and Personal",
+   "Group": "Combat",
+   "Lore": "A medal given to players who have killed opponent 10,000 times or more using melee weapons.",
+   "Text": "Score 1,000 melee kills",
+   "Conditions": [
+    {
+     "Counter": "MeleeKills",
+     "Target": 1000
+    }
+   ]
+  },
+  {
+   "ID": 25,
+   "Resource": "KillerF",
+   "Name": "Swatter",
+   "Group": "Combat",
+   "Lore": "Awarded to players who have proven the can double as a bug-zapper.",
+   "Text": "Score 1,000 shotgun kills",
+   "Conditions": [
+    {
+     "Counter": "ShotgunKills",
+     "Target": 1000
+    }
+   ]
+  },
+  {
+   "ID": 27,
+   "Resource": "Avenger",
+   "Name": "Bitter",
+   "Group": "Combat",
+   "Lore": "A medal given to combatants who seek revenge at all cost.",
+   "Text": "Score 5,000 kills",
+   "Conditions": [
+    {
+     "Counter": "Kills",
+     "Target": 5000
+    }
+   ]
+  },
+  {
+   "ID": 34,
+   "Resource": "300Kite",
+   "Name": "Killer K",
+   "Group": "Combat",
+   "Lore": "A medal given to those who knock down kites flying in the cold winter sky.",
+   "Text": "Score 3,000 rifle kills",
+   "Conditions": [
+    {
+     "Counter": "RifleKills",
+     "Target": 3000
+    }
+   ]
+  },
+  {
+   "ID": 49,
+   "Resource": "Ace",
+   "Name": "First Class Marksman",
+   "Group": "Combat",
+   "Lore": "The Family's pointman. I am the First Class Marksman",
+   "Text": "Score 5,000 headshots",
+   "Conditions": [
+    {
+     "Counter": "Headshots",
+     "Target": 5000
+    }
+   ]
+  },
+  {
+   "ID": 56,
+   "Resource": "MultiKill",
+   "Name": "Godlike",
+   "Group": "Combat",
+   "Lore": "A medal given to those who are fear incarnate and lead all enemies to death, the one whom no one has yet to meet and survive.",
+   "Text": "Score 50 kills in one match",
+   "Conditions": [
+    {
+     "Counter": "BestKills",
+     "Target": 50
+    }
+   ]
+  },
+  {
+   "ID": 61,
+   "Resource": "HiddenChaser",
+   "Name": "Hawkeye",
+   "Group": "Combat",
+   "Lore": "A medal given to those who effectively suppress the Hidden in Fun Mode.",
+   "Text": "Score 1,000 pistol kills",
+   "Conditions": [
+    {
+     "Counter": "PistolKills",
+     "Target": 1000
+    }
+   ]
+  },
+  {
+   "ID": 64,
+   "Resource": "DemolitionMan",
+   "Name": "Demo Man",
+   "Group": "Combat",
+   "Lore": "A medal given to a person that destroys everything in sight in Bazooka Battle.",
+   "Text": "Score 500 grenade kills",
+   "Conditions": [
+    {
+     "Counter": "GrenadeKills",
+     "Target": 500
+    }
+   ]
+  },
+  {
+   "ID": 69,
+   "Resource": "AllroundSoldier",
+   "Name": "Weapon Specialist",
+   "Group": "Combat",
+   "Lore": "A medal given to those that can handle all categories of weapons well, making them well prepared for all arenas of battle.",
+   "Text": "Score 100 pistol kills; Score 100 shotgun kills; Score 100 SMG kills; Score 100 rifle kills; Score 100 machine gun kills; Score 100 melee kills",
+   "Conditions": [
+    {
+     "Counter": "PistolKills",
+     "Target": 100
+    },
+    {
+     "Counter": "ShotgunKills",
+     "Target": 100
+    },
+    {
+     "Counter": "SmgKills",
+     "Target": 100
+    },
+    {
+     "Counter": "RifleKills",
+     "Target": 100
+    },
+    {
+     "Counter": "MgKills",
+     "Target": 100
+    },
+    {
+     "Counter": "MeleeKills",
+     "Target": 100
+    }
+   ]
+  },
+  {
+   "ID": 75,
+   "Resource": "battlefield",
+   "Name": "Rain of Fire",
+   "Group": "Combat",
+   "Lore": "A medal given to those who accomplish great deeds in battles where bullets fall like rain.",
+   "Text": "Score 2,000 machine gun kills",
+   "Conditions": [
+    {
+     "Counter": "MgKills",
+     "Target": 2000
+    }
+   ]
+  },
+  {
+   "ID": 85,
+   "Resource": "Berserk",
+   "Name": "Berserk",
+   "Group": "Combat",
+   "Lore": "A medal awarded to soldiers who truly went into Beast mode.",
+   "Text": "Score 80 kills in one match",
+   "Conditions": [
+    {
+     "Counter": "BestKills",
+     "Target": 80
+    }
+   ]
+  },
+  {
+   "ID": 103,
+   "Resource": "weaponmaster",
+   "Name": "Weapon Master",
+   "Group": "Combat",
+   "Lore": "A badge given to a person who can fight in battle with any kind of gun.",
+   "Text": "Score 1,000 pistol kills; Score 1,000 shotgun kills; Score 1,000 SMG kills; Score 1,000 rifle kills; Score 1,000 machine gun kills; Score 1,000 melee kills",
+   "Conditions": [
+    {
+     "Counter": "PistolKills",
+     "Target": 1000
+    },
+    {
+     "Counter": "ShotgunKills",
+     "Target": 1000
+    },
+    {
+     "Counter": "SmgKills",
+     "Target": 1000
+    },
+    {
+     "Counter": "RifleKills",
+     "Target": 1000
+    },
+    {
+     "Counter": "MgKills",
+     "Target": 1000
+    },
+    {
+     "Counter": "MeleeKills",
+     "Target": 1000
+    }
+   ]
+  },
+  {
+   "ID": 120,
+   "Resource": "adballoon",
+   "Name": "Killer B",
+   "Group": "Combat",
+   "Lore": "The one who silently took care of the floating balloons, Killer B",
+   "Text": "Score 2,000 SMG kills",
+   "Conditions": [
+    {
+     "Counter": "SmgKills",
+     "Target": 2000
+    }
+   ]
+  },
+  {
+   "ID": 154,
+   "Resource": "icanfly",
+   "Name": "I believe I can fly",
+   "Group": "Combat",
+   "Lore": "A medal awarded to those who only ever wanted to fly.",
+   "Text": "Defeat 10,000 AI soldiers",
+   "Conditions": [
+    {
+     "Counter": "BotKills",
+     "Target": 10000
+    }
+   ]
+  },
+  {
+   "ID": 156,
+   "Resource": "claytargetshooting",
+   "Name": "Clay Shooter",
+   "Group": "Combat",
+   "Lore": "A medal awarded to those who could easily win a clay shooting competition.",
+   "Text": "Defeat 2,000 AI soldiers",
+   "Conditions": [
+    {
+     "Counter": "BotKills",
+     "Target": 2000
+    }
+   ]
+  },
+  {
+   "ID": 6,
+   "Resource": "BotMaster",
+   "Name": "AI Master",
+   "Group": "Original",
+   "Lore": "A ribbon given to users who have opened AI mode elite difficulty.",
+   "Text": "Win 200 matches in AI modes",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 200,
+     "Modes": [
+      3,
+      4,
+      5
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 22,
+   "Resource": "BombPro",
+   "Name": "Explosive Expert",
+   "Group": "Original",
+   "Lore": "The ultimate expert on explosives. A ribbon given to users who have installed and defused a lot of explosives in Original, Original (AI) and Basic modes.",
+   "Text": "Plant or defuse 100 bombs in Original modes",
+   "Conditions": [
+    {
+     "Counter": "Bombs",
+     "Target": 100,
+     "Modes": [
+      0,
+      3,
+      6,
+      7,
+      23,
+      42
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 31,
+   "Resource": "Conqueror",
+   "Name": "Conqueror",
+   "Group": "Original",
+   "Lore": "A medal given to warriors who have contributed to their team's victory in Metal Arena by occupying the base.",
+   "Text": "Win 100 matches in Original modes",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 100,
+     "Modes": [
+      0,
+      3,
+      6,
+      7,
+      23,
+      42
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 32,
+   "Resource": "GoHome",
+   "Name": "Homeward Bound",
+   "Group": "Original",
+   "Lore": "A medal given to those who have a knack for slipping into home base at the perfect time in Metal Arena.",
+   "Text": "Rescue 100 hostages in Original modes",
+   "Conditions": [
+    {
+     "Counter": "Hostages",
+     "Target": 100,
+     "Modes": [
+      0,
+      3,
+      6,
+      7,
+      23,
+      42
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 33,
+   "Resource": "MetalHero",
+   "Name": "Metal Hero",
+   "Group": "Original",
+   "Lore": "A hero who has long fought this battle. All must take caution when this Hero arrives in Metal Arena.",
+   "Text": "Win 300 matches in Original modes",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 300,
+     "Modes": [
+      0,
+      3,
+      6,
+      7,
+      23,
+      42
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 72,
+   "Resource": "Assistant",
+   "Name": "Reliable",
+   "Group": "Original",
+   "Lore": "A medal given to those who quietly aided the team's victory in Basic mode.",
+   "Text": "Win 50 matches in AI modes",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 50,
+     "Modes": [
+      3,
+      4,
+      5
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 88,
+   "Resource": "OriginalHQ",
+   "Name": "Original HQ",
+   "Group": "Original",
+   "Lore": "A medal that will be given to users who are in the Original League Headquarters",
+   "Text": "Play 500 matches in Original modes",
+   "Conditions": [
+    {
+     "Counter": "Matches",
+     "Target": 500,
+     "Modes": [
+      0,
+      3,
+      6,
+      7,
+      23,
+      42
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 158,
+   "Resource": "agent",
+   "Name": "Agent",
+   "Group": "Original",
+   "Lore": "A medal awarded to those who despise weaker agents than themselves.",
+   "Text": "Win 50 matches in Super Soldier",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 50,
+     "Modes": [
+      57
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 26,
+   "Resource": "TDMWinner",
+   "Name": "Victor",
+   "Group": "Team Deathmatch",
+   "Lore": "A medal given to those that know how to lead their team to victory in Team Deathmatch.",
+   "Text": "Win 100 matches in Team Deathmatch modes",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 100,
+     "Modes": [
+      2,
+      5,
+      19
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 91,
+   "Resource": "DeathmatchHQ",
+   "Name": "Deathmatch HQ",
+   "Group": "Team Deathmatch",
+   "Lore": "A medal that will be given to users who are in the Death League Headquarters",
+   "Text": "Play 500 matches in Original, Deathmatch and Team Deathmatch",
+   "Conditions": [
+    {
+     "Counter": "Matches",
+     "Target": 500,
+     "Modes": [
+      0,
+      3,
+      6,
+      7,
+      23,
+      42,
+      2,
+      5,
+      19,
+      1,
+      4,
+      22
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 106,
+   "Resource": "bingbing",
+   "Name": "Round and Round",
+   "Group": "Team Deathmatch",
+   "Lore": "Medal given to those who have won a lot in Sudden Death.",
+   "Text": "Win 50 matches in Deathmatch modes",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 50,
+     "Modes": [
+      1,
+      4,
+      22
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 179,
+   "Resource": "tdmeventhonor",
+   "Name": "TDM Event Killer",
+   "Group": "Team Deathmatch",
+   "Lore": "A medal awarded to those who reached Top 100 in kill counts for the 2019 Team Deathmatch Improvement Event.",
+   "Text": "Score 5,000 kills in Team Deathmatch modes",
+   "Conditions": [
+    {
+     "Counter": "Kills",
+     "Target": 5000,
+     "Modes": [
+      2,
+      5,
+      19
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 7,
+   "Resource": "Survivor",
+   "Name": "Survival Master",
+   "Group": "Zombie",
+   "Lore": "A medal given to those who have survived 5,000 times or more in Zombie (Original, Mutant, Hero) mode.",
+   "Text": "Win 200 matches in Zombie (Original, Mutation, Hero)",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 200,
+     "Modes": [
+      8,
+      9,
+      14
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 8,
+   "Resource": "ZombieHunter",
+   "Name": "Zombie Hunter",
+   "Group": "Zombie",
+   "Lore": "A medal given to those who have killed 5,000 more Zombies in Zombie (Original, Mutant, Hero) mode.",
+   "Text": "Kill 2,000 zombies in Zombie (Original, Mutation, Hero)",
+   "Conditions": [
+    {
+     "Counter": "ZombieKills",
+     "Target": 2000,
+     "Modes": [
+      8,
+      9,
+      14
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 24,
+   "Resource": "Darwin",
+   "Name": "Dead Growth",
+   "Group": "Zombie",
+   "Lore": "A medal for Zombies who have mastered the evolutions of their form.",
+   "Text": "Infect 500 humans in Zombie (Original, Mutation, Hero)",
+   "Conditions": [
+    {
+     "Counter": "Infections",
+     "Target": 500,
+     "Modes": [
+      8,
+      9,
+      14
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 51,
+   "Resource": "Busters",
+   "Name": "Zombie Busters",
+   "Group": "Zombie",
+   "Lore": "No one can come close their abilities in hunting Zombies! Could it be the same for hunting humans...?",
+   "Text": "Kill 10,000 zombies in any zombie mode",
+   "Conditions": [
+    {
+     "Counter": "ZombieKills",
+     "Target": 10000,
+     "Modes": [
+      8,
+      9,
+      14,
+      29,
+      35,
+      36,
+      44,
+      45,
+      54,
+      56,
+      58,
+      20,
+      24,
+      30,
+      32,
+      37,
+      43
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 63,
+   "Resource": "MasterofEscape",
+   "Name": "Escape",
+   "Group": "Zombie",
+   "Lore": "A medal given to a person that can escape zombies with quick reflexes and outstanding determination.",
+   "Text": "Win 50 matches in Zombie Escape",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 50,
+     "Modes": [
+      20
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 68,
+   "Resource": "Phoenix",
+   "Name": "Phoenix",
+   "Group": "Zombie",
+   "Lore": "A medal given to those with phoenix-like qualities that can survive to the very end.",
+   "Text": "Win 500 matches in any zombie mode",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 500,
+     "Modes": [
+      8,
+      9,
+      14,
+      29,
+      35,
+      36,
+      44,
+      45,
+      54,
+      56,
+      58,
+      20,
+      24,
+      30,
+      32,
+      37,
+      43
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 71,
+   "Resource": "BotZMaster",
+   "Name": "Zombie Master",
+   "Group": "Zombie",
+   "Lore": "A ribbon given to users who have opened Zombie mode elite difficulty.",
+   "Text": "Win 200 matches in Zombie (AI)",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 200,
+     "Modes": [
+      24
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 74,
+   "Resource": "Infecter",
+   "Name": "Infector",
+   "Group": "Zombie",
+   "Lore": "A medal given to those who can join forces with the enemy in order to survive.",
+   "Text": "Infect 250 humans in any zombie mode",
+   "Conditions": [
+    {
+     "Counter": "Infections",
+     "Target": 250,
+     "Modes": [
+      8,
+      9,
+      14,
+      29,
+      35,
+      36,
+      44,
+      45,
+      54,
+      56,
+      58,
+      20,
+      24,
+      30,
+      32,
+      37,
+      43
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 89,
+   "Resource": "ZombieHQ",
+   "Name": "Zombie HQ",
+   "Group": "Zombie",
+   "Lore": "A medal that will be given to users who are in the Zombie League Headquarters",
+   "Text": "Play 500 matches in any zombie mode",
+   "Conditions": [
+    {
+     "Counter": "Matches",
+     "Target": 500,
+     "Modes": [
+      8,
+      9,
+      14,
+      29,
+      35,
+      36,
+      44,
+      45,
+      54,
+      56,
+      58,
+      20,
+      24,
+      30,
+      32,
+      37,
+      43
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 107,
+   "Resource": "hellozombie",
+   "Name": "Nice to be a zombie",
+   "Group": "Zombie",
+   "Lore": "Medal awarded to the person who finds many zombies.",
+   "Text": "Play 300 matches in any zombie mode",
+   "Conditions": [
+    {
+     "Counter": "Matches",
+     "Target": 300,
+     "Modes": [
+      8,
+      9,
+      14,
+      29,
+      35,
+      36,
+      44,
+      45,
+      54,
+      56,
+      58,
+      20,
+      24,
+      30,
+      32,
+      37,
+      43
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 134,
+   "Resource": "speedzombiemaster",
+   "Name": "Light Zombie Master",
+   "Group": "Zombie",
+   "Lore": "A medal given to users who have infected a human 10,000 times as Light Zombie.",
+   "Text": "Infect 100 humans in any zombie mode",
+   "Conditions": [
+    {
+     "Counter": "Infections",
+     "Target": 100,
+     "Modes": [
+      8,
+      9,
+      14,
+      29,
+      35,
+      36,
+      44,
+      45,
+      54,
+      56,
+      58,
+      20,
+      24,
+      30,
+      32,
+      37,
+      43
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 135,
+   "Resource": "heavyzombiemaster",
+   "Name": "Heavy Zombie Master",
+   "Group": "Zombie",
+   "Lore": "A medal given to users who have infected a human 10,000 times as Heavy Zombie.",
+   "Text": "Infect 200 humans in any zombie mode",
+   "Conditions": [
+    {
+     "Counter": "Infections",
+     "Target": 200,
+     "Modes": [
+      8,
+      9,
+      14,
+      29,
+      35,
+      36,
+      44,
+      45,
+      54,
+      56,
+      58,
+      20,
+      24,
+      30,
+      32,
+      37,
+      43
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 136,
+   "Resource": "normalzombiemaster",
+   "Name": "Zombie Master",
+   "Group": "Zombie",
+   "Lore": "A medal given to users who have infected a human 10,000 times as a zombie.",
+   "Text": "Infect 50 humans in any zombie mode",
+   "Conditions": [
+    {
+     "Counter": "Infections",
+     "Target": 50,
+     "Modes": [
+      8,
+      9,
+      14,
+      29,
+      35,
+      36,
+      44,
+      45,
+      54,
+      56,
+      58,
+      20,
+      24,
+      30,
+      32,
+      37,
+      43
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 137,
+   "Resource": "deimos2master",
+   "Name": "Ganymede Master",
+   "Group": "Zombie",
+   "Lore": "A medal given to users who have infected a human 10,000 times as Ganymede.",
+   "Text": "Infect 750 humans in any zombie mode",
+   "Conditions": [
+    {
+     "Counter": "Infections",
+     "Target": 750,
+     "Modes": [
+      8,
+      9,
+      14,
+      29,
+      35,
+      36,
+      44,
+      45,
+      54,
+      56,
+      58,
+      20,
+      24,
+      30,
+      32,
+      37,
+      43
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 138,
+   "Resource": "deimosmaster",
+   "Name": "Deimos Master",
+   "Group": "Zombie",
+   "Lore": "A medal given to users who have infected a human 10,000 times as Deimos.",
+   "Text": "Infect 500 humans in any zombie mode",
+   "Conditions": [
+    {
+     "Counter": "Infections",
+     "Target": 500,
+     "Modes": [
+      8,
+      9,
+      14,
+      29,
+      35,
+      36,
+      44,
+      45,
+      54,
+      56,
+      58,
+      20,
+      24,
+      30,
+      32,
+      37,
+      43
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 139,
+   "Resource": "witchmaster",
+   "Name": "Banshee Master",
+   "Group": "Zombie",
+   "Lore": "A medal given to users who have infected a human 10,000 times as Banshee.",
+   "Text": "Infect 1,000 humans in any zombie mode",
+   "Conditions": [
+    {
+     "Counter": "Infections",
+     "Target": 1000,
+     "Modes": [
+      8,
+      9,
+      14,
+      29,
+      35,
+      36,
+      44,
+      45,
+      54,
+      56,
+      58,
+      20,
+      24,
+      30,
+      32,
+      37,
+      43
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 140,
+   "Resource": "boomerzombiemaster",
+   "Name": "Venom Guard Master",
+   "Group": "Zombie",
+   "Lore": "A medal given to users who have infected a human 10,000 times as Venom Guard.",
+   "Text": "Infect 1,500 humans in any zombie mode",
+   "Conditions": [
+    {
+     "Counter": "Infections",
+     "Target": 1500,
+     "Modes": [
+      8,
+      9,
+      14,
+      29,
+      35,
+      36,
+      44,
+      45,
+      54,
+      56,
+      58,
+      20,
+      24,
+      30,
+      32,
+      37,
+      43
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 141,
+   "Resource": "zombidoctormaster",
+   "Name": "Voodoo Zombie Master",
+   "Group": "Zombie",
+   "Lore": "A medal given to users who have infected a human 10,000 times as Voodoo Zombie.",
+   "Text": "Infect 300 humans in any zombie mode",
+   "Conditions": [
+    {
+     "Counter": "Infections",
+     "Target": 300,
+     "Modes": [
+      8,
+      9,
+      14,
+      29,
+      35,
+      36,
+      44,
+      45,
+      54,
+      56,
+      58,
+      20,
+      24,
+      30,
+      32,
+      37,
+      43
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 142,
+   "Resource": "pczombiemaster",
+   "Name": "Psycho Zombie Master",
+   "Group": "Zombie",
+   "Lore": "A medal given to users who have infected a human 10,000 times as Psycho Zombie.",
+   "Text": "Infect 400 humans in any zombie mode",
+   "Conditions": [
+    {
+     "Counter": "Infections",
+     "Target": 400,
+     "Modes": [
+      8,
+      9,
+      14,
+      29,
+      35,
+      36,
+      44,
+      45,
+      54,
+      56,
+      58,
+      20,
+      24,
+      30,
+      32,
+      37,
+      43
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 143,
+   "Resource": "undertakermaster",
+   "Name": "Stamper Master",
+   "Group": "Zombie",
+   "Lore": "A medal given to users who have infected a human 10,000 times as Stamper.",
+   "Text": "Infect 1,250 humans in any zombie mode",
+   "Conditions": [
+    {
+     "Counter": "Infections",
+     "Target": 1250,
+     "Modes": [
+      8,
+      9,
+      14,
+      29,
+      35,
+      36,
+      44,
+      45,
+      54,
+      56,
+      58,
+      20,
+      24,
+      30,
+      32,
+      37,
+      43
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 144,
+   "Resource": "residentzombiemaster",
+   "Name": "Sting Finger Master",
+   "Group": "Zombie",
+   "Lore": "A medal given to users who have infected a human 10,000 times as Sting Finger.",
+   "Text": "Infect 2,000 humans in any zombie mode",
+   "Conditions": [
+    {
+     "Counter": "Infections",
+     "Target": 2000,
+     "Modes": [
+      8,
+      9,
+      14,
+      29,
+      35,
+      36,
+      44,
+      45,
+      54,
+      56,
+      58,
+      20,
+      24,
+      30,
+      32,
+      37,
+      43
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 145,
+   "Resource": "chinazombiemaster",
+   "Name": "Jiang Shi Master",
+   "Group": "Zombie",
+   "Lore": "A medal given to users who have infected a human 10,000 times as Jiang Shi.",
+   "Text": "Infect 2,500 humans in any zombie mode",
+   "Conditions": [
+    {
+     "Counter": "Infections",
+     "Target": 2500,
+     "Modes": [
+      8,
+      9,
+      14,
+      29,
+      35,
+      36,
+      44,
+      45,
+      54,
+      56,
+      58,
+      20,
+      24,
+      30,
+      32,
+      37,
+      43
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 146,
+   "Resource": "telleportzombiemaster",
+   "Name": "Lilith Master",
+   "Group": "Zombie",
+   "Lore": "A medal given to users who have infected a human 10,000 times as Lilith.",
+   "Text": "Infect 3,000 humans in any zombie mode",
+   "Conditions": [
+    {
+     "Counter": "Infections",
+     "Target": 3000,
+     "Modes": [
+      8,
+      9,
+      14,
+      29,
+      35,
+      36,
+      44,
+      45,
+      54,
+      56,
+      58,
+      20,
+      24,
+      30,
+      32,
+      37,
+      43
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 147,
+   "Resource": "revivalzombiemaster",
+   "Name": "Metatronic Master",
+   "Group": "Zombie",
+   "Lore": "A medal given to users who have infected a human 10,000 times as Metatronic.",
+   "Text": "Infect 4,000 humans in any zombie mode",
+   "Conditions": [
+    {
+     "Counter": "Infections",
+     "Target": 4000,
+     "Modes": [
+      8,
+      9,
+      14,
+      29,
+      35,
+      36,
+      44,
+      45,
+      54,
+      56,
+      58,
+      20,
+      24,
+      30,
+      32,
+      37,
+      43
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 151,
+   "Resource": "boosterzombimaster",
+   "Name": "Chaser Master",
+   "Group": "Zombie",
+   "Lore": "A medal granted to users who have infected a human 10,000 times as Chaser.",
+   "Text": "Infect 5,000 humans in any zombie mode",
+   "Conditions": [
+    {
+     "Counter": "Infections",
+     "Target": 5000,
+     "Modes": [
+      8,
+      9,
+      14,
+      29,
+      35,
+      36,
+      44,
+      45,
+      54,
+      56,
+      58,
+      20,
+      24,
+      30,
+      32,
+      37,
+      43
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 152,
+   "Resource": "passzombimaster",
+   "Name": "Blotter Master",
+   "Group": "Zombie",
+   "Lore": "A medal granted to users who have infected a human 10,000 times as Blotter.",
+   "Text": "Infect 6,000 humans in any zombie mode",
+   "Conditions": [
+    {
+     "Counter": "Infections",
+     "Target": 6000,
+     "Modes": [
+      8,
+      9,
+      14,
+      29,
+      35,
+      36,
+      44,
+      45,
+      54,
+      56,
+      58,
+      20,
+      24,
+      30,
+      32,
+      37,
+      43
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 162,
+   "Resource": "flyingzombiemaster",
+   "Name": "Rusty Wing Master",
+   "Group": "Zombie",
+   "Lore": "A medal given to players who have infected a human 10,000 times as Rusty Wing.",
+   "Text": "Infect 7,500 humans in any zombie mode",
+   "Conditions": [
+    {
+     "Counter": "Infections",
+     "Target": 7500,
+     "Modes": [
+      8,
+      9,
+      14,
+      29,
+      35,
+      36,
+      44,
+      45,
+      54,
+      56,
+      58,
+      20,
+      24,
+      30,
+      32,
+      37,
+      43
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 192,
+   "Resource": "akshazombiemaster",
+   "Name": "Yaksha Master",
+   "Group": "Zombie",
+   "Lore": "A medal granted to users who have infected a human 10,000 times as Yaksha.",
+   "Text": "Infect 10,000 humans in any zombie mode",
+   "Conditions": [
+    {
+     "Counter": "Infections",
+     "Target": 10000,
+     "Modes": [
+      8,
+      9,
+      14,
+      29,
+      35,
+      36,
+      44,
+      45,
+      54,
+      56,
+      58,
+      20,
+      24,
+      30,
+      32,
+      37,
+      43
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 258,
+   "Resource": "spiderzbmaster",
+   "Name": "Arachne Master",
+   "Group": "Zombie",
+   "Lore": "A medal granted to users who have infected 10,000 humans as Arachne.",
+   "Text": "Infect 10,000 humans in any zombie mode",
+   "Conditions": [
+    {
+     "Counter": "Infections",
+     "Target": 10000,
+     "Modes": [
+      8,
+      9,
+      14,
+      29,
+      35,
+      36,
+      44,
+      45,
+      54,
+      56,
+      58,
+      20,
+      24,
+      30,
+      32,
+      37,
+      43
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 259,
+   "Resource": "meatwallzbmaster",
+   "Name": "Brutus Master",
+   "Group": "Zombie",
+   "Lore": "A medal granted to users who have infected 10,000 humans as Brutus.",
+   "Text": "Infect 10,000 humans in any zombie mode",
+   "Conditions": [
+    {
+     "Counter": "Infections",
+     "Target": 10000,
+     "Modes": [
+      8,
+      9,
+      14,
+      29,
+      35,
+      36,
+      44,
+      45,
+      54,
+      56,
+      58,
+      20,
+      24,
+      30,
+      32,
+      37,
+      43
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 12,
+   "Resource": "SoloCompany",
+   "Name": "Lone Combatant",
+   "Group": "Scenario",
+   "Lore": "Putting in those Zombie Killing hours no matter what holiday it is. We ain't judging!",
+   "Text": "Play for 50 hours in Zombie Scenario",
+   "Conditions": [
+    {
+     "Counter": "Seconds",
+     "Target": 180000,
+     "Modes": [
+      15
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 21,
+   "Resource": "KillingMachine",
+   "Name": "Zombie Grinder",
+   "Group": "Scenario",
+   "Lore": "A medal given to those who rack up an incredible body count Zombie Scenario mode.",
+   "Text": "Kill 10,000 monsters in scenario modes",
+   "Conditions": [
+    {
+     "Counter": "MonsterKills",
+     "Target": 10000,
+     "Modes": [
+      15,
+      17,
+      28,
+      52,
+      53,
+      59
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 40,
+   "Resource": "LostcityMaster",
+   "Name": "City Hunter",
+   "Group": "Scenario",
+   "Lore": "A medal given to those who have cleared Zombie Scenario Survival: Lost City 400 times.",
+   "Text": "Win 100 matches in Zombie Scenario",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 100,
+     "Modes": [
+      15
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 41,
+   "Resource": "2gateMaster",
+   "Name": "Gatekeeper",
+   "Group": "Scenario",
+   "Lore": "A medal given to those who have cleared Zombie Scenario Double Gates 400 times.",
+   "Text": "Win 200 matches in Zombie Scenario",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 200,
+     "Modes": [
+      15
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 42,
+   "Resource": "TrapMaster",
+   "Name": "Activator",
+   "Group": "Scenario",
+   "Lore": "A medal given to those who have cleared Zombie Scenario Trap 400 times.",
+   "Text": "Win 400 matches in Zombie Scenario",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 400,
+     "Modes": [
+      15
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 43,
+   "Resource": "PhobosMaster",
+   "Name": "Phobos Slayer",
+   "Group": "Scenario",
+   "Lore": "A medal given to those who killed Phobos 100 times.",
+   "Text": "Win 10 matches in scenario modes",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 10,
+     "Modes": [
+      15,
+      17,
+      28,
+      52,
+      53,
+      59
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 44,
+   "Resource": "OberonMaster",
+   "Name": "Oberon Slayer",
+   "Group": "Scenario",
+   "Lore": "A medal given to those who killed Oberon 100 times.",
+   "Text": "Win 20 matches in scenario modes",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 20,
+     "Modes": [
+      15,
+      17,
+      28,
+      52,
+      53,
+      59
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 45,
+   "Resource": "ZsMaster",
+   "Name": "Pilgrim",
+   "Group": "Scenario",
+   "Lore": "A medal given to those who have cleared all maps in Zombie Scenario Season 1.",
+   "Text": "Win 25 matches in Zombie Scenario",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 25,
+     "Modes": [
+      15
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 46,
+   "Resource": "MillionKill",
+   "Name": "Undertaker",
+   "Group": "Scenario",
+   "Lore": "You, who has caused 1,000,000 zombies to face eternal sleep in Zombie Scenario, are a true angel of death.",
+   "Text": "Kill 50,000 monsters in scenario modes",
+   "Conditions": [
+    {
+     "Counter": "MonsterKills",
+     "Target": 50000,
+     "Modes": [
+      15,
+      17,
+      28,
+      52,
+      53,
+      59
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 52,
+   "Resource": "SpecialForce",
+   "Name": "Scenario Expedition",
+   "Group": "Scenario",
+   "Lore": "The world's greatest expedition made up of those who have come together to complete their given mission.",
+   "Text": "Win 50 matches in Human Scenario",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 50,
+     "Modes": [
+      17
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 57,
+   "Resource": "DioneChase",
+   "Name": "Poison",
+   "Group": "Scenario",
+   "Lore": "A medal given to those who have escaped the deadly poison, dangerous tentacle attacks and successfully tracked Dione.",
+   "Text": "Win 30 matches in scenario modes",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 30,
+     "Modes": [
+      15,
+      17,
+      28,
+      52,
+      53,
+      59
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 58,
+   "Resource": "Comanchekiller",
+   "Name": "Comanche",
+   "Group": "Scenario",
+   "Lore": "A medal given to veterans of the Hit-and-Run.",
+   "Text": "Win 400 matches in scenario modes",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 400,
+     "Modes": [
+      15,
+      17,
+      28,
+      52,
+      53,
+      59
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 59,
+   "Resource": "OspreyKiller",
+   "Name": "Osprey",
+   "Group": "Scenario",
+   "Lore": "A medal given to experts that can focus on their target in the midst of chaos.",
+   "Text": "Win 450 matches in scenario modes",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 450,
+     "Modes": [
+      15,
+      17,
+      28,
+      52,
+      53,
+      59
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 60,
+   "Resource": "XT-300Killer",
+   "Name": "Gear",
+   "Group": "Scenario",
+   "Lore": "A medal given to a clever soldier that can decode the enemy's attack pattern and neutralize it.",
+   "Text": "Win 500 matches in scenario modes",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 500,
+     "Modes": [
+      15,
+      17,
+      28,
+      52,
+      53,
+      59
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 70,
+   "Resource": "FireFighter",
+   "Name": "Decoy",
+   "Group": "Scenario",
+   "Lore": "A medal given to a person who successfully kill Revenant through its relentless attacks of fire.",
+   "Text": "Win 40 matches in scenario modes",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 40,
+     "Modes": [
+      15,
+      17,
+      28,
+      52,
+      53,
+      59
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 73,
+   "Resource": "LastSoldier",
+   "Name": "Angra",
+   "Group": "Scenario",
+   "Lore": "A medal given to LS members who bravely fought against Angra.",
+   "Text": "Win 50 matches in scenario modes",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 50,
+     "Modes": [
+      15,
+      17,
+      28,
+      52,
+      53,
+      59
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 76,
+   "Resource": "asura",
+   "Name": "Asura",
+   "Group": "Scenario",
+   "Lore": "This medal will be given to the players who complete Zombie Scenario Chronicles\n-There's a hero who won the battle of death valley.",
+   "Text": "Win 600 matches in scenario modes",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 600,
+     "Modes": [
+      15,
+      17,
+      28,
+      52,
+      53,
+      59
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 80,
+   "Resource": "TitanAttacker",
+   "Name": "Attack",
+   "Group": "Scenario",
+   "Lore": "A medal that will be given to soldiers who have fought against 3 types of Fallen Titans",
+   "Text": "Win 60 matches in scenario modes",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 60,
+     "Modes": [
+      15,
+      17,
+      28,
+      52,
+      53,
+      59
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 81,
+   "Resource": "ScorpionChef",
+   "Name": "Rusty",
+   "Group": "Scenario",
+   "Lore": "A medal that will be given to soldiers who fought and won the battle against Rusty Scorpions",
+   "Text": "Win 75 matches in scenario modes",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 75,
+     "Modes": [
+      15,
+      17,
+      28,
+      52,
+      53,
+      59
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 82,
+   "Resource": "ErikaGuardian",
+   "Name": "Erica",
+   "Group": "Scenario",
+   "Lore": "A medal that will be given to soldiers who fought against the Mad Mechanic to save Erica",
+   "Text": "Win 90 matches in scenario modes",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 90,
+     "Modes": [
+      15,
+      17,
+      28,
+      52,
+      53,
+      59
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 83,
+   "Resource": "AFCleader",
+   "Name": "Command",
+   "Group": "Scenario",
+   "Lore": "A medal that will be given to soldiers who have completed the Vanguard Company's last battle as the member of AFC",
+   "Text": "Win 105 matches in scenario modes",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 105,
+     "Modes": [
+      15,
+      17,
+      28,
+      52,
+      53,
+      59
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 84,
+   "Resource": "WrathController",
+   "Name": "Rage Controller",
+   "Group": "Scenario",
+   "Lore": "A medal given to those who did not succumb to their rage and defeated Frozen Wrath.",
+   "Text": "Win 120 matches in scenario modes",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 120,
+     "Modes": [
+      15,
+      17,
+      28,
+      52,
+      53,
+      59
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 86,
+   "Resource": "Lastone",
+   "Name": "Last",
+   "Group": "Scenario",
+   "Lore": "This is a medal that will be given to soldiers who fought against zombies and secured the Shelter in the City of the dead",
+   "Text": "Win 30 matches in modes 28, 52",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 30,
+     "Modes": [
+      28,
+      52
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 87,
+   "Resource": "Destroyer",
+   "Name": "Destroy",
+   "Group": "Scenario",
+   "Lore": "This is a medal that will be given to soldiers who avoided the zombie attacks and destroyed the enemy's shelter.",
+   "Text": "Win 100 matches in modes 28, 52",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 100,
+     "Modes": [
+      28,
+      52
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 90,
+   "Resource": "ZombiePveHQ",
+   "Name": "Zombie PvE HQ",
+   "Group": "Scenario",
+   "Lore": "A medal that will be given to users who are in the Zombie PVE League Headquarters",
+   "Text": "Play 500 matches in scenario modes",
+   "Conditions": [
+    {
+     "Counter": "Matches",
+     "Target": 500,
+     "Modes": [
+      15,
+      17,
+      28,
+      52,
+      53,
+      59
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 93,
+   "Resource": "timeattack1",
+   "Name": "Time Attack",
+   "Group": "Scenario",
+   "Lore": "",
+   "Text": "Win 60 matches in scenario modes",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 60,
+     "Modes": [
+      15,
+      17,
+      28,
+      52,
+      53,
+      59
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 94,
+   "Resource": "timeattack2",
+   "Name": "Time Attack Pro",
+   "Group": "Scenario",
+   "Lore": "",
+   "Text": "Win 120 matches in scenario modes",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 120,
+     "Modes": [
+      15,
+      17,
+      28,
+      52,
+      53,
+      59
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 96,
+   "Resource": "MenuController",
+   "Name": "Diet Controller",
+   "Group": "Scenario",
+   "Lore": "A medal given to those who defeated Gluttony, he who eats just about anything.",
+   "Text": "Win 140 matches in scenario modes",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 140,
+     "Modes": [
+      15,
+      17,
+      28,
+      52,
+      53,
+      59
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 97,
+   "Resource": "Sherlock",
+   "Name": "The Great Detective",
+   "Group": "Scenario",
+   "Lore": "A medal given to those who revealed the schemes of the Super Soldier Project.",
+   "Text": "Win 160 matches in scenario modes",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 160,
+     "Modes": [
+      15,
+      17,
+      28,
+      52,
+      53,
+      59
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 98,
+   "Resource": "madnessCloser",
+   "Name": "Madness Ender",
+   "Group": "Scenario",
+   "Lore": "A medal given to those who managed to stop Doctor Rex.",
+   "Text": "Win 180 matches in scenario modes",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 180,
+     "Modes": [
+      15,
+      17,
+      28,
+      52,
+      53,
+      59
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 101,
+   "Resource": "mechpilot",
+   "Name": "Mech Warrior",
+   "Group": "Scenario",
+   "Lore": "A medal awarded to those who can handle an XT-300 with great skill.",
+   "Text": "Win 200 matches in scenario modes",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 200,
+     "Modes": [
+      15,
+      17,
+      28,
+      52,
+      53,
+      59
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 102,
+   "Resource": "exterminator",
+   "Name": "Exterminator",
+   "Group": "Scenario",
+   "Lore": "A badge for the one who cooled down Laser Wing’s anger.",
+   "Text": "Win 225 matches in scenario modes",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 225,
+     "Modes": [
+      15,
+      17,
+      28,
+      52,
+      53,
+      59
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 104,
+   "Resource": "Killjack",
+   "Name": "Traitor",
+   "Group": "Scenario",
+   "Lore": "Medal awarded to those who defeat Jack.",
+   "Text": "Win 250 matches in scenario modes",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 250,
+     "Modes": [
+      15,
+      17,
+      28,
+      52,
+      53,
+      59
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 105,
+   "Resource": "Killcronobotics",
+   "Name": "Transformers",
+   "Group": "Scenario",
+   "Lore": "Medal awarded to people who defeat Cronobotic.",
+   "Text": "Win 275 matches in scenario modes",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 275,
+     "Modes": [
+      15,
+      17,
+      28,
+      52,
+      53,
+      59
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 116,
+   "Resource": "pointbox",
+   "Name": "Treasure Hunters",
+   "Group": "Scenario",
+   "Lore": "Medal given to the person who acquires the most points through dropped boxes in Zombie scenario.",
+   "Text": "Pick up 100 supply boxes",
+   "Conditions": [
+    {
+     "Counter": "DropBoxes",
+     "Target": 100
+    }
+   ]
+  },
+  {
+   "ID": 121,
+   "Resource": "ex_timeattack1",
+   "Name": "Time Attack Expert",
+   "Group": "Scenario",
+   "Lore": "",
+   "Text": "Win 250 matches in scenario modes",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 250,
+     "Modes": [
+      15,
+      17,
+      28,
+      52,
+      53,
+      59
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 122,
+   "Resource": "ex_timeattack2",
+   "Name": "Time Attack Legend",
+   "Group": "Scenario",
+   "Lore": "",
+   "Text": "Win 500 matches in scenario modes",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 500,
+     "Modes": [
+      15,
+      17,
+      28,
+      52,
+      53,
+      59
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 155,
+   "Resource": "bodyguard",
+   "Name": "Bodyguard",
+   "Group": "Scenario",
+   "Lore": "A medal awarded to those who escorted Ji Yoon Choi to the end without abandoning her.",
+   "Text": "Win 20 matches in Human Scenario",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 20,
+     "Modes": [
+      17
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 157,
+   "Resource": "tyrantcrabrestaurant",
+   "Name": "Crab Shake!",
+   "Group": "Scenario",
+   "Lore": "A medal awarded to those who can truly appreciate the taste of crab.",
+   "Text": "Win 300 matches in scenario modes",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 300,
+     "Modes": [
+      15,
+      17,
+      28,
+      52,
+      53,
+      59
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 231,
+   "Resource": "thisismine",
+   "Name": "Mechanical Engineer",
+   "Group": "Scenario",
+   "Lore": "A medal awarded to those who defeated Colossus 100 times.",
+   "Text": "Win 330 matches in scenario modes",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 330,
+     "Modes": [
+      15,
+      17,
+      28,
+      52,
+      53,
+      59
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 232,
+   "Resource": "SharkSpinexpert",
+   "Name": "Brought a Bigger Boat",
+   "Group": "Scenario",
+   "Lore": "A medal awarded to those who defeated Megalodon 100 times.",
+   "Text": "Win 360 matches in scenario modes",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 360,
+     "Modes": [
+      15,
+      17,
+      28,
+      52,
+      53,
+      59
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 233,
+   "Resource": "Zs2Master",
+   "Name": "Season 2 Veteran",
+   "Group": "Scenario",
+   "Lore": "A medal given to those who have cleared all of the Zombie Scenario Season 2.",
+   "Text": "Win 50 matches in Zombie Scenario",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 50,
+     "Modes": [
+      15
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 234,
+   "Resource": "Zs3Master",
+   "Name": "Season 3 Veteran",
+   "Group": "Scenario",
+   "Lore": "A medal given to those who have cleared all of the Zombie Scenario Season 3.",
+   "Text": "Win 75 matches in Zombie Scenario",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 75,
+     "Modes": [
+      15
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 235,
+   "Resource": "Zs4Master",
+   "Name": "Season 4 Veteran",
+   "Group": "Scenario",
+   "Lore": "A medal given to those who have cleared all of the Zombie Scenario Season 4.",
+   "Text": "Win 125 matches in Zombie Scenario",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 125,
+     "Modes": [
+      15
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 236,
+   "Resource": "Zs5Master",
+   "Name": "Season 5 Veteran",
+   "Group": "Scenario",
+   "Lore": "A medal given to those who have cleared all of the Zombie Scenario Season 5.",
+   "Text": "Win 175 matches in Zombie Scenario",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 175,
+     "Modes": [
+      15
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 237,
+   "Resource": "Zs6Master",
+   "Name": "Season 6 Veteran",
+   "Group": "Scenario",
+   "Lore": "A medal given to those who have cleared all of the Zombie Scenario Season 6.",
+   "Text": "Win 250 matches in Zombie Scenario",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 250,
+     "Modes": [
+      15
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 244,
+   "Resource": "SoloCompany2",
+   "Name": "Christmas Commando",
+   "Group": "Scenario",
+   "Lore": "Alone and far from home, our holiday hero holds the line.",
+   "Text": "Win 150 matches in Zombie Scenario",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 150,
+     "Modes": [
+      15
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 13,
+   "Resource": "Striker",
+   "Name": "Striker",
+   "Group": "Soccer",
+   "Lore": "Awarded to those who frequently score\nGOOOOOOOOOOAAAAAAAAAAAAAAAAAAAAAAALs.",
+   "Text": "Win 50 matches in Soccer",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 50,
+     "Modes": [
+      16
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 14,
+   "Resource": "AttackMF",
+   "Name": "Attacking Midfielder",
+   "Group": "Soccer",
+   "Lore": "Play a pivotal role on the team with aggressive breakthroughs and accurate passes.",
+   "Text": "Play 30 matches in Soccer",
+   "Conditions": [
+    {
+     "Counter": "Matches",
+     "Target": 30,
+     "Modes": [
+      16
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 15,
+   "Resource": "DefenceMF",
+   "Name": "Defensive Midfielder",
+   "Group": "Soccer",
+   "Lore": "Given to players for aggressively stealing the ball, but for others on your team.",
+   "Text": "Play 60 matches in Soccer",
+   "Conditions": [
+    {
+     "Counter": "Matches",
+     "Target": 60,
+     "Modes": [
+      16
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 16,
+   "Resource": "CenterBack",
+   "Name": "Center Back",
+   "Group": "Soccer",
+   "Lore": "For defense-focused players on the field, blocking players and shots alike from the goal.",
+   "Text": "Play 100 matches in Soccer",
+   "Conditions": [
+    {
+     "Counter": "Matches",
+     "Target": 100,
+     "Modes": [
+      16
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 17,
+   "Resource": "GoalKeeper",
+   "Name": "Goalkeeper",
+   "Group": "Soccer",
+   "Lore": "Awarded to those who take on the pressure of defending the goal.",
+   "Text": "Finish first 10 times in Soccer",
+   "Conditions": [
+    {
+     "Counter": "TopPlayer",
+     "Target": 10,
+     "Modes": [
+      16
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 18,
+   "Resource": "Ribero",
+   "Name": "Libero",
+   "Group": "Soccer",
+   "Lore": "Award for those who blend offense and defense on the field, from the Italyn word meaning 'free'.\nPlayers who excel at aggressive plays on the field can earn this Medal.",
+   "Text": "Win 100 matches in Soccer",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 100,
+     "Modes": [
+      16
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 19,
+   "Resource": "PlayMaker",
+   "Name": "Playmaster",
+   "Group": "Soccer",
+   "Lore": "A medal for players who know how to truly manage their team.\nPlayers who excel at coordinating defensive and offensive team members can earn this mdeal.",
+   "Text": "Win 200 matches in Soccer",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 200,
+     "Modes": [
+      16
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 20,
+   "Resource": "Fantasista",
+   "Name": "Beyond MVP",
+   "Group": "Soccer",
+   "Lore": "Awarded to those who truly dominate the sport.",
+   "Text": "Finish first 50 times in Soccer",
+   "Conditions": [
+    {
+     "Counter": "TopPlayer",
+     "Target": 50,
+     "Modes": [
+      16
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 95,
+   "Resource": "forward",
+   "Name": "Forward",
+   "Group": "Soccer",
+   "Lore": "",
+   "Text": "Finish first 100 times in Soccer",
+   "Conditions": [
+    {
+     "Counter": "TopPlayer",
+     "Target": 100,
+     "Modes": [
+      16
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 197,
+   "Resource": "mutation",
+   "Name": "Mutant",
+   "Group": "Zombie Z",
+   "Lore": "A medal awarded to those who reached 5,000 cumulative mutations.",
+   "Text": "Play 50 matches in Zombie Z",
+   "Conditions": [
+    {
+     "Counter": "Matches",
+     "Target": 50,
+     "Modes": [
+      45
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 198,
+   "Resource": "transformation",
+   "Name": "Metamorph",
+   "Group": "Zombie Z",
+   "Lore": "A medal awarded to those who reached 10,000 cumulative mutations.",
+   "Text": "Play 150 matches in Zombie Z",
+   "Conditions": [
+    {
+     "Counter": "Matches",
+     "Target": 150,
+     "Modes": [
+      45
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 199,
+   "Resource": "tabu",
+   "Name": "Unapproachable",
+   "Group": "Zombie Z",
+   "Lore": "A medal awarded to those who scored more than 100 melee kills with the Melee Masher mutation.",
+   "Text": "Score 100 melee kills in Zombie Z",
+   "Conditions": [
+    {
+     "Counter": "MeleeKills",
+     "Target": 100,
+     "Modes": [
+      45
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 200,
+   "Resource": "clean",
+   "Name": "Incorruptible",
+   "Group": "Zombie Z",
+   "Lore": "A medal awarded to those who achieved 10 round victories without any mutations as a human.",
+   "Text": "Win 10 matches in Zombie Z",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 10,
+     "Modes": [
+      45
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 201,
+   "Resource": "goldspoon",
+   "Name": "Big Roller",
+   "Group": "Zombie Z",
+   "Lore": "A medal awarded to those who played 1000 rounds in which they spent more than 6000 dollars.",
+   "Text": "Win 100 matches in Zombie Z",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 100,
+     "Modes": [
+      45
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 202,
+   "Resource": "soilspoon",
+   "Name": "Penny Pincher",
+   "Group": "Zombie Z",
+   "Lore": "A medal awarded to those who played 1000 rounds in which they spent less than 3000 dollars.",
+   "Text": "Play 300 matches in Zombie Z",
+   "Conditions": [
+    {
+     "Counter": "Matches",
+     "Target": 300,
+     "Modes": [
+      45
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 203,
+   "Resource": "bomber",
+   "Name": "Artillery",
+   "Group": "Zombie Z",
+   "Lore": "A medal awarded to those who scored 100 kills using the Support Bombardment mutation.",
+   "Text": "Score 100 grenade kills in Zombie Z",
+   "Conditions": [
+    {
+     "Counter": "GrenadeKills",
+     "Target": 100,
+     "Modes": [
+      45
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 204,
+   "Resource": "starhero",
+   "Name": "Celebrity",
+   "Group": "Zombie Z",
+   "Lore": "A medal awarded to those who made 100 Hero or Sidekick selections after obtaining the Heroic Presence mutation.",
+   "Text": "Finish first 25 times in Zombie Z",
+   "Conditions": [
+    {
+     "Counter": "TopPlayer",
+     "Target": 25,
+     "Modes": [
+      45
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 205,
+   "Resource": "Shopaholic",
+   "Name": "Chaotic",
+   "Group": "Zombie Z",
+   "Lore": "A medal awarded to those who made 1000 random weapon purchases.",
+   "Text": "Score 2,000 kills in Zombie Z",
+   "Conditions": [
+    {
+     "Counter": "Kills",
+     "Target": 2000,
+     "Modes": [
+      45
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 206,
+   "Resource": "bareknuckle",
+   "Name": "Ascetic",
+   "Group": "Zombie Z",
+   "Lore": "A medal awarded to those who scored 10 cumulative zombie kills after spending no money.",
+   "Text": "Score 10 melee kills in Zombie Z",
+   "Conditions": [
+    {
+     "Counter": "MeleeKills",
+     "Target": 10,
+     "Modes": [
+      45
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 207,
+   "Resource": "bombaway",
+   "Name": "Bursting",
+   "Group": "Zombie Z",
+   "Lore": "A medal awarded to those who used 1000 Zombie Bombs.",
+   "Text": "Infect 300 humans in Zombie Z",
+   "Conditions": [
+    {
+     "Counter": "Infections",
+     "Target": 300,
+     "Modes": [
+      45
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 208,
+   "Resource": "finalz",
+   "Name": "Ultimate Weapon",
+   "Group": "Zombie Z",
+   "Lore": "A medal awarded to those who scored 1000 round victories as a human with max mutations.",
+   "Text": "Win 300 matches in Zombie Z",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 300,
+     "Modes": [
+      45
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 209,
+   "Resource": "zdoctor",
+   "Name": "Geneticist",
+   "Group": "Zombie Z",
+   "Lore": "A medal awarded to those who reached 200 hours of Zombie Z play time.",
+   "Text": "Play for 50 hours in Zombie Z",
+   "Conditions": [
+    {
+     "Counter": "Seconds",
+     "Target": 180000,
+     "Modes": [
+      45
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 210,
+   "Resource": "agentz",
+   "Name": "Agent",
+   "Group": "Zombie Z",
+   "Lore": "A medal awarded to those who reached 500 hours of Zombie Z play time.",
+   "Text": "Play for 150 hours in Zombie Z",
+   "Conditions": [
+    {
+     "Counter": "Seconds",
+     "Target": 540000,
+     "Modes": [
+      45
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 211,
+   "Resource": "transexpert",
+   "Name": "Transformed",
+   "Group": "Zombie Z",
+   "Lore": "A medal awarded to those who played 3 or more different zombies in a single round.",
+   "Text": "Infect 50 humans in Zombie Z",
+   "Conditions": [
+    {
+     "Counter": "Infections",
+     "Target": 50,
+     "Modes": [
+      45
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 212,
+   "Resource": "zbombkiller",
+   "Name": "Exploded",
+   "Group": "Zombie Z",
+   "Lore": "A medal awarded to those who died 10 times to Zombie Bombs.",
+   "Text": "Die 100 times in Zombie Z",
+   "Conditions": [
+    {
+     "Counter": "Deaths",
+     "Target": 100,
+     "Modes": [
+      45
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 213,
+   "Resource": "dominant",
+   "Name": "Superior",
+   "Group": "Zombie Z",
+   "Lore": "A medal awarded to those who scored 100 kills on players who had more mutations.",
+   "Text": "Kill 100 zombies in Zombie Z",
+   "Conditions": [
+    {
+     "Counter": "ZombieKills",
+     "Target": 100,
+     "Modes": [
+      45
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 214,
+   "Resource": "weakperish",
+   "Name": "Opportunist",
+   "Group": "Zombie Z",
+   "Lore": "A medal awarded to those who scored 100 kills on players who had less mutations.",
+   "Text": "Kill 500 zombies in Zombie Z",
+   "Conditions": [
+    {
+     "Counter": "ZombieKills",
+     "Target": 500,
+     "Modes": [
+      45
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 215,
+   "Resource": "huntingsense",
+   "Name": "Hunter",
+   "Group": "Zombie Z",
+   "Lore": "A medal awarded to those who scored a zombie kill while they had the Hunter's Instinct mutation.",
+   "Text": "Kill 1 zombies in Zombie Z",
+   "Conditions": [
+    {
+     "Counter": "ZombieKills",
+     "Target": 1,
+     "Modes": [
+      45
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 216,
+   "Resource": "legendaryz",
+   "Name": "Legend",
+   "Group": "Zombie Z",
+   "Lore": "A medal awarded to those who scored at least 1 kill using each of their primary, secondary and melee weapons, and then killed the last human after turning into a zombie.",
+   "Text": "Score 30 kills in one match in Zombie Z",
+   "Conditions": [
+    {
+     "Counter": "BestKills",
+     "Target": 30,
+     "Modes": [
+      45
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 217,
+   "Resource": "Icarus",
+   "Name": "Skyward",
+   "Group": "Zombie Z",
+   "Lore": "A medal awarded to those who obtained the Icarus mutation 100 times.",
+   "Text": "Play 100 matches in Zombie Z",
+   "Conditions": [
+    {
+     "Counter": "Matches",
+     "Target": 100,
+     "Modes": [
+      45
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 218,
+   "Resource": "jointime",
+   "Name": "Unstable",
+   "Group": "Zombie Z",
+   "Lore": "A medal awarded to those who obtained at least 20 mutations at once after joining mid-match.",
+   "Text": "Infect 20 humans in Zombie Z",
+   "Conditions": [
+    {
+     "Counter": "Infections",
+     "Target": 20,
+     "Modes": [
+      45
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 219,
+   "Resource": "supersoldierz",
+   "Name": "Super Soldier",
+   "Group": "Zombie Z",
+   "Lore": "A medal awarded to those who activated all their mutations while having the maximum amount of mutations.",
+   "Text": "Finish first 50 times in Zombie Z",
+   "Conditions": [
+    {
+     "Counter": "TopPlayer",
+     "Target": 50,
+     "Modes": [
+      45
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 220,
+   "Resource": "superstarz",
+   "Name": "Superstar",
+   "Group": "Zombie Z",
+   "Lore": "A medal awarded to those who achieved 1st place results 10 times in Zombie Z.",
+   "Text": "Finish first 10 times in Zombie Z",
+   "Conditions": [
+    {
+     "Counter": "TopPlayer",
+     "Target": 10,
+     "Modes": [
+      45
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 221,
+   "Resource": "zbegins",
+   "Name": "Test Subject",
+   "Group": "Zombie Z",
+   "Lore": "A medal awarded to those who have played Zombie Z mode 5 times.",
+   "Text": "Play 5 matches in Zombie Z",
+   "Conditions": [
+    {
+     "Counter": "Matches",
+     "Target": 5,
+     "Modes": [
+      45
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 222,
+   "Resource": "togetherz",
+   "Name": "Control Group",
+   "Group": "Zombie Z",
+   "Lore": "A medal awarded to those who have played Zombie Z mode 5 times with other players.",
+   "Text": "Win 5 matches in Zombie Z",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 5,
+     "Modes": [
+      45
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 223,
+   "Resource": "masterz",
+   "Name": "Zombie Hunter",
+   "Group": "Zombie Z",
+   "Lore": "A medal awarded to those who have scored 1000 zombie kills.",
+   "Text": "Kill 1,000 zombies in Zombie Z",
+   "Conditions": [
+    {
+     "Counter": "ZombieKills",
+     "Target": 1000,
+     "Modes": [
+      45
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 224,
+   "Resource": "zheadshot",
+   "Name": "Terminator",
+   "Group": "Zombie Z",
+   "Lore": "A medal awarded to those who scored 1000 zombie kills with headshots.",
+   "Text": "Score 1,000 headshots in Zombie Z",
+   "Conditions": [
+    {
+     "Counter": "Headshots",
+     "Target": 1000,
+     "Modes": [
+      45
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 225,
+   "Resource": "whatthez",
+   "Name": "Such Potential",
+   "Group": "Zombie Z",
+   "Lore": "A medal awarded to those who had less than 15 mutations activated while having the maximum number of mutations.",
+   "Text": "Die 15 times in Zombie Z",
+   "Conditions": [
+    {
+     "Counter": "Deaths",
+     "Target": 15,
+     "Modes": [
+      45
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 226,
+   "Resource": "Doppelganger",
+   "Name": "Doppelganger",
+   "Group": "Zombie Z",
+   "Lore": "A medal awarded to those who scored a kill against another player who had the same mutation as themselves.",
+   "Text": "Score 100 kills in Zombie Z",
+   "Conditions": [
+    {
+     "Counter": "Kills",
+     "Target": 100,
+     "Modes": [
+      45
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 255,
+   "Resource": "spiderzbchange",
+   "Name": "Spider Human",
+   "Group": "Zombie Evolution",
+   "Lore": "A medal awarded to those who reached 1,000 cumulative transformations into Arachne in Zombie Evolution.",
+   "Text": "Play 100 matches in Zombie Evolution",
+   "Conditions": [
+    {
+     "Counter": "Matches",
+     "Target": 100,
+     "Modes": [
+      54
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 256,
+   "Resource": "meatwallzbchange",
+   "Name": "Kennel Keeper",
+   "Group": "Zombie Evolution",
+   "Lore": "A medal awarded to those who reached 1,000 cumulative transformations into Brutus in Zombie Evolution.",
+   "Text": "Win 100 matches in Zombie Evolution",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 100,
+     "Modes": [
+      54
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 257,
+   "Resource": "zombie5hmbuff",
+   "Name": "Overdose",
+   "Group": "Zombie Evolution",
+   "Lore": "A medal awarded to those who reached 1,000 cumulative virus uses while playing as human in Zombie Evolution.",
+   "Text": "Kill 1,000 zombies in Zombie Evolution",
+   "Conditions": [
+    {
+     "Counter": "ZombieKills",
+     "Target": 1000,
+     "Modes": [
+      54
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 238,
+   "Resource": "superstar",
+   "Name": "Award-Winning Actor",
+   "Group": "Prop Hunt",
+   "Lore": "A medal awarded to those who received Golden Thumbs Up a total of 100 times",
+   "Text": "Win 100 matches in Prop Hunt",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 100,
+     "Modes": [
+      49
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 239,
+   "Resource": "eagleeye",
+   "Name": "Hawkeye",
+   "Group": "Prop Hunt",
+   "Lore": "A medal awarded to those who killed objects a total of 100 times as a seeker",
+   "Text": "Score 100 kills in Prop Hunt",
+   "Conditions": [
+    {
+     "Counter": "Kills",
+     "Target": 100,
+     "Modes": [
+      49
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 240,
+   "Resource": "chanceman",
+   "Name": "Fortune's Favored",
+   "Group": "Prop Hunt",
+   "Lore": "A medal awarded to those who killed objects a total of 200 times during Burning Time",
+   "Text": "Score 200 kills in Prop Hunt",
+   "Conditions": [
+    {
+     "Counter": "Kills",
+     "Target": 200,
+     "Modes": [
+      49
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 241,
+   "Resource": "tracker",
+   "Name": "Super Seeker",
+   "Group": "Prop Hunt",
+   "Lore": "A medal awarded to those who played as a seeker 200 times.",
+   "Text": "Play 200 matches in Prop Hunt",
+   "Conditions": [
+    {
+     "Counter": "Matches",
+     "Target": 200,
+     "Modes": [
+      49
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 242,
+   "Resource": "actor",
+   "Name": "Method Actor",
+   "Group": "Prop Hunt",
+   "Lore": "A medal awarded to those who played a total of 500 times as an object",
+   "Text": "Play 500 matches in Prop Hunt",
+   "Conditions": [
+    {
+     "Counter": "Matches",
+     "Target": 500,
+     "Modes": [
+      49
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 148,
+   "Resource": "bestcreator",
+   "Name": "Excellent Creator",
+   "Group": "Studio",
+   "Lore": "A ribbon awarded to users who have created at least two maps that have received 1,000 or more recommendations\n\n*This ribbon may be awarded regardless of contest or event criteria.",
+   "Text": "Play for 5 hours in Studio modes",
+   "Conditions": [
+    {
+     "Counter": "Seconds",
+     "Target": 18000,
+     "Modes": [
+      38,
+      39
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 161,
+   "Resource": "globalbestcreator",
+   "Name": "Global Creator",
+   "Group": "Studio",
+   "Lore": "",
+   "Text": "Play for 20 hours in Studio modes",
+   "Conditions": [
+    {
+     "Counter": "Seconds",
+     "Target": 72000,
+     "Modes": [
+      38,
+      39
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 193,
+   "Resource": "contestcreator",
+   "Name": "Studio Creator",
+   "Group": "Studio",
+   "Lore": "A medal granted to users who have participated in the Studio Mode contest.\n\n* Medal may be given through contests or events, separately from the requirements.",
+   "Text": "Play for 1 hours in Studio modes",
+   "Conditions": [
+    {
+     "Counter": "Seconds",
+     "Target": 3600,
+     "Modes": [
+      38,
+      39
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 252,
+   "Resource": "bestguide",
+   "Name": "Excellent Guide Creator",
+   "Group": "Studio",
+   "Lore": "A medal awarded to CSers who actively created exceptionally excellent guides.",
+   "Text": "Play for 50 hours in Studio modes",
+   "Conditions": [
+    {
+     "Counter": "Seconds",
+     "Target": 180000,
+     "Modes": [
+      38,
+      39
+     ]
+    }
+   ]
+  },
+  {
+   "ID": 23,
+   "Resource": "Give1004",
+   "Name": "Philanthropist",
+   "Group": "Missions",
+   "Lore": "For those who bring happiness to others.",
+   "Text": "Complete 100 orders",
+   "Conditions": [
+    {
+     "Counter": "OrdersDone",
+     "Target": 100
+    }
+   ]
+  },
+  {
+   "ID": 28,
+   "Resource": "Specialist",
+   "Name": "Specialist",
+   "Group": "Missions",
+   "Lore": "A medal given to elite agents who are experts at successfully completing special missions.",
+   "Text": "Complete 50 mission requests",
+   "Conditions": [
+    {
+     "Counter": "RequestsDone",
+     "Target": 50
+    }
+   ]
+  },
+  {
+   "ID": 29,
+   "Resource": "Perfectionist",
+   "Name": "Perfectionist",
+   "Group": "Missions",
+   "Lore": "Reserved for those who won't take a single mission for granted.",
+   "Text": "Complete every daily order on 10 days",
+   "Conditions": [
+    {
+     "Counter": "PerfectDays",
+     "Target": 10
+    }
+   ]
+  },
+  {
+   "ID": 30,
+   "Resource": "GodOfMission",
+   "Name": "Daily Deity",
+   "Group": "Missions",
+   "Lore": "For you, missions are just second nature.",
+   "Text": "Complete 500 orders",
+   "Conditions": [
+    {
+     "Counter": "OrdersDone",
+     "Target": 500
+    }
+   ]
+  },
+  {
+   "ID": 62,
+   "Resource": "FriendHenry",
+   "Name": "Meister",
+   "Group": "Missions",
+   "Lore": "A medal given to those who have successfully crafted countless weapons.",
+   "Text": "Unlock 50 battle pass items",
+   "Conditions": [
+    {
+     "Counter": "Unlocks",
+     "Target": 50
+    }
+   ]
+  },
+  {
+   "ID": 66,
+   "Resource": "Enhancer",
+   "Name": "Enhance",
+   "Group": "Missions",
+   "Lore": "A medal that will be given to soldiers who have enhanced their weapons 100 times",
+   "Text": "Unlock 100 battle pass items",
+   "Conditions": [
+    {
+     "Counter": "Unlocks",
+     "Target": 100
+    }
+   ]
+  },
+  {
+   "ID": 108,
+   "Resource": "recycle",
+   "Name": "Recycle",
+   "Group": "Missions",
+   "Lore": "Medal given to people who use recycled items through decomposition",
+   "Text": "Buy 20 items at the Black Market",
+   "Conditions": [
+    {
+     "Counter": "BlackMarketBuys",
+     "Target": 20
+    }
+   ]
+  },
+  {
+   "ID": 109,
+   "Resource": "mix",
+   "Name": "Combination",
+   "Group": "Missions",
+   "Lore": "A medal given to the person who manufactured a lot of items through combinations.",
+   "Text": "Buy 50 items at the Black Market",
+   "Conditions": [
+    {
+     "Counter": "BlackMarketBuys",
+     "Target": 50
+    }
+   ]
+  },
+  {
+   "ID": 180,
+   "Resource": "buffclass19s1title",
+   "Name": "Overseer",
+   "Group": "Missions",
+   "Lore": "A medal awarded to those who completed the special retrieval mission for another world.",
+   "Text": "Complete 10 event missions",
+   "Conditions": [
+    {
+     "Counter": "EventsDone",
+     "Target": 10
+    }
+   ]
+  },
+  {
+   "ID": 191,
+   "Resource": "buffclass19s2title",
+   "Name": "Made in Heaven",
+   "Group": "Missions",
+   "Lore": "A medal awarded to those who completed the special mission from heaven.",
+   "Text": "Complete 25 event missions",
+   "Conditions": [
+    {
+     "Counter": "EventsDone",
+     "Target": 25
+    }
+   ]
+  },
+  {
+   "ID": 227,
+   "Resource": "buffclass19s3title",
+   "Name": "Love for All",
+   "Group": "Missions",
+   "Lore": "A medal awarded to those who completed the Love for All mission.",
+   "Text": "Complete 50 event missions",
+   "Conditions": [
+    {
+     "Counter": "EventsDone",
+     "Target": 50
+    }
+   ]
+  },
+  {
+   "ID": 243,
+   "Resource": "buffclass19s4title",
+   "Name": "War Machines",
+   "Group": "Missions",
+   "Lore": "A medal awarded to those who have obtained both Queen and Cyborg",
+   "Text": "Complete 75 event missions",
+   "Conditions": [
+    {
+     "Counter": "EventsDone",
+     "Target": 75
+    }
+   ]
+  },
+  {
+   "ID": 249,
+   "Resource": "buffclass20s2title",
+   "Name": "Comrade, Can You Hear Me?",
+   "Group": "Missions",
+   "Lore": "Medal given to those who have obtained both Private Erica and Drill Instructor Gerard.",
+   "Text": "Complete 100 event missions",
+   "Conditions": [
+    {
+     "Counter": "EventsDone",
+     "Target": 100
+    }
+   ]
+  },
+  {
+   "ID": 262,
+   "Resource": "buffclass20s3title",
+   "Name": "Secret Agent",
+   "Group": "Missions",
+   "Lore": "Medal given to those who have obtained both Boss David Black and Special Agent Criss.",
+   "Text": "Complete 150 event missions",
+   "Conditions": [
+    {
+     "Counter": "EventsDone",
+     "Target": 150
+    }
+   ]
+  },
+  {
+   "ID": 111,
+   "Resource": "skull",
+   "Name": "Skull",
+   "Group": "Collection",
+   "Lore": "Medal awarded to the person who collects the SKULL weapon.",
+   "Text": "Own 5 SKULL items",
+   "Conditions": [
+    {
+     "Own": [
+      198,
+      363,
+      367,
+      407,
+      427,
+      437,
+      538,
+      562,
+      577,
+      828,
+      8611,
+      9353,
+      9355,
+      9360,
+      9366,
+      9370,
+      9471,
+      9472,
+      9473,
+      9667
+     ],
+     "Count": 5
+    }
+   ]
+  },
+  {
+   "ID": 112,
+   "Resource": "balrog",
+   "Name": "BALROG",
+   "Group": "Collection",
+   "Lore": "Medal given to the person who collects BALROG weapons.",
+   "Text": "Own 5 BALROG items",
+   "Conditions": [
+    {
+     "Own": [
+      466,
+      482,
+      504,
+      517,
+      532,
+      554,
+      685,
+      686,
+      687,
+      688,
+      689,
+      690,
+      930,
+      931,
+      9474,
+      9475,
+      9476,
+      9477,
+      9478,
+      9484
+     ],
+     "Count": 5
+    }
+   ]
+  },
+  {
+   "ID": 113,
+   "Resource": "janus",
+   "Name": "JANUS",
+   "Group": "Collection",
+   "Lore": "Medal awarded to the person who collects the JANUS weapons.",
+   "Text": "Own 5 JANUS items",
+   "Conditions": [
+    {
+     "Own": [
+      587,
+      595,
+      598,
+      673,
+      684,
+      711,
+      840,
+      9479,
+      9480,
+      9481,
+      9496,
+      9499,
+      9503
+     ],
+     "Count": 5
+    }
+   ]
+  },
+  {
+   "ID": 114,
+   "Resource": "samzangmonk",
+   "Name": "Journey to the West",
+   "Group": "Collection",
+   "Lore": "Medal awarded to the person who collects all the items from the Journey to the West set.",
+   "Text": "Own 150 items",
+   "Conditions": [
+    {
+     "Own": [],
+     "Count": 150
+    }
+   ]
+  },
+  {
+   "ID": 115,
+   "Resource": "dorothy",
+   "Name": "Dorothy",
+   "Group": "Collection",
+   "Lore": "Medal awarded to the person who collects all of the Wizard of Oz set.",
+   "Text": "Own 250 items",
+   "Conditions": [
+    {
+     "Own": [],
+     "Count": 250
+    }
+   ]
+  },
+  {
+   "ID": 117,
+   "Resource": "mayfly",
+   "Name": "Ephemera",
+   "Group": "Collection",
+   "Lore": "Medal awarded to people  who have acquired one-day weapons.",
+   "Text": "Own 25 items",
+   "Conditions": [
+    {
+     "Own": [],
+     "Count": 25
+    }
+   ]
+  },
+  {
+   "ID": 118,
+   "Resource": "extenstion",
+   "Name": "Dream of Renewal",
+   "Group": "Collection",
+   "Lore": "Medal given to the person who acquires arms with an unlimited extension period.",
+   "Text": "Own 50 items",
+   "Conditions": [
+    {
+     "Own": [],
+     "Count": 50
+    }
+   ]
+  },
+  {
+   "ID": 119,
+   "Resource": "ohyeah",
+   "Name": "Oye",
+   "Group": "Collection",
+   "Lore": "Medal awarded to people who successfully obtain weapons for an unlimited period of time.",
+   "Text": "Own 100 items",
+   "Conditions": [
+    {
+     "Own": [],
+     "Count": 100
+    }
+   ]
+  },
+  {
+   "ID": 164,
+   "Resource": "darkknight",
+   "Name": "Dark Knight",
+   "Group": "Collection",
+   "Lore": "A medal awarded to those who collect the Dark Knight weapons and class.",
+   "Text": "Own 2 Dark Knight items",
+   "Conditions": [
+    {
+     "Own": [
+      943,
+      944
+     ],
+     "Count": 2
+    }
+   ]
+  },
+  {
+   "ID": 165,
+   "Resource": "paladin",
+   "Name": "Paladin",
+   "Group": "Collection",
+   "Lore": "A medal awarded to those who collect the Paladin weapons and class.",
+   "Text": "Own 2 Paladin items",
+   "Conditions": [
+    {
+     "Own": [
+      1055,
+      1056
+     ],
+     "Count": 2
+    }
+   ]
+  },
+  {
+   "ID": 166,
+   "Resource": "bloodhunter",
+   "Name": "Crimson Hunter",
+   "Group": "Collection",
+   "Lore": "A medal awarded to those who collect the Crimson Hunter weapons and class.",
+   "Text": "Own 2 Crimson Hunter items",
+   "Conditions": [
+    {
+     "Own": [
+      877,
+      9619
+     ],
+     "Count": 2
+    }
+   ]
+  },
+  {
+   "ID": 167,
+   "Resource": "lycan",
+   "Name": "Lycanthrope",
+   "Group": "Collection",
+   "Lore": "A medal awarded to those who collect the Lycanthrope weapons and class.",
+   "Text": "Own 1 Lycanthrope items",
+   "Conditions": [
+    {
+     "Own": [
+      8084
+     ],
+     "Count": 1
+    }
+   ]
+  },
+  {
+   "ID": 168,
+   "Resource": "buffphoenix",
+   "Name": "Phoenix",
+   "Group": "Collection",
+   "Lore": "A medal awarded to those who collect the Phoenix weapons and class.",
+   "Text": "Own 1 Phoenix items",
+   "Conditions": [
+    {
+     "Own": [
+      8167
+     ],
+     "Count": 1
+    }
+   ]
+  },
+  {
+   "ID": 169,
+   "Resource": "buffclassteam",
+   "Name": "Covert Operatives",
+   "Group": "Collection",
+   "Lore": "A medal awarded to those who collect all of the covert and special Superhuman classes.",
+   "Text": "Own 5 Superhuman class items",
+   "Conditions": [
+    {
+     "Own": [
+      943,
+      944,
+      1055,
+      1056,
+      8084,
+      8085,
+      8107,
+      8134,
+      8135,
+      8167,
+      8195,
+      8196,
+      8223,
+      8224,
+      8251,
+      8252,
+      8287,
+      8288,
+      8352,
+      8353,
+      8418,
+      8419,
+      8439,
+      8440,
+      8488,
+      8489,
+      8526,
+      8527,
+      8559,
+      8560,
+      8572,
+      8573,
+      8629,
+      8630,
+      8659,
+      8660,
+      8703,
+      8704,
+      8747,
+      8748,
+      8813,
+      8814,
+      8857,
+      8858,
+      8903,
+      8904,
+      8932,
+      8933,
+      8952,
+      8988,
+      8989,
+      9000,
+      9001,
+      9025,
+      9026,
+      9029,
+      9030,
+      9055,
+      9056,
+      9062,
+      9063,
+      9127,
+      9128,
+      9131,
+      9132,
+      9220,
+      9221,
+      9224,
+      9225,
+      9289,
+      9290,
+      9293,
+      9294,
+      9394,
+      9395,
+      9398,
+      9399,
+      9536,
+      9537,
+      9540,
+      9541,
+      9588,
+      9711,
+      9713,
+      9889,
+      9891
+     ],
+     "Count": 5
+    }
+   ]
+  },
+  {
+   "ID": 149,
+   "Resource": "season17_01m",
+   "Name": "17 - Season 1 Elite",
+   "Group": "Seasons",
+   "Lore": "A medal given to players who have shown outstanding performance in Ranked Mode: 2017 Season 1.\n\n* Equipping this medal will display a special effect when you are a human or a zombie.",
+   "Text": "Complete 25 weekly orders",
+   "Conditions": [
+    {
+     "Counter": "WeeklyOrdersDone",
+     "Target": 25
+    }
+   ]
+  },
+  {
+   "ID": 150,
+   "Resource": "season17_01",
+   "Name": "17 - Season 1",
+   "Group": "Seasons",
+   "Lore": "A medal to commemorate your participation in the Ranked Mode: 2017 Season 1",
+   "Text": "Complete 10 weekly orders",
+   "Conditions": [
+    {
+     "Counter": "WeeklyOrdersDone",
+     "Target": 10
+    }
+   ]
+  },
+  {
+   "ID": 159,
+   "Resource": "season18_01m",
+   "Name": "18 - Season 1 Elite",
+   "Group": "Seasons",
+   "Lore": "",
+   "Text": "Complete 60 weekly orders",
+   "Conditions": [
+    {
+     "Counter": "WeeklyOrdersDone",
+     "Target": 60
+    }
+   ]
+  },
+  {
+   "ID": 160,
+   "Resource": "season18_01",
+   "Name": "18 - Season 1",
+   "Group": "Seasons",
+   "Lore": "",
+   "Text": "Complete 40 weekly orders",
+   "Conditions": [
+    {
+     "Counter": "WeeklyOrdersDone",
+     "Target": 40
+    }
+   ]
+  },
+  {
+   "ID": 170,
+   "Resource": "season18_02m",
+   "Name": "18 - Season 2 Elite",
+   "Group": "Seasons",
+   "Lore": "",
+   "Text": "Complete 100 weekly orders",
+   "Conditions": [
+    {
+     "Counter": "WeeklyOrdersDone",
+     "Target": 100
+    }
+   ]
+  },
+  {
+   "ID": 171,
+   "Resource": "season18_02",
+   "Name": "18 - Season 2",
+   "Group": "Seasons",
+   "Lore": "",
+   "Text": "Complete 80 weekly orders",
+   "Conditions": [
+    {
+     "Counter": "WeeklyOrdersDone",
+     "Target": 80
+    }
+   ]
+  },
+  {
+   "ID": 172,
+   "Resource": "season1buy",
+   "Name": "Season 1 Trailblazer",
+   "Group": "Seasons",
+   "Lore": "A medal awarded to those who purchase a Season Pass for Season 1.",
+   "Text": "Unlock 1 battle passes",
+   "Conditions": [
+    {
+     "Counter": "PassesUnlocked",
+     "Target": 1
+    }
+   ]
+  },
+  {
+   "ID": 173,
+   "Resource": "season1fin",
+   "Name": "Season 1 Conqueror",
+   "Group": "Seasons",
+   "Lore": "Medal given to players who have shown outstanding performance in Season 1.\n\n*Equipping this medal will display a special effect when you are a human or a zombie.",
+   "Text": "Complete 1 battle passes",
+   "Conditions": [
+    {
+     "Counter": "PassesCompleted",
+     "Target": 1
+    }
+   ]
+  },
+  {
+   "ID": 189,
+   "Resource": "season2buy",
+   "Name": "Season 2 Trailblazer",
+   "Group": "Seasons",
+   "Lore": "A medal awarded to those who purchase a Season Pass for Season 2.",
+   "Text": "Unlock 2 battle passes",
+   "Conditions": [
+    {
+     "Counter": "PassesUnlocked",
+     "Target": 2
+    }
+   ]
+  },
+  {
+   "ID": 190,
+   "Resource": "season2fin",
+   "Name": "Season 2 Conqueror",
+   "Group": "Seasons",
+   "Lore": "Medal given to players who have shown outstanding performance in Season 2.\n\n*Equipping this medal will display a special effect when you are a human or a zombie.",
+   "Text": "Complete 2 battle passes",
+   "Conditions": [
+    {
+     "Counter": "PassesCompleted",
+     "Target": 2
+    }
+   ]
+  },
+  {
+   "ID": 194,
+   "Resource": "season3buy",
+   "Name": "Season 3 Trailblazer",
+   "Group": "Seasons",
+   "Lore": "A medal awarded to those who purchase a Season Pass for Season 3.",
+   "Text": "Unlock 3 battle passes",
+   "Conditions": [
+    {
+     "Counter": "PassesUnlocked",
+     "Target": 3
+    }
+   ]
+  },
+  {
+   "ID": 195,
+   "Resource": "season3fin",
+   "Name": "Season 3 Conqueror",
+   "Group": "Seasons",
+   "Lore": "Medal given to players who have shown outstanding performance in Season 3.\n\n*Equipping this medal will display a special effect when you are a human or a zombie.",
+   "Text": "Complete 3 battle passes",
+   "Conditions": [
+    {
+     "Counter": "PassesCompleted",
+     "Target": 3
+    }
+   ]
+  },
+  {
+   "ID": 229,
+   "Resource": "season4buy",
+   "Name": "Season 4 Trailblazer",
+   "Group": "Seasons",
+   "Lore": "A medal awarded to those who purchase a Season Pass for Season 4.",
+   "Text": "Unlock 4 battle passes",
+   "Conditions": [
+    {
+     "Counter": "PassesUnlocked",
+     "Target": 4
+    }
+   ]
+  },
+  {
+   "ID": 230,
+   "Resource": "season4fin",
+   "Name": "Season 4 Conqueror",
+   "Group": "Seasons",
+   "Lore": "Medal given to players who have shown outstanding performance in Season 4.\n\n*Equipping this medal will display a special effect when you are a human or a zombie.",
+   "Text": "Complete 4 battle passes",
+   "Conditions": [
+    {
+     "Counter": "PassesCompleted",
+     "Target": 4
+    }
+   ]
+  },
+  {
+   "ID": 246,
+   "Resource": "season5buy",
+   "Name": "Season 5 Trailblazer",
+   "Group": "Seasons",
+   "Lore": "A medal awarded to those who purchase a Season Pass for Season 5.",
+   "Text": "Unlock 5 battle passes",
+   "Conditions": [
+    {
+     "Counter": "PassesUnlocked",
+     "Target": 5
+    }
+   ]
+  },
+  {
+   "ID": 247,
+   "Resource": "season5fin",
+   "Name": "Season 5 Conqueror",
+   "Group": "Seasons",
+   "Lore": "Medal given to players who have shown outstanding performance in Season 5.\n\n*Equipping this medal will display a special effect when you are a human or a zombie.",
+   "Text": "Complete 5 battle passes",
+   "Conditions": [
+    {
+     "Counter": "PassesCompleted",
+     "Target": 5
+    }
+   ]
+  },
+  {
+   "ID": 250,
+   "Resource": "season6buy",
+   "Name": "Season 6 Trailblazer",
+   "Group": "Seasons",
+   "Lore": "A medal awarded to those who purchase a Season Pass for Season 6. Displays a special effect when used.\n* Season 6 Pass Reward",
+   "Text": "Unlock 6 battle passes",
+   "Conditions": [
+    {
+     "Counter": "PassesUnlocked",
+     "Target": 6
+    }
+   ]
+  },
+  {
+   "ID": 251,
+   "Resource": "season6fin",
+   "Name": "Season 6 Conqueror",
+   "Group": "Seasons",
+   "Lore": "Medal given to players who have shown outstanding performance in Season 6.\n\n*Equipping this medal will display a special effect when you are a human or a zombie.",
+   "Text": "Complete 6 battle passes",
+   "Conditions": [
+    {
+     "Counter": "PassesCompleted",
+     "Target": 6
+    }
+   ]
+  },
+  {
+   "ID": 260,
+   "Resource": "season7buy",
+   "Name": "Season 7 Trailblazer",
+   "Group": "Seasons",
+   "Lore": "A medal awarded to those who purchase a Season Pass for Season 7. Displays a special effect when used.\n* Season 7 Pass Reward",
+   "Text": "Unlock 7 battle passes",
+   "Conditions": [
+    {
+     "Counter": "PassesUnlocked",
+     "Target": 7
+    }
+   ]
+  },
+  {
+   "ID": 261,
+   "Resource": "season7fin",
+   "Name": "Season 7 Conqueror",
+   "Group": "Seasons",
+   "Lore": "Medal given to players who have shown outstanding performance in Season 7.\n\n*Equipping this medal will display a special effect when you are a human or a zombie.",
+   "Text": "Complete 7 battle passes",
+   "Conditions": [
+    {
+     "Counter": "PassesCompleted",
+     "Target": 7
+    }
+   ]
+  }
+ ]
+}

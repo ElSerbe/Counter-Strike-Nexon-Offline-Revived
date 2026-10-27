@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Service Record</title>
+<link rel="stylesheet" href="../shop/style.css">
+<link rel="stylesheet" href="profile.css">
+</head>
+<body>
+<header class="topbar">
+  <h1>Service Record</h1>
+  <nav id="tabs" class="tabs">
+    <button type="button" data-tab="overview" class="active">Overview</button>
+    <button type="button" data-tab="medals">Medals</button>
+    <button type="button" data-tab="modes">Game modes</button>
+  </nav>
+  <div class="wallet" title="Medals (shop currency)">
+    <span class="medal-icon"></span><span id="currency">--</span>
+  </div>
+  <button id="close" class="close" type="button" title="Close (Esc)">Close &times;</button>
+</header>
+
+<main id="view"></main>
+
+<div id="toast" class="toast hidden"></div>
+<script src="profile.js"></script>
+</body>
+</html>

@@ -125,8 +125,11 @@
   async function load() {
     try {
       const fresh = await api("/api/state");
-      if (fresh.openView === "bots") {
-        location.replace("/bots/"); // the room's "AI settings" button: the AI player editor
+      // the game's browser window opened by another button: the room's "AI settings" (AI player editor), the
+      // taskbar's VIP (profile) and Missions buttons
+      const views = { bots: "/bots/", profile: "/profile/", missions: "/missions/" };
+      if (views[fresh.openView]) {
+        location.replace(views[fresh.openView]);
         return;
       }
       state = fresh;
