@@ -267,6 +267,13 @@ static void LoadSettings()
             }
         }
         fclose(f);
+        // Counter-Strike's own weapons whose model isn't named after the item (usp45 -> p_usp.mdl...): the pistols
+        // everyone spawns with must be known to drop them ("None" secondary)
+        static const struct { const char* model; int cat; } aliases[] = {
+            { "models/p_usp.mdl", 1 }, { "models/p_deagle.mdl", 1 }, { "models/p_elite.mdl", 1 },
+            { "models/p_glock18.mdl", 1 }, { "models/p_p228.mdl", 1 }, { "models/p_fiveseven.mdl", 1 } };
+        for (auto& a : aliases)
+            cfg.weaponCategory.emplace(a.model, a.cat);
     }
     cfg.followDistance = IniFloat(ini, "FollowDistance", "180");
     cfg.zgPlayers = GetPrivateProfileIntA("BotAssist", "ZombieGiantPlayers", -1, ini);
@@ -730,6 +737,8 @@ struct BotState
     int strips = 0;              // drops in this life
     int stripProbe = 0;          // next None slot to switch to (to drop what it carries there)
     float nextProbe = 0;
+    int probedSlot = 0;          // the slot it was just switched to (1 / 2), and what it held before
+    std::string probedFrom;
     void* commander = nullptr;   // who gave it
     bool driven = false;         // botassist drove this bot in the last command
     float nextDebug = 0, nextBeam = 0;
@@ -1887,6 +1896,10 @@ static void UpdateBuying(void* bot, BotState& st)
             ch = (char)tolower(ch);
         auto cat = cfg.weaponCategory.find(held);
         int c = cat == cfg.weaponCategory.end() ? 0 : cat->second;
+        // a weapon botassist doesn't know that came up when switching to a None slot is that slot's weapon
+        if (c == 0 && st.probedSlot && !held.empty() && held != st.probedFrom && held.find("knife") == std::string::npos)
+            c = st.probedSlot == 2 ? 1 : 4;
+        st.probedSlot = 0;
         if ((rb->primary < 0 && c >= 2 && c <= 5) || (rb->secondary < 0 && c == 1))
         {
             FakeCommand(bot, "cl_drop");
@@ -1905,7 +1918,11 @@ static void UpdateBuying(void* bot, BotState& st)
             if (rb->secondary < 0)
                 probes[n++] = "slot2";
             if (st.stripProbe < n)
+            {
+                st.probedSlot = probes[st.stripProbe][4] - '0';
+                st.probedFrom = held;
                 FakeCommand(bot, probes[st.stripProbe++]); // nothing happens if it has none
+            }
             else
             {
                 st.stripProbe = 0;
@@ -4955,7 +4972,7 @@ static struct
 } g_cheats;
 static float g_consoleNextCheck = -1;
 static void CalibrateEdict(void* edict);
-static bool HttpPost(const wchar_t* path, const char* body);
+static bool HttpPost(const wchar_t* path, const char* body, std::string* reply = nullptr);
 static volatile LONG g_cheatsReported = 0; // 0 not yet in this match, 1 sending or told
 
 // sv_cheats is on: CSNZ_Server cuts this match's medals (POST /api/cheats); a failed call is tried again later
@@ -5901,7 +5918,7 @@ static const DWORD GAMEUI_MAINPANEL = 0x10b844fc;
 static DWORD g_gameUiDelta;
 static DWORD g_botSettingReturn;
 
-static bool HttpPost(const wchar_t* path, const char* body)
+static bool HttpPost(const wchar_t* path, const char* body, std::string* reply)
 {
     bool ok = false;
     HINTERNET ses = WinHttpOpen(L"botassist", WINHTTP_ACCESS_TYPE_NO_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
@@ -5913,7 +5930,13 @@ static bool HttpPost(const wchar_t* path, const char* body)
     if (req && WinHttpSendRequest(req, L"Content-Type: application/json\r\n", (DWORD)-1L, (LPVOID)body, (DWORD)strlen(body),
                                   (DWORD)strlen(body), 0) &&
         WinHttpReceiveResponse(req, NULL))
+    {
         ok = true;
+        char buf[4096];
+        DWORD got = 0;
+        while (reply && WinHttpReadData(req, buf, sizeof(buf), &got) && got)
+            reply->append(buf, got);
+    }
     if (req)
         WinHttpCloseHandle(req);
     if (con)
@@ -6459,6 +6482,29 @@ static DWORD WINAPI QuestTexts(LPVOID)
     return 0;
 }
 
+// Steam achievements: CSNZ_Server sends the game's Steam packet (192) only to a client whose Steam API is up (the
+// game's handler has no ISteamUserStats otherwise and crashes). The login doesn't say it (user name + password), so
+// botassist checks SteamAPI_GetHSteamPipe like the game does and tells the server (POST /api/steam, answered once a
+// character is logged in on this computer); again now and then, for a new login.
+static DWORD WINAPI ReportSteam(LPVOID)
+{
+    bool told = false;
+    for (;;)
+    {
+        Sleep(told ? 30000 : 5000);
+        HMODULE api = GetModuleHandleA("steam_api.dll");
+        typedef int(__cdecl * PipeFn)();
+        PipeFn pipe = api ? (PipeFn)GetProcAddress(api, "SteamAPI_GetHSteamPipe") : nullptr;
+        if (!pipe || !pipe())
+            continue;
+        std::string reply;
+        bool ok = HttpPost(L"/api/steam", "{\"steam\":true}", &reply) && reply.find("\"ok\":true") != std::string::npos;
+        if (ok && !told)
+            Log("Steam: the Steam API is up, CSNZ_Server sends the Steam achievements");
+        told = ok;
+    }
+}
+
 static DWORD WINAPI Watcher(LPVOID)
 {
     HMODULE hooked = NULL;
@@ -6519,7 +6565,10 @@ BOOL APIENTRY DllMain(HMODULE self, DWORD reason, LPVOID)
         Log("botassist loaded (%s)", cfg.enabled ? "enabled" : "disabled in botassist.ini");
         CreateThread(NULL, 0, Watcher, NULL, 0, NULL);
         if (cfg.enabled)
+        {
             CreateThread(NULL, 0, QuestTexts, NULL, 0, NULL);
+            CreateThread(NULL, 0, ReportSteam, NULL, 0, NULL);
+        }
     }
     return TRUE;
 }

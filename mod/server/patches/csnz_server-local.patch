@@ -1289,10 +1289,10 @@ index ad8d88a..9844970 100644
  		CUserInventoryItem targetItem;
 diff --git a/src/manager/medalmanager.cpp b/src/manager/medalmanager.cpp
 new file mode 100644
-index 0000000..d5bb116
+index 0000000..2c902d6
 --- /dev/null
 +++ b/src/manager/medalmanager.cpp
-@@ -0,0 +1,502 @@
+@@ -0,0 +1,501 @@
 +#include "medalmanager.h"
 +#include "warbondmanager.h"
 +#include "userdatabase.h"
@@ -1670,12 +1670,11 @@ index 0000000..d5bb116
 +	g_PacketManager.SendHonorQuests(user->GetExtendedSocket(), quests, (int)ctx.points);
 +}
 +
-+void CMedalManager::SetSteamClient(IExtendedSocket* socket, bool steam)
++bool CMedalManager::SetSteamClient(IExtendedSocket* socket, bool steam)
 +{
-+	if (steam)
-+		m_SteamSockets.insert(socket->GetID());
-+	else
-+		m_SteamSockets.erase(socket->GetID());
++	if (!socket)
++		return false;
++	return steam ? m_SteamSockets.insert(socket->GetID()).second : m_SteamSockets.erase(socket->GetID()) > 0;
 +}
 +
 +void CMedalManager::SendSteam(IUser* user, MedalContext& ctx)
@@ -1797,7 +1796,7 @@ index 0000000..d5bb116
 +}
 diff --git a/src/manager/medalmanager.h b/src/manager/medalmanager.h
 new file mode 100644
-index 0000000..745d383
+index 0000000..1a0e4c5
 --- /dev/null
 +++ b/src/manager/medalmanager.h
 @@ -0,0 +1,107 @@
@@ -1880,9 +1879,9 @@ index 0000000..745d383
 +	// GET /api/questtexts (botassist): the medals' texts in the game's Medals tab, CSO_Quest<2000+id>_Desc1 / _Cond<n>
 +	nlohmann::json QuestTexts() const;
 +
-+	// the client logged in through Steam (login packet): only then the Steam packet may be sent (the game has no
-+	// ISteamUserStats otherwise and would crash on it)
-+	void SetSteamClient(IExtendedSocket* socket, bool steam);
++	// the client's Steam API is up (botassist: POST /api/steam; or a login packet with a Steam ticket): only then the
++	// Steam packet may be sent (the game has no ISteamUserStats otherwise and would crash on it). True if it changed.
++	bool SetSteamClient(IExtendedSocket* socket, bool steam);
 +
 +private:
 +	bool LoadConfig();
@@ -3616,10 +3615,10 @@ index 3054001..9c14f6b 100644
  	void SendUserLoadout(IUser* user);
 diff --git a/src/manager/warbondmanager.cpp b/src/manager/warbondmanager.cpp
 new file mode 100644
-index 0000000..b7862ef
+index 0000000..a8f0410
 --- /dev/null
 +++ b/src/manager/warbondmanager.cpp
-@@ -0,0 +1,950 @@
+@@ -0,0 +1,960 @@
 +#include "warbondmanager.h"
 +#include "usermanager.h"
 +#include "userdatabase.h"
@@ -3832,6 +3831,16 @@ index 0000000..b7862ef
 +				va("sv_cheats is on: this match's medals will be cut by %d%%.", m_Medals.cheatPenalty));
 +		}
 +		result = { { "ok", true }, { "match", match != NULL }, { "penalty", m_Medals.cheatPenalty } };
++	}
++	else if (req.method == "POST" && req.path == "/api/steam")
++	{
++		// botassist.asi: the game's Steam API is up on this computer, the Steam achievements can be sent
++		if (g_MedalManager.SetSteamClient(user->GetExtendedSocket(), true))
++		{
++			Logger().Info("MedalManager: user %d plays through Steam, sending the Steam achievements\n", user->GetID());
++			g_MedalManager.CheckMedals(user);
++		}
++		result = { { "ok", true } };
 +	}
 +	else if (req.path == "/api/missions")
 +	{
@@ -5657,10 +5666,31 @@ index 13a4ee8..c36e019 100644
  	std::vector<int> m_KickedUsers;
  	std::vector<int> m_FamilyBattleUsers;
 diff --git a/src/room/roomsettings.cpp b/src/room/roomsettings.cpp
-index 0ba9234..d5d4988 100644
+index 0ba9234..2452fde 100644
 --- a/src/room/roomsettings.cpp
 +++ b/src/room/roomsettings.cpp
-@@ -899,6 +899,15 @@ int CRoomSettings::GetDefaultFriendlyBots(int gameModeId)
+@@ -775,14 +775,18 @@ int CRoomSettings::GetMapSetting(int mapId, const string& setting)
+ 	return g_pMapListTable->GetCell<int>(setting, to_string(mapId));
+ }
+ 
++// offline build: rooms start without weapon restrictions (the official server put Team Deathmatch on "New Classic",
++// 9, and some maps on their own restriction); the host can still pick one
+ int CRoomSettings::GetGameModeDefaultWeaponLimit(int gameModeId)
+ {
+-	return (gameModeId == 2 || gameModeId == 5 || gameModeId == 23) ? 9 : 0;
++	(void)gameModeId;
++	return 0;
+ }
+ 
+ int CRoomSettings::GetMapDefaultWeaponRestrict(int mapId)
+ {
+-	return g_pMapListTable->GetCell<int>("weapon_restrict_deault", to_string(mapId));
++	(void)mapId;
++	return 0;
+ }
+ 
+ int CRoomSettings::GetDefaultBuyTime(int gameModeId)
+@@ -899,6 +903,15 @@ int CRoomSettings::GetDefaultFriendlyBots(int gameModeId)
  		case 58:
  			friendlyBots = 8;
  			break;
@@ -5676,7 +5706,7 @@ index 0ba9234..d5d4988 100644
  	}
  
  	return friendlyBots;
-@@ -931,7 +940,14 @@ int CRoomSettings::GetDefaultEnemyBots(int gameModeId)
+@@ -931,7 +944,14 @@ int CRoomSettings::GetDefaultEnemyBots(int gameModeId)
  	return enemyBots;
  }
  
@@ -5691,7 +5721,7 @@ index 0ba9234..d5d4988 100644
  {
  	int botAdd = 0;
  
-@@ -1416,7 +1432,7 @@ void CRoomSettings::LoadDefaultSettings(int gameModeId, int mapId)
+@@ -1416,7 +1436,7 @@ void CRoomSettings::LoadDefaultSettings(int gameModeId, int mapId)
  	botDifficulty = 0;
  	friendlyBots = GetDefaultFriendlyBots(gameModeId);
  	enemyBots = GetDefaultEnemyBots(gameModeId);
@@ -5700,7 +5730,7 @@ index 0ba9234..d5d4988 100644
  	botAdd = GetDefaultBotAdd(gameModeId);
  	kdRule = 0;
  	startingCash = GetDefaultStartingCash(gameModeId);
-@@ -1530,7 +1546,7 @@ void CRoomSettings::LoadZbCompetitiveSettings(int gameModeId)
+@@ -1530,7 +1550,7 @@ void CRoomSettings::LoadZbCompetitiveSettings(int gameModeId)
  	botDifficulty = 0;
  	friendlyBots = GetDefaultFriendlyBots(gameModeId);
  	enemyBots = GetDefaultEnemyBots(gameModeId);
@@ -5709,7 +5739,24 @@ index 0ba9234..d5d4988 100644
  	botAdd = GetDefaultBotAdd(gameModeId);
  
  	lowMidFlag |= ROOM_LOWMID_KDRULE;
-@@ -1807,7 +1823,7 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
+@@ -1766,12 +1786,10 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
+ 		lowFlag |= ROOM_LOW_ROUNDTIME;
+ 		roundTime = GetGameModeDefaultSetting(gameModeId, "mode_roundtime_id");
+ 
+-		int limit = GetGameModeDefaultWeaponLimit(gameModeId);
+-		if (limit)
+-		{
+-			lowFlag |= ROOM_LOW_WEAPONLIMIT;
+-			weaponLimit = limit;
+-		}
++		// offline build: a new mode (and a new room) starts without weapon restrictions, whatever the client sent
++		lowFlag |= ROOM_LOW_WEAPONLIMIT;
++		weaponLimit = GetGameModeDefaultWeaponLimit(gameModeId);
++		weaponLimitCustom.clear();
+ 
+ 		lowFlag |= ROOM_LOW_HOSTAGEKILLLIMIT;
+ 		hostageKillLimit = 0;
+@@ -1807,7 +1825,7 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
  		botDifficulty = 0;
  		friendlyBots = GetDefaultFriendlyBots(gameModeId);
  		enemyBots = GetDefaultEnemyBots(gameModeId);
@@ -5718,7 +5765,7 @@ index 0ba9234..d5d4988 100644
  		botAdd = GetDefaultBotAdd(gameModeId);
  
  		lowMidFlag |= ROOM_LOWMID_KDRULE;
-@@ -2026,7 +2042,7 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
+@@ -2026,7 +2044,7 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
  					Logger().Warn("User '%s' tried to update a room\'s settings with gameModeId that doesn't allow bots, gameModeId: %d\n", user->GetLogName(), gameModeId);
  					lowMidFlag &= ~ROOM_LOWMID_BOT;
  				}
@@ -5727,7 +5774,7 @@ index 0ba9234..d5d4988 100644
  				{
  					if (botDifficulty > 7)
  						botDifficulty = 7;
-@@ -2034,31 +2050,22 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
+@@ -2034,31 +2052,22 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
  					if (friendlyBots > 15)
  						friendlyBots = 15;
  
@@ -5772,6 +5819,21 @@ index 0ba9234..d5d4988 100644
  				}
  			}
  
+@@ -2364,12 +2373,8 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
+ 			maxPlayers = g_pMapListTable->GetCell<int>("max_player", to_string(mapId));
+ 		}
+ 
+-		int restriction = GetMapDefaultWeaponRestrict(mapId);
+-		if (restriction)
+-		{
+-			highMidFlag |= ROOM_HIGHMID_WEAPONRESTRICT;
+-			weaponRestrict = restriction;
+-		}
++		highMidFlag |= ROOM_HIGHMID_WEAPONRESTRICT;
++		weaponRestrict = GetMapDefaultWeaponRestrict(mapId);
+ 
+ 		lowMidFlag |= ROOM_LOWMID_BALLNUMBER;
+ 		ballNumber = GetMapSetting(mapId, "ball_default");
 diff --git a/src/room/roomsettings.h b/src/room/roomsettings.h
 index 69a1cd9..823c6f8 100644
 --- a/src/room/roomsettings.h
