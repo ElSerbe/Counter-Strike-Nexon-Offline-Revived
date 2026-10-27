@@ -161,6 +161,32 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
   .slots-head, .slot { grid-template-columns: 50px 1fr 100px 88px; }
   .slot img.wpn { max-width: 96px; }
 }
+/* the lobby's web window is the 4:3 lobby minus its frame (1024x768 -> 1000x686): the adding controls take a
+   second row of the top bar, and main fills what is left */
+body { display: flex; flex-direction: column; }
+.topbar { flex: none; }
+main { flex: 1; min-height: 0; height: auto; }
+@media (max-width: 1240px) {
+  .topbar { height: auto; flex-wrap: wrap; row-gap: 8px; padding: 9px 12px; }
+  .adder { order: 1; width: 100%; }
+  .adder #scramble { margin-left: auto; }
+  .adder .small, .topbar > .small { align-self: stretch; }
+  .topbar > .small { padding: 0 10px; }
+}
+.fm-count { white-space: nowrap; }
+@media (max-width: 1100px) { .small-row { flex-wrap: wrap; row-gap: 6px; gap: 6px; } .small-row .small { padding: 6px 8px; letter-spacing: .5px; }.fm { width: calc(100% - 24px); height: calc(100% - 24px); } }
+@media (max-width: 900px) {
+  .slots { width: 360px; }
+  .slots-head, .slot { grid-template-columns: 46px 1fr 84px 88px; }
+  .slot img.wpn { max-width: 80px; }
+  .roominfo { display: none; }
+  .topbar h1 { margin-right: auto; }
+  .picker-top { flex-wrap: wrap; row-gap: 6px; }
+  .pick-tabs { margin-left: 0; width: 100%; }
+  .pick-tabs button { flex: 1; width: auto; }
+  .fm-list { width: 190px; }
+  .fm-row #fmname { flex: 1 1 140px; min-width: 0; }
+}
 .ed-row { flex-wrap: wrap; row-gap: 12px; }
 .ed-row .field.grow { min-width: 300px; }
 
