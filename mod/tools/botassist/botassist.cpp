@@ -26,6 +26,7 @@
 #include <unordered_map>
 #include <queue>
 #include <algorithm>
+#include <functional>
 #include <winhttp.h>
 #include <intrin.h>
 #pragma comment(lib, "winhttp.lib")
@@ -1044,13 +1045,32 @@ static bool PickSpot(void* bot, BotState& st, V3 pos, V3 around, float minR, flo
     return false;
 }
 
-// where to shoot: upper body, led a little by the target's movement
+static const char* Str(int s);
+
+// where to shoot: upper body, led a little by the target's movement. Bosses' boxes reach far above their bodies
+// (Zombie Disaster Zone's boss: the bots shot into the air above it): on a target taller than a player the bots
+// aim at most 100 units above its feet, where every big monster has a body.
+static const float TALL_TARGET = 150.0f, TALL_AIM = 100.0f;
 static V3 AimPoint(void* target)
 {
     unsigned char* v = Vars(target);
     V3 lo = Vec((float*)(v + EV_ABSMIN)), hi = Vec((float*)(v + EV_ABSMAX));
     V3 p = (lo + hi) * 0.5f;
-    p.z += (hi.z - lo.z) * 0.2f;
+    float height = hi.z - lo.z;
+    if (height > TALL_TARGET)
+    {
+        p.z = lo.z + TALL_AIM;
+        static std::vector<std::string> seen;
+        std::string model = Str(F<int>(v, 0xc8)); // pev->model
+        if (std::find(seen.begin(), seen.end(), model) == seen.end() && seen.size() < 50)
+        {
+            seen.push_back(model);
+            Log("tall target %s: box %.0f x %.0f x %.0f, aimed %.0f above its feet", model.c_str(), hi.x - lo.x,
+                hi.y - lo.y, height, TALL_AIM);
+        }
+        return p;
+    }
+    p.z += height * 0.2f;
     return p + Vec((float*)(v + EV_VELOCITY)) * 0.06f;
 }
 
@@ -4857,11 +4877,45 @@ static bool ZgKeepClient(void* cl, const char* fmt, DWORD ret)
     return !allowed;
 }
 
+// Zombie Disaster Zone: two of the room's three bots left within a second of joining, with nothing on the game's
+// side. In that mode the bots' drops and room kicks are logged with their caller, and the bots stay like Zombie
+// Giant's fake players (gone only on a level change, at the end of the session or when they leave the room).
+static const int MODE_ZSRIFT = 59;
+static void* BotWhere(std::function<bool(void*)> match)
+{
+    void* found = nullptr;
+    ForEntitiesNear(V3{ 0, 0, 0 }, 1e6f, [&](void* e) {
+        if (!found && (F<int>(Vars(e), EV_FLAGS) & (FL_CLIENT | FL_FAKECLIENT)) == (FL_CLIENT | FL_FAKECLIENT) && match(e))
+            found = e;
+    });
+    return found;
+}
+
+static bool ZsrKeepBot(void* cl, const char* fmt, DWORD ret)
+{
+    const char* name = (const char*)cl + HW_CLIENT_NAME;
+    if (!BotWhere([&](void* e) { return !strcmp(String(F<int>(Vars(e), EV_NETNAME)), name); }))
+        return false;
+    std::string reason = fmt ? fmt : "";
+    bool allowed = reason.find("level change") != std::string::npos || reason.find("Session End") != std::string::npos ||
+                   reason.find("Client leave") != std::string::npos || reason.find("shutting down") != std::string::npos;
+    static std::vector<std::string> seen;
+    std::string key = std::string(name) + "|" + reason;
+    if (std::find(seen.begin(), seen.end(), key) == seen.end() && seen.size() < 200)
+    {
+        seen.push_back(key);
+        Log("ZSRift: the engine drops bot '%s': reason '%s', from hw+%lx%s", name, reason.c_str(), ret - g_hwLo,
+            allowed ? "" : ": KEPT");
+    }
+    return !allowed;
+}
+
 static void HookedDropClient(void* cl, int crash, const char* fmt, DWORD a1, DWORD a2, DWORD a3, DWORD a4)
 {
     DWORD ret = (DWORD)_ReturnAddress();
     bool keep = false;
     __try { keep = cl && ZgActive() && ZgKeepClient(cl, fmt, ret); } __except (EXCEPTION_EXECUTE_HANDLER) {}
+    __try { keep = keep || (cl && GameMode() == MODE_ZSRIFT && ZsrKeepBot(cl, fmt, ret)); } __except (EXCEPTION_EXECUTE_HANDLER) {}
     if (!keep)
         g_DropClientTramp(cl, crash, fmt, a1, a2, a3, a4);
 }
@@ -4896,11 +4950,25 @@ static bool ZgRoomKickBlocked(int index, DWORD ret)
     return e != nullptr;
 }
 
+static bool ZsrRoomKickBlocked(int index, DWORD ret)
+{
+    void* bot = BotWhere([&](void* e) { return g_IndexOfEdict && g_IndexOfEdict(e) == index; });
+    static std::vector<DWORD> seen;
+    if (bot && std::find(seen.begin(), seen.end(), ret) == seen.end() && seen.size() < 50)
+    {
+        seen.push_back(ret);
+        Log("ZSRift: the room kicks bot '%s' (player %d) from %s+%lx: refused", String(F<int>(Vars(bot), EV_NETNAME)),
+            index, ret >= g_mpLo && ret < g_mpHi ? "mp" : "hw", ret >= g_mpLo && ret < g_mpHi ? ret - g_mpDelta : ret - g_hwLo);
+    }
+    return bot != nullptr;
+}
+
 static void __fastcall HookedRoomKick(void* self, void* edx, int index)
 {
     DWORD ret = (DWORD)_ReturnAddress();
     bool blocked = false;
     __try { blocked = ZgActive() && ZgRoomKickBlocked(index, ret); } __except (EXCEPTION_EXECUTE_HANDLER) {}
+    __try { blocked = blocked || (GameMode() == MODE_ZSRIFT && ZsrRoomKickBlocked(index, ret)); } __except (EXCEPTION_EXECUTE_HANDLER) {}
     if (!blocked)
         g_RoomKick(self, edx, index);
 }
@@ -5388,6 +5456,7 @@ static bool ZSRiftStart(unsigned char* cso)
         ((MessageFn)(MP_ROUND_MESSAGE + g_mpDelta))("#Game_Commencing", 10);
         ((TerminateFn)(MP_TERMINATE_ROUND + g_mpDelta))(3.0f, 3);
         cso[0x534] = 1;
+        cso[0x30b] = 1; // complete reset: the restart doesn't count as a round played (+0x4cc), the rift's 5 do
         return true;
     }
     __except (EXCEPTION_EXECUTE_HANDLER)
@@ -5484,6 +5553,53 @@ static bool ZSRiftDeathThink(void* player)
     }
 }
 
+// Money per kill: the rift pays only at the start of each round (its StartMoney / RoundMoney stats), so a monster's
+// killer also gets ZSRIFT_KILL_MONEY through the rules' monster-kill handler (ZSRift vtable slot 0x334, 0x10767a20:
+// rules, monster, killer player), with the game's own money getter / setter (0x114b76d0 / 0x114cce40, thiscall on
+// the player, as its upgrade purchases use them; the money on the HUD follows).
+static const int ZSRIFT_KILL_MONEY = 5, ZSRIFT_MAX_MONEY = 999999;
+static const DWORD MP_ZSRIFT_VTABLE = 0x1178504C, MP_ZSRIFT_MONSTER_KILLED = 0x10767a20, MP_GET_MONEY = 0x114b76d0,
+                   MP_SET_MONEY = 0x114cce40;
+typedef void(__fastcall* MonsterKilledFn)(void* rules, void* edx, void* monster, void* killer);
+static MonsterKilledFn g_ZsrMonsterKilled;
+
+static void ZsrPayKill(void* killer)
+{
+    __try
+    {
+        typedef int(__thiscall * GetFn)(void*);
+        typedef void(__thiscall * SetFn)(void*, int);
+        int money = ((GetFn)(MP_GET_MONEY + g_mpDelta))(killer);
+        if (money >= 0 && money < ZSRIFT_MAX_MONEY)
+            ((SetFn)(MP_SET_MONEY + g_mpDelta))(killer, min(money + ZSRIFT_KILL_MONEY, ZSRIFT_MAX_MONEY));
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+    }
+}
+
+static void __fastcall HookedZsrMonsterKilled(void* rules, void* edx, void* monster, void* killer)
+{
+    g_ZsrMonsterKilled(rules, edx, monster, killer);
+    if (killer)
+        ZsrPayKill(killer);
+}
+
+static void HookZsrKillMoney()
+{
+    static bool tried = false;
+    if (tried)
+        return;
+    tried = true;
+    void** slot = (void**)(MP_ZSRIFT_VTABLE + g_mpDelta + 0x334);
+    if (Readable(slot, 4) && *slot == (void*)(MP_ZSRIFT_MONSTER_KILLED + g_mpDelta))
+    {
+        g_ZsrMonsterKilled = (MonsterKilledFn)*slot;
+        PatchSlot(slot, (void*)HookedZsrMonsterKilled);
+    }
+    Log("ZSRift: %s", g_ZsrMonsterKilled ? "each monster kill pays its killer" : "kill money NOT hooked (unexpected code)");
+}
+
 static std::string ZSRiftDeadState(void* e)
 {
     unsigned char* v = Vars(e);
@@ -5532,6 +5648,7 @@ static void ZSRiftWatch()
     unsigned char* r = *(unsigned char**)(MP_GAMERULES + g_mpDelta);
     if (!r || !Readable(r, 0x2d0) || !cso || !Readable(cso, 0x560))
         return;
+    HookZsrKillMoney();
     int monsters = 0, players = 0;
     std::map<std::string, int> classes;
     std::string health;
