@@ -18,7 +18,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 MOD = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
-from gen_medals import (SCENARIO, ZOMBIE, ZOMBIE_ALL, ZS, c, describe)  # noqa: E402
+from gen_medals import (SCENARIO, TDM, ZOMBIE, ZOMBIE_ALL, ZOMBIE_CLASSIC, ZS, c, describe)  # noqa: E402
 
 SCHEMA = r"C:\Program Files (x86)\Steam\appcache\stats\UserGameStatsSchema_273110.bin"
 MEDALS = os.path.join(MOD, "server", "CSNZ_Server", "bin", "Data", "Medals.json")
@@ -86,6 +86,18 @@ EXTRA = {
     "AQS2410": [c("Matches", 200, ZOMBIE_ALL)],        # perks
 }
 
+# achievements whose own goal is something the server counts: they keep that goal (the Steam bar shows the real
+# count) instead of unlocking with their medal, whose goal is another counter or number
+STEAM_GOAL = {
+    "AQS2007": ("Wins", ZOMBIE_CLASSIC),               # survive in Zombie Mode
+    "AQS2008": ("ZombieKills", ZOMBIE_CLASSIC),
+    "AQS2010": ("MeleeKills", None),
+    "AQS2026": ("Wins", TDM),
+    "AQS2063": ("Wins", [20]),                         # escape in Zombie Escape
+    "AQS2074": ("Infections", [20]),
+    "AQS2239": ("Kills", [49]),                        # objects killed as a seeker
+}
+
 
 def parse_kv(buf, i=0):
     out = {}
@@ -145,7 +157,12 @@ def main():
                 bar = int(progress.get("max_val") or 0)
                 ach["Stat"] = stat
                 ach["Max"] = min(bar, limit) if bar and limit else bar or limit
-            if num - 2000 in medals:
+            if name in STEAM_GOAL and ach.get("Max"):
+                counter, modes = STEAM_GOAL[name]
+                req = c(counter, ach["Max"], modes)
+                ach["Text"] = describe(req, {})
+                ach["Conditions"] = [condition(req)]
+            elif num - 2000 in medals:
                 ach["Medal"] = num - 2000
             elif name in EXTRA:
                 ach["Text"] = "; ".join(describe(r, {}) for r in EXTRA[name])
@@ -158,7 +175,7 @@ def main():
         sys.exit("no medal and no EXTRA condition for: " + ", ".join(missing))
     with open(OUT, "w", encoding="utf-8") as f:
         json.dump({"Version": 1, "Achievements": out}, f, indent=1, ensure_ascii=False)
-    print(f"{len(out)} achievements ({sum('Medal' in a for a in out)} medals, {len(EXTRA)} own conditions) -> {OUT}")
+    print(f"{len(out)} achievements ({sum('Medal' in a for a in out)} medals, {len(out) - sum('Medal' in a for a in out)} own conditions) -> {OUT}")
 
 
 if __name__ == "__main__":

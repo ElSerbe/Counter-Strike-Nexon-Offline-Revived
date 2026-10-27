@@ -1289,10 +1289,10 @@ index ad8d88a..9844970 100644
  		CUserInventoryItem targetItem;
 diff --git a/src/manager/medalmanager.cpp b/src/manager/medalmanager.cpp
 new file mode 100644
-index 0000000..2c902d6
+index 0000000..4911081
 --- /dev/null
 +++ b/src/manager/medalmanager.cpp
-@@ -0,0 +1,501 @@
+@@ -0,0 +1,509 @@
 +#include "medalmanager.h"
 +#include "warbondmanager.h"
 +#include "userdatabase.h"
@@ -1713,7 +1713,15 @@ index 0000000..2c902d6
 +		if (a.stat.empty() || a.max <= 0)
 +			continue;
 +
-+		int value = done ? a.max : min(a.max - 1, (int)(fraction * a.max));
++		// the bar shows the real count when the goal is one counter up to the achievement's own max, else the share
++		// of the medal's goal (another counter or number than Steam's text)
++		int value;
++		if (done)
++			value = a.max;
++		else if (a.conditions.size() == 1 && Target(a.conditions[0]) == a.max)
++			value = (int)min<long long>(a.max - 1, Have(ctx, a.conditions[0], user));
++		else
++			value = min(a.max - 1, (int)(fraction * a.max + 1e-9));
 +		auto prev = last.find(a.stat);
 +		if (prev != last.end() && prev->second >= value)
 +			continue; // Steam stats only go up

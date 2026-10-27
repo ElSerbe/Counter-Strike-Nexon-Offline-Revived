@@ -1902,7 +1902,16 @@ static void UpdateBuying(void* bot, BotState& st)
         st.probedSlot = 0;
         if ((rb->primary < 0 && c >= 2 && c <= 5) || (rb->secondary < 0 && c == 1))
         {
+            // thrown behind the bot (the drop goes where the player faces): thrown ahead, the bot and the ones it
+            // fights walked onto it, picked it up and threw it again, round and round
+            float* va = (float*)(Vars(bot) + EV_VANGLE);
+            float* an = (float*)(Vars(bot) + EV_ANGLES);
+            float saved[6] = { va[0], va[1], va[2], an[0], an[1], an[2] };
+            va[0] = an[0] = 0;
+            va[1] = an[1] = AngleDiff(va[1] + 180.0f, 0.0f);
             FakeCommand(bot, "cl_drop");
+            memcpy(va, saved, sizeof(float) * 3);
+            memcpy(an, saved + 3, sizeof(float) * 3);
             st.strips++;
             st.stripProbe = 0; // it may carry the other slot's one too
             static int reports = 0;

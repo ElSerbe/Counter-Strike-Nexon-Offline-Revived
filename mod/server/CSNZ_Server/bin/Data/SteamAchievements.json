@@ -33,7 +33,18 @@
    "Desc": "Survive 5000 times in Zombie Mode",
    "Stat": "SA2007",
    "Max": 3000,
-   "Medal": 7
+   "Text": "Win 3,000 matches in Zombie (Original, Mutation, Hero)",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 3000,
+     "Modes": [
+      8,
+      9,
+      14
+     ]
+    }
+   ]
   },
   {
    "Name": "AQS2008",
@@ -41,7 +52,18 @@
    "Desc": "Score 5000 Zombie kills in Zombie Mode",
    "Stat": "SA2008",
    "Max": 5000,
-   "Medal": 8
+   "Text": "Kill 5,000 zombies in Zombie (Original, Mutation, Hero)",
+   "Conditions": [
+    {
+     "Counter": "ZombieKills",
+     "Target": 5000,
+     "Modes": [
+      8,
+      9,
+      14
+     ]
+    }
+   ]
   },
   {
    "Name": "AQS2010",
@@ -49,7 +71,13 @@
    "Desc": "10,000 melee weapon kills",
    "Stat": "SA2010",
    "Max": 10000,
-   "Medal": 10
+   "Text": "Score 10,000 melee kills",
+   "Conditions": [
+    {
+     "Counter": "MeleeKills",
+     "Target": 10000
+    }
+   ]
   },
   {
    "Name": "AQ_2011",
@@ -145,7 +173,18 @@
    "Desc": "Score 300 wins in Team Deathmatch",
    "Stat": "SA2026",
    "Max": 300,
-   "Medal": 26
+   "Text": "Win 300 matches in Team Deathmatch modes",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 300,
+     "Modes": [
+      2,
+      5,
+      19
+     ]
+    }
+   ]
   },
   {
    "Name": "AQ_2027",
@@ -307,7 +346,16 @@
    "Desc": "Escape 3,000 times in Zombie Escape Mode",
    "Stat": "SA2063",
    "Max": 3000,
-   "Medal": 63
+   "Text": "Win 3,000 matches in Zombie Escape",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 3000,
+     "Modes": [
+      20
+     ]
+    }
+   ]
   },
   {
    "Name": "AQS2064",
@@ -381,7 +429,16 @@
    "Desc": "Infect 5,000 Humans in Zombie Escape Mode",
    "Stat": "SA2074",
    "Max": 5000,
-   "Medal": 74
+   "Text": "Infect 5,000 humans in Zombie Escape",
+   "Conditions": [
+    {
+     "Counter": "Infections",
+     "Target": 5000,
+     "Modes": [
+      20
+     ]
+    }
+   ]
   },
   {
    "Name": "AQ_2075",
@@ -971,7 +1028,16 @@
    "Desc": "Kill 500 objects as a seeker",
    "Stat": "SA2239",
    "Max": 500,
-   "Medal": 239
+   "Text": "Score 500 kills in Prop Hunt",
+   "Conditions": [
+    {
+     "Counter": "Kills",
+     "Target": 500,
+     "Modes": [
+      49
+     ]
+    }
+   ]
   },
   {
    "Name": "AQS2240",
