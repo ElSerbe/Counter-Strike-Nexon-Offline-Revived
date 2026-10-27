@@ -362,3 +362,11 @@ automatic ones join CT. No more kicks in co-op modes.
 - Sex of a character: ChooseAppearance asks the class table ([0x121d3ec4] + 0x1f8, vfunc 0x50(class number),
   thiscall) whether the class is male (player +0x1fb5 bit 0 / +0x2155: male voice and sounds). Random characters
   alternate per team so each team gets as many men as women (PickCharacter).
+- Team swaps in the middle of a match (mp.dll 0x114d66e1) give the default character of the new team (class table
+  vfunc 0x24(team) -> player +0xcd4, male, player vfunc 0x220 = model). A bot whose class becomes that default
+  after a team change gets a character of its new team (room character, filter, or random half men / half women)
+  the same way (ApplyTeamCharacter). Not in zombie modes (infection changes team and model).
+- Room AI players without weapons or filter buy any weapon of the game (BuyAnyWeapon=1) in every mode, melee
+  included (botassist_weapons.txt category 11, from gen_weapons.py).
+- sv_cheats: hw.dll sets it to 1 at start-up with -dev, and it stays on between matches; botassist sets it to 0
+  when each match starts, so only turning it on during the match flags the match (logs the command line once).

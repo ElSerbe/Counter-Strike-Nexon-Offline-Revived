@@ -134,7 +134,7 @@ static struct
     int apiPort = 30080;            // CSNZ_Server's web API (the room's AI players: GET /api/matchbots)           // in follow mode, never farther than this from you (fighting or not)              // bots spread out around you instead of all following to the same place
     int debug = 1;             // 1: botassist_debug.log (what bots look at / shoot, entities around you); 2: also laser beams
     bool buyAnyWeapon = true;  // bots buy random weapons from the whole game (botassist_weapons.txt)
-    std::vector<int> primaries, pistols;
+    std::vector<int> primaries, pistols, melees;
     int skill = -1;            // 0..7, -1: the room's bot difficulty
     std::string voices = "radio"; // normal (their voice chatter), radio (radio commands, shown as text), off
     bool randomCharacters = true; // any character of the game (botassist_characters.txt)
@@ -239,11 +239,12 @@ static void LoadSettings()
         }
         fclose(f);
     }
-    // "<item id> <category>" per line (1 pistol, 2 shotgun, 3 SMG, 4 rifle, 5 machine gun), from Item.csv
+    // "<item id> <category>" per line (1 pistol, 2 shotgun, 3 SMG, 4 rifle, 5 machine gun, 11 melee), from Item.csv
     char list[MAX_PATH];
     snprintf(list, sizeof(list), "%sbotassist_weapons.txt", g_dir);
     cfg.primaries.clear();
     cfg.pistols.clear();
+    cfg.melees.clear();
     if (FILE* f = fopen(list, "r"))
     {
         int id, cat;
@@ -253,7 +254,7 @@ static void LoadSettings()
         {
             if (line[0] == ';' || sscanf(line, "%d %d", &id, &cat) != 2)
                 continue;
-            (cat == 1 ? cfg.pistols : cfg.primaries).push_back(id);
+            (cat == 1 ? cfg.pistols : cat == 11 ? cfg.melees : cfg.primaries).push_back(id);
             const char* semi = strchr(line, ';');
             if (semi && sscanf(semi + 1, " %127s", res) == 1)
             {
@@ -719,6 +720,7 @@ struct BotState
     int appliedClass = 0;        // room character already given to this bot
     unsigned char* ownProfile = nullptr; // this bot's copy of its BotProfile with its room skill (see ApplyRoomSkill)
     int ownSkill = -1;
+    int charTeam = 0;            // team its character belongs to (a swap to the other team gets a new one)
     bool wasAliveLoadout = false;
     float nextLoadoutCheck = 0;  // room weapons: check what it holds now and then
     int loadoutBuys = 0;         // buys of the room's weapons in this life
@@ -1858,11 +1860,19 @@ static void UpdateBuying(void* bot, BotState& st)
         return;
     MatchBot* rb = RoomBotOf(bot, st);
     bool scenario = CoopMode();
+    // room AI players buy their own loadout in every mode: chosen weapons, else random ones from their filter, else
+    // (BuyAnyWeapon) any weapon of the game, not only Counter-Strike's
     bool chosen = rb && (rb->primary != 0 || rb->secondary != 0 || rb->melee != 0 || !rb->allowPrimary.empty() ||
-                         !rb->allowSecondary.empty() || !rb->allowMelee.empty());
+                         !rb->allowSecondary.empty() || !rb->allowMelee.empty() ||
+                         (cfg.buyAnyWeapon && !cfg.primaries.empty()));
     // a slot: the room's weapon, -1 for "None", else a random one from the bot's filter, else 0
     auto pick = [](int fixed, const std::vector<int>& allow) {
         return fixed != 0 ? fixed : allow.empty() ? 0 : allow[rand() % allow.size()];
+    };
+    // the same, falling back on any weapon of the slot (BuyAnyWeapon)
+    auto pickAny = [&](int fixed, const std::vector<int>& allow, const std::vector<int>& any) {
+        int id = pick(fixed, allow);
+        return id != 0 || !cfg.buyAnyWeapon || any.empty() ? id : any[rand() % any.size()];
     };
     // "None": the bot drops its weapon of that slot (the game gives a pistol, some modes a primary, and bots pick
     // up what others drop). CSNZ's drop command is "cl_drop" (mp.dll 0x113ee0f4: game rules vfunc 0x11c), it throws
@@ -1947,9 +1957,9 @@ static void UpdateBuying(void* bot, BotState& st)
             // a new life: new random weapons from the filter; buying again (the game's AI changed it): the same
             if (st.loadoutBuys == 0)
             {
-                st.loadoutPrimary = pick(rb->primary, rb->allowPrimary);
-                st.loadoutSecondary = pick(rb->secondary, rb->allowSecondary);
-                st.loadoutMelee = pick(rb->melee, rb->allowMelee);
+                st.loadoutPrimary = pickAny(rb->primary, rb->allowPrimary, cfg.primaries);
+                st.loadoutSecondary = pickAny(rb->secondary, rb->allowSecondary, cfg.pistols);
+                st.loadoutMelee = pickAny(rb->melee, rb->allowMelee, cfg.melees);
             }
             st.loadoutBuys++;
             {
@@ -2020,7 +2030,7 @@ static void UpdateBuying(void* bot, BotState& st)
         int roomSecondary = rb ? pick(rb->secondary, rb->allowSecondary) : 0;
         if (roomSecondary >= 0 && (roomSecondary > 0 || !cfg.pistols.empty()))
             BuyAs(bot, roomSecondary > 0 ? roomSecondary : cfg.pistols[rand() % cfg.pistols.size()]);
-        int roomMelee = rb ? pick(rb->melee, rb->allowMelee) : 0;
+        int roomMelee = rb ? pickAny(rb->melee, rb->allowMelee, cfg.melees) : 0;
         if (roomMelee > 0)
             BuyAs(bot, roomMelee);
         FakeCommand(bot, "item_28"); // kevlar + helmet
@@ -5193,8 +5203,15 @@ static void ConsoleFrame()
     if (!g_hwLo || !g_mpDelta)
         return;
     float now = Now();
-    if (now < g_cheats.lastFrame - 1.0f) // a new map
+    if (now < g_cheats.lastFrame - 1.0f || g_cheats.lastFrame < 0) // a new map (or the first one)
     {
+        // every match starts without cheats (the engine turns sv_cheats on by itself with -dev, and it stays on from
+        // an earlier match): the player has to turn it on again in this one
+        if (g_CVarGetFloat && g_CVarSetString && g_CVarGetFloat("sv_cheats") != 0.0f)
+        {
+            g_CVarSetString("sv_cheats", "0");
+            Log("console: new match, sv_cheats 0 (it was on; command line: %.200s)", GetCommandLineA());
+        }
         if (g_cheats.god || g_cheats.noclip || g_cheats.notarget || g_cheats.fly)
             Log("console: new map, cheats off");
         g_cheats.god = g_cheats.noclip = g_cheats.notarget = g_cheats.fly = false;
@@ -5383,6 +5400,107 @@ static void ApplyRoomSkill(void* bot, BotState& bs)
         *(float*)(bs.ownProfile + 0x68));
 }
 
+// Modes that swap the teams in the middle of the match give everyone the default character of the new team
+// (mp.dll 0x114d66e1: class number = class table vfunc 0x24(team), male, then player vfunc 0x220 sets the model).
+// A bot that ends up on the other team with that default character gets a character of its new team instead:
+// its room character if it fits, else one from its filter or any (half men, half women). Zombie modes are left
+// alone (infection changes the team and the model).
+static bool ZombieMode(int mode)
+{
+    static const int zombie[] = { 8, 9, 14, 15, 17, 20, 24, 28, 29, 30, 32, 35, 36, 37, 43, 44, 45, 51, 52, 54, 56,
+                                  57, 58, 59 };
+    for (int z : zombie)
+        if (mode == z)
+            return true;
+    return false;
+}
+
+typedef int(__fastcall* TeamDefaultClassFn)(void* table, void* edx, int team);
+typedef void(__fastcall* PlayerVoidFn)(void* player, void* edx);
+// the class number of the team's default character, or -1
+static int TeamDefaultClass(int team)
+{
+    __try
+    {
+        void* owner = *(void**)(MP_CLASS_OWNER + g_mpDelta);
+        void* table = owner ? *(void**)((unsigned char*)owner + 0x1f8) : nullptr;
+        return table ? ((TeamDefaultClassFn)(*(void***)table)[0x24 / 4])(table, nullptr, team) : -1;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        return -1;
+    }
+}
+
+// what the team swap does, with our class: class number (+0xcd4, +0x1fb8), sex (+0x1fb5 bit 0, +0x2155), model
+static bool SetPlayerClass(unsigned char* player, int number, int male)
+{
+    __try
+    {
+        *(int*)(player + 0xcd4) = number;
+        *(int*)(player + 0x1fb8) = number;
+        player[0x1fb5] = (unsigned char)((player[0x1fb5] & ~1) | (male ? 1 : 0));
+        player[0x2155] = (unsigned char)(male ? 1 : 0);
+        ((PlayerVoidFn)(*(void***)player)[0x220 / 4])(player, nullptr);
+        return true;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        return false;
+    }
+}
+
+static void ApplyTeamCharacter(void* bot, BotState& bs)
+{
+    int team = TeamOf(bot);
+    if (team != 1 && team != 2)
+        return;
+    if (!bs.charTeam)
+    {
+        bs.charTeam = team; // the character it was created with
+        return;
+    }
+    if (team == bs.charTeam)
+        return;
+    unsigned char* player = (unsigned char*)PrivateOf(bot);
+    if (!player || IsBadReadPtr(player + 0xcd4, 4) || ZombieMode(GameMode()))
+    {
+        bs.charTeam = team;
+        return;
+    }
+    int current = *(int*)(player + 0xcd4);
+    int def = TeamDefaultClass(team);
+    if (def <= 0 || current != def)
+        return; // not swapped yet (or it already has a character of its own)
+    bs.charTeam = team;
+    MatchBot* rb = RoomBotOf(bot, bs);
+    int id = 0;
+    if (rb && rb->character > 0 && CharacterFits(rb->character, team) && CharacterClassNumber(rb->character))
+        id = rb->character;
+    else
+    {
+        std::vector<int> pool;
+        if (rb)
+            for (int c : rb->allowCharacter)
+                if (CharacterFits(c, team) && CharacterClassNumber(c))
+                    pool.push_back(c);
+        if (pool.empty() && cfg.randomCharacters)
+            pool = cfg.characters[team];
+        if (pool.empty())
+            return;
+        id = PickCharacter(pool, team);
+    }
+    int number = CharacterClassNumber(id);
+    int sex = CharacterSex(id);
+    if (!number || !SetPlayerClass(player, number, sex != 0))
+        return;
+    bs.appliedClass = id;
+    static int reports = 0;
+    if (reports++ < 60)
+        Log("bot %d '%s' swapped to team %d: character %d (class %d) instead of the team's default %d", bs.slot,
+            rb ? rb->name.c_str() : "?", team, id, number, def);
+}
+
 // ---------------------------------------------------------------- hooks
 static void HookedRunPlayerMove(void* fakeclient, const float* angles, float fwd, float side, float up,
                                 unsigned short buttons, unsigned char impulse, unsigned char msec)
@@ -5403,6 +5521,7 @@ static void HookedRunPlayerMove(void* fakeclient, const float* angles, float fwd
                 BotState& bs = StateFor(fakeclient);
                 ApplyRoomCharacter(fakeclient, bs);
                 ApplyRoomSkill(fakeclient, bs);
+                ApplyTeamCharacter(fakeclient, bs);
                 if (cfg.sameTeam && CoopMode())
                     FixCoopTeam(fakeclient, bs);
                 UpdateBuying(fakeclient, bs);

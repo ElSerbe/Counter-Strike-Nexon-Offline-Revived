@@ -1,13 +1,18 @@
 {
  "3": [
   {
+   "character": [
+    8336,
+    8335
+   ],
    "id": 1,
    "melee": [
-    566
+    8328,
+    8334
    ],
-   "name": "DAGGER",
+   "name": "Asian Bowmans",
    "primary": [
-    -1
+    8330
    ],
    "secondary": [
     -1
