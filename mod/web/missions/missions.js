@@ -11,6 +11,7 @@
   let selected = null; // request id shown in the briefing
   let busy = false;
   let confirmBuy = null;
+  let marketPick = null; // Black Market item shown in the preview
 
   const PREVIEW = location.port !== "30080";
 
@@ -132,18 +133,66 @@
   }
 
   // ---------------------------------------------------------------- black market
+  // 3D preview like the shop's battle passes (../shop/viewer.js, models from tools/export_shop_assets.py): costumes
+  // worn by the player's character, zombie skins as the zombie, weapons in the character's hands
+  let modelIndex = null;
+  fetch("../shop/models/index.json").then(r => (r.ok ? r.json() : null)).then(j => { modelIndex = j; if (data && tab === "market") renderMarket(); }).catch(() => {});
+  const stageCanvas = document.createElement("canvas");
+  stageCanvas.className = "stage-canvas";
+  let viewer = null, shownKey = "";
+
+  function previewModel(it) {
+    const entry = modelIndex && modelIndex.items[it.itemID];
+    if (!entry) return null;
+    const mine = state && modelIndex.items[state.characterItem];
+    const character = (mine && mine.character && !mine.zombie && mine.character) || modelIndex.defaultCharacter;
+    if (entry.costume) return { character, weapon: modelIndex.defaultWeapon, pose: "ref_aim_carbine", costume: entry.costume };
+    if (entry.zombie) return { character: entry.character, weapon: null, pose: "ref_aim_knife" };
+    if (entry.character) return { character: entry.character, weapon: modelIndex.defaultWeapon, pose: "ref_aim_carbine" };
+    return { character, weapon: entry.weapon, pose: entry.pose || "ref_aim_carbine" };
+  }
+
+  function showStage(it) {
+    const stage = $("stage");
+    if (!stage) return;
+    const m = previewModel(it);
+    if (!m || !(viewer || (viewer = window.createViewer && createViewer(stageCanvas, "../shop/models/")))) {
+      stage.classList.add("no-model");
+      return;
+    }
+    stage.appendChild(stageCanvas);
+    const key = [m.character, m.weapon, m.pose, m.costume].join("|");
+    if (key === shownKey) return;
+    shownKey = key;
+    viewer.show(m.character, m.weapon, m.pose, m.costume).then(ok => { if (!ok) { shownKey = ""; stage.classList.add("no-model"); } });
+  }
+
+  const buyButton = it => it.owned ? '<span class="owned-tag">Owned</span>'
+    : `<button type="button" class="btn${confirmBuy === it.itemID ? " confirm" : ""}" data-buy="${it.itemID}"${data.badges < it.price ? " disabled" : ""}>${confirmBuy === it.itemID ? "Confirm" : "Buy"}</button>`;
+
   function renderMarket() {
-    view.innerHTML = `<div class="market">
+    if (!data.market.some(it => it.itemID === marketPick))
+      marketPick = (data.market.find(it => it.kind === "Costume") || data.market[0] || {}).itemID;
+    const pick = data.market.find(it => it.itemID === marketPick);
+    const scroll = view.querySelector(".market-main") ? view.querySelector(".market-main").scrollTop : 0;
+    view.innerHTML = `<div class="market"><div class="market-main">
       <div class="market-head"><div><h2>Black Market</h2><p>Rare gear paid with Black Badges. Missions are the only way to earn them.</p></div>
         <span class="refresh">New stock in ${timeLeft(data.refreshIn)}</span></div>
       <div class="market-grid">${data.market.map(it => `
-        <div class="mitem${it.kind === "Costume" ? " costume" : ""}${it.owned ? " owned" : ""}">
+        <div class="mitem${it.kind === "Costume" ? " costume" : ""}${it.owned ? " owned" : ""}${it.itemID === marketPick ? " selected" : ""}" data-pick="${it.itemID}">
           <div class="art"><img src="../shop/icons/${it.itemID}.png" alt="" onerror="this.outerHTML='<span class=&quot;none&quot;>No picture</span>'"></div>
           <div class="info"><div><div class="nm" title="${esc(it.name)}">${esc(it.name)}</div><div class="kind">${esc(it.kind)}</div></div>
-            <div class="buy"><span class="price">${badge(true)}${num(it.price)}</span>
-              ${it.owned ? '<span class="owned-tag">Owned</span>' : `<button type="button" class="btn${confirmBuy === it.itemID ? " confirm" : ""}" data-buy="${it.itemID}"${data.badges < it.price ? " disabled" : ""}>${confirmBuy === it.itemID ? "Confirm" : "Buy"}</button>`}</div></div>
-        </div>`).join("")}</div>
+            <div class="buy"><span class="price">${badge(true)}${num(it.price)}</span>${buyButton(it)}</div></div>
+        </div>`).join("")}</div></div>
+      <aside class="preview">${pick ? `
+        <div class="stage" id="stage"><div class="art"><img src="../shop/icons/${pick.itemID}.png" alt="" onerror="this.remove()"></div></div>
+        <div class="category">${esc(pick.kind)}${previewModel(pick) && previewModel(pick).costume ? " &middot; worn by your character" : ""}</div>
+        <h3>${esc(pick.name)}</h3>
+        <div class="buy-row"><div class="price">${badge()}${num(pick.price)}</div>${buyButton(pick)}</div>
+        <div class="note">Drag the model to turn it.</div>` : '<div class="empty">Nothing in stock.</div>'}</aside>
     </div>`;
+    view.querySelector(".market-main").scrollTop = scroll;
+    if (pick) showStage(pick);
   }
 
   // ---------------------------------------------------------------- orders and challenges (from the shop)
@@ -224,6 +273,11 @@
       confirmBuy = null;
       return act({ action: "buy", itemID: id }, "Bought. It's in your inventory.");
     }
+    const pickItem = t.closest("[data-pick]");
+    if (pickItem) {
+      marketPick = +pickItem.dataset.pick;
+      return renderMarket();
+    }
     const req = t.closest("[data-req]");
     if (req) {
       selected = +req.dataset.req;
@@ -235,7 +289,7 @@
   let mock = null;
   function preview(path, body) {
     if (!mock) {
-      mock = { badges: 45, medals: 1260, refreshIn: 30000,
+      mock = { badges: 45, medals: 1260, refreshIn: 30000, characterItem: 51,
         requests: { slots: 3, active: [], offers: [] }, market: [], event: null };
       const npcs = [["DoctorA", "Senior Researcher Soi"], ["Victor", "Victor"], ["Evelyn", "Evelyn"], ["Jacob", "Jacob"], ["Zim", "Zim"]];
       const titles = ["Glorious Victor!", "Necessity", "C4 Plan Support", "Zombie Sweep", "First Steps 3", "Virus Host"];
@@ -253,10 +307,11 @@
           { text: "Finish first 3 times", badges: 15, medals: 40, progress: [{ have: 1, need: 3 }], done: false, claimed: false }] };
       mock.market = [[9423, "Sflaser (S25-3)", 30, "Weapon"], [9426, "Ironfan (S25-3)", 30, "Weapon"], [9425, "Python (S25-3)", 30, "Weapon"],
         [9424, "M 249ex (S25-3)", 30, "Weapon"], [9108, "Balrog 7 (S24-3)", 30, "Weapon"], [9023, "Skull 2 (S24-2)", 30, "Weapon"],
-        [9655, "Agenth (Pet)", 300, "Costume"], [9586, "Coralcrown (Head)", 300, "Costume"]].map(([itemID, name, price, kind], i) => ({ itemID, name, price, kind, owned: i === 4 }));
+        [9655, "Agenth (Pet)", 300, "Costume"], [9586, "Coralcrown (Head)", 300, "Costume"], [8928, "Beveragecan (Pelvis)", 300, "Costume"],
+        [9413, "Orientalinkfan (Back)", 300, "Costume"], [8584, "Boomerskin (S21-4)", 30, "Costume"]].map(([itemID, name, price, kind], i) => ({ itemID, name, price, kind, owned: i === 4 }));
     }
     if (path === "/api/state")
-      return { medals: mock.medals, orders: [
+      return { medals: mock.medals, characterItem: mock.characterItem, orders: [
         { period: "Daily", text: "Play 3 matches", reward: 10, progress: 1, target: 3, completed: false, resetsIn: 30000 },
         { period: "Weekly", text: "Win 10 matches", reward: 40, progress: 10, target: 10, completed: true, resetsIn: 300000 },
         { period: "Challenge", group: "Combat", text: "Score 1,000 kills", reward: 50, progress: 420, target: 1000, completed: false }] };

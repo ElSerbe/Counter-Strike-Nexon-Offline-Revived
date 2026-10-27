@@ -11,6 +11,7 @@ import os
 import struct
 import zlib
 
+STUDIO_NF_ADDITIVE = 0x20
 STUDIO_NF_MASKED = 0x40
 
 HDR_FIELDS = ["flags", "numbones", "boneindex", "numbonecontrollers", "bonecontrollerindex", "numhitboxes",
@@ -344,7 +345,10 @@ def export_skinned(model, prefix, out_dir, kind, tex_loader=None):
         external = tex_loader(tex["name"], tex["external"]) if tex_loader else None
         png = bmp_png(external, masked) if external else texture_png(model, tex)
         open(os.path.join(out_dir, file_name), "wb").write(png)
-        meshes.append({"texture": file_name, "masked": masked, **g})
+        # glows and effect planes: black is see-through (the engine adds them to what's behind). CSO marks most of
+        # them with a "$0b_" name (fire, trails) instead of the flag.
+        additive = bool(tex["flags"] & STUDIO_NF_ADDITIVE) or tex["name"].lower().startswith("$0b_")
+        meshes.append({"texture": file_name, "masked": masked, **({"additive": True} if additive else {}), **g})
 
     out = {"kind": kind, "bones": [{"name": b["name"], "parent": b["parent"]} for b in model.bones], "meshes": meshes}
     names = {s["name"].lower() for s in model.seqs}

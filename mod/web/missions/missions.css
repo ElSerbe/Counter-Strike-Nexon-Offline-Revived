@@ -64,12 +64,18 @@
 .bonus .t span { font-size: 12px; color: var(--muted); }
 
 /* ---------- black market ---------- */
-.market { height: 100%; overflow-y: auto; padding: 18px 22px; }
+.market { height: 100%; display: flex; }
+.market-main { flex: 1; min-width: 0; overflow-y: auto; padding: 18px 22px; }
+.market .preview h3 { font-size: 20px; }
+.market .preview .buy-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.market .preview .stage { height: 300px; }
+.market .preview .stage > .art img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.market .preview .empty { color: var(--muted); }
 .market-head { display: flex; justify-content: space-between; align-items: end; gap: 20px; margin-bottom: 14px; }
 .market-head h2 { margin: 0; font-size: 18px; letter-spacing: 3px; text-transform: uppercase; color: #e7e2d4; }
 .market-head p { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
 .market-head .refresh { color: var(--muted); font-size: 12px; letter-spacing: 1px; text-transform: uppercase; white-space: nowrap; }
-.market-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.market-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
 .mitem { border: 1px solid var(--line); background: radial-gradient(circle at 50% 30%, #1a1f26, var(--panel) 70%); display: flex; flex-direction: column; min-width: 0; }
 .mitem.costume { border-color: #4a2a24; background: radial-gradient(circle at 50% 30%, #2a1814, var(--panel) 70%); }
 .mitem .art { height: 110px; display: flex; align-items: center; justify-content: center; padding: 10px; }
@@ -80,12 +86,13 @@
 .mitem .kind { font-size: 10px; color: var(--muted); letter-spacing: 1.5px; text-transform: uppercase; }
 .mitem .buy { display: flex; justify-content: space-between; align-items: center; }
 .mitem .price { display: inline-flex; align-items: center; gap: 5px; font-weight: 600; }
+.mitem { cursor: pointer; }
+.mitem.selected { outline: 2px solid var(--accent); outline-offset: -2px; }
 .mitem.owned { opacity: .6; }
 .mitem .owned-tag { color: var(--owned); font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; }
 
 @media (max-width: 1100px) {
   .requests { grid-template-columns: 1fr 270px; }
   .briefing .portrait { height: 180px; }
-  .market-grid { grid-template-columns: repeat(3, 1fr); }
   .wallets { gap: 12px; }
 }

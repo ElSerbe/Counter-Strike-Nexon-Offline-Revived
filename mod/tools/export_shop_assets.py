@@ -4,10 +4,13 @@ Icons come from gfx/vgui/basket/<resource>.tga (the native shop's item pictures)
 resource/cso_na_en.txt. Files are read with tools/nartool/nartool.exe, which uses the game's own FileSystem_Nar.dll.
 
 3D models for the preview: the character (models/player/<res>/<res>.mdl) or the third-person weapon
-(models/p_<res>.mdl), exported by mdl_export.py, plus the default characters of a new account.
+(models/p_<res>.mdl), exported by mdl_export.py, plus the default characters of a new account. Costumes
+(models/costume/<res>.mdl) are worn by the player's character: their root bone follows one of its bones (the web
+viewer's COSTUME_ROOTS). Zombie skins are whole zombie models (models/player/<res>_origin/<res>_origin.mdl).
 
 Usage:
-  python export_shop_assets.py            items used by the battle passes (Data/Warbonds.json)
+  python export_shop_assets.py            items of the battle passes (Data/Warbonds.json), the Black Market
+                                          (Data/Missions.json) and every character
   python export_shop_assets.py --all      every weapon and character in Item.csv
 Writes web/shop/icons/<itemID>.png, web/shop/models/* (+ models/index.json) and
 server/CSNZ_Server/bin/Data/ItemNames.json.
@@ -41,6 +44,7 @@ SOUNDS = {"charge.wav": "sound/weaponascend/gauge2.wav", "unlock.wav": "sound/ev
           "pass.wav": "sound/gachapon/open_weapon_item_top_sss.wav"}
 DEFAULT_WEAPON = "m4a1"            # held by characters shown on their own
 WEAPON_CATEGORIES = ("1", "2", "3", "4", "5", "6", "11")
+COSTUME_CLASSES = ("HeadCostume", "BackCostume", "PelvisCostume", "FaceCostume", "PetCostume", "ArmCostume")
 ARCHIVES = ("cstrike", "dstrike", "estrike", "fstrike")
 # third-person models whose names can't be derived from the item's resource name (found in mp.dll / client.dll)
 MODEL_OVERRIDES = {"ak47l": "models/p_ak47_long.mdl", "deagled": "models/p_ddeagle.mdl", "mp7a1d": "models/p_dmp7a1.mdl"}
@@ -105,6 +109,12 @@ def warbond_item_ids():
     text = open(os.path.join(SERVER_DATA, "Warbonds.json"), encoding="utf-8").read()
     cfg = json.loads(re.sub(r"(?m)^\s*//.*$", "", text))
     return {i["ItemID"] for w in cfg["Warbonds"] for p in w["Pages"] for i in p["Items"]}
+
+
+def market_item_ids():
+    text = open(os.path.join(SERVER_DATA, "Missions.json"), encoding="utf-8").read()
+    cfg = json.loads(re.sub(r"(?m)^\s*//.*$", "", text))
+    return {i["ItemID"] for i in cfg.get("BlackMarket", {}).get("Items", [])}
 
 
 def warbond_art():
@@ -309,6 +319,10 @@ def export_models(items, wanted, available, tmp):
             continue
         if it["class"] == "Class":
             wanted_models = [(str(item_id), "character", [f"models/player/{res}/{res}.mdl"])]
+        elif it["class"] in COSTUME_CLASSES:
+            wanted_models = [(str(item_id), "costume", [f"models/costume/{res}.mdl"])]
+        elif it["class"] == "ZombieSkinCostume":
+            wanted_models = [(str(item_id), "zombie", [f"models/player/{res}_origin/{res}_origin.mdl"])]
         elif it["class"] == "Equipment" and it["category"] in WEAPON_CATEGORIES:
             wanted_models = [(str(item_id), "weapon", weapon_model_candidates(res, available))]
         else:
@@ -324,11 +338,13 @@ def export_models(items, wanted, available, tmp):
         path = next((c for c in candidates if os.path.exists(os.path.join(tmp, c))), None)
         if not path:
             continue
-        name = os.path.basename(path)[:-4] if kind == "weapon" else path.split("/")[2]
+        name = path.split("/")[2] if kind in ("character", "zombie") else os.path.basename(path)[:-4]
         if name not in models:
-            models[name] = (mdl_export.Model(open(os.path.join(tmp, path), "rb").read()), kind)
+            # a zombie skin is a character model of its own (shown without a weapon)
+            models[name] = (mdl_export.Model(open(os.path.join(tmp, path), "rb").read()),
+                            "character" if kind == "zombie" else kind)
         if key != "default":
-            index[key] = {kind: name}
+            index[key] = {"character": name, "zombie": True} if kind == "zombie" else {kind: name}
     skin_textures = {}
     for key, res in skins.items():
         base, archive, textures = SKINS[res]
@@ -377,7 +393,8 @@ def export_models(items, wanted, available, tmp):
             if pose:
                 entry["pose"] = pose
     first_char = next((items[i]["resource"] for i in chars if items[i]["resource"] in models), "gign")
-    data = {"items": {k: v for k, v in index.items() if (v.get("weapon") or v.get("character")) in models},
+    data = {"items": {k: v for k, v in index.items()
+                      if (v.get("weapon") or v.get("character") or v.get("costume")) in models},
             "defaultCharacter": first_char, "defaultWeapon": "p_" + DEFAULT_WEAPON}
     json.dump(data, open(os.path.join(MODEL_DIR, "index.json"), "w", encoding="utf-8"), indent=1)
     return data
@@ -461,7 +478,8 @@ def main():
     if "--all" in sys.argv:
         wanted = [i for i, it in items.items() if it["class"] in ("Equipment", "Class")]
     else:
-        wanted = sorted(warbond_item_ids())
+        wanted = sorted(warbond_item_ids() | market_item_ids() |
+                        {i for i, it in items.items() if it["class"] == "Class"})
     available = nar_files()
 
     icon_candidates = {}
