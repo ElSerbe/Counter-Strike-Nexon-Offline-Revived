@@ -1,19 +1,20 @@
 diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
-index b5e72be..1a31ad0 100644
+index b5e72be..299b588 100644
 --- a/src/CMakeLists.txt
 +++ b/src/CMakeLists.txt
-@@ -38,6 +38,10 @@ endif()
+@@ -38,6 +38,11 @@ endif()
  target_sources(PROJECTNAME PRIVATE "main.cpp")
  target_sources(PROJECTNAME PRIVATE "serverinstance.cpp")
  target_sources(PROJECTNAME PRIVATE "serverconfig.cpp")
 +target_sources(PROJECTNAME PRIVATE "manager/warbondmanager.cpp")
 +target_sources(PROJECTNAME PRIVATE "manager/bingomanager.cpp")
 +target_sources(PROJECTNAME PRIVATE "manager/medalmanager.cpp")
++target_sources(PROJECTNAME PRIVATE "manager/missionmanager.cpp")
 +target_sources(PROJECTNAME PRIVATE "net/webserver.cpp")
  target_sources(PROJECTNAME PRIVATE "command.cpp")
  target_sources(PROJECTNAME PRIVATE "common/buffer.cpp")
  target_sources(PROJECTNAME PRIVATE "common/buildnum.cpp")
-@@ -148,6 +152,8 @@ if (MSVC)
+@@ -148,6 +153,8 @@ if (MSVC)
  else()
  	# don't treat some warnings as errors
  	target_compile_options(PROJECTNAME PRIVATE -Wno-error=sign-compare -Wno-error=unused-variable -Wno-error=delete-non-virtual-dtor -Wno-error=unused-parameter -Wno-error=conversion-null -Wno-error=register -Wno-error=unused-value -Wno-error=reorder -Wno-error=attributes)
@@ -76,10 +77,10 @@ index c342dd1..e1994a9 100644
  #ifdef WIN32
  #include <winsock2.h>
 diff --git a/src/definitions.h b/src/definitions.h
-index e96eb5f..557e6db 100644
+index e96eb5f..59b60bb 100644
 --- a/src/definitions.h
 +++ b/src/definitions.h
-@@ -1441,6 +1441,43 @@ enum UserSurveyAnswerResult
+@@ -1441,6 +1441,51 @@ enum UserSurveyAnswerResult
  	ANSWER_DB_ERROR,
  };
  
@@ -118,6 +119,14 @@ index e96eb5f..557e6db 100644
 +	int mode;
 +	std::string name;
 +	long long value;
++};
++// offline build: a mission of the Missions page (CMissionManager): its state, or a requirement's starting value
++struct UserMission_s
++{
++	std::string key;
++	long long value; // the counter's value when the mission was taken (requirement rows)
++	int state;       // 1 active, 2 reward claimed
++	int period;      // day (requests) or week (events) it belongs to
 +};
 +
  // ROOM LOW FLAGS
@@ -230,10 +239,10 @@ index 4e7a9ed..26f10a7 100644
  class IRoom;
  class CRoomUser;
 diff --git a/src/interface/iuserdatabase.h b/src/interface/iuserdatabase.h
-index 48b869d..87b3a52 100644
+index 48b869d..99c8a3a 100644
 --- a/src/interface/iuserdatabase.h
 +++ b/src/interface/iuserdatabase.h
-@@ -97,6 +97,16 @@ public:
+@@ -97,6 +97,20 @@ public:
  	virtual int SetAddons(int userID, std::vector<int>& addons) = 0;
  
  	virtual int GetUsersAssociatedWithIP(const std::string& ip, std::vector<CUserData>& userData) = 0;
@@ -247,6 +256,10 @@ index 48b869d..87b3a52 100644
 +	// adds each value to its counter; best: keeps the bigger value instead (records like most kills in a match)
 +	virtual int AddCounters(int userID, const std::vector<UserCounter_s>& counters, bool best) = 0;
 +	virtual int SetCounter(int userID, const UserCounter_s& counter) = 0;
++	virtual int GetMissions(int userID, std::vector<UserMission_s>& missions) = 0;
++	virtual int SetMissions(int userID, const std::vector<UserMission_s>& missions) = 0;
++	// removes the rows whose key starts with the prefix
++	virtual int DeleteMissions(int userID, const std::string& prefix) = 0;
  	virtual int GetUsersAssociatedWithHWID(const std::vector<unsigned char>& hwid, std::vector<CUserData>& userData) = 0;
  
  	// clan related
@@ -1665,6 +1678,571 @@ index 0000000..d8db753
 +
 +extern CMedalManager g_MedalManager;
 +bool IsZombieModeOffline(int mode);
+diff --git a/src/manager/missionmanager.cpp b/src/manager/missionmanager.cpp
+new file mode 100644
+index 0000000..331bcd2
+--- /dev/null
++++ b/src/manager/missionmanager.cpp
+@@ -0,0 +1,459 @@
++#include "missionmanager.h"
++#include "medalmanager.h"
++#include "warbondmanager.h"
++#include "userdatabase.h"
++#include "itemmanager.h"
++#include "packetmanager.h"
++#include "serverinstance.h"
++#include "main.h"
++#include "common/utils.h"
++
++#include <fstream>
++#include <random>
++#include <set>
++#include <ctime>
++#include <algorithm>
++
++using namespace std;
++using json = nlohmann::json;
++
++CMissionManager g_MissionManager;
++
++CMissionManager::CMissionManager() : CBaseManager("MissionManager")
++{
++}
++
++bool CMissionManager::Init()
++{
++	return LoadConfig();
++}
++
++static vector<MissionRequirement> ReadConditions(const json& list)
++{
++	vector<MissionRequirement> reqs;
++	for (auto& c : list)
++	{
++		MissionRequirement r;
++		r.counter = c.value("Counter", "");
++		r.target = c.value("Target", 0LL);
++		r.modes = c.value("Modes", vector<int>());
++		if (!r.counter.empty() && r.target > 0)
++			reqs.push_back(r);
++	}
++	return reqs;
++}
++
++bool CMissionManager::LoadConfig()
++{
++	ifstream f("Data/Missions.json");
++	json cfg = json::parse(f, nullptr, false, true);
++	if (cfg.is_discarded() || !cfg.is_object())
++	{
++		Logger().Error("MissionManager: couldn't load Data/Missions.json, no missions\n");
++		return true;
++	}
++	try
++	{
++		m_RequestOffers = cfg.value("RequestOffers", 4);
++		m_RequestSlots = cfg.value("RequestSlots", 3);
++		for (auto& r : cfg.value("Requests", json::array()))
++		{
++			MissionRequest req;
++			req.id = r.value("ID", 0);
++			req.title = r.value("Title", "");
++			req.npc = r.value("Npc", "");
++			req.portrait = r.value("Portrait", "");
++			req.story = r.value("Story", "");
++			req.text = r.value("Text", "");
++			req.conditions = ReadConditions(r.value("Conditions", json::array()));
++			req.badges = r.value("Badges", 0);
++			req.medals = r.value("Medals", 0);
++			if (req.id && !req.conditions.empty())
++				m_Requests.push_back(req);
++		}
++		for (auto& e : cfg.value("Events", json::array()))
++		{
++			MissionEvent ev;
++			ev.id = e.value("ID", 0);
++			ev.name = e.value("Name", "");
++			ev.description = e.value("Description", "");
++			ev.bonusBadges = e.value("BonusBadges", 0);
++			ev.bonusMedals = e.value("BonusMedals", 0);
++			for (auto& m : e.value("Missions", json::array()))
++			{
++				EventMission mission;
++				mission.text = m.value("Text", "");
++				mission.conditions = ReadConditions(m.value("Conditions", json::array()));
++				mission.badges = m.value("Badges", 0);
++				mission.medals = m.value("Medals", 0);
++				if (!mission.conditions.empty())
++					ev.missions.push_back(mission);
++			}
++			if (ev.id && !ev.missions.empty())
++				m_Events.push_back(ev);
++		}
++		json market = cfg.value("BlackMarket", json::object());
++		m_MarketWeapons = market.value("Weapons", 6);
++		m_MarketCostumes = market.value("Costumes", 2);
++		for (auto& i : market.value("Items", json::array()))
++			m_Market.push_back({ i.value("ItemID", 0), i.value("Name", ""), i.value("Kind", "Weapon"), i.value("Price", 30) });
++	}
++	catch (exception& e)
++	{
++		Logger().Error("MissionManager: Data/Missions.json: %s\n", e.what());
++	}
++	Logger().Info("MissionManager: %d mission requests, %d events, %d Black Market items\n", (int)m_Requests.size(),
++		(int)m_Events.size(), (int)m_Market.size());
++	return true;
++}
++
++// local calendar day (requests and the Black Market change at midnight) and week (events change on Monday)
++int CMissionManager::Today()
++{
++	time_t now = time(NULL);
++	tm local = *localtime(&now);
++	tm midnight = local;
++	midnight.tm_hour = midnight.tm_min = midnight.tm_sec = 0;
++	return (int)((mktime(&midnight) + 43200) / 86400); // noon of that day: safe against DST
++}
++
++int CMissionManager::ThisWeek()
++{
++	return (Today() + 3) / 7; // 1970-01-01 was a Thursday: weeks start on Monday
++}
++
++static int SecondsToMidnight()
++{
++	time_t now = time(NULL);
++	tm local = *localtime(&now);
++	return 86400 - (local.tm_hour * 3600 + local.tm_min * 60 + local.tm_sec);
++}
++
++long long CMissionManager::Total(const vector<UserCounter_s>& counters, const MissionRequirement& req)
++{
++	long long total = 0;
++	for (auto& c : counters)
++		if (c.name == req.counter && (req.modes.empty() ? c.mode == -1 : find(req.modes.begin(), req.modes.end(), c.mode) != req.modes.end()))
++			total += c.value;
++	return total;
++}
++
++// the requests offered today (the same all day): a shuffle of the ones not taken and not done today
++vector<int> CMissionManager::Offers(int userID, int day, const map<string, UserMission_s>& missions)
++{
++	vector<int> ids;
++	for (auto& r : m_Requests)
++		ids.push_back(r.id);
++	mt19937 rng((unsigned)(day * 7919 + userID * 104729));
++	shuffle(ids.begin(), ids.end(), rng);
++	vector<int> offers;
++	for (int id : ids)
++	{
++		auto it = missions.find("R" + to_string(id));
++		if (it != missions.end() && (it->second.state == 1 || it->second.period == day))
++			continue; // active, or done today
++		offers.push_back(id);
++		if ((int)offers.size() >= m_RequestOffers)
++			break;
++	}
++	return offers;
++}
++
++vector<const MarketItem*> CMissionManager::Stock(int day)
++{
++	vector<const MarketItem*> weapons, costumes;
++	for (auto& m : m_Market)
++		(m.kind == "Costume" ? costumes : weapons).push_back(&m);
++	mt19937 rng((unsigned)(day * 2654435761u));
++	shuffle(weapons.begin(), weapons.end(), rng);
++	shuffle(costumes.begin(), costumes.end(), rng);
++	weapons.resize(min((int)weapons.size(), m_MarketWeapons));
++	costumes.resize(min((int)costumes.size(), m_MarketCostumes));
++	weapons.insert(weapons.end(), costumes.begin(), costumes.end());
++	return weapons;
++}
++
++const MissionEvent* CMissionManager::CurrentEvent()
++{
++	return m_Events.empty() ? NULL : &m_Events[ThisWeek() % m_Events.size()];
++}
++
++// rows "<prefix>.<i>" keep each requirement's starting value
++json CMissionManager::Progress(const vector<MissionRequirement>& reqs, const string& prefix, const vector<UserCounter_s>& counters,
++	const map<string, UserMission_s>& missions, bool& done)
++{
++	json progress = json::array();
++	done = true;
++	for (size_t i = 0; i < reqs.size(); i++)
++	{
++		auto it = missions.find(prefix + "." + to_string(i));
++		long long start = it != missions.end() ? it->second.value : Total(counters, reqs[i]);
++		long long have = max(0LL, Total(counters, reqs[i]) - start);
++		if (have < reqs[i].target)
++			done = false;
++		progress.push_back({ { "have", min(have, reqs[i].target) }, { "need", reqs[i].target } });
++	}
++	return progress;
++}
++
++vector<UserMission_s> CMissionManager::Start(const vector<MissionRequirement>& reqs, const string& prefix,
++	const vector<UserCounter_s>& counters, int period)
++{
++	vector<UserMission_s> rows = { { prefix, 0, 1, period } };
++	for (size_t i = 0; i < reqs.size(); i++)
++		rows.push_back({ prefix + "." + to_string(i), Total(counters, reqs[i]), 1, period });
++	return rows;
++}
++
++void CMissionManager::Reward(IUser* user, int badges, int medals, const char* what)
++{
++	if (badges)
++		g_MedalManager.AddCounter(user, "BlackBadges", badges);
++	if (medals)
++		user->UpdatePoints(medals);
++	string text = string(what) + " complete:";
++	if (badges)
++		text += va(" +%d Black Badges", badges);
++	if (medals)
++		text += va("%s +%d medals", badges ? "," : "", medals);
++	g_PacketManager.SendUMsgNoticeMessageInChat(user->GetExtendedSocket(), text);
++}
++
++json CMissionManager::Build(IUser* user)
++{
++	int userID = user->GetID(), day = Today(), week = ThisWeek();
++	vector<UserCounter_s> counters;
++	g_UserDatabase.GetCounters(userID, counters);
++	vector<UserMission_s> rows;
++	g_UserDatabase.GetMissions(userID, rows);
++	map<string, UserMission_s> missions;
++	for (auto& r : rows)
++		missions[r.key] = r;
++
++	long long badges = 0;
++	for (auto& c : counters)
++		if (c.mode == -1 && c.name == "BlackBadges")
++			badges = c.value;
++	CUserCharacter ch = user->GetCharacter(UFLAG_LOW_POINTS);
++
++	// requests
++	json active = json::array(), offers = json::array();
++	auto requestJson = [&](const MissionRequest& r) {
++		return json{ { "id", r.id }, { "title", r.title }, { "npc", r.npc }, { "portrait", r.portrait }, { "story", r.story },
++			{ "text", r.text }, { "badges", r.badges }, { "medals", r.medals } };
++	};
++	for (auto& r : m_Requests)
++	{
++		auto it = missions.find("R" + to_string(r.id));
++		if (it == missions.end() || it->second.state != 1)
++			continue;
++		bool done;
++		json j = requestJson(r);
++		j["progress"] = Progress(r.conditions, "R" + to_string(r.id), counters, missions, done);
++		j["done"] = done;
++		active.push_back(j);
++	}
++	for (int id : Offers(userID, day, missions))
++		for (auto& r : m_Requests)
++			if (r.id == id)
++				offers.push_back(requestJson(r));
++
++	// the event of the week: its missions start counting the first time the page is opened this week
++	json event = nullptr;
++	if (const MissionEvent* ev = CurrentEvent())
++	{
++		vector<UserMission_s> fresh;
++		string base = "E" + to_string(ev->id) + "." + to_string(week);
++		for (size_t m = 0; m < ev->missions.size(); m++)
++		{
++			string prefix = base + "." + to_string(m);
++			if (!missions.count(prefix))
++			{
++				auto started = Start(ev->missions[m].conditions, prefix, counters, week);
++				for (auto& s : started)
++					missions[s.key] = s;
++				fresh.insert(fresh.end(), started.begin(), started.end());
++			}
++		}
++		if (!fresh.empty())
++		{
++			g_UserDatabase.DeleteMissions(userID, "E"); // older weeks
++			for (auto& s : missions)
++				if (s.first.compare(0, base.size(), base) == 0)
++					fresh.push_back(s.second);
++			g_UserDatabase.SetMissions(userID, fresh);
++		}
++		json list = json::array();
++		bool allClaimed = true;
++		for (size_t m = 0; m < ev->missions.size(); m++)
++		{
++			string prefix = base + "." + to_string(m);
++			bool done;
++			json progress = Progress(ev->missions[m].conditions, prefix, counters, missions, done);
++			bool claimed = missions[prefix].state == 2;
++			allClaimed &= claimed;
++			list.push_back({ { "text", ev->missions[m].text }, { "badges", ev->missions[m].badges }, { "medals", ev->missions[m].medals },
++				{ "progress", progress }, { "done", done || claimed }, { "claimed", claimed } });
++		}
++		int weekday = (Today() + 3) % 7; // 0 Monday .. 6 Sunday
++		int secondsLeft = SecondsToMidnight() + (6 - weekday) * 86400;
++		event = { { "id", ev->id }, { "name", ev->name }, { "description", ev->description }, { "missions", list },
++			{ "bonusBadges", ev->bonusBadges }, { "bonusMedals", ev->bonusMedals }, { "allClaimed", allClaimed },
++			{ "bonusClaimed", missions.count(base + ".B") > 0 }, { "endsIn", secondsLeft } };
++	}
++
++	// the Black Market of the day
++	set<int> owned = g_WarbondManager.OwnedItems(user);
++	json stock = json::array();
++	for (auto* item : Stock(day))
++		stock.push_back({ { "itemID", item->itemID }, { "name", item->name }, { "kind", item->kind }, { "price", item->price },
++			{ "owned", owned.count(item->itemID) > 0 } });
++
++	return { { "badges", badges }, { "medals", ch.points }, { "refreshIn", SecondsToMidnight() },
++		{ "requests", { { "slots", m_RequestSlots }, { "active", active }, { "offers", offers } } },
++		{ "event", event }, { "market", stock } };
++}
++
++json CMissionManager::Api(IUser* user, const string& method, const string& body, int& status)
++{
++	if (method != "POST")
++		return Build(user);
++	json in = json::parse(body, nullptr, false);
++	if (in.is_discarded())
++	{
++		status = 400;
++		return { { "error", "Invalid request." } };
++	}
++	auto fail = [&](int code, const char* message) {
++		status = code;
++		return json{ { "error", message } };
++	};
++	int userID = user->GetID(), day = Today(), week = ThisWeek();
++	vector<UserCounter_s> counters;
++	g_UserDatabase.GetCounters(userID, counters);
++	vector<UserMission_s> rows;
++	g_UserDatabase.GetMissions(userID, rows);
++	map<string, UserMission_s> missions;
++	for (auto& r : rows)
++		missions[r.key] = r;
++	string action = in.value("action", "");
++
++	if (action == "accept" || action == "abandon" || action == "claim")
++	{
++		int id = in.value("id", 0);
++		const MissionRequest* req = NULL;
++		for (auto& r : m_Requests)
++			if (r.id == id)
++				req = &r;
++		if (!req)
++			return fail(404, "No such mission request.");
++		string key = "R" + to_string(id);
++		auto it = missions.find(key);
++		bool isActive = it != missions.end() && it->second.state == 1;
++		if (action == "accept")
++		{
++			if (isActive)
++				return fail(409, "You already took this request.");
++			vector<int> offers = Offers(userID, day, missions);
++			if (find(offers.begin(), offers.end(), id) == offers.end())
++				return fail(409, "This request isn't offered today.");
++			int count = 0;
++			for (auto& m : missions)
++				count += m.first[0] == 'R' && m.first.find('.') == string::npos && m.second.state == 1;
++			if (count >= m_RequestSlots)
++				return fail(409, "Finish or drop a request first: all your request slots are taken.");
++			g_UserDatabase.DeleteMissions(userID, key + ".");
++			g_UserDatabase.SetMissions(userID, Start(req->conditions, key, counters, day));
++		}
++		else if (action == "abandon")
++		{
++			if (!isActive)
++				return fail(409, "You don't have this request.");
++			g_UserDatabase.DeleteMissions(userID, key);
++		}
++		else
++		{
++			if (!isActive)
++				return fail(409, "You don't have this request.");
++			bool done;
++			Progress(req->conditions, key, counters, missions, done);
++			if (!done)
++				return fail(409, "This request isn't done yet.");
++			g_UserDatabase.DeleteMissions(userID, key + ".");
++			g_UserDatabase.SetMissions(userID, { { key, 0, 2, day } });
++			Reward(user, req->badges, req->medals, ("Request \"" + req->title + "\"").c_str());
++			g_MedalManager.AddCounter(user, "RequestsDone", 1);
++			g_MedalManager.CheckMedals(user);
++		}
++	}
++	else if (action == "claimEvent" || action == "claimBonus")
++	{
++		const MissionEvent* ev = CurrentEvent();
++		if (!ev)
++			return fail(404, "There's no event this week.");
++		string base = "E" + to_string(ev->id) + "." + to_string(week);
++		if (action == "claimEvent")
++		{
++			int index = in.value("index", -1);
++			if (index < 0 || index >= (int)ev->missions.size())
++				return fail(404, "No such event mission.");
++			string prefix = base + "." + to_string(index);
++			auto it = missions.find(prefix);
++			if (it == missions.end())
++				return fail(409, "Open the event first.");
++			if (it->second.state == 2)
++				return fail(409, "Already claimed.");
++			bool done;
++			Progress(ev->missions[index].conditions, prefix, counters, missions, done);
++			if (!done)
++				return fail(409, "This event mission isn't done yet.");
++			g_UserDatabase.SetMissions(userID, { { prefix, 0, 2, week } });
++			Reward(user, ev->missions[index].badges, ev->missions[index].medals, ("Event mission of " + ev->name).c_str());
++			g_MedalManager.AddCounter(user, "EventsDone", 1);
++			g_MedalManager.CheckMedals(user);
++		}
++		else
++		{
++			if (missions.count(base + ".B"))
++				return fail(409, "Already claimed.");
++			for (size_t m = 0; m < ev->missions.size(); m++)
++			{
++				auto it = missions.find(base + "." + to_string(m));
++				if (it == missions.end() || it->second.state != 2)
++					return fail(409, "Claim every mission of the event first.");
++			}
++			g_UserDatabase.SetMissions(userID, { { base + ".B", 0, 2, week } });
++			Reward(user, ev->bonusBadges, ev->bonusMedals, ev->name.c_str());
++		}
++	}
++	else if (action == "buy")
++	{
++		int itemID = in.value("itemID", 0);
++		const MarketItem* item = NULL;
++		for (auto* m : Stock(day))
++			if (m->itemID == itemID)
++				item = m;
++		if (!item)
++			return fail(404, "That item isn't on sale today.");
++		if (g_WarbondManager.OwnedItems(user).count(itemID))
++			return fail(409, "You already own this item.");
++		long long badges = 0;
++		for (auto& c : counters)
++			if (c.mode == -1 && c.name == "BlackBadges")
++				badges = c.value;
++		if (badges < item->price)
++			return fail(409, "Not enough Black Badges.");
++		int added = g_ItemManager.AddItem(userID, user, itemID, 1, 0);
++		if (added == ITEM_ADD_INVENTORY_FULL)
++			return fail(409, "Your inventory is full.");
++		if (added != ITEM_ADD_SUCCESS)
++			return fail(500, "Couldn't add the item.");
++		g_MedalManager.AddCounter(user, "BlackBadges", -item->price);
++		g_MedalManager.AddCounter(user, "BlackMarketBuys", 1);
++		g_MedalManager.CheckMedals(user);
++		Logger().Info("MissionManager: user %d bought item %d at the Black Market for %d badges\n", userID, itemID, item->price);
++	}
++	else
++		return fail(400, "Unknown action.");
++	return Build(user);
++}
+diff --git a/src/manager/missionmanager.h b/src/manager/missionmanager.h
+new file mode 100644
+index 0000000..6175716
+--- /dev/null
++++ b/src/manager/missionmanager.h
+@@ -0,0 +1,94 @@
++#pragma once
++
++#include <string>
++#include <vector>
++#include <map>
++
++#include "interface/imanager.h"
++#include "manager.h"
++#include "nlohmann/json.hpp"
++
++class IUser;
++struct UserCounter_s;
++struct UserMission_s;
++
++// a statistic (CMedalManager counter) that must grow by `target` after the mission is taken
++struct MissionRequirement
++{
++	std::string counter;
++	long long target = 0;
++	std::vector<int> modes; // empty: all modes
++};
++
++struct MissionRequest
++{
++	int id;
++	std::string title, npc, portrait, story, text;
++	std::vector<MissionRequirement> conditions;
++	int badges = 0, medals = 0;
++};
++
++struct EventMission
++{
++	std::string text;
++	std::vector<MissionRequirement> conditions;
++	int badges = 0, medals = 0;
++};
++
++struct MissionEvent
++{
++	int id;
++	std::string name, description;
++	std::vector<EventMission> missions;
++	int bonusBadges = 0, bonusMedals = 0;
++};
++
++struct MarketItem
++{
++	int itemID;
++	std::string name, kind; // "Weapon" or "Costume"
++	int price;
++};
++
++class IMissionManager : public IBaseManager
++{
++};
++
++/**
++ * Offline build: the Missions page (taskbar Missions button). Mission requests from the game's quest NPCs (a few
++ * offers a day, some taken at once), the event of the week, and the Black Market (the game's black badge shop, a
++ * new stock every day) paid with Black Badges, which only missions give. Data/Missions.json (tools/gen_missions.py).
++ * Daily and weekly orders and challenges stay in CWarbondManager; the page shows them too.
++ */
++class CMissionManager : public CBaseManager<IMissionManager>
++{
++public:
++	CMissionManager();
++
++	virtual bool Init();
++
++	// GET / POST /api/missions {action: accept|abandon|claim (id) | claimEvent (index) | claimBonus | buy (itemID)}
++	nlohmann::json Api(IUser* user, const std::string& method, const std::string& body, int& status);
++
++private:
++	bool LoadConfig();
++	nlohmann::json Build(IUser* user);
++	static int Today();
++	static int ThisWeek();
++	static long long Total(const std::vector<UserCounter_s>& counters, const MissionRequirement& req);
++	std::vector<int> Offers(int userID, int day, const std::map<std::string, UserMission_s>& missions);
++	std::vector<const MarketItem*> Stock(int day);
++	const MissionEvent* CurrentEvent();
++	nlohmann::json Progress(const std::vector<MissionRequirement>& reqs, const std::string& prefix,
++		const std::vector<UserCounter_s>& counters, const std::map<std::string, UserMission_s>& missions, bool& done);
++	std::vector<UserMission_s> Start(const std::vector<MissionRequirement>& reqs, const std::string& prefix,
++		const std::vector<UserCounter_s>& counters, int period);
++	void Reward(IUser* user, int badges, int medals, const char* what);
++
++	std::vector<MissionRequest> m_Requests;
++	std::vector<MissionEvent> m_Events;
++	std::vector<MarketItem> m_Market;
++	int m_RequestOffers = 4, m_RequestSlots = 3, m_MarketWeapons = 6, m_MarketCostumes = 2;
++};
++
++extern CMissionManager g_MissionManager;
 diff --git a/src/manager/packetmanager.cpp b/src/manager/packetmanager.cpp
 index 0defb02..94edd28 100644
 --- a/src/manager/packetmanager.cpp
@@ -1791,10 +2369,10 @@ index b9ca2f3..76eb9b9 100644
  	void SendRoomInviteUserList(IExtendedSocket* socket, IUser* user);
  	void SendRoomGameResult(IExtendedSocket* socket, IRoom* room, CGameMatch* match);
 diff --git a/src/manager/userdatabase.cpp b/src/manager/userdatabase.cpp
-index 0d23de4..3cae968 100644
+index 0d23de4..52dbc67 100644
 --- a/src/manager/userdatabase.cpp
 +++ b/src/manager/userdatabase.cpp
-@@ -626,6 +626,78 @@ int CUserDatabaseProxy::GetUsersAssociatedWithIP(const string& ip, vector<CUserD
+@@ -626,6 +626,102 @@ int CUserDatabaseProxy::GetUsersAssociatedWithIP(const string& ip, vector<CUserD
  	return result;
  }
  
@@ -1870,14 +2448,38 @@ index 0d23de4..3cae968 100644
 +	return result;
 +}
 +
++int CUserDatabaseProxy::GetMissions(int userID, vector<UserMission_s>& missions)
++{
++	ExecCalcStart();
++	int result = m_pDatabase->GetMissions(userID, missions);
++	ExecCalcEnd(__FUNCTION__);
++	return result;
++}
++
++int CUserDatabaseProxy::SetMissions(int userID, const vector<UserMission_s>& missions)
++{
++	ExecCalcStart();
++	int result = m_pDatabase->SetMissions(userID, missions);
++	ExecCalcEnd(__FUNCTION__);
++	return result;
++}
++
++int CUserDatabaseProxy::DeleteMissions(int userID, const string& prefix)
++{
++	ExecCalcStart();
++	int result = m_pDatabase->DeleteMissions(userID, prefix);
++	ExecCalcEnd(__FUNCTION__);
++	return result;
++}
++
  int CUserDatabaseProxy::GetUsersAssociatedWithHWID(const vector<unsigned char>& hwid, vector<CUserData>& userData)
  {
  	ExecCalcStart();
 diff --git a/src/manager/userdatabase.h b/src/manager/userdatabase.h
-index ee72a34..96c1c79 100644
+index ee72a34..af248ce 100644
 --- a/src/manager/userdatabase.h
 +++ b/src/manager/userdatabase.h
-@@ -118,6 +118,15 @@ public:
+@@ -118,6 +118,18 @@ public:
  	virtual int SetAddons(int userID, std::vector<int>& addons);
  
  	virtual int GetUsersAssociatedWithIP(const std::string& ip, std::vector<CUserData>& userData);
@@ -1890,11 +2492,14 @@ index ee72a34..96c1c79 100644
 +	virtual int GetCounters(int userID, std::vector<UserCounter_s>& counters);
 +	virtual int AddCounters(int userID, const std::vector<UserCounter_s>& counters, bool best);
 +	virtual int SetCounter(int userID, const UserCounter_s& counter);
++	virtual int GetMissions(int userID, std::vector<UserMission_s>& missions);
++	virtual int SetMissions(int userID, const std::vector<UserMission_s>& missions);
++	virtual int DeleteMissions(int userID, const std::string& prefix);
  	virtual int GetUsersAssociatedWithHWID(const std::vector<unsigned char>& hwid, std::vector<CUserData>& userData);
  
  	// clan related
 diff --git a/src/manager/userdatabase_sqlite.cpp b/src/manager/userdatabase_sqlite.cpp
-index ed5fefb..167be39 100644
+index ed5fefb..5d6c74e 100644
 --- a/src/manager/userdatabase_sqlite.cpp
 +++ b/src/manager/userdatabase_sqlite.cpp
 @@ -49,7 +49,7 @@ bool CUserDatabaseSQLite::Init()
@@ -1906,7 +2511,7 @@ index ed5fefb..167be39 100644
  			return false;
  
  		DropSessions();
-@@ -4101,6 +4101,261 @@ int CUserDatabaseSQLite::SetAddons(int userID, vector<int>& addons)
+@@ -4101,6 +4101,326 @@ int CUserDatabaseSQLite::SetAddons(int userID, vector<int>& addons)
  	return 1;
  }
  
@@ -2011,6 +2616,7 @@ index ed5fefb..167be39 100644
 +		m_Database.exec(OBFUSCATE("CREATE TABLE IF NOT EXISTS UserWarbondUnlock (userID INT NOT NULL, warbondID INT NOT NULL, itemID INT NOT NULL, cost INT NOT NULL, time INT NOT NULL, PRIMARY KEY (userID, warbondID, itemID))"));
 +		m_Database.exec(OBFUSCATE("CREATE TABLE IF NOT EXISTS UserOrderProgress (userID INT NOT NULL, orderID INT NOT NULL, periodStart INT NOT NULL, progress INT NOT NULL, completed INT NOT NULL, PRIMARY KEY (userID, orderID))"));
 +		m_Database.exec(OBFUSCATE("CREATE TABLE IF NOT EXISTS UserCounter (userID INT NOT NULL, mode INT NOT NULL, name TEXT NOT NULL, value INT NOT NULL, PRIMARY KEY (userID, mode, name))"));
++		m_Database.exec(OBFUSCATE("CREATE TABLE IF NOT EXISTS UserMission (userID INT NOT NULL, key TEXT NOT NULL, value INT NOT NULL, state INT NOT NULL, period INT NOT NULL, PRIMARY KEY (userID, key))"));
 +	}
 +	catch (exception& e)
 +	{
@@ -2165,10 +2771,74 @@ index ed5fefb..167be39 100644
 +	return 1;
 +}
 +
++int CUserDatabaseSQLite::GetMissions(int userID, vector<UserMission_s>& missions)
++{
++	try
++	{
++		SQLite::Statement query(m_Database, "SELECT key, value, state, period FROM UserMission WHERE userID = ?");
++		query.bind(1, userID);
++		while (query.executeStep())
++			missions.push_back({ query.getColumn(0).getString(), query.getColumn(1).getInt64(), query.getColumn(2).getInt(), query.getColumn(3).getInt() });
++	}
++	catch (exception& e)
++	{
++		Logger().Error("CUserDatabaseSQLite::GetMissions: database internal error: %s, %d\n", e.what(), m_Database.getErrorCode());
++		return 0;
++	}
++
++	return 1;
++}
++
++int CUserDatabaseSQLite::SetMissions(int userID, const vector<UserMission_s>& missions)
++{
++	try
++	{
++		SQLite::Transaction transaction(m_Database);
++		SQLite::Statement query(m_Database, "INSERT OR REPLACE INTO UserMission VALUES (?, ?, ?, ?, ?)");
++		for (auto& m : missions)
++		{
++			query.bind(1, userID);
++			query.bind(2, m.key);
++			query.bind(3, (int64_t)m.value);
++			query.bind(4, m.state);
++			query.bind(5, m.period);
++			query.exec();
++			query.reset();
++		}
++		transaction.commit();
++	}
++	catch (exception& e)
++	{
++		Logger().Error("CUserDatabaseSQLite::SetMissions: database internal error: %s, %d\n", e.what(), m_Database.getErrorCode());
++		return 0;
++	}
++
++	return 1;
++}
++
++int CUserDatabaseSQLite::DeleteMissions(int userID, const string& prefix)
++{
++	try
++	{
++		SQLite::Statement query(m_Database, "DELETE FROM UserMission WHERE userID = ? AND substr(key, 1, ?) = ?");
++		query.bind(1, userID);
++		query.bind(2, (int)prefix.size());
++		query.bind(3, prefix);
++		query.exec();
++	}
++	catch (exception& e)
++	{
++		Logger().Error("CUserDatabaseSQLite::DeleteMissions: database internal error: %s, %d\n", e.what(), m_Database.getErrorCode());
++		return 0;
++	}
++
++	return 1;
++}
++
  int CUserDatabaseSQLite::GetUsersAssociatedWithIP(const string& ip, vector<CUserData>& userData)
  {
  	try
-@@ -6437,7 +6692,7 @@ int CUserDatabaseSQLite::GetUserClassModLoadOut(int userID, int slot, ClassModIn
+@@ -6437,7 +6757,7 @@ int CUserDatabaseSQLite::GetUserClassModLoadOut(int userID, int slot, ClassModIn
  {
  	try
  	{
@@ -2178,10 +2848,10 @@ index ed5fefb..167be39 100644
  				std::vector<int> data;
  				std::stringstream ss(column);
 diff --git a/src/manager/userdatabase_sqlite.h b/src/manager/userdatabase_sqlite.h
-index 0e1d7d2..8a23a7f 100644
+index 0e1d7d2..a6efa65 100644
 --- a/src/manager/userdatabase_sqlite.h
 +++ b/src/manager/userdatabase_sqlite.h
-@@ -109,6 +109,16 @@ public:
+@@ -109,6 +109,19 @@ public:
  	int SetAddons(int userID, std::vector<int>& addons);
  
  	int GetUsersAssociatedWithIP(const std::string& ip, std::vector<CUserData>& userData);
@@ -2194,6 +2864,9 @@ index 0e1d7d2..8a23a7f 100644
 +	virtual int GetCounters(int userID, std::vector<UserCounter_s>& counters);
 +	virtual int AddCounters(int userID, const std::vector<UserCounter_s>& counters, bool best);
 +	virtual int SetCounter(int userID, const UserCounter_s& counter);
++	virtual int GetMissions(int userID, std::vector<UserMission_s>& missions);
++	virtual int SetMissions(int userID, const std::vector<UserMission_s>& missions);
++	virtual int DeleteMissions(int userID, const std::string& prefix);
 +	bool CreateWarbondTables();
  	int GetUsersAssociatedWithHWID(const std::vector<unsigned char>& hwid, std::vector<CUserData>& userData);
  
@@ -2554,10 +3227,10 @@ index 3054001..9c14f6b 100644
  	void SendUserLoadout(IUser* user);
 diff --git a/src/manager/warbondmanager.cpp b/src/manager/warbondmanager.cpp
 new file mode 100644
-index 0000000..b621a36
+index 0000000..8f338a6
 --- /dev/null
 +++ b/src/manager/warbondmanager.cpp
-@@ -0,0 +1,913 @@
+@@ -0,0 +1,945 @@
 +#include "warbondmanager.h"
 +#include "usermanager.h"
 +#include "userdatabase.h"
@@ -2570,6 +3243,7 @@ index 0000000..b621a36
 +#include "room/gamematch.h"
 +#include "bingomanager.h"
 +#include "medalmanager.h"
++#include "missionmanager.h"
 +
 +#include <fstream>
 +#include <set>
@@ -2764,6 +3438,10 @@ index 0000000..b621a36
 +				va("sv_cheats is on: this match's medals will be cut by %d%%.", m_Medals.cheatPenalty));
 +		}
 +		result = { { "ok", true }, { "match", match != NULL }, { "penalty", m_Medals.cheatPenalty } };
++	}
++	else if (req.path == "/api/missions")
++	{
++		result = g_MissionManager.Api(user, req.method, req.body, resp.status);
 +	}
 +	else if (req.method == "GET" && req.path == "/api/profile")
 +	{
@@ -3368,8 +4046,35 @@ index 0000000..b621a36
 +				va("%s complete: %s (%s)", o.period == "Challenge" ? "Challenge" : "Order", o.text.c_str(), reward.c_str()));
 +			if (o.tickets)
 +				g_BingoManager.GiveTickets(user, o.tickets, NULL);
++			// statistics for the medals: orders done, weekly ones, days with every daily order done
++			g_MedalManager.AddCounter(user, "OrdersDone", 1);
++			if (o.period == "Weekly")
++				g_MedalManager.AddCounter(user, "WeeklyOrdersDone", 1);
++			if (o.period == "Daily")
++			{
++				bool allDaily = true;
++				for (auto& other : m_Orders)
++				{
++					if (other.period != "Daily" || other.id == o.id)
++						continue;
++					bool done = false;
++					for (auto& p : progress)
++						if (p.orderID == other.id && p.periodStart == periodStart && p.completed)
++							done = true;
++					allDaily &= done;
++				}
++				if (allDaily)
++					g_MedalManager.AddCounter(user, "PerfectDays", 1);
++			}
 +		}
 +		g_UserDatabase.SetOrderProgress(user->GetID(), current);
++		// later orders of this call see it (several daily orders can finish in the same match)
++		bool known = false;
++		for (auto& p : progress)
++			if (p.orderID == current.orderID)
++				p = current, known = true;
++		if (!known)
++			progress.push_back(current);
 +	}
 +}
 +

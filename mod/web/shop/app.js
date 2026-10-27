@@ -1,4 +1,4 @@
-// Acquisition Centre: battle passes bought with medals, plus daily/weekly orders.
+// Acquisition Centre: battle passes bought with medals (orders and challenges are on the Missions page).
 // Data comes from CSNZ_Server (/api/state, /api/unlock).
 (function () {
   const view = document.getElementById("view");
@@ -57,7 +57,6 @@
   const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const medal = (small) => '<span class="medal-icon' + (small ? " small" : "") + '"></span>';
   // Bingo Tickets an order gives besides its medals (the game's own ticket picture)
-  const tickets = o => (o.tickets ? '<span class="ticket-reward" title="Bingo Ticket"><img src="icons/2179.png" alt="">+' + o.tickets + "</span>" : "");
   const pct = (a, b) => (b ? Math.min(100, Math.round(a * 100 / b)) : 0);
 
   // Real item picture exported from the game files (tools/export_shop_assets.py), silhouette if missing.
@@ -150,8 +149,6 @@
     tabsEl.classList.toggle("hidden", inPass);
     tabsEl.querySelectorAll("button").forEach(b => b.classList.toggle("active", b.dataset.tab === tab));
     if (inPass) renderPass(passById(openPass));
-    else if (tab === "orders") renderOrders();
-    else if (tab === "challenges") renderChallenges();
     else renderCentre();
     if (!inPass) showStage(null);
   }
@@ -431,54 +428,6 @@
     } finally {
       busy = false;
     }
-  }
-
-  // ---------- orders ----------
-  function timeLeft(seconds) {
-    const d = Math.floor(seconds / 86400), h = Math.floor(seconds % 86400 / 3600), m = Math.floor(seconds % 3600 / 60);
-    return d ? d + "d " + h + "h" : h ? h + "h " + m + "m" : m + "m";
-  }
-
-  function renderOrders() {
-    titleEl.textContent = "Acquisition Centre";
-    const column = (period, label) => {
-      const list = state.orders.filter(o => o.period === period);
-      if (!list.length) return "";
-      const resets = timeLeft(list[0].resetsIn);
-      return "<div><h2>" + label + "<small>Resets in " + resets + "</small></h2>" +
-        list.map(o =>
-          '<div class="order' + (o.completed ? " done" : "") + '">' +
-            '<div class="row"><span class="text">' + esc(o.text) + '</span><span class="reward">' + medal(true) + "+" + o.reward + tickets(o) + "</span></div>" +
-            '<div class="progress"><span style="width:' + pct(o.progress, o.target) + '%"></span></div>' +
-            '<div class="sub">' + (o.completed ? "Completed" : o.progress + " / " + o.target) + "</div>" +
-          "</div>").join("") + "</div>";
-    };
-    view.innerHTML = '<div class="orders">' + column("Daily", "Daily orders") + column("Weekly", "Weekly orders") + "</div>";
-  }
-
-  // ---------- challenge book: permanent goals, each pays out once ----------
-  function renderChallenges() {
-    titleEl.textContent = "Acquisition Centre";
-    const list = state.orders.filter(o => o.period === "Challenge");
-    const done = list.filter(o => o.completed);
-    const earned = done.reduce((sum, o) => sum + o.reward, 0);
-    const total = list.reduce((sum, o) => sum + o.reward, 0);
-    const groups = [];
-    list.forEach(o => { let g = groups.find(x => x.name === o.group); if (!g) groups.push(g = { name: o.group || "General", items: [] }); g.items.push(o); });
-    const card = o =>
-      '<div class="challenge' + (o.completed ? " done" : "") + '">' +
-        '<div class="row"><span class="text">' + esc(o.text) + '</span><span class="reward">' + medal(true) + o.reward + tickets(o) + "</span></div>" +
-        '<div class="progress"><span style="width:' + pct(o.progress, o.target) + '%"></span></div>' +
-        '<div class="sub">' + (o.completed ? "Completed" : o.progress.toLocaleString("en-US") + " / " + o.target.toLocaleString("en-US")) + "</div>" +
-      "</div>";
-    view.innerHTML = '<div class="challenges">' +
-      '<div class="book-head"><div><h2>Challenge book</h2><p>Permanent goals. Each one pays out once.</p></div>' +
-        '<div class="book-stats"><div><span class="label">Completed</span><span class="value">' + done.length + " / " + list.length + "</span></div>" +
-        '<div><span class="label">Medals earned</span><span class="value">' + medal() + earned + " / " + total + "</span></div></div>" +
-        '<div class="progress book-progress"><span style="width:' + pct(done.length, list.length) + '%"></span></div></div>' +
-      groups.map(g => '<section class="book-group"><h3>' + esc(g.name) + "<small>" + g.items.filter(o => o.completed).length + " / " + g.items.length + "</small></h3>" +
-        '<div class="book-grid">' + g.items.map(card).join("") + "</div></section>").join("") +
-    "</div>";
   }
 
   tabsEl.querySelectorAll("button").forEach(b => b.onclick = () => { tab = b.dataset.tab; render(); });

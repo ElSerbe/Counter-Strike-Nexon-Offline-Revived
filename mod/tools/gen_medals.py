@@ -345,7 +345,13 @@ def describe(req, sets, count=None):
         pattern, count = req[1], count if count is not None else req[2]
         return f"Own {count} items" if not pattern else f"Own {count} {sets.get(pattern, pattern)} items"
     _, counter, target, modes = req
-    text = COUNTERS[counter].format(n=fmt(target), h=fmt(target // 3600))
+    hours = target / 3600
+    h = fmt(target // 3600) if target % 3600 == 0 else f"{hours:g}"
+    text = COUNTERS[counter].format(n=fmt(target), h=h)
+    if counter == "Seconds" and target < 3600:
+        text = f"Play for {target // 60} minutes"
+    elif counter == "Seconds" and target == 3600:
+        text = "Play for 1 hour"
     if modes:
         text += " in " + GROUP_NAMES.get(tuple(modes), "modes " + ", ".join(map(str, modes)))
     return text

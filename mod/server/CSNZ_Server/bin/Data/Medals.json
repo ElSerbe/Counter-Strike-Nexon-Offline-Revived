@@ -4012,7 +4012,7 @@
    "Name": "Studio Creator",
    "Group": "Studio",
    "Lore": "A medal granted to users who have participated in the Studio Mode contest.\n\n* Medal may be given through contests or events, separately from the requirements.",
-   "Text": "Play for 1 hours in Studio modes",
+   "Text": "Play for 1 hour in Studio modes",
    "Conditions": [
     {
      "Counter": "Seconds",

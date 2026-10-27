@@ -1,0 +1,2189 @@
+{
+ "Version": 1,
+ "RequestOffers": 4,
+ "RequestSlots": 3,
+ "Requests": [
+  {
+   "ID": 1,
+   "Title": "Glorious Victor!",
+   "Npc": "Senior Researcher Soi",
+   "Portrait": "doctora",
+   "Story": "The world ultimately belongs to the victor.\nThat is the only thing I learned while working\nin various governments and organizations.\n\nThe mission I have for you is simple. All you have to do is win...\nMake the weak crumble before you and leave the victor.\nI will give you a prize worthy of your accomplishment.\n\n* This mission can only be completed in a room with 4 or more players.\n* Unclaimed prizes will disappear when the mission has been reset.",
+   "Text": "Win 3 matches",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 3
+    }
+   ],
+   "Badges": 4,
+   "Medals": 15
+  },
+  {
+   "ID": 2,
+   "Title": "Necessity",
+   "Npc": "Evelyn",
+   "Portrait": "evelyn",
+   "Story": "Don't think that being a mercenary like me is easy. Greenhorns can't handle the pressure. Without the skills needed for popping heads, no one will ever hire you. \r\n\nYeah, that's right, headshots are a necessity for killers.\n\nStill, you seem to have the nerve needed to pull the trigger when it counts.\nIt just so happens I have a job with a pretty good prize. So, are you a killer?\n\n* This mission can only be completed in a room with 4 or more players.\n* Unclaimed prizes will disappear when the mission has been reset.",
+   "Text": "Score 5 headshots",
+   "Conditions": [
+    {
+     "Counter": "Headshots",
+     "Target": 5
+    }
+   ],
+   "Badges": 3,
+   "Medals": 10
+  },
+  {
+   "ID": 3,
+   "Title": "Perfect Headshot",
+   "Npc": "Signalman Felix",
+   "Portrait": "felix",
+   "Story": "Accuracy is essential for a soldier.\nIf you lack the skill to eliminate an enemy with one headshot it puts your own life in danger.\n\nNow, this fodder shouldn't be too much trouble, show me some real precision.\n\n* This mission can only be completed in a room with 4 or more players.\n* Unclaimed prizes will disappear when the mission has been reset.",
+   "Text": "Score 7 headshots in AI modes",
+   "Conditions": [
+    {
+     "Counter": "Headshots",
+     "Target": 7,
+     "Modes": [
+      3,
+      4,
+      5
+     ]
+    }
+   ],
+   "Badges": 3,
+   "Medals": 10
+  },
+  {
+   "ID": 4,
+   "Title": "C4 Plan Support",
+   "Npc": "Douglas Jacob",
+   "Portrait": "jacob",
+   "Story": "There's a big problem. The troops in the operation area have requested emergency support because their C4 specialist has gone missing.\nYou seem to have experience with handling a C4 bomb.\n\nReport to the battleground and carry out their C4\nplan. I will contact the active force and let them know you are on your way.\n\n* This mission can only be completed in a room with 4 or more players.\n* Unclaimed prizes will disappear when the mission has been reset.",
+   "Text": "Plant or defuse 3 bombs in Original modes",
+   "Conditions": [
+    {
+     "Counter": "Bombs",
+     "Target": 3,
+     "Modes": [
+      0,
+      3,
+      6,
+      7,
+      23,
+      42
+     ]
+    }
+   ],
+   "Badges": 5,
+   "Medals": 15
+  },
+  {
+   "ID": 5,
+   "Title": "Hostage Rescue",
+   "Npc": "Commander Victor",
+   "Portrait": "victor",
+   "Story": "The Terrorists are at it again. The extremes one must go to in order to make their message known,\nI know their struggle...\nAah, never mind. Ignore what I just said. I will give you the mission that just came down from the government.\n\nPlease rescue the hostages that are being detained by the Terrorists. It's an urgent mission so I'm sure your reward will be worth it.\n\n* This mission can only be completed in a room with 4 or more players.\n* Unclaimed prizes will disappear when the mission has been reset.",
+   "Text": "Rescue 5 hostages in Original modes",
+   "Conditions": [
+    {
+     "Counter": "Hostages",
+     "Target": 5,
+     "Modes": [
+      0,
+      3,
+      6,
+      7,
+      23,
+      42
+     ]
+    }
+   ],
+   "Badges": 5,
+   "Medals": 15
+  },
+  {
+   "ID": 6,
+   "Title": "Important Indeed",
+   "Npc": "Jim the 'Red Lizard'",
+   "Portrait": "zim",
+   "Story": "When you're in business, there are times when you simply have to be cold hearted. Eliminating your rivals is often just a sound investment.\nBut would you even understand my line of work if there isn't a trigger to pull? \n\nDon't worry, I compensate even my lowest of associates well for their unique talents...\n\nGo to the Oilrig and eliminate the VIP. It's not important for you to know who he is.\n\n* This mission can only be completed in a room with 4 or more players.\n* Unclaimed prizes will disappear when the mission has been reset.",
+   "Text": "Win 2 matches in Original modes",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 2,
+     "Modes": [
+      0,
+      3,
+      6,
+      7,
+      23,
+      42
+     ]
+    }
+   ],
+   "Badges": 4,
+   "Medals": 15
+  },
+  {
+   "ID": 7,
+   "Title": "Grenade Toss",
+   "Npc": "Security Chief Chen",
+   "Portrait": "chen",
+   "Story": "Soldier! It's an important skill to assess the situation and make adequate responses. In standoff situations, a well placed grenade is a very adequate response.\n\nThis Mission will require skill with explosives. Go to the battlefield and effectively use grenades to subdue the enemy. \n\n* This mission can only be completed in a room with 4 or more players.\n* Unclaimed prizes will disappear when the mission has been reset.",
+   "Text": "Score 1 grenade kills in Original, Deathmatch and Team Deathmatch",
+   "Conditions": [
+    {
+     "Counter": "GrenadeKills",
+     "Target": 1,
+     "Modes": [
+      0,
+      3,
+      6,
+      7,
+      23,
+      42,
+      2,
+      5,
+      19,
+      1,
+      4,
+      22
+     ]
+    }
+   ],
+   "Badges": 3,
+   "Medals": 10
+  },
+  {
+   "ID": 8,
+   "Title": "Weapon Expert",
+   "Npc": "Officer Rowen",
+   "Portrait": "rowen",
+   "Story": "I want to work with you on this job, so listen up: the client for this job has made an interesting request. The important thing is that you're able to use a pistol and knife effortlessly, just as I can.\n\nYour job is to eliminate one opponent with a pistol and another with a knife.\n\nYou do... own a pistol and knife right?\n\n* This mission can only be completed in a room with 4 or more players.\n* Unclaimed prizes will disappear when the mission has been reset.",
+   "Text": "Score 1 melee kills in Original, Deathmatch and Team Deathmatch; Score 1 pistol kills in Original, Deathmatch and Team Deathmatch",
+   "Conditions": [
+    {
+     "Counter": "MeleeKills",
+     "Target": 1,
+     "Modes": [
+      0,
+      3,
+      6,
+      7,
+      23,
+      42,
+      2,
+      5,
+      19,
+      1,
+      4,
+      22
+     ]
+    },
+    {
+     "Counter": "PistolKills",
+     "Target": 1,
+     "Modes": [
+      0,
+      3,
+      6,
+      7,
+      23,
+      42,
+      2,
+      5,
+      19,
+      1,
+      4,
+      22
+     ]
+    }
+   ],
+   "Badges": 4,
+   "Medals": 10
+  },
+  {
+   "ID": 9,
+   "Title": "1 vs 100",
+   "Npc": "Senior Researcher Soi",
+   "Portrait": "doctora",
+   "Story": "Soldier! Don't forget that war isn't fought with headcount alone. A competent soldier can outmatch 100 enemies all by himself.\n\nThe battle is not going well for us so I'll need you to pick up the slack.\n\nI trust that you'll return after eliminating at least 5 enemies without falling in battle.\n\n* This mission can only be completed in a room with 4 or more players.\n* Unclaimed prizes will disappear when the mission has been reset.",
+   "Text": "Score 25 kills in modes 2, 5, 19, 1, 4, 22",
+   "Conditions": [
+    {
+     "Counter": "Kills",
+     "Target": 25,
+     "Modes": [
+      2,
+      5,
+      19,
+      1,
+      4,
+      22
+     ]
+    }
+   ],
+   "Badges": 3,
+   "Medals": 10
+  },
+  {
+   "ID": 10,
+   "Title": "Heroism",
+   "Npc": "Evelyn",
+   "Portrait": "evelyn",
+   "Story": "We at Aegis Institute are investigating the Hero that helped us greatly against the zombies. Because those disgusting zombies have the ability to evolve, we cannot be careless in our research towards enhancing the Hero’s abilities.\n\nSuch research is difficult because we lack information from real battles.\n\nIf you can bring us real combat data on the Hero, it would be vital to our research.\n\n* This mission can only be completed in a room with 4 or more players.\n* Unclaimed prizes will disappear when the mission has been reset.",
+   "Text": "Win 2 matches in modes 14",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 2,
+     "Modes": [
+      14
+     ]
+    }
+   ],
+   "Badges": 5,
+   "Medals": 15
+  },
+  {
+   "ID": 11,
+   "Title": "Clinical Trial",
+   "Npc": "Signalman Felix",
+   "Portrait": "felix",
+   "Story": "The effect of the morale booster was what helped us counter-attack those nauseating zombies. At Aegis Institute, we're analyzing the effects of the morale booster in order to destroy zombies more effectively.\n\nOf course, the problem is... Yes. It's the lack of data. If you can come back to us after fully experiencing the morale booster that info will be priceless.\n\n* This mission can only be completed in a room with 4 or more players.\n* Unclaimed prizes will disappear when the mission has been reset.",
+   "Text": "Kill 20 zombies in modes 14",
+   "Conditions": [
+    {
+     "Counter": "ZombieKills",
+     "Target": 20,
+     "Modes": [
+      14
+     ]
+    }
+   ],
+   "Badges": 4,
+   "Medals": 15
+  },
+  {
+   "ID": 12,
+   "Title": "Economical Battle",
+   "Npc": "Douglas Jacob",
+   "Portrait": "jacob",
+   "Story": "Have you heard the phrase 'a penny saved is a penny earned'? It means that money, however small, can become a fortune when it's pooled together. That's why being frugal is so important.\n\nWe can see how wasteful you are with bullets when killing zombies. If you can put down zombies without wasting any ammunition then that's just good sense.\n\n*This mission can only be completed in a room with 4 or more players.\n* Unclaimed prizes will disappear when the mission has been reset.",
+   "Text": "Score 3 melee kills in Zombie (Original, Mutation, Hero)",
+   "Conditions": [
+    {
+     "Counter": "MeleeKills",
+     "Target": 3,
+     "Modes": [
+      8,
+      9,
+      14
+     ]
+    }
+   ],
+   "Badges": 5,
+   "Medals": 15
+  },
+  {
+   "ID": 13,
+   "Title": "Eliminate the Host",
+   "Npc": "Commander Victor",
+   "Portrait": "victor",
+   "Story": "Hey rookie, how much do you know about zombies? Heheh... I have quite a bit of experience toying with zombies. You at least know to eliminate the host first in order to kill all of them, right? That's the fastest way to weaken them...\n\nRookie, this mission is to eliminate the host.\nSo how about it? It's been a while since I've played with zombies. Let's have some fun!\n\n*This mission can only be completed in a room with 4 or more players.\n* Unclaimed prizes will disappear when the mission has been reset.",
+   "Text": "Score 5 headshots in modes 9, 14",
+   "Conditions": [
+    {
+     "Counter": "Headshots",
+     "Target": 5,
+     "Modes": [
+      9,
+      14
+     ]
+    }
+   ],
+   "Badges": 4,
+   "Medals": 10
+  },
+  {
+   "ID": 14,
+   "Title": "Dead Drop",
+   "Npc": "Jim the 'Red Lizard'",
+   "Portrait": "zim",
+   "Story": "This is big trouble. We've received communication that zombies have infested district B7 again. I think we're going to have to send over a supply box, but it's going to be a nasty operation because of those zombies.\n\nWe need your help. Retrieve the supply box amidst the crowd of zombies.\nIt'll be a big help during combat as well.\n\n*This mission can only be completed in a room with 4 or more players.\n* Unclaimed prizes will disappear when the mission has been reset.",
+   "Text": "Kill 30 zombies in modes 9, 14",
+   "Conditions": [
+    {
+     "Counter": "ZombieKills",
+     "Target": 30,
+     "Modes": [
+      9,
+      14
+     ]
+    }
+   ],
+   "Badges": 4,
+   "Medals": 15
+  },
+  {
+   "ID": 15,
+   "Title": "Dangerous Alliance",
+   "Npc": "Security Chief Chen",
+   "Portrait": "chen",
+   "Story": "An interesting world, isn't it? There's even a time when zombies and humans must be allies in battle. They are always\nat each other's throat, how long will they go on pretending to be friends? Such a dangerous alliance will only end in betrayal.\n\nNow, I have a request. Show me a hint of that betrayal.\n Proof that it is merely fate that humans\nmust kill zombies and zombies must kill humans...\n \r\n\n*This mission can only be completed in a room with 4 or more players.\n* Unclaimed prizes will disappear when the mission has been reset.",
+   "Text": "Kill 10 zombies in Zombie (Original, Mutation, Hero); Infect 10 humans in Zombie (Original, Mutation, Hero)",
+   "Conditions": [
+    {
+     "Counter": "ZombieKills",
+     "Target": 10,
+     "Modes": [
+      8,
+      9,
+      14
+     ]
+    },
+    {
+     "Counter": "Infections",
+     "Target": 10,
+     "Modes": [
+      8,
+      9,
+      14
+     ]
+    }
+   ],
+   "Badges": 6,
+   "Medals": 20
+  },
+  {
+   "ID": 16,
+   "Title": "Juggernaut Hunt",
+   "Npc": "Officer Rowen",
+   "Portrait": "rowen",
+   "Story": "This is a desperate situation. We heard that Juggernauts, the giant zombies that appeared in the Lost City, are spreading out to other areas. The Juggernauts are wreaking havoc in these areas and if we don't put a stop to it many lives will be at risk.\n\nYou've got more experience than anyone with these creatures, you're our best bet. Go and put those Juggernauts down for good!\n\n*This mission can only be completed in a room with 4 or more players.\n* Unclaimed prizes will disappear when the mission has been reset.",
+   "Text": "Kill 150 monsters in Zombie Scenario",
+   "Conditions": [
+    {
+     "Counter": "MonsterKills",
+     "Target": 150,
+     "Modes": [
+      15
+     ]
+    }
+   ],
+   "Badges": 5,
+   "Medals": 15
+  },
+  {
+   "ID": 17,
+   "Title": "Public Interest",
+   "Npc": "Senior Researcher Soi",
+   "Portrait": "doctora",
+   "Story": "A fool spends money only for himself with no interest in his fellow man. It's smart business to invest in the common good knowing it will return profit for himself.\n\nThe same goes for soldiers like you. If you have done your part with the Barrier Wall Upgrade in the Double Gate area, I would be inclined to invest in you too.\n\n*This mission can only be completed in a room with 4 or more players.\n* Unclaimed prizes will disappear when the mission has been reset.",
+   "Text": "Win 1 matches in Zombie Scenario",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 1,
+     "Modes": [
+      15
+     ]
+    }
+   ],
+   "Badges": 5,
+   "Medals": 15
+  },
+  {
+   "ID": 18,
+   "Title": "Eliminate the Titan",
+   "Npc": "Evelyn",
+   "Portrait": "evelyn",
+   "Story": "Soldier! I hate to admit it but we are at a disadvantage in this operation. If we want to get rid of the Vanguard Company soldiers, eliminating the commanding officer is the best route.\n\nYou must go to the battlefront and eliminate the Titan. Yes, I mean those huge masked men charging with the minigun!\n\n*This mission can only be completed in a room with 4 or more players.\n*  Unclaimed prizes will disappear when the mission has been reset.",
+   "Text": "Win 1 matches in Human Scenario",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 1,
+     "Modes": [
+      17
+     ]
+    }
+   ],
+   "Badges": 5,
+   "Medals": 15
+  },
+  {
+   "ID": 19,
+   "Title": "Air Strike Support",
+   "Npc": "Signalman Felix",
+   "Portrait": "felix",
+   "Story": "Although the purpose of Aegis Institute is to halt zombie expansion, the Vanguard Company is no less of an enemy with their disruption to our research.\nThat's why this guidance system was developed.\n\nYour mission is to deliver the air strike coordinates at the battle site. When you deliver the coordinates, the bomber on our side will attack.\n\n*This mission can only be completed in a room with 4 or more players.\n* Unclaimed prizes will disappear when the mission has been reset.",
+   "Text": "Kill 200 monsters in Human Scenario",
+   "Conditions": [
+    {
+     "Counter": "MonsterKills",
+     "Target": 200,
+     "Modes": [
+      17
+     ]
+    }
+   ],
+   "Badges": 5,
+   "Medals": 15
+  },
+  {
+   "ID": 20,
+   "Title": "Universal Player",
+   "Npc": "Douglas Jacob",
+   "Portrait": "jacob",
+   "Story": "This is a really big problem... We have a football game at our base this afternoon, but one of our players is on leave so we need to fill a position.\n\nWhat? Will you really play for our team?\n\nGreat! If you can deliver an outstanding performance, I'll see to it that you're rewarded.\n\n*This mission can only be completed in a room with 4 or more players.\n* Unclaimed prizes will disappear when the mission has been reset.",
+   "Text": "Win 1 matches in Soccer; Play 2 matches in Soccer",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 1,
+     "Modes": [
+      16
+     ]
+    },
+    {
+     "Counter": "Matches",
+     "Target": 2,
+     "Modes": [
+      16
+     ]
+    }
+   ],
+   "Badges": 5,
+   "Medals": 15
+  },
+  {
+   "ID": 21,
+   "Title": "Occupy the Base",
+   "Npc": "Commander Victor",
+   "Portrait": "victor",
+   "Story": "Well, we have an annoying problem... Sometimes a minor dispute can grow into a big fight. Sure, fighting each other is fine but not when it damages the company, right? Go and subdue the defense system.\n\nIt's simple. Subdue the hostile guardian and secure a few bases.\n\n*This mission can only be completed in a room with 4 or more players.\n* Unclaimed prizes will disappear when the mission has been reset.",
+   "Text": "Score 50 kills in modes 0, 3, 6, 7, 23, 42, 2, 5, 19",
+   "Conditions": [
+    {
+     "Counter": "Kills",
+     "Target": 50,
+     "Modes": [
+      0,
+      3,
+      6,
+      7,
+      23,
+      42,
+      2,
+      5,
+      19
+     ]
+    }
+   ],
+   "Badges": 4,
+   "Medals": 15
+  },
+  {
+   "ID": 22,
+   "Title": "Zombie Sweep",
+   "Npc": "Jim the 'Red Lizard'",
+   "Portrait": "zim",
+   "Story": "What's vital for controlling the damage caused by the zombies is to regularly reduce their population. Who knows? Maybe starting small can eventually lead to the extermination of the zombies!\n\nMaybe...\nYou don't look opposed to the task in any case.\n\n* Can be achieved only in a room with 4 or more players.\n* Unclaimed prizes will disappear when the mission has been reset.",
+   "Text": "Kill 100 monsters in Zombie Scenario",
+   "Conditions": [
+    {
+     "Counter": "MonsterKills",
+     "Target": 100,
+     "Modes": [
+      15
+     ]
+    }
+   ],
+   "Badges": 4,
+   "Medals": 15
+  },
+  {
+   "ID": 23,
+   "Title": "First Steps 1",
+   "Npc": "Security Chief Chen",
+   "Portrait": "chen",
+   "Story": "Soldier, as you know, your First Step is always the most important! Now stand up and do something! \n* Unclaimed prizes will disappear when the mission has been reset.",
+   "Text": "Play for 20 minutes",
+   "Conditions": [
+    {
+     "Counter": "Seconds",
+     "Target": 1200
+    }
+   ],
+   "Badges": 2,
+   "Medals": 5
+  },
+  {
+   "ID": 24,
+   "Title": "First Steps 2",
+   "Npc": "Officer Rowen",
+   "Portrait": "rowen",
+   "Story": "I'm pretty sure you know what to do! What are you looking at? Don't stop now!\n* Unclaimed prizes will disappear when the mission has been reset.",
+   "Text": "Play for 40 minutes",
+   "Conditions": [
+    {
+     "Counter": "Seconds",
+     "Target": 2400
+    }
+   ],
+   "Badges": 3,
+   "Medals": 10
+  },
+  {
+   "ID": 25,
+   "Title": "First Steps 3",
+   "Npc": "Senior Researcher Soi",
+   "Portrait": "doctora",
+   "Story": "Good job, soldier! You probably feel more confident now. But that's no reason for you to be arrogant!\n* Unclaimed prizes will disappear when the mission has been reset.",
+   "Text": "Play for 1 hour",
+   "Conditions": [
+    {
+     "Counter": "Seconds",
+     "Target": 3600
+    }
+   ],
+   "Badges": 4,
+   "Medals": 15
+  },
+  {
+   "ID": 26,
+   "Title": "Aura of an expert",
+   "Npc": "Evelyn",
+   "Portrait": "evelyn",
+   "Story": "The numbers of those grotesque zombies aren't decreasing. We need to take a stable defensive position.\nHowever, we lack the number of experts who can help us out. We need your help.\nIf you can become an expert through experience that is the best way. Please help out.\n\n* Can be only completed in a room with 2 or more people.\n* Uncollected rewards will vanish upon reset.",
+   "Text": "Win 1 matches in modes 28, 52",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 1,
+     "Modes": [
+      28,
+      52
+     ]
+    }
+   ],
+   "Badges": 6,
+   "Medals": 20
+  },
+  {
+   "ID": 27,
+   "Title": "Shopaholic",
+   "Npc": "Signalman Felix",
+   "Portrait": "felix",
+   "Story": "Through our efforts, our position has become more fortified against attacks, but we can't be satisfied here. We'll need to be on our toes.\nFrom what I hear, a Black Market was open while the zombie forces took a hit. Please go over there and buy weapons.\nWith them, we can fortify our position even further. Hurry.\n\n* Can be only completed in a room with 4 or more people.\n* Uncollected rewards will vanish upon reset.",
+   "Text": "Play 2 matches in modes 28, 52",
+   "Conditions": [
+    {
+     "Counter": "Matches",
+     "Target": 2,
+     "Modes": [
+      28,
+      52
+     ]
+    }
+   ],
+   "Badges": 4,
+   "Medals": 15
+  },
+  {
+   "ID": 28,
+   "Title": "Recharging the fighting spirit",
+   "Npc": "Douglas Jacob",
+   "Portrait": "jacob",
+   "Story": "One of the reasons why we were able to push the zombie forces back and go on the counter attack was our recharged fighting spirit. Aegis Institute is preparing to study ways to eliminate zombies more effectively by studying this effect.\nThe problem is that we don't have enough data.\nIf you can experience this effect first-hand by going into their lair, there won't be any data that can compare.\n\n* Can be only completed in a room with 4 or more people.\n* Uncollected rewards will vanish upon reset.",
+   "Text": "Kill 30 zombies in modes 14",
+   "Conditions": [
+    {
+     "Counter": "ZombieKills",
+     "Target": 30,
+     "Modes": [
+      14
+     ]
+    }
+   ],
+   "Badges": 4,
+   "Medals": 15
+  },
+  {
+   "ID": 29,
+   "Title": "Virus Host",
+   "Npc": "Commander Victor",
+   "Portrait": "victor",
+   "Story": "You've almost become a Super Soldier now. However, we cannot be satisfied yet.\nWith the research that has been carried out, you now have an ability to infect others with the virus.\nNow, the time has come. It will be a new era for us. Go forth and infect those lowly humans, so that they will become one of us. Show us your abilities.\n\n* Can be only completed in a room with 4 or more people.\n* Uncollected rewards will vanish upon reset.",
+   "Text": "Infect 10 humans in Zombie (Original, Mutation, Hero)",
+   "Conditions": [
+    {
+     "Counter": "Infections",
+     "Target": 10,
+     "Modes": [
+      8,
+      9,
+      14
+     ]
+    }
+   ],
+   "Badges": 4,
+   "Medals": 15
+  },
+  {
+   "ID": 30,
+   "Title": "Master of Supply refill",
+   "Npc": "Jim the 'Red Lizard'",
+   "Portrait": "zim",
+   "Story": "We're in a dire situation here. We've received a report that zombies have resurfaced in Zone B7. We'll need to send them supplies but it looks like it'll be hard due to the area being overrun by zombies.\n\nWe need your help.\nPlease send them Supply Boxes by going through the area.\nIt'll be of great help in battle.\n\n* Can be only completed in a room with 4 or more people.\n* Uncollected rewards will vanish upon reset.",
+   "Text": "Play 3 matches in Zombie (Original, Mutation, Hero)",
+   "Conditions": [
+    {
+     "Counter": "Matches",
+     "Target": 3,
+     "Modes": [
+      8,
+      9,
+      14
+     ]
+    }
+   ],
+   "Badges": 3,
+   "Medals": 10
+  },
+  {
+   "ID": 31,
+   "Title": "Payback via air",
+   "Npc": "Security Chief Chen",
+   "Portrait": "chen",
+   "Story": "Looks like you're getting used to special grenades.\nIf we are to expand our forces, we'll need to familiarize ourselves with this.\nGo, show us what you can do.\n\n* Can be only completed in a room with 4 or more people.\n* Uncollected rewards will vanish upon reset.",
+   "Text": "Infect 5 humans in modes 9, 14",
+   "Conditions": [
+    {
+     "Counter": "Infections",
+     "Target": 5,
+     "Modes": [
+      9,
+      14
+     ]
+    }
+   ],
+   "Badges": 3,
+   "Medals": 10
+  },
+  {
+   "ID": 32,
+   "Title": "Hawkeye",
+   "Npc": "Officer Rowen",
+   "Portrait": "rowen",
+   "Story": "In order to become a better agent, you must be able to tell the real from the fake.\n In midst of the zombie crowd, there are zombies infected with virus that enables the host to keep its intellects.\n Go and eliminate the 'real' zombies.\n\n* Can be only completed in a room with 4 or more people.\n* Uncollected rewards will vanish upon reset.",
+   "Text": "Play 2 matches in Prop Hunt",
+   "Conditions": [
+    {
+     "Counter": "Matches",
+     "Target": 2,
+     "Modes": [
+      49
+     ]
+    }
+   ],
+   "Badges": 4,
+   "Medals": 10
+  },
+  {
+   "ID": 101,
+   "Title": "Special Operation: Original",
+   "Npc": "Commander Victor",
+   "Portrait": "victor",
+   "Story": "A special operation from Command. Get it done and report back.",
+   "Text": "Score 15 kills in Original modes",
+   "Conditions": [
+    {
+     "Counter": "Kills",
+     "Target": 15,
+     "Modes": [
+      0,
+      3,
+      6,
+      7,
+      23,
+      42
+     ]
+    }
+   ],
+   "Badges": 3,
+   "Medals": 10
+  },
+  {
+   "ID": 102,
+   "Title": "Special Operation: Deathmatch",
+   "Npc": "Jim the 'Red Lizard'",
+   "Portrait": "zim",
+   "Story": "A special operation from Command. Get it done and report back.",
+   "Text": "Score 60 kills in Deathmatch modes",
+   "Conditions": [
+    {
+     "Counter": "Kills",
+     "Target": 60,
+     "Modes": [
+      1,
+      4,
+      22
+     ]
+    }
+   ],
+   "Badges": 4,
+   "Medals": 15
+  },
+  {
+   "ID": 103,
+   "Title": "Special Operation: Team Deathmatch",
+   "Npc": "Security Chief Chen",
+   "Portrait": "chen",
+   "Story": "A special operation from Command. Get it done and report back.",
+   "Text": "Score 45 kills in Team Deathmatch modes",
+   "Conditions": [
+    {
+     "Counter": "Kills",
+     "Target": 45,
+     "Modes": [
+      2,
+      5,
+      19
+     ]
+    }
+   ],
+   "Badges": 4,
+   "Medals": 15
+  },
+  {
+   "ID": 104,
+   "Title": "Special Operation: Original (AI)",
+   "Npc": "Officer Rowen",
+   "Portrait": "rowen",
+   "Story": "A special operation from Command. Get it done and report back.",
+   "Text": "Score 50 kills in modes 3",
+   "Conditions": [
+    {
+     "Counter": "Kills",
+     "Target": 50,
+     "Modes": [
+      3
+     ]
+    }
+   ],
+   "Badges": 4,
+   "Medals": 15
+  },
+  {
+   "ID": 105,
+   "Title": "Special Operation: Deathmatch (AI)",
+   "Npc": "Senior Researcher Soi",
+   "Portrait": "doctora",
+   "Story": "A special operation from Command. Get it done and report back.",
+   "Text": "Score 120 kills in modes 4",
+   "Conditions": [
+    {
+     "Counter": "Kills",
+     "Target": 120,
+     "Modes": [
+      4
+     ]
+    }
+   ],
+   "Badges": 5,
+   "Medals": 15
+  },
+  {
+   "ID": 106,
+   "Title": "Special Operation: Team Deathmatch (AI)",
+   "Npc": "Evelyn",
+   "Portrait": "evelyn",
+   "Story": "A special operation from Command. Get it done and report back.",
+   "Text": "Score 80 kills in modes 5",
+   "Conditions": [
+    {
+     "Counter": "Kills",
+     "Target": 80,
+     "Modes": [
+      5
+     ]
+    }
+   ],
+   "Badges": 5,
+   "Medals": 15
+  },
+  {
+   "ID": 107,
+   "Title": "Special Operation: Zombie",
+   "Npc": "Signalman Felix",
+   "Portrait": "felix",
+   "Story": "A special operation from Command. Get it done and report back.",
+   "Text": "Kill 10 zombies in modes 8",
+   "Conditions": [
+    {
+     "Counter": "ZombieKills",
+     "Target": 10,
+     "Modes": [
+      8
+     ]
+    }
+   ],
+   "Badges": 3,
+   "Medals": 10
+  },
+  {
+   "ID": 108,
+   "Title": "Special Operation: Zombie Mutation",
+   "Npc": "Douglas Jacob",
+   "Portrait": "jacob",
+   "Story": "A special operation from Command. Get it done and report back.",
+   "Text": "Kill 10 zombies in modes 9",
+   "Conditions": [
+    {
+     "Counter": "ZombieKills",
+     "Target": 10,
+     "Modes": [
+      9
+     ]
+    }
+   ],
+   "Badges": 3,
+   "Medals": 10
+  },
+  {
+   "ID": 109,
+   "Title": "Special Operation: Zombie Hero",
+   "Npc": "Commander Victor",
+   "Portrait": "victor",
+   "Story": "A special operation from Command. Get it done and report back.",
+   "Text": "Kill 5 zombies in modes 14",
+   "Conditions": [
+    {
+     "Counter": "ZombieKills",
+     "Target": 5,
+     "Modes": [
+      14
+     ]
+    }
+   ],
+   "Badges": 3,
+   "Medals": 10
+  },
+  {
+   "ID": 110,
+   "Title": "Special Operation: Zombie hunt",
+   "Npc": "Jim the 'Red Lizard'",
+   "Portrait": "zim",
+   "Story": "A special operation from Command. Get it done and report back.",
+   "Text": "Kill 50 zombies in any zombie mode",
+   "Conditions": [
+    {
+     "Counter": "ZombieKills",
+     "Target": 50,
+     "Modes": [
+      8,
+      9,
+      14,
+      29,
+      35,
+      36,
+      44,
+      45,
+      54,
+      56,
+      58,
+      20,
+      24,
+      30,
+      32,
+      37,
+      43
+     ]
+    }
+   ],
+   "Badges": 5,
+   "Medals": 15
+  },
+  {
+   "ID": 111,
+   "Title": "Special Operation: Zombie Exterminate",
+   "Npc": "Security Chief Chen",
+   "Portrait": "chen",
+   "Story": "A special operation from Command. Get it done and report back.",
+   "Text": "Kill 30 zombies in modes 32",
+   "Conditions": [
+    {
+     "Counter": "ZombieKills",
+     "Target": 30,
+     "Modes": [
+      32
+     ]
+    }
+   ],
+   "Badges": 5,
+   "Medals": 15
+  },
+  {
+   "ID": 112,
+   "Title": "Special Operation: Zombie Scenario",
+   "Npc": "Officer Rowen",
+   "Portrait": "rowen",
+   "Story": "A special operation from Command. Get it done and report back.",
+   "Text": "Kill 300 monsters in Zombie Scenario",
+   "Conditions": [
+    {
+     "Counter": "MonsterKills",
+     "Target": 300,
+     "Modes": [
+      15
+     ]
+    }
+   ],
+   "Badges": 5,
+   "Medals": 20
+  },
+  {
+   "ID": 113,
+   "Title": "Special Operation: Human Scenario",
+   "Npc": "Senior Researcher Soi",
+   "Portrait": "doctora",
+   "Story": "A special operation from Command. Get it done and report back.",
+   "Text": "Kill 150 monsters in Human Scenario",
+   "Conditions": [
+    {
+     "Counter": "MonsterKills",
+     "Target": 150,
+     "Modes": [
+      17
+     ]
+    }
+   ],
+   "Badges": 5,
+   "Medals": 20
+  },
+  {
+   "ID": 115,
+   "Title": "Special Operation: Gun Deathmatch",
+   "Npc": "Signalman Felix",
+   "Portrait": "felix",
+   "Story": "A special operation from Command. Get it done and report back.",
+   "Text": "Score 45 kills in modes 22",
+   "Conditions": [
+    {
+     "Counter": "Kills",
+     "Target": 45,
+     "Modes": [
+      22
+     ]
+    }
+   ],
+   "Badges": 4,
+   "Medals": 15
+  },
+  {
+   "ID": 116,
+   "Title": "Special Operation: Light Original",
+   "Npc": "Douglas Jacob",
+   "Portrait": "jacob",
+   "Story": "A special operation from Command. Get it done and report back.",
+   "Text": "Score 45 kills in modes 23",
+   "Conditions": [
+    {
+     "Counter": "Kills",
+     "Target": 45,
+     "Modes": [
+      23
+     ]
+    }
+   ],
+   "Badges": 4,
+   "Medals": 15
+  },
+  {
+   "ID": 117,
+   "Title": "Special Operation: Zombie modes",
+   "Npc": "Commander Victor",
+   "Portrait": "victor",
+   "Story": "A special operation from Command. Get it done and report back.",
+   "Text": "Kill 30 zombies in Zombie modes",
+   "Conditions": [
+    {
+     "Counter": "ZombieKills",
+     "Target": 30,
+     "Modes": [
+      8,
+      9,
+      14,
+      29,
+      35,
+      36,
+      44,
+      45,
+      54,
+      56,
+      58
+     ]
+    }
+   ],
+   "Badges": 4,
+   "Medals": 15
+  },
+  {
+   "ID": 119,
+   "Title": "Special Operation: Zombie Shelter",
+   "Npc": "Security Chief Chen",
+   "Portrait": "chen",
+   "Story": "A special operation from Command. Get it done and report back.",
+   "Text": "Kill 300 monsters in modes 28, 52",
+   "Conditions": [
+    {
+     "Counter": "MonsterKills",
+     "Target": 300,
+     "Modes": [
+      28,
+      52
+     ]
+    }
+   ],
+   "Badges": 5,
+   "Medals": 20
+  },
+  {
+   "ID": 121,
+   "Title": "Special Operation: Zombie Union",
+   "Npc": "Senior Researcher Soi",
+   "Portrait": "doctora",
+   "Story": "A special operation from Command. Get it done and report back.",
+   "Text": "Kill 10 zombies in modes 29",
+   "Conditions": [
+    {
+     "Counter": "ZombieKills",
+     "Target": 10,
+     "Modes": [
+      29
+     ]
+    }
+   ],
+   "Badges": 3,
+   "Medals": 10
+  },
+  {
+   "ID": 122,
+   "Title": "Special Operation: Zombie Giant",
+   "Npc": "Evelyn",
+   "Portrait": "evelyn",
+   "Story": "A special operation from Command. Get it done and report back.",
+   "Text": "Score 3 kills in modes 30",
+   "Conditions": [
+    {
+     "Counter": "Kills",
+     "Target": 3,
+     "Modes": [
+      30
+     ]
+    }
+   ],
+   "Badges": 4,
+   "Medals": 10
+  }
+ ],
+ "Events": [
+  {
+   "ID": 1,
+   "Name": "Operation Headhunter",
+   "Description": "Command wants marksmen. Every clean headshot this week counts toward the operation.",
+   "BonusBadges": 25,
+   "BonusMedals": 100,
+   "Missions": [
+    {
+     "Text": "Score 50 headshots",
+     "Conditions": [
+      {
+       "Counter": "Headshots",
+       "Target": 50
+      }
+     ],
+     "Badges": 10,
+     "Medals": 30
+    },
+    {
+     "Text": "Score 150 headshots",
+     "Conditions": [
+      {
+       "Counter": "Headshots",
+       "Target": 150
+      }
+     ],
+     "Badges": 15,
+     "Medals": 40
+    },
+    {
+     "Text": "Score 200 rifle kills",
+     "Conditions": [
+      {
+       "Counter": "RifleKills",
+       "Target": 200
+      }
+     ],
+     "Badges": 10,
+     "Medals": 30
+    },
+    {
+     "Text": "Finish first 3 times",
+     "Conditions": [
+      {
+       "Counter": "TopPlayer",
+       "Target": 3
+      }
+     ],
+     "Badges": 15,
+     "Medals": 40
+    }
+   ]
+  },
+  {
+   "ID": 2,
+   "Name": "Outbreak Week",
+   "Description": "The infection is spreading across every zone. Hold the line, or join the horde.",
+   "BonusBadges": 25,
+   "BonusMedals": 100,
+   "Missions": [
+    {
+     "Text": "Kill 100 zombies in any zombie mode",
+     "Conditions": [
+      {
+       "Counter": "ZombieKills",
+       "Target": 100,
+       "Modes": [
+        8,
+        9,
+        14,
+        29,
+        35,
+        36,
+        44,
+        45,
+        54,
+        56,
+        58,
+        20,
+        24,
+        30,
+        32,
+        37,
+        43
+       ]
+      }
+     ],
+     "Badges": 10,
+     "Medals": 30
+    },
+    {
+     "Text": "Infect 50 humans in any zombie mode",
+     "Conditions": [
+      {
+       "Counter": "Infections",
+       "Target": 50,
+       "Modes": [
+        8,
+        9,
+        14,
+        29,
+        35,
+        36,
+        44,
+        45,
+        54,
+        56,
+        58,
+        20,
+        24,
+        30,
+        32,
+        37,
+        43
+       ]
+      }
+     ],
+     "Badges": 10,
+     "Medals": 30
+    },
+    {
+     "Text": "Win 5 matches in any zombie mode",
+     "Conditions": [
+      {
+       "Counter": "Wins",
+       "Target": 5,
+       "Modes": [
+        8,
+        9,
+        14,
+        29,
+        35,
+        36,
+        44,
+        45,
+        54,
+        56,
+        58,
+        20,
+        24,
+        30,
+        32,
+        37,
+        43
+       ]
+      }
+     ],
+     "Badges": 15,
+     "Medals": 40
+    },
+    {
+     "Text": "Play 10 matches in any zombie mode",
+     "Conditions": [
+      {
+       "Counter": "Matches",
+       "Target": 10,
+       "Modes": [
+        8,
+        9,
+        14,
+        29,
+        35,
+        36,
+        44,
+        45,
+        54,
+        56,
+        58,
+        20,
+        24,
+        30,
+        32,
+        37,
+        43
+       ]
+      }
+     ],
+     "Badges": 10,
+     "Medals": 30
+    }
+   ]
+  },
+  {
+   "ID": 3,
+   "Name": "Scenario Siege",
+   "Description": "The labs are overrun. Clear the scenarios and bring the survivors home.",
+   "BonusBadges": 25,
+   "BonusMedals": 100,
+   "Missions": [
+    {
+     "Text": "Kill 1,000 monsters in scenario modes",
+     "Conditions": [
+      {
+       "Counter": "MonsterKills",
+       "Target": 1000,
+       "Modes": [
+        15,
+        17,
+        28,
+        52,
+        53,
+        59
+       ]
+      }
+     ],
+     "Badges": 10,
+     "Medals": 30
+    },
+    {
+     "Text": "Win 3 matches in scenario modes",
+     "Conditions": [
+      {
+       "Counter": "Wins",
+       "Target": 3,
+       "Modes": [
+        15,
+        17,
+        28,
+        52,
+        53,
+        59
+       ]
+      }
+     ],
+     "Badges": 15,
+     "Medals": 40
+    },
+    {
+     "Text": "Kill 3,000 monsters in scenario modes",
+     "Conditions": [
+      {
+       "Counter": "MonsterKills",
+       "Target": 3000,
+       "Modes": [
+        15,
+        17,
+        28,
+        52,
+        53,
+        59
+       ]
+      }
+     ],
+     "Badges": 15,
+     "Medals": 40
+    },
+    {
+     "Text": "Pick up 10 supply boxes",
+     "Conditions": [
+      {
+       "Counter": "DropBoxes",
+       "Target": 10
+      }
+     ],
+     "Badges": 10,
+     "Medals": 30
+    }
+   ]
+  },
+  {
+   "ID": 4,
+   "Name": "Arms Race",
+   "Description": "A field test for every weapon class. Show the engineers what each one can do.",
+   "BonusBadges": 25,
+   "BonusMedals": 100,
+   "Missions": [
+    {
+     "Text": "Score 30 pistol kills",
+     "Conditions": [
+      {
+       "Counter": "PistolKills",
+       "Target": 30
+      }
+     ],
+     "Badges": 8,
+     "Medals": 25
+    },
+    {
+     "Text": "Score 60 SMG kills",
+     "Conditions": [
+      {
+       "Counter": "SmgKills",
+       "Target": 60
+      }
+     ],
+     "Badges": 8,
+     "Medals": 25
+    },
+    {
+     "Text": "Score 40 shotgun kills",
+     "Conditions": [
+      {
+       "Counter": "ShotgunKills",
+       "Target": 40
+      }
+     ],
+     "Badges": 8,
+     "Medals": 25
+    },
+    {
+     "Text": "Score 60 machine gun kills",
+     "Conditions": [
+      {
+       "Counter": "MgKills",
+       "Target": 60
+      }
+     ],
+     "Badges": 8,
+     "Medals": 25
+    },
+    {
+     "Text": "Score 15 melee kills",
+     "Conditions": [
+      {
+       "Counter": "MeleeKills",
+       "Target": 15
+      }
+     ],
+     "Badges": 10,
+     "Medals": 30
+    }
+   ]
+  },
+  {
+   "ID": 5,
+   "Name": "Demolition Week",
+   "Description": "Bomb sites, hostages and objectives: the Original front needs specialists.",
+   "BonusBadges": 25,
+   "BonusMedals": 100,
+   "Missions": [
+    {
+     "Text": "Plant or defuse 10 bombs in Original modes",
+     "Conditions": [
+      {
+       "Counter": "Bombs",
+       "Target": 10,
+       "Modes": [
+        0,
+        3,
+        6,
+        7,
+        23,
+        42
+       ]
+      }
+     ],
+     "Badges": 12,
+     "Medals": 35
+    },
+    {
+     "Text": "Rescue 10 hostages in Original modes",
+     "Conditions": [
+      {
+       "Counter": "Hostages",
+       "Target": 10,
+       "Modes": [
+        0,
+        3,
+        6,
+        7,
+        23,
+        42
+       ]
+      }
+     ],
+     "Badges": 12,
+     "Medals": 35
+    },
+    {
+     "Text": "Win 5 matches in Original modes",
+     "Conditions": [
+      {
+       "Counter": "Wins",
+       "Target": 5,
+       "Modes": [
+        0,
+        3,
+        6,
+        7,
+        23,
+        42
+       ]
+      }
+     ],
+     "Badges": 12,
+     "Medals": 35
+    },
+    {
+     "Text": "Score 150 kills in Original modes",
+     "Conditions": [
+      {
+       "Counter": "Kills",
+       "Target": 150,
+       "Modes": [
+        0,
+        3,
+        6,
+        7,
+        23,
+        42
+       ]
+      }
+     ],
+     "Badges": 10,
+     "Medals": 30
+    }
+   ]
+  },
+  {
+   "ID": 6,
+   "Name": "Iron Will",
+   "Description": "Show up, fight, finish. This week rewards the ones who keep coming back.",
+   "BonusBadges": 25,
+   "BonusMedals": 100,
+   "Missions": [
+    {
+     "Text": "Play 15 matches",
+     "Conditions": [
+      {
+       "Counter": "Matches",
+       "Target": 15
+      }
+     ],
+     "Badges": 10,
+     "Medals": 30
+    },
+    {
+     "Text": "Win 8 matches",
+     "Conditions": [
+      {
+       "Counter": "Wins",
+       "Target": 8
+      }
+     ],
+     "Badges": 12,
+     "Medals": 35
+    },
+    {
+     "Text": "Play for 5 hours",
+     "Conditions": [
+      {
+       "Counter": "Seconds",
+       "Target": 18000
+      }
+     ],
+     "Badges": 12,
+     "Medals": 35
+    },
+    {
+     "Text": "Score 400 kills",
+     "Conditions": [
+      {
+       "Counter": "Kills",
+       "Target": 400
+      }
+     ],
+     "Badges": 10,
+     "Medals": 30
+    }
+   ]
+  },
+  {
+   "ID": 7,
+   "Name": "Team Deathmatch Cup",
+   "Description": "Points table open: every team kill and every win goes on the board.",
+   "BonusBadges": 25,
+   "BonusMedals": 100,
+   "Missions": [
+    {
+     "Text": "Score 300 kills in Team Deathmatch modes",
+     "Conditions": [
+      {
+       "Counter": "Kills",
+       "Target": 300,
+       "Modes": [
+        2,
+        5,
+        19
+       ]
+      }
+     ],
+     "Badges": 10,
+     "Medals": 30
+    },
+    {
+     "Text": "Win 5 matches in Team Deathmatch modes",
+     "Conditions": [
+      {
+       "Counter": "Wins",
+       "Target": 5,
+       "Modes": [
+        2,
+        5,
+        19
+       ]
+      }
+     ],
+     "Badges": 12,
+     "Medals": 35
+    },
+    {
+     "Text": "Finish first 3 times in Team Deathmatch modes",
+     "Conditions": [
+      {
+       "Counter": "TopPlayer",
+       "Target": 3,
+       "Modes": [
+        2,
+        5,
+        19
+       ]
+      }
+     ],
+     "Badges": 15,
+     "Medals": 40
+    },
+    {
+     "Text": "Score 80 headshots in Team Deathmatch modes",
+     "Conditions": [
+      {
+       "Counter": "Headshots",
+       "Target": 80,
+       "Modes": [
+        2,
+        5,
+        19
+       ]
+      }
+     ],
+     "Badges": 10,
+     "Medals": 30
+    }
+   ]
+  },
+  {
+   "ID": 8,
+   "Name": "Close Quarters",
+   "Description": "No room for long sights. Get up close and make it count.",
+   "BonusBadges": 25,
+   "BonusMedals": 100,
+   "Missions": [
+    {
+     "Text": "Score 25 melee kills",
+     "Conditions": [
+      {
+       "Counter": "MeleeKills",
+       "Target": 25
+      }
+     ],
+     "Badges": 12,
+     "Medals": 35
+    },
+    {
+     "Text": "Score 80 shotgun kills",
+     "Conditions": [
+      {
+       "Counter": "ShotgunKills",
+       "Target": 80
+      }
+     ],
+     "Badges": 10,
+     "Medals": 30
+    },
+    {
+     "Text": "Score 15 grenade kills",
+     "Conditions": [
+      {
+       "Counter": "GrenadeKills",
+       "Target": 15
+      }
+     ],
+     "Badges": 10,
+     "Medals": 30
+    },
+    {
+     "Text": "Defeat 300 AI soldiers",
+     "Conditions": [
+      {
+       "Counter": "BotKills",
+       "Target": 300
+      }
+     ],
+     "Badges": 10,
+     "Medals": 30
+    }
+   ]
+  }
+ ],
+ "BlackMarket": {
+  "Weapons": 6,
+  "Costumes": 2,
+  "Items": [
+   {
+    "ItemID": 9655,
+    "Name": "Agenth (Pet)",
+    "Price": 300,
+    "Kind": "Costume"
+   },
+   {
+    "ItemID": 9586,
+    "Name": "Coralcrown (Head)",
+    "Price": 300,
+    "Kind": "Costume"
+   },
+   {
+    "ItemID": 9413,
+    "Name": "Orientalinkfan (Back)",
+    "Price": 300,
+    "Kind": "Costume"
+   },
+   {
+    "ItemID": 9271,
+    "Name": "Polaroid (Pelvis)",
+    "Price": 300,
+    "Kind": "Costume"
+   },
+   {
+    "ItemID": 9205,
+    "Name": "Chefknife (Back)",
+    "Price": 300,
+    "Kind": "Costume"
+   },
+   {
+    "ItemID": 9099,
+    "Name": "Pingpongpaddle (Back)",
+    "Price": 300,
+    "Kind": "Costume"
+   },
+   {
+    "ItemID": 9033,
+    "Name": "Sunflowerhat (Head)",
+    "Price": 300,
+    "Kind": "Costume"
+   },
+   {
+    "ItemID": 8964,
+    "Name": "Deliverbag (Back)",
+    "Price": 300,
+    "Kind": "Costume"
+   },
+   {
+    "ItemID": 8928,
+    "Name": "Beveragecan (Pelvis)",
+    "Price": 300,
+    "Kind": "Costume"
+   },
+   {
+    "ItemID": 8862,
+    "Name": "Arcadeconsole (Pelvis)",
+    "Price": 300,
+    "Kind": "Costume"
+   },
+   {
+    "ItemID": 8809,
+    "Name": "Pendant (Back)",
+    "Price": 300,
+    "Kind": "Costume"
+   },
+   {
+    "ItemID": 8693,
+    "Name": "Mask (Head)",
+    "Price": 300,
+    "Kind": "Costume"
+   },
+   {
+    "ItemID": 8644,
+    "Name": "Earplug (Head)",
+    "Price": 300,
+    "Kind": "Costume"
+   },
+   {
+    "ItemID": 8556,
+    "Name": "Hipsack",
+    "Price": 300,
+    "Kind": "Costume"
+   },
+   {
+    "ItemID": 8492,
+    "Name": "Backpack",
+    "Price": 300,
+    "Kind": "Costume"
+   },
+   {
+    "ItemID": 8735,
+    "Name": "Spraykit (Pelvis)",
+    "Price": 300,
+    "Kind": "Costume"
+   },
+   {
+    "ItemID": 8496,
+    "Name": "Weaponpaint 21rb",
+    "Price": 300,
+    "Kind": "Costume"
+   },
+   {
+    "ItemID": 9423,
+    "Name": "Sflaser (S25-3)",
+    "Price": 30,
+    "Kind": "Weapon"
+   },
+   {
+    "ItemID": 9426,
+    "Name": "Ironfan (S25-3)",
+    "Price": 30,
+    "Kind": "Weapon"
+   },
+   {
+    "ItemID": 9425,
+    "Name": "Python (S25-3)",
+    "Price": 30,
+    "Kind": "Weapon"
+   },
+   {
+    "ItemID": 9424,
+    "Name": "M 249ex (S25-3)",
+    "Price": 30,
+    "Kind": "Weapon"
+   },
+   {
+    "ItemID": 9281,
+    "Name": "HK 121 (S25-2)",
+    "Price": 30,
+    "Kind": "Weapon"
+   },
+   {
+    "ItemID": 9284,
+    "Name": "Sfsword (S25-2)",
+    "Price": 30,
+    "Kind": "Weapon"
+   },
+   {
+    "ItemID": 9282,
+    "Name": "Sfsmg (S25-2)",
+    "Price": 30,
+    "Kind": "Weapon"
+   },
+   {
+    "ItemID": 9283,
+    "Name": "Vulcanus 1 (S25-2)",
+    "Price": 30,
+    "Kind": "Weapon"
+   },
+   {
+    "ItemID": 9195,
+    "Name": "Runeblade (S25-1)",
+    "Price": 30,
+    "Kind": "Weapon"
+   },
+   {
+    "ItemID": 9196,
+    "Name": "Sfgun (S25-1)",
+    "Price": 30,
+    "Kind": "Weapon"
+   },
+   {
+    "ItemID": 9197,
+    "Name": "Turbulent 1 (S25-1)",
+    "Price": 30,
+    "Kind": "Weapon"
+   },
+   {
+    "ItemID": 9198,
+    "Name": "Spknife (S25-1)",
+    "Price": 30,
+    "Kind": "Weapon"
+   },
+   {
+    "ItemID": 9093,
+    "Name": "P 90 (S24-3)",
+    "Price": 30,
+    "Kind": "Weapon"
+   },
+   {
+    "ItemID": 9108,
+    "Name": "Balrog 7 (S24-3)",
+    "Price": 30,
+    "Kind": "Weapon"
+   },
+   {
+    "ItemID": 9109,
+    "Name": "Kingcobra (S24-3)",
+    "Price": 30,
+    "Kind": "Weapon"
+   },
+   {
+    "ItemID": 9110,
+    "Name": "Crow 9 (S24-3)",
+    "Price": 30,
+    "Kind": "Weapon"
+   },
+   {
+    "ItemID": 9013,
+    "Name": "Usas 12 (S24-2)",
+    "Price": 30,
+    "Kind": "Weapon"
+   },
+   {
+    "ItemID": 9024,
+    "Name": "Hammer (S24-2)",
+    "Price": 30,
+    "Kind": "Weapon"
+   },
+   {
+    "ItemID": 9023,
+    "Name": "Skull 2 (S24-2)",
+    "Price": 30,
+    "Kind": "Weapon"
+   },
+   {
+    "ItemID": 9022,
+    "Name": "MG 3 (S24-2)",
+    "Price": 30,
+    "Kind": "Weapon"
+   },
+   {
+    "ItemID": 8956,
+    "Name": "Laserminigun (S24-1)",
+    "Price": 30,
+    "Kind": "Weapon"
+   },
+   {
+    "ItemID": 8974,
+    "Name": "Ethereal (S24-1)",
+    "Price": 30,
+    "Kind": "Weapon"
+   },
+   {
+    "ItemID": 8975,
+    "Name": "Crow 1 (S24-1)",
+    "Price": 30,
+    "Kind": "Weapon"
+   },
+   {
+    "ItemID": 8976,
+    "Name": "Nataknife (S24-1)",
+    "Price": 30,
+    "Kind": "Weapon"
+   },
+   {
+    "ItemID": 8913,
+    "Name": "Buffm 249 (S23-3)",
+    "Price": 30,
+    "Kind": "Weapon"
+   },
+   {
+    "ItemID": 8914,
+    "Name": "Sfsniper (S23-3)",
+    "Price": 30,
+    "Kind": "Weapon"
+   },
+   {
+    "ItemID": 8915,
+    "Name": "Sapientia (S23-3)",
+    "Price": 30,
+    "Kind": "Weapon"
+   },
+   {
+    "ItemID": 8916,
+    "Name": "Katanad (S23-3)",
+    "Price": 30,
+    "Kind": "Weapon"
+   },
+   {
+    "ItemID": 8850,
+    "Name": "Buffaug (S23-2)",
+    "Price": 30,
+    "Kind": "Weapon"
+   },
+   {
+    "ItemID": 8847,
+    "Name": "SL 8 (S23-2)",
+    "Price": 30,
+    "Kind": "Weapon"
+   },
+   {
+    "ItemID": 8848,
+    "Name": "Dfpistol (S23-2)",
+    "Price": 30,
+    "Kind": "Weapon"
+   },
+   {
+    "ItemID": 8849,
+    "Name": "Tomahawk (S23-2)",
+    "Price": 30,
+    "Kind": "Weapon"
+   },
+   {
+    "ItemID": 8780,
+    "Name": "Sfsmg (S23-1)",
+    "Price": 30,
+    "Kind": "Weapon"
+   },
+   {
+    "ItemID": 8781,
+    "Name": "Sfmg (S23-1)",
+    "Price": 30,
+    "Kind": "Weapon"
+   },
+   {
+    "ItemID": 8782,
+    "Name": "Dartpistol (S23-1)",
+    "Price": 30,
+    "Kind": "Weapon"
+   },
+   {
+    "ItemID": 8783,
+    "Name": "Crowbarcraft (S23-1)",
+    "Price": 30,
+    "Kind": "Weapon"
+   },
+   {
+    "ItemID": 8717,
+    "Name": "Janus 7 (S22-3)",
+    "Price": 30,
+    "Kind": "Weapon"
+   },
+   {
+    "ItemID": 8719,
+    "Name": "Dragonsword (S22-3)",
+    "Price": 30,
+    "Kind": "Weapon"
+   },
+   {
+    "ItemID": 8718,
+    "Name": "Bufffiveseven (S22-3)",
+    "Price": 30,
+    "Kind": "Weapon"
+   },
+   {
+    "ItemID": 8669,
+    "Name": "Sfpistol (S22-2)",
+    "Price": 30,
+    "Kind": "Weapon"
+   },
+   {
+    "ItemID": 8670,
+    "Name": "Sfsword (S22-2)",
+    "Price": 30,
+    "Kind": "Weapon"
+   },
+   {
+    "ItemID": 8668,
+    "Name": "Lunarcannon (S22-2)",
+    "Price": 30,
+    "Kind": "Weapon"
+   },
+   {
+    "ItemID": 8633,
+    "Name": "Waterpistolma (S22-1)",
+    "Price": 30,
+    "Kind": "Weapon"
+   },
+   {
+    "ItemID": 8635,
+    "Name": "Crossbowex 21mc (S22-1)",
+    "Price": 30,
+    "Kind": "Weapon"
+   },
+   {
+    "ItemID": 8634,
+    "Name": "Holyswordmb (S22-1)",
+    "Price": 30,
+    "Kind": "Weapon"
+   },
+   {
+    "ItemID": 8505,
+    "Name": "Lockongunmd (S21-2)",
+    "Price": 30,
+    "Kind": "Weapon"
+   },
+   {
+    "ItemID": 8539,
+    "Name": "Cannonexmd (S21-3)",
+    "Price": 30,
+    "Kind": "Weapon"
+   },
+   {
+    "ItemID": 8582,
+    "Name": "Janusd (S21-4)",
+    "Price": 30,
+    "Kind": "Weapon"
+   },
+   {
+    "ItemID": 9422,
+    "Name": "Psycho (S25-3)",
+    "Price": 30,
+    "Kind": "Costume"
+   },
+   {
+    "ItemID": 9280,
+    "Name": "Resiskin (S25-2)",
+    "Price": 30,
+    "Kind": "Costume"
+   },
+   {
+    "ItemID": 9194,
+    "Name": "Normal (S25-1)",
+    "Price": 30,
+    "Kind": "Costume"
+   },
+   {
+    "ItemID": 9103,
+    "Name": "Speedskin (S24-3)",
+    "Price": 30,
+    "Kind": "Costume"
+   },
+   {
+    "ItemID": 9021,
+    "Name": "Deimos (S24-2)",
+    "Price": 30,
+    "Kind": "Costume"
+   },
+   {
+    "ItemID": 8973,
+    "Name": "Aksha (S24-1)",
+    "Price": 30,
+    "Kind": "Costume"
+   },
+   {
+    "ItemID": 8925,
+    "Name": "Normal (S23-3)",
+    "Price": 30,
+    "Kind": "Costume"
+   },
+   {
+    "ItemID": 8840,
+    "Name": "Witchskin (S23-2)",
+    "Price": 30,
+    "Kind": "Costume"
+   },
+   {
+    "ItemID": 8808,
+    "Name": "Normal (S23-1)",
+    "Price": 30,
+    "Kind": "Costume"
+   },
+   {
+    "ItemID": 524,
+    "Name": "Lusty Rose (Light Zombie costume)",
+    "Price": 30,
+    "Kind": "Costume"
+   },
+   {
+    "ItemID": 8506,
+    "Name": "Deimosskin (S21-2)",
+    "Price": 30,
+    "Kind": "Costume"
+   },
+   {
+    "ItemID": 8507,
+    "Name": "Witchskin (S21-2)",
+    "Price": 30,
+    "Kind": "Costume"
+   },
+   {
+    "ItemID": 8540,
+    "Name": "Deimos 2skin (S21-3)",
+    "Price": 30,
+    "Kind": "Costume"
+   },
+   {
+    "ItemID": 8541,
+    "Name": "Boosterzombiskin (S21-3)",
+    "Price": 30,
+    "Kind": "Costume"
+   },
+   {
+    "ItemID": 8583,
+    "Name": "Bloterskin (S21-4)",
+    "Price": 30,
+    "Kind": "Costume"
+   },
+   {
+    "ItemID": 8584,
+    "Name": "Boomerskin (S21-4)",
+    "Price": 30,
+    "Kind": "Costume"
+   },
+   {
+    "ItemID": 374,
+    "Name": "Tiger Tattoo",
+    "Price": 30,
+    "Kind": "Costume"
+   },
+   {
+    "ItemID": 362,
+    "Name": "SAF Scout",
+    "Price": 30,
+    "Kind": "Costume"
+   }
+  ]
+ }
+}

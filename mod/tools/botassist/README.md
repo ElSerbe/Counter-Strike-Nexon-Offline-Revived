@@ -370,3 +370,13 @@ automatic ones join CT. No more kicks in co-op modes.
   included (botassist_weapons.txt category 11, from gen_weapons.py).
 - sv_cheats: hw.dll sets it to 1 at start-up with -dev, and it stays on between matches; botassist sets it to 0
   when each match starts, so only turning it on during the match flags the match (logs the command line once).
+
+## Taskbar VIP and Missions buttons
+
+- CSOTaskbar::OnCommand "OpenVIPInfo" (0x1059795e) and "OpenQuestDlg" (0x10597287) open main panel pages 0x15 / 0xf
+  through the page manager (0x104528c0, vfunc 0x64). botassist turns their "call 0x104528c0" (0x10597976 /
+  0x105972a3) into a jump to a stub that posts /api/openview {"view": "profile" | "missions"} and opens the game's
+  browser window (OpenWebEvent), then returns past the page call (0x10597984 / 0x105972b1).
+- The pages: mod/web/profile (statistics and medals, CSNZ_Server CMedalManager, Data/Medals.json from
+  tools/gen_medals.py) and mod/web/missions (requests, weekly event, Black Market, orders, challenges;
+  CMissionManager, Data/Missions.json from tools/gen_missions.py).

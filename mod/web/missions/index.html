@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Missions</title>
+<link rel="stylesheet" href="../shop/style.css">
+<link rel="stylesheet" href="missions.css">
+</head>
+<body>
+<header class="topbar">
+  <h1>Missions</h1>
+  <nav id="tabs" class="tabs">
+    <button type="button" data-tab="requests" class="active">Requests</button>
+    <button type="button" data-tab="event">Event</button>
+    <button type="button" data-tab="market">Black Market</button>
+    <button type="button" data-tab="orders">Orders</button>
+    <button type="button" data-tab="challenges">Challenges</button>
+  </nav>
+  <div class="wallets">
+    <div class="wallet badges" title="Black Badges: only missions give them, spent at the Black Market">
+      <span class="badge-icon"></span><span id="badges">--</span>
+    </div>
+    <div class="wallet" title="Medals">
+      <span class="medal-icon"></span><span id="medals">--</span>
+    </div>
+  </div>
+  <button id="close" class="close" type="button" title="Close (Esc)">Close &times;</button>
+</header>
+
+<main id="view"></main>
+
+<div id="toast" class="toast hidden"></div>
+<script src="missions.js"></script>
+</body>
+</html>

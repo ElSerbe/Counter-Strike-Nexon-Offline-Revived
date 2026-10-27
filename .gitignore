@@ -50,3 +50,4 @@ mod/server/src-repo/
 *.mdmp
 *.dmp
 mod/web/profile/medals/
+mod/web/missions/npc/
