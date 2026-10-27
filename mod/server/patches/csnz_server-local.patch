@@ -22,7 +22,7 @@ index b5e72be..3232287 100644
  
  # Fix mutex not locking in Release builds
 diff --git a/src/common/logger.cpp b/src/common/logger.cpp
-index e38a7df..b6ca10d 100644
+index e38a7df..c899cba 100644
 --- a/src/common/logger.cpp
 +++ b/src/common/logger.cpp
 @@ -1,3 +1,4 @@
@@ -39,6 +39,32 @@ index e38a7df..b6ca10d 100644
  }
  
  void CCompositeLogger::LogVarg(int level, const char* msg, va_list argptr)
+@@ -209,7 +210,12 @@ void CConsoleLogger::LogVarg(int level, const char* msg, va_list argptr)
+ 	SetTextColor(color);
+ #endif
+ 
+-	vprintf(msg, argptr);
++	// offline build: the composite logger formats once and passes no arguments; a '%' left in the text (a player's
++	// name, "-60%") must not be read as a format again
++	if (argptr)
++		vprintf(msg, argptr);
++	else
++		fputs(msg, stdout);
+ 
+ #ifndef WIN32
+ 	SetTextColor(CON_COLOR_WHITE); // reset color to default
+@@ -290,7 +296,10 @@ void CFileLogger::LogVarg(int level, const char* msg, va_list argptr)
+ 	FILE* file = fopen(m_szLogPath, "a+");
+ 	if (file)
+ 	{
+-		vfprintf(file, msg, argptr);
++		if (argptr)
++			vfprintf(file, msg, argptr);
++		else
++			fputs(msg, file);
+ 
+ 		fclose(file);
+ 	}
 diff --git a/src/common/utils.cpp b/src/common/utils.cpp
 index c342dd1..e1994a9 100644
 --- a/src/common/utils.cpp

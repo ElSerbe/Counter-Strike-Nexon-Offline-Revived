@@ -352,3 +352,13 @@ automatic ones join CT. No more kicks in co-op modes.
   bot manager ServerCommand -> AddBot(2 / 0 / 1)). Their entries get a wrapper that sets g_consoleBotAdd, and
   RoomBotQuota lets those bots in past the room's AI players.
 - The command list is checked every 2 s of server time (mp.dll's commands are registered when its bot manager starts).
+
+## Room skill in PvP, characters half men / half women
+
+- The game's own AI (PvP modes) aims by the bot's BotProfile: CBot::m_profile at player +0x3700 (profile +0x04
+  aggression, +0x08 skill 0..1, +0x0c teamwork, +0x64 reaction time = file value - 0.1, +0x68 attack delay; parser
+  at mp.dll 0x11319b70). Profiles are shared, so a room AI player with a skill gets its own copy (ApplyRoomSkill):
+  skill 0..7 -> skill 0.2..1, reaction 0.4..0, attack delay 0.7..0. Logged as "room skill N (profile ...)".
+- Sex of a character: ChooseAppearance asks the class table ([0x121d3ec4] + 0x1f8, vfunc 0x50(class number),
+  thiscall) whether the class is male (player +0x1fb5 bit 0 / +0x2155: male voice and sounds). Random characters
+  alternate per team so each team gets as many men as women (PickCharacter).

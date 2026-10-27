@@ -44,3 +44,7 @@ mod/web/shop/promo/
 
 # CSNZ_Server source checkout (rebuilt from upstream + mod/server/patches)
 mod/server/src-repo/
+
+# crash dumps
+*.mdmp
+*.dmp

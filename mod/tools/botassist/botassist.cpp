@@ -717,6 +717,8 @@ struct BotState
     int roomBot = -1;            // index into g_matchBots: the room AI player this bot plays (name, weapons...)
     bool ordered = false;        // a player gave this bot an order (other modes: botassist only moves it then)
     int appliedClass = 0;        // room character already given to this bot
+    unsigned char* ownProfile = nullptr; // this bot's copy of its BotProfile with its room skill (see ApplyRoomSkill)
+    int ownSkill = -1;
     bool wasAliveLoadout = false;
     float nextLoadoutCheck = 0;  // room weapons: check what it holds now and then
     int loadoutBuys = 0;         // buys of the room's weapons in this life
@@ -2297,7 +2299,10 @@ static void UpdateCvars(void* anyPlayer)
     if (now < g_nextCvarCheck && now >= g_nextCvarCheck - 10.0f)
         return;
     g_nextCvarCheck = now + 3.0f;
-    g_difficulty = g_CVarGetFloat("bot_difficulty");
+    float difficulty = g_CVarGetFloat("bot_difficulty");
+    if (difficulty != g_difficulty)
+        Log("bot_difficulty %.0f", difficulty);
+    g_difficulty = difficulty;
     const char* want = cfg.voices == "off" ? "off" : cfg.voices == "normal" ? "normal" : "radio";
     const char* cur = g_CVarGetString("bot_chatter");
     if (!cur || _stricmp(cur, want))
@@ -2346,6 +2351,70 @@ static bool CharacterFits(int id, int team)
     return it == cfg.characterTeam.end() || it->second == team;
 }
 
+// a character's sex, as the game knows it (female voices and sounds): ChooseAppearance asks the class table
+// ([0x121d3ec4] + 0x1f8, vfunc 0x50(class number), thiscall) whether the class is male. 1 male, 0 female, -1 unknown.
+static const DWORD MP_CLASS_OWNER = 0x121d3ec4;
+typedef bool(__fastcall* ClassIsMaleFn)(void* table, void* edx, int classNumber);
+static int ClassSex(int number)
+{
+    __try
+    {
+        void* owner = *(void**)(MP_CLASS_OWNER + g_mpDelta);
+        void* table = owner ? *(void**)((unsigned char*)owner + 0x1f8) : nullptr;
+        if (!table)
+            return -1;
+        ClassIsMaleFn isMale = (ClassIsMaleFn)(*(void***)table)[0x50 / 4];
+        return isMale(table, nullptr, number) ? 1 : 0;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        return -1;
+    }
+}
+
+static int CharacterSex(int id)
+{
+    static std::unordered_map<int, int> known;
+    auto it = known.find(id);
+    if (it != known.end())
+        return it->second;
+    int number = CharacterClassNumber(id);
+    int sex = number && g_mpDelta ? ClassSex(number) : -1;
+    if (sex >= 0)
+        known[id] = sex;
+    return sex;
+}
+
+// a random character from the pool, as many men as women: each team's next bot gets the sex its team has fewer of
+// in this match (a tie: either), then any character of that sex
+static int g_sexLevel = -1;
+static int g_sexPicks[3][2]; // [team][female, male]
+static int PickCharacter(const std::vector<int>& pool, int team)
+{
+    std::vector<int> bySex[2];
+    for (int id : pool)
+    {
+        int sex = CharacterSex(id);
+        if (sex >= 0)
+            bySex[sex].push_back(id);
+    }
+    if (bySex[0].empty() || bySex[1].empty())
+        return pool[rand() % pool.size()];
+    if (g_sexLevel != g_levels)
+    {
+        g_sexLevel = g_levels;
+        memset(g_sexPicks, 0, sizeof(g_sexPicks));
+        static int reports = 0;
+        if (reports++ < 3)
+            Log("characters for team %d: %d men, %d women (picked half and half)", team, (int)bySex[1].size(),
+                (int)bySex[0].size());
+    }
+    int* picks = g_sexPicks[team == 1 ? 1 : 2];
+    int sex = picks[0] < picks[1] ? 0 : picks[1] < picks[0] ? 1 : rand() % 2;
+    picks[sex]++;
+    return bySex[sex][rand() % bySex[sex].size()];
+}
+
 // the game's bots buy with Counter-Strike's aliases
 static int BuyAliasSlot(const char* cmd)
 {
@@ -2391,7 +2460,7 @@ static int BotCharacter(void* bot, int team)
             pool = cfg.characters[team];
         if (pool.empty())
             return 0;
-        id = pool[rand() % pool.size()];
+        id = PickCharacter(pool, team);
     }
     StateFor(bot).appliedClass = id;
     int number = CharacterClassNumber(id);
@@ -5249,6 +5318,71 @@ static void ApplyRoomCharacter(void* bot, BotState& bs)
         after ? after : "");
 }
 
+// The game's own AI (every PvP mode) aims and reacts by the bot's BotProfile (CBot::m_profile, player +0x3700;
+// profiles are shared by every bot with the same name). A room AI player with a skill gets its own copy:
+//   +0x08 skill 0..1 (aim error: 1 = none), +0x64 reaction time (BotProfile.db value - 0.1), +0x68 attack delay.
+// Skill 0..7 -> skill 0.2..1, reaction 0.4..0 s, attack delay 0.7..0 s: Expert aims and reacts like CZ's best.
+static const int PLAYER_BOT_PROFILE = 0x3700;
+static const int PROFILE_COPY = 0x200;
+static bool SetRoomProfile(unsigned char* player, BotState& bs, int skill, float* was)
+{
+    __try
+    {
+        unsigned char** slot = (unsigned char**)(player + PLAYER_BOT_PROFILE);
+        unsigned char* cur = *slot;
+        if (!cur)
+            return false;
+        if (cur != bs.ownProfile)
+        {
+            float s = *(float*)(cur + 8), r = *(float*)(cur + 0x64);
+            if (!(s >= 0.0f && s <= 1.0f) || !(r >= -1.0f && r <= 5.0f))
+                return false; // not a BotProfile
+            memcpy(bs.ownProfile, cur, PROFILE_COPY);
+        }
+        was[0] = *(float*)(bs.ownProfile + 8);
+        was[1] = *(float*)(bs.ownProfile + 0x64);
+        was[2] = *(float*)(bs.ownProfile + 0x68);
+        float d = (float)(skill > 7 ? 7 : skill);
+        *(float*)(bs.ownProfile + 8) = 0.2f + d * (0.8f / 7.0f);
+        *(float*)(bs.ownProfile + 0x64) = 0.4f - d * (0.4f / 7.0f);
+        *(float*)(bs.ownProfile + 0x68) = (7.0f - d) * 0.1f;
+        *slot = bs.ownProfile;
+        return true;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        return false;
+    }
+}
+
+static void ApplyRoomSkill(void* bot, BotState& bs)
+{
+    MatchBot* rb = RoomBotOf(bot, bs);
+    if (!rb || rb->skill < 0)
+        return;
+    unsigned char* player = (unsigned char*)PrivateOf(bot);
+    if (!player || IsBadReadPtr(player + PLAYER_BOT_PROFILE, 4))
+        return;
+    unsigned char* cur = *(unsigned char**)(player + PLAYER_BOT_PROFILE);
+    if (cur && cur == bs.ownProfile && bs.ownSkill == rb->skill)
+        return;
+    if (!bs.ownProfile)
+        bs.ownProfile = new unsigned char[PROFILE_COPY];
+    float was[3] = {};
+    if (!SetRoomProfile(player, bs, rb->skill, was))
+    {
+        static int fails = 0;
+        if (fails++ < 5)
+            Log("bot '%s': no bot profile at +0x%x: room skill not applied", rb->name.c_str(), PLAYER_BOT_PROFILE);
+        bs.ownSkill = rb->skill; // don't try every frame
+        return;
+    }
+    bs.ownSkill = rb->skill;
+    Log("bot %d '%s': room skill %d (profile skill %.2f -> %.2f, reaction %.2f -> %.2f, attack delay %.2f -> %.2f)", bs.slot,
+        rb->name.c_str(), rb->skill, was[0], *(float*)(bs.ownProfile + 8), was[1], *(float*)(bs.ownProfile + 0x64), was[2],
+        *(float*)(bs.ownProfile + 0x68));
+}
+
 // ---------------------------------------------------------------- hooks
 static void HookedRunPlayerMove(void* fakeclient, const float* angles, float fwd, float side, float up,
                                 unsigned short buttons, unsigned char impulse, unsigned char msec)
@@ -5268,6 +5402,7 @@ static void HookedRunPlayerMove(void* fakeclient, const float* angles, float fwd
             {
                 BotState& bs = StateFor(fakeclient);
                 ApplyRoomCharacter(fakeclient, bs);
+                ApplyRoomSkill(fakeclient, bs);
                 if (cfg.sameTeam && CoopMode())
                     FixCoopTeam(fakeclient, bs);
                 UpdateBuying(fakeclient, bs);
