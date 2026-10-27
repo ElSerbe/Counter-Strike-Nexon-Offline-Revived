@@ -1,0 +1,2185 @@
+{
+ "Version": 1,
+ "Achievements": [
+  {
+   "Name": "AQ_2001",
+   "Display": "Step 1",
+   "Desc": "Reach Level 6",
+   "Medal": 1
+  },
+  {
+   "Name": "AQ_2002",
+   "Display": "Healthy",
+   "Desc": "Stay logged in for 24 hours",
+   "Medal": 2
+  },
+  {
+   "Name": "AQS2003",
+   "Display": "Headhunter",
+   "Desc": "Score 1,000 headshots",
+   "Stat": "SA2003",
+   "Max": 1000,
+   "Medal": 3
+  },
+  {
+   "Name": "AQ_2006",
+   "Display": "AI Master",
+   "Desc": "Reach Elite difficulty in Bot Mode (excluding Zombie Mode)",
+   "Medal": 6
+  },
+  {
+   "Name": "AQS2007",
+   "Display": "Survival Master",
+   "Desc": "Survive 5000 times in Zombie Mode",
+   "Stat": "SA2007",
+   "Max": 3000,
+   "Medal": 7
+  },
+  {
+   "Name": "AQS2008",
+   "Display": "Zombie Hunter",
+   "Desc": "Score 5000 Zombie kills in Zombie Mode",
+   "Stat": "SA2008",
+   "Max": 5000,
+   "Medal": 8
+  },
+  {
+   "Name": "AQS2010",
+   "Display": "Melee Master",
+   "Desc": "10,000 melee weapon kills",
+   "Stat": "SA2010",
+   "Max": 10000,
+   "Medal": 10
+  },
+  {
+   "Name": "AQ_2011",
+   "Display": "Mania",
+   "Desc": "Reach 2,000 hours of cumulative login time",
+   "Medal": 11
+  },
+  {
+   "Name": "AQS2013",
+   "Display": "Striker",
+   "Desc": "Score 100 goals in Soccer",
+   "Stat": "SA2013",
+   "Max": 100,
+   "Medal": 13
+  },
+  {
+   "Name": "AQ_2014",
+   "Display": "AM",
+   "Desc": "Score 50 assists and 100 passes in Soccer",
+   "Medal": 14
+  },
+  {
+   "Name": "AQ_2015",
+   "Display": "DM",
+   "Desc": "Score 100 steals and passes in Soccer",
+   "Medal": 15
+  },
+  {
+   "Name": "AQ_2016",
+   "Display": "CB",
+   "Desc": "Score 200 steals and 10 defenses in Soccer",
+   "Medal": 16
+  },
+  {
+   "Name": "AQ_2017",
+   "Display": "Goalie",
+   "Desc": "Score 50 goal defenses in Soccer",
+   "Medal": 17
+  },
+  {
+   "Name": "AQ_2018",
+   "Display": "Libero",
+   "Desc": "Achieve a creative play in Soccer",
+   "Medal": 18
+  },
+  {
+   "Name": "AQ_2019",
+   "Display": "Player",
+   "Desc": "Achieve an outstanding play in Soccer",
+   "Medal": 19
+  },
+  {
+   "Name": "AQ_2020",
+   "Display": "MVP",
+   "Desc": "Achieve 2,500 MVPs in Soccer",
+   "Medal": 20
+  },
+  {
+   "Name": "AQ_2021",
+   "Display": "Killing Machine",
+   "Desc": "Annihilate Zombies in Zombie Scenario",
+   "Medal": 21
+  },
+  {
+   "Name": "AQ_2022",
+   "Display": "Bomb Squad",
+   "Desc": "C4 Planting/Defusal Expert",
+   "Medal": 22
+  },
+  {
+   "Name": "AQ_2023",
+   "Display": "Angel",
+   "Desc": "For those who bring happiness to others",
+   "Medal": 23
+  },
+  {
+   "Name": "AQ_2024",
+   "Display": "Evolving",
+   "Desc": "Top Zombie Player by evolutions",
+   "Medal": 24
+  },
+  {
+   "Name": "AQS2025",
+   "Display": "Swatter",
+   "Desc": "Score 300 Mosquito Kills",
+   "Stat": "SA2025",
+   "Max": 300,
+   "Medal": 25
+  },
+  {
+   "Name": "AQS2026",
+   "Display": "Winner",
+   "Desc": "Score 300 wins in Team Deathmatch",
+   "Stat": "SA2026",
+   "Max": 300,
+   "Medal": 26
+  },
+  {
+   "Name": "AQ_2027",
+   "Display": "Avenger",
+   "Desc": "Tenacious warrior bent on revenge",
+   "Medal": 27
+  },
+  {
+   "Name": "AQ_2028",
+   "Display": "Specialist",
+   "Desc": "Complete 30 Consecutive Special Missions",
+   "Medal": 28
+  },
+  {
+   "Name": "AQ_2029",
+   "Display": "Perfectionist",
+   "Desc": "Clear All Daily Missions 10 Times",
+   "Medal": 29
+  },
+  {
+   "Name": "AQ_2030",
+   "Display": "Completionist",
+   "Desc": "Complete a Mission with Great Passion",
+   "Medal": 30
+  },
+  {
+   "Name": "AQS2034",
+   "Display": "Kite Assassin",
+   "Desc": "Score 300 Stingray Kite Kills",
+   "Stat": "SA2034",
+   "Max": 300,
+   "Medal": 34
+  },
+  {
+   "Name": "AQS2040",
+   "Display": "City Hunter",
+   "Desc": "Clear Survival: Lost City 400 times",
+   "Stat": "SA2040",
+   "Max": 100,
+   "Medal": 40
+  },
+  {
+   "Name": "AQS2042",
+   "Display": "Activator",
+   "Desc": "Survive in Survival: Trap 400 times",
+   "Stat": "SA2042",
+   "Max": 100,
+   "Medal": 42
+  },
+  {
+   "Name": "AQ_2043",
+   "Display": "Phobos",
+   "Desc": "Kill Phobos 100 times",
+   "Medal": 43
+  },
+  {
+   "Name": "AQS2044",
+   "Display": "Oberon",
+   "Desc": "Kill Oberon 100 times",
+   "Stat": "SA2044",
+   "Max": 100,
+   "Medal": 44
+  },
+  {
+   "Name": "AQ_2045",
+   "Display": "Pilgrim",
+   "Desc": "Clear Zombie Scenario Season 1",
+   "Medal": 45
+  },
+  {
+   "Name": "AQ_2046",
+   "Display": "Undertaker",
+   "Desc": "Score One Million Zombie Kills in Zombie Scenario",
+   "Medal": 46
+  },
+  {
+   "Name": "AQS2048",
+   "Display": "Gang",
+   "Desc": "Get a total of 100 Cumulative Plays on 5 consecutive Continuous Maps",
+   "Stat": "SA2048",
+   "Max": 100,
+   "Medal": 48
+  },
+  {
+   "Name": "AQS2051",
+   "Display": "Buster",
+   "Desc": "Play 350 hours in Zombie Mode with Family Members",
+   "Stat": "SA2051",
+   "Max": 350,
+   "Medal": 51
+  },
+  {
+   "Name": "AQS2052",
+   "Display": "The Scenario",
+   "Desc": "Play 350 hours in Scenario Mode with Family Members",
+   "Stat": "SA2052",
+   "Max": 350,
+   "Medal": 52
+  },
+  {
+   "Name": "AQS2056",
+   "Display": "Godlike",
+   "Desc": "Score 3 Consecutive Kills 1000 times in Original/Team Deathmatch",
+   "Stat": "SA2056",
+   "Max": 1000,
+   "Medal": 56
+  },
+  {
+   "Name": "AQS2057",
+   "Display": "Poisonous",
+   "Desc": "Defeat Dione 100 times",
+   "Stat": "SA2057",
+   "Max": 100,
+   "Medal": 57
+  },
+  {
+   "Name": "AQS2058",
+   "Display": "Comanche",
+   "Desc": "Defeat Comanche 100 times",
+   "Stat": "SA2058",
+   "Max": 100,
+   "Medal": 58
+  },
+  {
+   "Name": "AQS2059",
+   "Display": "Osprey",
+   "Desc": "Defeat Osprey 100 times",
+   "Stat": "SA2059",
+   "Max": 100,
+   "Medal": 59
+  },
+  {
+   "Name": "AQS2060",
+   "Display": "Breaker",
+   "Desc": "Defeat XT-300 100 times",
+   "Stat": "SA2060",
+   "Max": 100,
+   "Medal": 60
+  },
+  {
+   "Name": "AQS2061",
+   "Display": "Hawkeye",
+   "Desc": "Score 3,000 Hidden Kills in Hidden Mode",
+   "Stat": "SA2061",
+   "Max": 3000,
+   "Medal": 61
+  },
+  {
+   "Name": "AQS2062",
+   "Display": "Meister",
+   "Desc": "Successfully craft a weapon 300 times",
+   "Stat": "SA2062",
+   "Max": 300,
+   "Medal": 62
+  },
+  {
+   "Name": "AQS2063",
+   "Display": "Escape Artist",
+   "Desc": "Escape 3,000 times in Zombie Escape Mode",
+   "Stat": "SA2063",
+   "Max": 3000,
+   "Medal": 63
+  },
+  {
+   "Name": "AQS2064",
+   "Display": "Demo Man",
+   "Desc": "Score 10,000 Kills with a Bazooka",
+   "Stat": "SA2064",
+   "Max": 10000,
+   "Medal": 64
+  },
+  {
+   "Name": "AQS2066",
+   "Display": "Enhancer",
+   "Desc": "Successfully enhance a weapon 100 times",
+   "Stat": "SA2066",
+   "Max": 100,
+   "Medal": 66
+  },
+  {
+   "Name": "AQS2067",
+   "Display": "Successful",
+   "Desc": "Fail to enhance a weapon 3,000 times",
+   "Stat": "SA2067",
+   "Max": 3000,
+   "Medal": 67
+  },
+  {
+   "Name": "AQS2068",
+   "Display": "Phoenix",
+   "Desc": "Clear Survival: Groundwater 100 times",
+   "Stat": "SA2068",
+   "Max": 100,
+   "Medal": 68
+  },
+  {
+   "Name": "AQ_2069",
+   "Display": "Weapon Specialist",
+   "Desc": "Use a variety of weapons in Gun Deathmatch Mode",
+   "Medal": 69
+  },
+  {
+   "Name": "AQS2070",
+   "Display": "Firefighter",
+   "Desc": "Kill Revenant 100 times",
+   "Stat": "SA2070",
+   "Max": 100,
+   "Medal": 70
+  },
+  {
+   "Name": "AQ_2071",
+   "Display": "Zombie Master",
+   "Desc": "Unlock Elite Difficulty in Zombie Mode",
+   "Medal": 71
+  },
+  {
+   "Name": "AQ_2072",
+   "Display": "Reliable",
+   "Desc": "Commit yourself for the team's victory in Basic Mode",
+   "Medal": 72
+  },
+  {
+   "Name": "AQS2073",
+   "Display": "Last Stand",
+   "Desc": "Kill Angra 100 times",
+   "Stat": "SA2073",
+   "Max": 100,
+   "Medal": 73
+  },
+  {
+   "Name": "AQS2074",
+   "Display": "Ice Cold",
+   "Desc": "Infect 5,000 Humans in Zombie Escape Mode",
+   "Stat": "SA2074",
+   "Max": 5000,
+   "Medal": 74
+  },
+  {
+   "Name": "AQ_2075",
+   "Display": "Crossfire",
+   "Desc": "Actively play a role in Battle Rush Mode",
+   "Medal": 75
+  },
+  {
+   "Name": "AQS2080",
+   "Display": "Attacker",
+   "Desc": "Defeat Fallen Titan 100 times",
+   "Stat": "SA2080",
+   "Max": 100,
+   "Medal": 80
+  },
+  {
+   "Name": "AQS2081",
+   "Display": "Scorpion",
+   "Desc": "Defeat Rusty Scorpion 100 times",
+   "Stat": "SA2081",
+   "Max": 100,
+   "Medal": 81
+  },
+  {
+   "Name": "AQS2082",
+   "Display": "Protector",
+   "Desc": "Defeat Mad Mechanic 100 times",
+   "Stat": "SA2082",
+   "Max": 100,
+   "Medal": 82
+  },
+  {
+   "Name": "AQS2083",
+   "Display": "Commander",
+   "Desc": "Defeat Lost Guardian 100 times",
+   "Stat": "SA2083",
+   "Max": 100,
+   "Medal": 83
+  },
+  {
+   "Name": "AQS2085",
+   "Display": "Berserker",
+   "Desc": "Score 1,000 Kills as the Beast",
+   "Stat": "SA2085",
+   "Max": 1000,
+   "Medal": 85
+  },
+  {
+   "Name": "AQS2086",
+   "Display": "Last One",
+   "Desc": "Clear the Zombie Shelter: Co-op 100 times",
+   "Stat": "SA2086",
+   "Max": 100,
+   "Medal": 86
+  },
+  {
+   "Name": "AQS2087",
+   "Display": "Destroyer",
+   "Desc": "Win Zombie Shelter: Team Match 100 times",
+   "Stat": "SA2087",
+   "Max": 100,
+   "Medal": 87
+  },
+  {
+   "Name": "AQS2041",
+   "Display": "Gate Keeper",
+   "Desc": "Clear Survival: Double Gate 400 times",
+   "Stat": "SA2041",
+   "Max": 100,
+   "Medal": 41
+  },
+  {
+   "Name": "AQS2084",
+   "Display": "Rage Master",
+   "Desc": "Defeat Frozen Wrath 100 times",
+   "Stat": "SA2084",
+   "Max": 100,
+   "Medal": 84
+  },
+  {
+   "Name": "AQS2096",
+   "Display": "Controller",
+   "Desc": "Defeat Gluttony 100 times",
+   "Stat": "SA2096",
+   "Max": 100,
+   "Medal": 96
+  },
+  {
+   "Name": "AQS2097",
+   "Display": "Great Detective",
+   "Desc": "Defeat Zavist and Neid 100 times",
+   "Stat": "SA2097",
+   "Max": 100,
+   "Medal": 97
+  },
+  {
+   "Name": "AQS2098",
+   "Display": "Madness Ender",
+   "Desc": "Defeat Doctor Rex 100 times",
+   "Stat": "SA2098",
+   "Max": 100,
+   "Medal": 98
+  },
+  {
+   "Name": "AQS2101",
+   "Display": "Mech Warrior",
+   "Desc": "Operate XT-300 100 times",
+   "Stat": "SA2101",
+   "Max": 100,
+   "Medal": 101
+  },
+  {
+   "Name": "AQS2102",
+   "Display": "Exterminator",
+   "Desc": "Kill Laser Wing 100 times",
+   "Stat": "SA2102",
+   "Max": 100,
+   "Medal": 102
+  },
+  {
+   "Name": "AQS2104",
+   "Display": "Traitor",
+   "Desc": "Kill Jack 100 times",
+   "Stat": "SA2104",
+   "Max": 100,
+   "Medal": 104
+  },
+  {
+   "Name": "AQS2105",
+   "Display": "Transformer",
+   "Desc": "Kill Cronobotic 100 times",
+   "Stat": "SA2105",
+   "Max": 100,
+   "Medal": 105
+  },
+  {
+   "Name": "AQS2108",
+   "Display": "Recycler",
+   "Desc": "Successfully Disassemble 1,000 times",
+   "Stat": "SA2108",
+   "Max": 1000,
+   "Medal": 108
+  },
+  {
+   "Name": "AQS2116",
+   "Display": "Treasure Hunter",
+   "Desc": "Earn 100,000 points from boxes dropped in Zombie Scenario.",
+   "Stat": "SA2116",
+   "Max": 100000,
+   "Medal": 116
+  },
+  {
+   "Name": "AQ_2118",
+   "Display": "Renovator",
+   "Desc": "Obtain arms with an unlimited extension period.",
+   "Medal": 118
+  },
+  {
+   "Name": "AQS2134",
+   "Display": "Light Zombie Master",
+   "Desc": "Infect a Human 10,000 times as a Light Zombie",
+   "Stat": "SA2134",
+   "Max": 10000,
+   "Medal": 134
+  },
+  {
+   "Name": "AQS2135",
+   "Display": "Heavy Zombie Master",
+   "Desc": "Infect a Human 10,000 times as a Heavy Zombie",
+   "Stat": "SA2135",
+   "Max": 10000,
+   "Medal": 135
+  },
+  {
+   "Name": "AQS2136",
+   "Display": "Normal Zombie Master",
+   "Desc": "Infect a Human 10,000 times as a Regular Zombie",
+   "Stat": "SA2136",
+   "Max": 10000,
+   "Medal": 136
+  },
+  {
+   "Name": "AQS2137",
+   "Display": "Ganymede Master",
+   "Desc": "Infect a Human 10,000 times as a Ganymede",
+   "Stat": "SA2137",
+   "Max": 10000,
+   "Medal": 137
+  },
+  {
+   "Name": "AQS2138",
+   "Display": "Deimos Master",
+   "Desc": "Infect a Human 10,000 times as a Deimos",
+   "Stat": "SA2138",
+   "Max": 10000,
+   "Medal": 138
+  },
+  {
+   "Name": "AQS2139",
+   "Display": "Banshee Master",
+   "Desc": "Infect a Human 10,000 times as a Banshee",
+   "Stat": "SA2139",
+   "Max": 10000,
+   "Medal": 139
+  },
+  {
+   "Name": "AQS2140",
+   "Display": "Venom Guard Master",
+   "Desc": "Infect a Human 10,000 times as a Venom Guard",
+   "Stat": "SA2140",
+   "Max": 10000,
+   "Medal": 140
+  },
+  {
+   "Name": "AQS2141",
+   "Display": "Voodoo Zombie Master",
+   "Desc": "Infect a Human 10,000 times as a Voodoo Zombie",
+   "Stat": "SA2141",
+   "Max": 10000,
+   "Medal": 141
+  },
+  {
+   "Name": "AQS2142",
+   "Display": "Psycho Zombie Master",
+   "Desc": "Infect a Human 10,000 times as a Psycho Zombie",
+   "Stat": "SA2142",
+   "Max": 10000,
+   "Medal": 142
+  },
+  {
+   "Name": "AQS2143",
+   "Display": "Stamper Master",
+   "Desc": "Infect a Human 10,000 times as a Stamper",
+   "Stat": "SA2143",
+   "Max": 10000,
+   "Medal": 143
+  },
+  {
+   "Name": "AQS2144",
+   "Display": "Venom Sting Master",
+   "Desc": "Infect a Human 10,000 times as a Venom Sting",
+   "Stat": "SA2144",
+   "Max": 10000,
+   "Medal": 144
+  },
+  {
+   "Name": "AQS2145",
+   "Display": "Jiangshi Master",
+   "Desc": "Infect a Human 10,000 times as a Jiangshi",
+   "Stat": "SA2145",
+   "Max": 10000,
+   "Medal": 145
+  },
+  {
+   "Name": "AQS2146",
+   "Display": "Lilith Master",
+   "Desc": "Infect a Human 10,000 times as a Lilith",
+   "Stat": "SA2146",
+   "Max": 10000,
+   "Medal": 146
+  },
+  {
+   "Name": "AQS2147",
+   "Display": "Metatron Master",
+   "Desc": "Infect a Human 10,000 times as a Metatron",
+   "Stat": "SA2147",
+   "Max": 10000,
+   "Medal": 147
+  },
+  {
+   "Name": "AQS2151",
+   "Display": "Chaser Master",
+   "Desc": "Infect a Human 10,000 times as a Chaser",
+   "Stat": "SA2151",
+   "Max": 10000,
+   "Medal": 151
+  },
+  {
+   "Name": "AQS2152",
+   "Display": "Blotter Master",
+   "Desc": "Infect a Human 10,000 times as a Blotter",
+   "Stat": "SA2152",
+   "Max": 10000,
+   "Medal": 152
+  },
+  {
+   "Name": "AQS2154",
+   "Display": "I Can Fly",
+   "Desc": "Defeat Crono Wing 100 times",
+   "Stat": "SA2154",
+   "Max": 100,
+   "Medal": 154
+  },
+  {
+   "Name": "AQS2155",
+   "Display": "Bodyguard",
+   "Desc": "Defeat Mr. X 100 times",
+   "Stat": "SA2155",
+   "Max": 100,
+   "Medal": 155
+  },
+  {
+   "Name": "AQS2156",
+   "Display": "Clay Shooter",
+   "Desc": "Defeat Bootleg 100 times",
+   "Stat": "SA2156",
+   "Max": 100,
+   "Medal": 156
+  },
+  {
+   "Name": "AQS2157",
+   "Display": "Taste Test",
+   "Desc": "Defeat Tyrant Crab 100 times",
+   "Stat": "SA2157",
+   "Max": 100,
+   "Medal": 157
+  },
+  {
+   "Name": "AQS2158",
+   "Display": "Agent",
+   "Desc": "Defeat Agent J 100 times",
+   "Stat": "SA2158",
+   "Max": 100,
+   "Medal": 158
+  },
+  {
+   "Name": "AQS2162",
+   "Display": "Rusty Wing Master",
+   "Desc": "Infect a Human 10,000 times as a Rusty Wing",
+   "Stat": "SA2162",
+   "Max": 10000,
+   "Medal": 162
+  },
+  {
+   "Name": "AQ_2181",
+   "Display": "CSN:S Soldier",
+   "Desc": "Reach Level 100",
+   "Medal": 181
+  },
+  {
+   "Name": "AQS2192",
+   "Display": "Yaksha Master",
+   "Desc": "Infect a Human 10,000 times as a Yaksha",
+   "Stat": "SA2192",
+   "Max": 10000,
+   "Medal": 192
+  },
+  {
+   "Name": "AQS2197",
+   "Display": "Mutant",
+   "Desc": "Reached 5000 cumulative EXP.",
+   "Stat": "SA2197",
+   "Max": 5000,
+   "Medal": 197
+  },
+  {
+   "Name": "AQS2198",
+   "Display": "Metamorph",
+   "Desc": "Reached 10,000 cumulative mutations.",
+   "Stat": "SA2198",
+   "Max": 10000,
+   "Medal": 198
+  },
+  {
+   "Name": "AQS2199",
+   "Display": "Unapproachable",
+   "Desc": "Scored 100 melee kills with the Melee Masher mutation.",
+   "Stat": "SA2199",
+   "Max": 100,
+   "Medal": 199
+  },
+  {
+   "Name": "AQS2200",
+   "Display": "Incorruptible",
+   "Desc": "Achieved 10 round victories without any mutations as a human.",
+   "Stat": "SA2200",
+   "Max": 10,
+   "Medal": 200
+  },
+  {
+   "Name": "AQS2201",
+   "Display": "Big Roller",
+   "Desc": "Played 1000 rounds in which you spent more than 6000 dollars.",
+   "Stat": "SA2201",
+   "Max": 1000,
+   "Medal": 201
+  },
+  {
+   "Name": "AQS2202",
+   "Display": "Penny Pincher",
+   "Desc": "Played 1000 rounds in which you spent less than 3000 dollars.",
+   "Stat": "SA2202",
+   "Max": 1000,
+   "Medal": 202
+  },
+  {
+   "Name": "AQS2203",
+   "Display": "Artillery",
+   "Desc": "Scored 100 kills using the Support Bombardment mutation",
+   "Stat": "SA2203",
+   "Max": 100,
+   "Medal": 203
+  },
+  {
+   "Name": "AQS2204",
+   "Display": "Celebrity",
+   "Desc": "Made 100 Hero or Sidekick selections after obtaining the Heroic Presence mutation.",
+   "Stat": "SA2204",
+   "Max": 100,
+   "Medal": 204
+  },
+  {
+   "Name": "AQS2205",
+   "Display": "Chaotic",
+   "Desc": "Made 1000 random weapon purchases.",
+   "Stat": "SA2205",
+   "Max": 1000,
+   "Medal": 205
+  },
+  {
+   "Name": "AQS2206",
+   "Display": "Ascetic",
+   "Desc": "Scored 10 cumulative zombie kills after spending no money.",
+   "Stat": "SA2206",
+   "Max": 10,
+   "Medal": 206
+  },
+  {
+   "Name": "AQS2207",
+   "Display": "Bursting",
+   "Desc": "Used 1000 Zombie Bombs.",
+   "Stat": "SA2207",
+   "Max": 1000,
+   "Medal": 207
+  },
+  {
+   "Name": "AQ_2211",
+   "Display": "Transformed",
+   "Desc": "Played 3 or more different zombies during a single round.",
+   "Medal": 211
+  },
+  {
+   "Name": "AQS2213",
+   "Display": "Superior",
+   "Desc": "Scored 100 kills on players who had more mutations.",
+   "Stat": "SA2213",
+   "Max": 100,
+   "Medal": 213
+  },
+  {
+   "Name": "AQS2214",
+   "Display": "Opportunist",
+   "Desc": "Scored 100 kills on players who had less mutations.",
+   "Stat": "SA2214",
+   "Max": 100,
+   "Medal": 214
+  },
+  {
+   "Name": "AQ_2215",
+   "Display": "Hunter",
+   "Desc": "Scored a zombie kill with the Hunter's Instinct mutation.",
+   "Medal": 215
+  },
+  {
+   "Name": "AQS2217",
+   "Display": "Skyward",
+   "Desc": "Obtained the Icarus mutation 100 times.",
+   "Stat": "SA2217",
+   "Max": 100,
+   "Medal": 217
+  },
+  {
+   "Name": "AQ_2218",
+   "Display": "Unstable",
+   "Desc": "Obtained at least 20 mutations at once after joining mid-match.",
+   "Medal": 218
+  },
+  {
+   "Name": "AQS2220",
+   "Display": "Superstar",
+   "Desc": "Achieved 1st place results 10 times in Zombie Z.",
+   "Stat": "SA2220",
+   "Max": 10,
+   "Medal": 220
+  },
+  {
+   "Name": "AQS2221",
+   "Display": "Test Subject",
+   "Desc": "Played Zombie Z mode 5 times.",
+   "Stat": "SA2221",
+   "Max": 5,
+   "Medal": 221
+  },
+  {
+   "Name": "AQS2222",
+   "Display": "Control Group",
+   "Desc": "Played Zombie Z mode 5 times with other players.",
+   "Stat": "SA2222",
+   "Max": 5,
+   "Medal": 222
+  },
+  {
+   "Name": "AQS2223",
+   "Display": "Zombie Hunter",
+   "Desc": "Scored 1000 zombie kills.",
+   "Stat": "SA2223",
+   "Max": 1000,
+   "Medal": 223
+  },
+  {
+   "Name": "AQS2224",
+   "Display": "Terminator",
+   "Desc": "Scored 1000 zombie kills with headshots.",
+   "Stat": "SA2224",
+   "Max": 1000,
+   "Medal": 224
+  },
+  {
+   "Name": "AQ_2225",
+   "Display": "Such Potential",
+   "Desc": "Have less than 20 human-exclusive mutations active while at max level. Human-exclusive mutations are color-coded blue.",
+   "Medal": 225
+  },
+  {
+   "Name": "AQ_2226",
+   "Display": "Doppelganger",
+   "Desc": "Scored a kill against another player who had the same mutation as themselves.",
+   "Medal": 226
+  },
+  {
+   "Name": "AQS2231",
+   "Display": "Mechanical Engineer",
+   "Desc": "Defeat Colossus 100 times",
+   "Stat": "SA2231",
+   "Max": 100,
+   "Medal": 231
+  },
+  {
+   "Name": "AQS2232",
+   "Display": "Brought a Bigger Boat",
+   "Desc": "Defeat Megalodon 100 times",
+   "Stat": "SA2232",
+   "Max": 100,
+   "Medal": 232
+  },
+  {
+   "Name": "AQ_2233",
+   "Display": "Season 2 Veteran",
+   "Desc": "Clear Zombie Scenario Season 2",
+   "Medal": 233
+  },
+  {
+   "Name": "AQ_2234",
+   "Display": "Season 3 Veteran",
+   "Desc": "Clear Zombie Scenario Season 3",
+   "Medal": 234
+  },
+  {
+   "Name": "AQ_2235",
+   "Display": "Season 4 Veteran",
+   "Desc": "Clear Zombie Scenario Season 4",
+   "Medal": 235
+  },
+  {
+   "Name": "AQ_2236",
+   "Display": "Season 5 Veteran",
+   "Desc": "Clear Zombie Scenario Season 5",
+   "Medal": 236
+  },
+  {
+   "Name": "AQ_2237",
+   "Display": "Season 6 Veteran",
+   "Desc": "Clear Zombie Scenario Season 6",
+   "Medal": 237
+  },
+  {
+   "Name": "AQS2238",
+   "Display": "Award-Winning Actor",
+   "Desc": "Receive a total of 100 Golden Thumbs Up",
+   "Stat": "SA2238",
+   "Max": 100,
+   "Medal": 238
+  },
+  {
+   "Name": "AQS2239",
+   "Display": "Hawkeye",
+   "Desc": "Kill 500 objects as a seeker",
+   "Stat": "SA2239",
+   "Max": 500,
+   "Medal": 239
+  },
+  {
+   "Name": "AQS2240",
+   "Display": "Fortune's Favored",
+   "Desc": "Find 200 objects during Burning Time",
+   "Stat": "SA2240",
+   "Max": 200,
+   "Medal": 240
+  },
+  {
+   "Name": "AQS2241",
+   "Display": "Super Seeker",
+   "Desc": "Play 200 times as a seeker",
+   "Stat": "SA2241",
+   "Max": 200,
+   "Medal": 241
+  },
+  {
+   "Name": "AQS2242",
+   "Display": "Method Actor",
+   "Desc": "Play a total of 500 times as an object",
+   "Stat": "SA2242",
+   "Max": 500,
+   "Medal": 242
+  },
+  {
+   "Name": "AQS2255",
+   "Display": "Spider Human",
+   "Desc": "Transform into Arachne 1,000 or more times",
+   "Stat": "SA2255",
+   "Max": 1000,
+   "Medal": 255
+  },
+  {
+   "Name": "AQS2256",
+   "Display": "Kennel Keeper",
+   "Desc": "Transform into Brutus 1,000 or more times",
+   "Stat": "SA2256",
+   "Max": 1000,
+   "Medal": 256
+  },
+  {
+   "Name": "AQS2257",
+   "Display": "Overdose",
+   "Desc": "Use virus as a human 1,000 or more times",
+   "Stat": "SA2257",
+   "Max": 1000,
+   "Medal": 257
+  },
+  {
+   "Name": "AQS2258",
+   "Display": "Arachne Master",
+   "Desc": "Infect 10,000 humans as Arachne",
+   "Stat": "SA2258",
+   "Max": 10000,
+   "Medal": 258
+  },
+  {
+   "Name": "AQS2259",
+   "Display": "Brutus Master",
+   "Desc": "Infect 10,000 humans as Brutus",
+   "Stat": "SA2259",
+   "Max": 10000,
+   "Medal": 259
+  },
+  {
+   "Name": "AQS2267",
+   "Display": "Not Missing a Beat",
+   "Desc": "Achieve 5 consecutive logins",
+   "Stat": "SA2267",
+   "Max": 5,
+   "Text": "Play on 5 different days",
+   "Conditions": [
+    {
+     "Counter": "DaysPlayed",
+     "Target": 5
+    }
+   ]
+  },
+  {
+   "Name": "AQS2268",
+   "Display": "Welcome ",
+   "Desc": "Reach cumulative 10 logins",
+   "Stat": "SA2268",
+   "Max": 10,
+   "Text": "Play 10 matches",
+   "Conditions": [
+    {
+     "Counter": "Matches",
+     "Target": 10
+    }
+   ]
+  },
+  {
+   "Name": "AQS2269",
+   "Display": "Hacker",
+   "Desc": "Decode 30 decoders.",
+   "Stat": "SA2269",
+   "Max": 30,
+   "Text": "Complete 30 orders",
+   "Conditions": [
+    {
+     "Counter": "OrdersDone",
+     "Target": 30
+    }
+   ]
+  },
+  {
+   "Name": "AQS2273",
+   "Display": "Security System",
+   "Desc": "Defeat the security system 100 times",
+   "Stat": "SA2273",
+   "Max": 100,
+   "Text": "Win 35 matches in scenario modes",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 35,
+     "Modes": [
+      15,
+      17,
+      28,
+      52,
+      53,
+      59
+     ]
+    }
+   ]
+  },
+  {
+   "Name": "AQ_2280",
+   "Display": "Complete the Guide",
+   "Desc": "A token for those who have completed all the missions of the Mission Chain tutorial",
+   "Text": "Complete 10 mission requests",
+   "Conditions": [
+    {
+     "Counter": "RequestsDone",
+     "Target": 10
+    }
+   ]
+  },
+  {
+   "Name": "AQS2296",
+   "Display": "Negotiator",
+   "Desc": "Defeat Agent B 100 times",
+   "Stat": "SA2296",
+   "Max": 100,
+   "Text": "Win 45 matches in scenario modes",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 45,
+     "Modes": [
+      15,
+      17,
+      28,
+      52,
+      53,
+      59
+     ]
+    }
+   ]
+  },
+  {
+   "Name": "AQ_2297",
+   "Display": "Season 7 Veteran",
+   "Desc": "Clear Zombie Scenario Season 7",
+   "Text": "Win 300 matches in Zombie Scenario",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 300,
+     "Modes": [
+      15
+     ]
+    }
+   ]
+  },
+  {
+   "Name": "AQS2298",
+   "Display": "Look Into My Eyes",
+   "Desc": "Defeat Agent H 100 times",
+   "Stat": "SA2298",
+   "Max": 100,
+   "Text": "Win 55 matches in scenario modes",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 55,
+     "Modes": [
+      15,
+      17,
+      28,
+      52,
+      53,
+      59
+     ]
+    }
+   ]
+  },
+  {
+   "Name": "AQS2304",
+   "Display": "Master of Combining",
+   "Desc": "A medal awarded to those who have successfully part combined 100 times",
+   "Stat": "SA2304",
+   "Max": 100,
+   "Text": "Unlock 40 battle pass items",
+   "Conditions": [
+    {
+     "Counter": "Unlocks",
+     "Target": 40
+    }
+   ]
+  },
+  {
+   "Name": "AQS2322",
+   "Display": "Lion Heart",
+   "Desc": "Defeat Hippomenes 100 times",
+   "Stat": "SA2322",
+   "Max": 100,
+   "Text": "Win 65 matches in scenario modes",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 65,
+     "Modes": [
+      15,
+      17,
+      28,
+      52,
+      53,
+      59
+     ]
+    }
+   ]
+  },
+  {
+   "Name": "AQS2323",
+   "Display": "Extermination",
+   "Desc": "Defeat Narak 100 times",
+   "Stat": "SA2323",
+   "Max": 100,
+   "Text": "Win 80 matches in scenario modes",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 80,
+     "Modes": [
+      15,
+      17,
+      28,
+      52,
+      53,
+      59
+     ]
+    }
+   ]
+  },
+  {
+   "Name": "AQ_2335",
+   "Display": "Season 8 Veteran",
+   "Desc": "Clear Zombie Scenario Season 8",
+   "Text": "Win 350 matches in Zombie Scenario",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 350,
+     "Modes": [
+      15
+     ]
+    }
+   ]
+  },
+  {
+   "Name": "AQS2346",
+   "Display": "Back to Basics",
+   "Desc": "Clear Zombie Scenario alone using regular weapons only.",
+   "Stat": "SA2346",
+   "Max": 10,
+   "Text": "Win 10 matches in Zombie Scenario",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 10,
+     "Modes": [
+      15
+     ]
+    }
+   ]
+  },
+  {
+   "Name": "AQS2347",
+   "Display": "Stronger Together",
+   "Desc": "Clear Zombie Scenario with two people using regular weapons only",
+   "Stat": "SA2347",
+   "Max": 20,
+   "Text": "Win 20 matches in Zombie Scenario",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 20,
+     "Modes": [
+      15
+     ]
+    }
+   ]
+  },
+  {
+   "Name": "AQS2348",
+   "Display": "Advanced Destruction",
+   "Desc": "Clear Zombie Scenario alone using Advanced weapons only",
+   "Stat": "SA2048",
+   "Max": 20,
+   "Text": "Win 30 matches in Zombie Scenario",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 30,
+     "Modes": [
+      15
+     ]
+    }
+   ]
+  },
+  {
+   "Name": "AQS2349",
+   "Display": "Two Advanced For Them",
+   "Desc": "Clear Zombie Scenario with two people using Advanced weapons only",
+   "Stat": "SA2349",
+   "Max": 30,
+   "Text": "Win 40 matches in Zombie Scenario",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 40,
+     "Modes": [
+      15
+     ]
+    }
+   ]
+  },
+  {
+   "Name": "AQS2350",
+   "Display": "I'll Take It Rare",
+   "Desc": "Clear Zombie Scenario alone using Rare weapons only",
+   "Stat": "SA2350",
+   "Max": 30,
+   "Text": "Win 50 matches in Zombie Scenario",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 50,
+     "Modes": [
+      15
+     ]
+    }
+   ]
+  },
+  {
+   "Name": "AQS2351",
+   "Display": "We'll Take It Rare",
+   "Desc": "Clear Zombie Scenario with two people using Rare weapons only",
+   "Stat": "SA2351",
+   "Max": 40,
+   "Text": "Win 60 matches in Zombie Scenario",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 60,
+     "Modes": [
+      15
+     ]
+    }
+   ]
+  },
+  {
+   "Name": "AQS2352",
+   "Display": "Keeping It Unique",
+   "Desc": "Clear Zombie Scenario alone using Unique weapons only",
+   "Stat": "SA2352",
+   "Max": 40,
+   "Text": "Win 70 matches in Zombie Scenario",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 70,
+     "Modes": [
+      15
+     ]
+    }
+   ]
+  },
+  {
+   "Name": "AQS2353",
+   "Display": "Two Unique To Quit",
+   "Desc": "Clear Zombie Scenario with two people using Unique weapons only",
+   "Stat": "SA2353",
+   "Max": 50,
+   "Text": "Win 80 matches in Zombie Scenario",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 80,
+     "Modes": [
+      15
+     ]
+    }
+   ]
+  },
+  {
+   "Name": "AQS2354",
+   "Display": "Perfect Soldier",
+   "Desc": "Complete a full clear of Zombie Scenario alone without dying.",
+   "Stat": "SA2354",
+   "Max": 30,
+   "Text": "Win 90 matches in Zombie Scenario",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 90,
+     "Modes": [
+      15
+     ]
+    }
+   ]
+  },
+  {
+   "Name": "AQS2355",
+   "Display": "Perfect Raid",
+   "Desc": "Complete a full clear of Zombie Scenario with two or more people without dying.",
+   "Stat": "SA2355",
+   "Max": 50,
+   "Text": "Win 100 matches in Zombie Scenario",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 100,
+     "Modes": [
+      15
+     ]
+    }
+   ]
+  },
+  {
+   "Name": "AQS2356",
+   "Display": "Legendary Sword",
+   "Desc": "Complete a full clear of Zombie Scenario alone with only Melee Weapons.",
+   "Stat": "SA2356",
+   "Max": 20,
+   "Text": "Score 500 melee kills in scenario modes",
+   "Conditions": [
+    {
+     "Counter": "MeleeKills",
+     "Target": 500,
+     "Modes": [
+      15,
+      17,
+      28,
+      52,
+      53,
+      59
+     ]
+    }
+   ]
+  },
+  {
+   "Name": "AQS2357",
+   "Display": "Feast of Swords",
+   "Desc": "Complete a full clear of Zombie Scenario with two or more people using only Melee Weapons.",
+   "Stat": "SA2357",
+   "Max": 30,
+   "Text": "Score 1,000 melee kills in scenario modes",
+   "Conditions": [
+    {
+     "Counter": "MeleeKills",
+     "Target": 1000,
+     "Modes": [
+      15,
+      17,
+      28,
+      52,
+      53,
+      59
+     ]
+    }
+   ]
+  },
+  {
+   "Name": "AQS2358",
+   "Display": "Eternal Class",
+   "Desc": "Complete Human Infections when Zombie HP is at 2,000 or less.",
+   "Stat": "SA2358",
+   "Max": 100,
+   "Text": "Infect 300 humans in any zombie mode",
+   "Conditions": [
+    {
+     "Counter": "Infections",
+     "Target": 300,
+     "Modes": [
+      8,
+      9,
+      14,
+      29,
+      35,
+      36,
+      44,
+      45,
+      54,
+      56,
+      58,
+      20,
+      24,
+      30,
+      32,
+      37,
+      43
+     ]
+    }
+   ]
+  },
+  {
+   "Name": "AQS2359",
+   "Display": "One Against Ten",
+   "Desc": "Accumulate 10 zombie kills as a human in a single round 30 times",
+   "Stat": "SA2359",
+   "Max": 30,
+   "Text": "Kill 3,000 zombies in any zombie mode",
+   "Conditions": [
+    {
+     "Counter": "ZombieKills",
+     "Target": 3000,
+     "Modes": [
+      8,
+      9,
+      14,
+      29,
+      35,
+      36,
+      44,
+      45,
+      54,
+      56,
+      58,
+      20,
+      24,
+      30,
+      32,
+      37,
+      43
+     ]
+    }
+   ]
+  },
+  {
+   "Name": "AQS2369",
+   "Display": "Worker C",
+   "Desc": "Defeat Agent C 100 times",
+   "Stat": "SA2369",
+   "Max": 100,
+   "Text": "Win 95 matches in scenario modes",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 95,
+     "Modes": [
+      15,
+      17,
+      28,
+      52,
+      53,
+      59
+     ]
+    }
+   ]
+  },
+  {
+   "Name": "AQS2382",
+   "Display": "Fireman",
+   "Desc": "Defeat Mammon 100 times",
+   "Stat": "SA2382",
+   "Max": 100,
+   "Text": "Win 110 matches in scenario modes",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 110,
+     "Modes": [
+      15,
+      17,
+      28,
+      52,
+      53,
+      59
+     ]
+    }
+   ]
+  },
+  {
+   "Name": "AQS2401",
+   "Display": "Flyswatter",
+   "Desc": "Defeat Dominus 100 times",
+   "Stat": "SA2401",
+   "Max": 100,
+   "Text": "Win 130 matches in scenario modes",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 130,
+     "Modes": [
+      15,
+      17,
+      28,
+      52,
+      53,
+      59
+     ]
+    }
+   ]
+  },
+  {
+   "Name": "AQS2478",
+   "Display": "Old-Timer",
+   "Desc": "A medal given to those who exceeded a Total Login time of 500 hours in Zombie Scenario.",
+   "Stat": "SA2478",
+   "Max": 500,
+   "Text": "Play for 100 hours in scenario modes",
+   "Conditions": [
+    {
+     "Counter": "Seconds",
+     "Target": 360000,
+     "Modes": [
+      15,
+      17,
+      28,
+      52,
+      53,
+      59
+     ]
+    }
+   ]
+  },
+  {
+   "Name": "AQS2477",
+   "Display": "Settler",
+   "Desc": "A medal given to those who exceeded a Total Login time of 200 hours in Zombie Scenario.",
+   "Stat": "SA2477",
+   "Max": 200,
+   "Text": "Play for 40 hours in scenario modes",
+   "Conditions": [
+    {
+     "Counter": "Seconds",
+     "Target": 144000,
+     "Modes": [
+      15,
+      17,
+      28,
+      52,
+      53,
+      59
+     ]
+    }
+   ]
+  },
+  {
+   "Name": "AQS2476",
+   "Display": "Penniless",
+   "Desc": "A medal given to those who have cleared Zombie Scenario on Hard difficulty or higher without using any items 50 times.",
+   "Stat": "SA2476",
+   "Max": 50,
+   "Text": "Win 150 matches in Zombie Scenario",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 150,
+     "Modes": [
+      15
+     ]
+    }
+   ]
+  },
+  {
+   "Name": "AQS2475",
+   "Display": "Whisper of the Devil",
+   "Desc": "A medal given to those who have cleared Zombie Scenario on Inferno difficulty or higher 100 times.",
+   "Stat": "SA2475",
+   "Max": 100,
+   "Text": "Win 250 matches in scenario modes",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 250,
+     "Modes": [
+      15,
+      17,
+      28,
+      52,
+      53,
+      59
+     ]
+    }
+   ]
+  },
+  {
+   "Name": "AQS2474",
+   "Display": "Full Combat Gear",
+   "Desc": "A medal given to those who have used an Add-On and cleared Zombie Scenario 1000 times total.",
+   "Stat": "SA2474",
+   "Max": 1000,
+   "Text": "Win 500 matches in scenario modes",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 500,
+     "Modes": [
+      15,
+      17,
+      28,
+      52,
+      53,
+      59
+     ]
+    }
+   ]
+  },
+  {
+   "Name": "AQ_2462",
+   "Display": "What in the World",
+   "Desc": "Fail an Exploration with a 95% or higher success chance.",
+   "Text": "Complete 25 mission requests",
+   "Conditions": [
+    {
+     "Counter": "RequestsDone",
+     "Target": 25
+    }
+   ]
+  },
+  {
+   "Name": "AQ_2461",
+   "Display": "Lucky Pioneer",
+   "Desc": "Successfully complete an Exploration with a 5% or lower chance of success.",
+   "Text": "Complete 10 event missions",
+   "Conditions": [
+    {
+     "Counter": "EventsDone",
+     "Target": 10
+    }
+   ]
+  },
+  {
+   "Name": "AQS2460",
+   "Display": "Dehancement Craftsman",
+   "Desc": "Use Random -1 Dehancement Material 500 times",
+   "Stat": "SA2460",
+   "Max": 500,
+   "Text": "Buy 30 items at the Black Market",
+   "Conditions": [
+    {
+     "Counter": "BlackMarketBuys",
+     "Target": 30
+    }
+   ]
+  },
+  {
+   "Name": "AQS2459",
+   "Display": "Manner",
+   "Desc": "Receive 1,000 commendations from other players.",
+   "Stat": "SA2459",
+   "Max": 1000,
+   "Text": "Play 500 matches",
+   "Conditions": [
+    {
+     "Counter": "Matches",
+     "Target": 500
+    }
+   ]
+  },
+  {
+   "Name": "AQS2458",
+   "Display": "Hand of Trust",
+   "Desc": "Commend another player 5000 times.",
+   "Stat": "SA2458",
+   "Max": 5000,
+   "Text": "Play 1,500 matches",
+   "Conditions": [
+    {
+     "Counter": "Matches",
+     "Target": 1500
+    }
+   ]
+  },
+  {
+   "Name": "AQS2457",
+   "Display": "Trader",
+   "Desc": "Complete 5 transactions in the Auction House.",
+   "Stat": "SA2457",
+   "Max": 5,
+   "Text": "Buy 5 items at the Black Market",
+   "Conditions": [
+    {
+     "Counter": "BlackMarketBuys",
+     "Target": 5
+    }
+   ]
+  },
+  {
+   "Name": "AQS2456",
+   "Display": "Artist",
+   "Desc": "Perform Weapon Painting 50 times.",
+   "Stat": "SA2456",
+   "Max": 50,
+   "Text": "Unlock 25 battle pass items",
+   "Conditions": [
+    {
+     "Counter": "Unlocks",
+     "Target": 25
+    }
+   ]
+  },
+  {
+   "Name": "AQS2448",
+   "Display": "Reload Obsession",
+   "Desc": "A token awarded for those who reloaded weapons 10000 times.",
+   "Stat": "SA2448",
+   "Max": 10000,
+   "Text": "Score 10,000 kills",
+   "Conditions": [
+    {
+     "Counter": "Kills",
+     "Target": 10000
+    }
+   ]
+  },
+  {
+   "Name": "AQS2444",
+   "Display": "Honor Student",
+   "Desc": "A medal for placing 3rd or higher at the end of a game 200 times",
+   "Text": "Finish first 60 times",
+   "Conditions": [
+    {
+     "Counter": "TopPlayer",
+     "Target": 60
+    }
+   ]
+  },
+  {
+   "Name": "AQS2443",
+   "Display": "Always 1st",
+   "Desc": "A medal for reaching 1st place at the end of a game 100 times",
+   "Stat": "SA2443",
+   "Max": 100,
+   "Text": "Finish first 100 times",
+   "Conditions": [
+    {
+     "Counter": "TopPlayer",
+     "Target": 100
+    }
+   ]
+  },
+  {
+   "Name": "AQS2442",
+   "Display": "Medic",
+   "Desc": "A medal for recovering 50000 HP",
+   "Stat": "SA2442",
+   "Max": 50000,
+   "Text": "Play 300 matches in any zombie mode",
+   "Conditions": [
+    {
+     "Counter": "Matches",
+     "Target": 300,
+     "Modes": [
+      8,
+      9,
+      14,
+      29,
+      35,
+      36,
+      44,
+      45,
+      54,
+      56,
+      58,
+      20,
+      24,
+      30,
+      32,
+      37,
+      43
+     ]
+    }
+   ]
+  },
+  {
+   "Name": "AQS2441",
+   "Display": "Power of Fury",
+   "Desc": "A medal for reaching 150% or higher Morale Boost 10 times as Human",
+   "Stat": "SA2441",
+   "Max": 10,
+   "Text": "Win 100 matches in Zombie modes",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 100,
+     "Modes": [
+      8,
+      9,
+      14,
+      29,
+      35,
+      36,
+      44,
+      45,
+      54,
+      56,
+      58
+     ]
+    }
+   ]
+  },
+  {
+   "Name": "AQS2440",
+   "Display": "Gun Prohibition",
+   "Desc": "A medal for winning 10 rounds without dealing damage with Primary or Secondary Weapons",
+   "Stat": "SA2440",
+   "Max": 10,
+   "Text": "Score 300 melee kills in any zombie mode",
+   "Conditions": [
+    {
+     "Counter": "MeleeKills",
+     "Target": 300,
+     "Modes": [
+      8,
+      9,
+      14,
+      29,
+      35,
+      36,
+      44,
+      45,
+      54,
+      56,
+      58,
+      20,
+      24,
+      30,
+      32,
+      37,
+      43
+     ]
+    }
+   ]
+  },
+  {
+   "Name": "AQ_2439",
+   "Display": "Pacifist",
+   "Desc": "A medal for winning 1 round as Human without dealing damage to Zombies",
+   "Text": "Win 25 matches in any zombie mode",
+   "Conditions": [
+    {
+     "Counter": "Wins",
+     "Target": 25,
+     "Modes": [
+      8,
+      9,
+      14,
+      29,
+      35,
+      36,
+      44,
+      45,
+      54,
+      56,
+      58,
+      20,
+      24,
+      30,
+      32,
+      37,
+      43
+     ]
+    }
+   ]
+  },
+  {
+   "Name": "AQ_2438",
+   "Display": "Hot Bath",
+   "Desc": "A medal for taking damage from a Fire Bomb for 20 seconds or longer",
+   "Text": "Die 1,000 times in any zombie mode",
+   "Conditions": [
+    {
+     "Counter": "Deaths",
+     "Target": 1000,
+     "Modes": [
+      8,
+      9,
+      14,
+      29,
+      35,
+      36,
+      44,
+      45,
+      54,
+      56,
+      58,
+      20,
+      24,
+      30,
+      32,
+      37,
+      43
+     ]
+    }
+   ]
+  },
+  {
+   "Name": "AQS2437",
+   "Display": "Volcano Eruption",
+   "Desc": "A medal for dealing 1000 damage with Fire Bombs",
+   "Stat": "SA2437",
+   "Max": 1000,
+   "Text": "Score 300 grenade kills",
+   "Conditions": [
+    {
+     "Counter": "GrenadeKills",
+     "Target": 300
+    }
+   ]
+  },
+  {
+   "Name": "AQS2436",
+   "Display": "Supply Expert",
+   "Desc": "A medal for acquiring 100 Supply Boxes as Human",
+   "Stat": "SA2436",
+   "Max": 100,
+   "Text": "Pick up 100 supply boxes",
+   "Conditions": [
+    {
+     "Counter": "DropBoxes",
+     "Target": 100
+    }
+   ]
+  },
+  {
+   "Name": "AQS2435",
+   "Display": "Precise Explosion",
+   "Desc": "A medal for dealing 5000 damage with Zombie Bombs",
+   "Stat": "SA2435",
+   "Max": 5000,
+   "Text": "Infect 1,500 humans in any zombie mode",
+   "Conditions": [
+    {
+     "Counter": "Infections",
+     "Target": 1500,
+     "Modes": [
+      8,
+      9,
+      14,
+      29,
+      35,
+      36,
+      44,
+      45,
+      54,
+      56,
+      58,
+      20,
+      24,
+      30,
+      32,
+      37,
+      43
+     ]
+    }
+   ]
+  },
+  {
+   "Name": "AQS2434",
+   "Display": "Pitcher",
+   "Desc": "A medal for throwing 2000 Zombie Bombs",
+   "Stat": "SA2434",
+   "Max": 2000,
+   "Text": "Infect 3,000 humans in any zombie mode",
+   "Conditions": [
+    {
+     "Counter": "Infections",
+     "Target": 3000,
+     "Modes": [
+      8,
+      9,
+      14,
+      29,
+      35,
+      36,
+      44,
+      45,
+      54,
+      56,
+      58,
+      20,
+      24,
+      30,
+      32,
+      37,
+      43
+     ]
+    }
+   ]
+  },
+  {
+   "Name": "AQS2427",
+   "Display": "Military Supplies Broker",
+   "Desc": "Purchase a weapon 1000 times in Zombie Scenario",
+   "Stat": "SA2427",
+   "Max": 1000,
+   "Text": "Play 300 matches in scenario modes",
+   "Conditions": [
+    {
+     "Counter": "Matches",
+     "Target": 300,
+     "Modes": [
+      15,
+      17,
+      28,
+      52,
+      53,
+      59
+     ]
+    }
+   ]
+  },
+  {
+   "Name": "AQS2416",
+   "Display": "Explorer",
+   "Desc": "A medal awarded to those who explore the nooks and crannies of the otherworld.",
+   "Stat": "SA2416",
+   "Max": 100,
+   "Text": "Play on 60 different days",
+   "Conditions": [
+    {
+     "Counter": "DaysPlayed",
+     "Target": 60
+    }
+   ]
+  },
+  {
+   "Name": "AQS2415",
+   "Display": "Human Modification Project",
+   "Desc": "A medal awarded to those who have used the Deadly Shot, Bloody Blade, and Sprint skills.",
+   "Stat": "SA2415",
+   "Max": 10,
+   "Text": "Kill 1,500 zombies in any zombie mode",
+   "Conditions": [
+    {
+     "Counter": "ZombieKills",
+     "Target": 1500,
+     "Modes": [
+      8,
+      9,
+      14,
+      29,
+      35,
+      36,
+      44,
+      45,
+      54,
+      56,
+      58,
+      20,
+      24,
+      30,
+      32,
+      37,
+      43
+     ]
+    }
+   ]
+  },
+  {
+   "Name": "AQS2410",
+   "Display": "Perk Chaser",
+   "Desc": "A medal granted to those who have equipped 10 different perks at least once, and completed a session of Zombie Mode and Zombie Hero.",
+   "Stat": "SA2410",
+   "Max": 10,
+   "Text": "Play 200 matches in any zombie mode",
+   "Conditions": [
+    {
+     "Counter": "Matches",
+     "Target": 200,
+     "Modes": [
+      8,
+      9,
+      14,
+      29,
+      35,
+      36,
+      44,
+      45,
+      54,
+      56,
+      58,
+      20,
+      24,
+      30,
+      32,
+      37,
+      43
+     ]
+    }
+   ]
+  }
+ ]
+}

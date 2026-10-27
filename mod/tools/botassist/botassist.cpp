@@ -22,6 +22,7 @@
 #include <string.h>
 #include <string>
 #include <vector>
+#include <map>
 #include <unordered_map>
 #include <queue>
 #include <algorithm>
@@ -6316,6 +6317,148 @@ static void HookModeDialog()
     Log("mode list: the create-room mode grid scrolls");
 }
 
+// ---------------------------------------------------------------- medal texts
+// My Info's Medals tab shows each medal (an honor quest of CSNZ_Server) with the game's texts CSO_Quest<2000+id>_Desc1
+// / _Cond<n>, which describe the original online conditions. CSNZ_Server's offline ones (GET /api/questtexts)
+// replace them: vgui2's ILocalize (VGUI_Localize003, CSO build) finds strings with vtable slots 3 and 4 (both
+// (const char* token) -> wchar_t*, "#" optional); both are hooked and answer these tokens first. The table is
+// built once and never changed afterwards, so the game's threads can read it freely.
+static std::map<std::string, std::wstring>* g_questTexts;
+static void* g_locFind[2];
+typedef const wchar_t*(__fastcall* LocFindFn)(void* self, void* edx, const char* token);
+
+static const wchar_t* QuestText(const char* token)
+{
+    std::map<std::string, std::wstring>* texts = g_questTexts;
+    if (!texts || !token)
+        return nullptr;
+    if (*token == '#')
+        token++;
+    if (_strnicmp(token, "CSO_Quest", 9) != 0)
+        return nullptr;
+    std::string key(token);
+    for (char& c : key)
+        c = (char)tolower((unsigned char)c);
+    auto it = texts->find(key);
+    return it == texts->end() ? nullptr : it->second.c_str();
+}
+
+static const wchar_t* __fastcall LocFind3(void* self, void*, const char* token)
+{
+    const wchar_t* text = QuestText(token);
+    return text ? text : ((LocFindFn)g_locFind[0])(self, nullptr, token);
+}
+
+static const wchar_t* __fastcall LocFind4(void* self, void*, const char* token)
+{
+    const wchar_t* text = QuestText(token);
+    return text ? text : ((LocFindFn)g_locFind[1])(self, nullptr, token);
+}
+
+// a flat JSON object of strings ({"key":"text",...}) -> lowercase key -> UTF-16 text
+static std::map<std::string, std::wstring>* ParseTexts(const std::string& json)
+{
+    auto* out = new std::map<std::string, std::wstring>();
+    size_t i = 0;
+    auto readString = [&](std::string& s) -> bool {
+        i = json.find('"', i);
+        if (i == std::string::npos)
+            return false;
+        for (i++; i < json.size() && json[i] != '"'; i++)
+        {
+            if (json[i] != '\\' || i + 1 >= json.size())
+            {
+                s += json[i];
+                continue;
+            }
+            char e = json[++i];
+            if (e == 'n')
+                s += '\n';
+            else if (e == 't')
+                s += '\t';
+            else if (e == 'u' && i + 4 < json.size())
+            {
+                unsigned cp = strtoul(json.substr(i + 1, 4).c_str(), nullptr, 16);
+                i += 4;
+                if (cp < 0x80)
+                    s += (char)cp;
+                else if (cp < 0x800)
+                    s += (char)(0xc0 | (cp >> 6)), s += (char)(0x80 | (cp & 0x3f));
+                else
+                    s += (char)(0xe0 | (cp >> 12)), s += (char)(0x80 | ((cp >> 6) & 0x3f)), s += (char)(0x80 | (cp & 0x3f));
+            }
+            else
+                s += e;
+        }
+        i++;
+        return true;
+    };
+    for (;;)
+    {
+        std::string key, value;
+        if (!readString(key))
+            break;
+        size_t colon = json.find(':', i);
+        if (colon == std::string::npos)
+            break;
+        i = colon + 1;
+        if (!readString(value))
+            break;
+        int n = MultiByteToWideChar(CP_UTF8, 0, value.c_str(), (int)value.size(), nullptr, 0);
+        std::wstring w(n, L'\0');
+        MultiByteToWideChar(CP_UTF8, 0, value.c_str(), (int)value.size(), &w[0], n);
+        for (char& c : key)
+            c = (char)tolower((unsigned char)c);
+        (*out)[key] = w;
+    }
+    return out;
+}
+
+static DWORD WINAPI QuestTexts(LPVOID)
+{
+    typedef void*(__cdecl * CreateInterfaceFn)(const char*, int*);
+    void** loc = nullptr;
+    for (int i = 0; i < 600 && !loc; i++)
+    {
+        HMODULE vgui = GetModuleHandleA("vgui2.dll");
+        CreateInterfaceFn ci = vgui ? (CreateInterfaceFn)GetProcAddress(vgui, "CreateInterface") : nullptr;
+        loc = ci ? (void**)ci("VGUI_Localize003", nullptr) : nullptr;
+        if (!loc)
+            Sleep(1000);
+    }
+    if (!loc)
+    {
+        Log("medal texts: vgui2 ILocalize not found");
+        return 0;
+    }
+    std::string json;
+    for (int i = 0; i < 120 && json.size() < 2; i++)
+    {
+        json = HttpGet(L"/api/questtexts");
+        if (json.size() < 2)
+            Sleep(5000);
+    }
+    if (json.size() < 2)
+    {
+        Log("medal texts: CSNZ_Server didn't answer /api/questtexts, the Medals tab keeps the game's texts");
+        return 0;
+    }
+    g_questTexts = ParseTexts(json);
+
+    void** vt = *(void***)loc;
+    if (vt[3] == (void*)LocFind3)
+        return 0;
+    g_locFind[0] = vt[3];
+    g_locFind[1] = vt[4];
+    DWORD old;
+    VirtualProtect(vt + 3, 2 * sizeof(void*), PAGE_READWRITE, &old);
+    vt[3] = (void*)LocFind3;
+    vt[4] = (void*)LocFind4;
+    VirtualProtect(vt + 3, 2 * sizeof(void*), old, &old);
+    Log("medal texts: %d texts of the Medals tab replaced by the offline conditions", (int)g_questTexts->size());
+    return 0;
+}
+
 static DWORD WINAPI Watcher(LPVOID)
 {
     HMODULE hooked = NULL;
@@ -6375,6 +6518,8 @@ BOOL APIENTRY DllMain(HMODULE self, DWORD reason, LPVOID)
         LoadSettings();
         Log("botassist loaded (%s)", cfg.enabled ? "enabled" : "disabled in botassist.ini");
         CreateThread(NULL, 0, Watcher, NULL, 0, NULL);
+        if (cfg.enabled)
+            CreateThread(NULL, 0, QuestTexts, NULL, 0, NULL);
     }
     return TRUE;
 }

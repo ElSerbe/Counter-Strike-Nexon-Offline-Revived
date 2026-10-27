@@ -77,10 +77,10 @@ index c342dd1..e1994a9 100644
  #ifdef WIN32
  #include <winsock2.h>
 diff --git a/src/definitions.h b/src/definitions.h
-index e96eb5f..59b60bb 100644
+index e96eb5f..0f0ba5b 100644
 --- a/src/definitions.h
 +++ b/src/definitions.h
-@@ -1441,6 +1441,51 @@ enum UserSurveyAnswerResult
+@@ -1441,6 +1441,70 @@ enum UserSurveyAnswerResult
  	ANSWER_DB_ERROR,
  };
  
@@ -114,6 +114,25 @@ index e96eb5f..59b60bb 100644
 +	bool completed;
 +};
 +// offline build: a player's statistic (kills, wins, seconds played...) in one game mode, or in all of them (mode -1)
++// offline build: a medal as the client's honor quest (My Info -> Medals tab), quest ID 2000 + title ID
++struct HonorQuest_s
++{
++	int titleID = 0;
++	int category = 0;  // tab: 1 Scenario, 2 Fun, 3 Zombie, 4 Killer, 5 Family, 6 Worker, 7 Writer
++	bool done = false;
++	std::vector<std::pair<long long, long long>> tasks; // one per requirement: goal, progress
++};
++
++// offline build: a Steam stat for the client's Packet_Steam (SetStat; IndicateAchievementProgress if indicate)
++struct SteamStat_s
++{
++	std::string stat;
++	int value;
++	std::string achievement;
++	int max;
++	bool indicate;
++};
++
 +struct UserCounter_s
 +{
 +	int mode;
@@ -1270,10 +1289,10 @@ index ad8d88a..9844970 100644
  		CUserInventoryItem targetItem;
 diff --git a/src/manager/medalmanager.cpp b/src/manager/medalmanager.cpp
 new file mode 100644
-index 0000000..3e01378
+index 0000000..d5bb116
 --- /dev/null
 +++ b/src/manager/medalmanager.cpp
-@@ -0,0 +1,331 @@
+@@ -0,0 +1,502 @@
 +#include "medalmanager.h"
 +#include "warbondmanager.h"
 +#include "userdatabase.h"
@@ -1310,6 +1329,24 @@ index 0000000..3e01378
 +	return LoadConfig();
 +}
 +
++static MedalCondition ParseCondition(const json& c)
++{
++	MedalCondition cond;
++	cond.counter = c.value("Counter", "");
++	cond.target = c.value("Target", 0LL);
++	cond.modes = c.value("Modes", vector<int>());
++	cond.level = c.value("Level", 0);
++	cond.points = c.value("Points", 0);
++	cond.medals = c.value("Medals", 0);
++	if (c.contains("Own"))
++	{
++		cond.own = c.value("Own", vector<int>());
++		cond.count = c.value("Count", 1);
++		cond.ownAny = cond.own.empty();
++	}
++	return cond;
++}
++
 +bool CMedalManager::LoadConfig()
 +{
 +	ifstream f("Data/Medals.json");
@@ -1333,22 +1370,7 @@ index 0000000..3e01378
 +			medal.lore = m.value("Lore", "");
 +			medal.text = m.value("Text", "");
 +			for (auto& c : m.value("Conditions", json::array()))
-+			{
-+				MedalCondition cond;
-+				cond.counter = c.value("Counter", "");
-+				cond.target = c.value("Target", 0LL);
-+				cond.modes = c.value("Modes", vector<int>());
-+				cond.level = c.value("Level", 0);
-+				cond.points = c.value("Points", 0);
-+				cond.medals = c.value("Medals", 0);
-+				if (c.contains("Own"))
-+				{
-+					cond.own = c.value("Own", vector<int>());
-+					cond.count = c.value("Count", 1);
-+					cond.ownAny = cond.own.empty();
-+				}
-+				medal.conditions.push_back(cond);
-+			}
++				medal.conditions.push_back(ParseCondition(c));
 +			if (medal.id > 0 && medal.id < 1024 && !medal.conditions.empty())
 +				m_Medals.push_back(medal);
 +		}
@@ -1357,7 +1379,36 @@ index 0000000..3e01378
 +	{
 +		Logger().Error("MedalManager: Data/Medals.json: %s\n", e.what());
 +	}
-+	Logger().Info("MedalManager: %d medals\n", (int)m_Medals.size());
++
++	ifstream sf("Data/SteamAchievements.json");
++	json steam = json::parse(sf, nullptr, false, true);
++	m_Steam.clear();
++	if (steam.is_object())
++	{
++		try
++		{
++			m_bSteamEnabled = steam.value("Enabled", true);
++			for (auto& a : steam.value("Achievements", json::array()))
++			{
++				SteamAchievement ach;
++				ach.name = a.value("Name", "");
++				ach.stat = a.value("Stat", "");
++				ach.text = a.value("Text", "");
++				ach.max = a.value("Max", 0);
++				ach.medal = a.value("Medal", 0);
++				for (auto& c : a.value("Conditions", json::array()))
++					ach.conditions.push_back(ParseCondition(c));
++				if (!ach.name.empty() && (ach.medal || !ach.conditions.empty()))
++					m_Steam.push_back(ach);
++			}
++		}
++		catch (exception& e)
++		{
++			Logger().Error("MedalManager: Data/SteamAchievements.json: %s\n", e.what());
++		}
++	}
++	Logger().Info("MedalManager: %d medals, %d Steam achievements%s\n", (int)m_Medals.size(), (int)m_Steam.size(),
++		m_bSteamEnabled ? "" : " (disabled)");
 +	return true;
 +}
 +
@@ -1516,18 +1567,45 @@ index 0000000..3e01378
 +	return !cond.counter.empty() ? cond.target : cond.level ? cond.level : cond.points ? cond.points : cond.medals ? cond.medals : cond.count;
 +}
 +
++MedalContext CMedalManager::Context(IUser* user)
++{
++	MedalContext ctx;
++	CUserCharacter ch = user->GetCharacter(UFLAG_LOW_LEVEL | UFLAG_LOW_POINTS | UFLAG_LOW_ACHIEVEMENTLIST);
++	g_UserDatabase.GetCounters(user->GetID(), ctx.counters);
++	AddPassStats(user, ctx.counters);
++	set<int> ownedSet = g_WarbondManager.OwnedItems(user);
++	ctx.owned.assign(ownedSet.begin(), ownedSet.end());
++	ctx.earned.insert(ch.achievementList.begin(), ch.achievementList.end());
++	ctx.level = ch.level;
++	ctx.points = ch.points;
++	return ctx;
++}
++
++long long CMedalManager::Have(MedalContext& ctx, const MedalCondition& cond, IUser* user)
++{
++	auto it = ctx.totals.find(cond.modes);
++	if (it == ctx.totals.end())
++		it = ctx.totals.emplace(cond.modes, Totals(ctx.counters, cond.modes)).first;
++	return Progress(cond, it->second, user, ctx.level, ctx.points, (int)ctx.earned.size(), ctx.owned);
++}
++
++double CMedalManager::Fraction(MedalContext& ctx, const vector<MedalCondition>& conditions, IUser* user)
++{
++	double least = 1.0;
++	for (auto& cond : conditions)
++	{
++		long long need = Target(cond);
++		if (need > 0)
++			least = min(least, (double)min(Have(ctx, cond, user), need) / need);
++	}
++	return conditions.empty() ? 0.0 : least;
++}
++
 +void CMedalManager::CheckMedals(IUser* user)
 +{
 +	if (!user || m_Medals.empty())
 +		return;
-+	CUserCharacter ch = user->GetCharacter(UFLAG_LOW_LEVEL | UFLAG_LOW_POINTS | UFLAG_LOW_ACHIEVEMENTLIST);
-+	vector<UserCounter_s> counters;
-+	g_UserDatabase.GetCounters(user->GetID(), counters);
-+	AddPassStats(user, counters);
-+	set<int> ownedSet = g_WarbondManager.OwnedItems(user);
-+	vector<int> owned(ownedSet.begin(), ownedSet.end());
-+	set<int> earned(ch.achievementList.begin(), ch.achievementList.end());
-+	map<vector<int>, map<string, long long>> totals;
++	MedalContext ctx = Context(user);
 +
 +	// a medal can complete another ("earn N medals"): until nothing changes
 +	for (bool changed = true; changed;)
@@ -1535,23 +1613,18 @@ index 0000000..3e01378
 +		changed = false;
 +		for (auto& m : m_Medals)
 +		{
-+			if (earned.count(m.id))
++			if (ctx.earned.count(m.id))
 +				continue;
 +			bool done = true;
 +			for (auto& cond : m.conditions)
-+			{
-+				auto it = totals.find(cond.modes);
-+				if (it == totals.end())
-+					it = totals.emplace(cond.modes, Totals(counters, cond.modes)).first;
-+				if (Progress(cond, it->second, user, ch.level, ch.points, (int)earned.size(), owned) < Target(cond))
++				if (Have(ctx, cond, user) < Target(cond))
 +				{
 +					done = false;
 +					break;
 +				}
-+			}
 +			if (!done)
 +				continue;
-+			earned.insert(m.id);
++			ctx.earned.insert(m.id);
 +			changed = true;
 +			user->UpdateAchievementList(m.id);
 +			g_PacketManager.SendTitle(user->GetExtendedSocket(), m.id);
@@ -1559,6 +1632,135 @@ index 0000000..3e01378
 +			Logger().Info("MedalManager: user %d earned medal %d (%s)\n", user->GetID(), m.id, m.resource.c_str());
 +		}
 +	}
++
++	SendHonorQuests(user, ctx);
++	SendSteam(user, ctx);
++}
++
++// ---------------------------------------------------------------- the game's Medals tab and Steam
++
++// medal group (Data/Medals.json) -> tab of My Info's Medals tab (1 Scenario, 2 Fun, 3 Zombie, 4 Killer, 5 Family,
++// 6 Worker, 7 Writer); every medal is also in "View All"
++static int HonorCategory(const string& group)
++{
++	static const map<string, int> tabs = { { "Scenario", 1 }, { "Soccer", 2 }, { "Prop Hunt", 2 }, { "Zombie", 3 },
++		{ "Zombie Z", 3 }, { "Zombie Evolution", 3 }, { "Ranking", 4 }, { "Combat", 4 }, { "Original", 4 },
++		{ "Team Deathmatch", 4 }, { "Account", 6 }, { "Missions", 6 }, { "Collection", 6 }, { "Seasons", 6 },
++		{ "Studio", 7 } };
++	auto it = tabs.find(group);
++	return it == tabs.end() ? 0 : it->second;
++}
++
++void CMedalManager::SendHonorQuests(IUser* user, MedalContext& ctx)
++{
++	vector<HonorQuest_s> quests;
++	for (auto& m : m_Medals)
++	{
++		HonorQuest_s q;
++		q.titleID = m.id;
++		q.category = HonorCategory(m.group);
++		q.done = ctx.earned.count(m.id) > 0;
++		for (auto& cond : m.conditions)
++		{
++			long long need = max(1LL, Target(cond));
++			q.tasks.push_back({ need, q.done ? need : min(Have(ctx, cond, user), need) });
++		}
++		quests.push_back(q);
++	}
++	g_PacketManager.SendHonorQuests(user->GetExtendedSocket(), quests, (int)ctx.points);
++}
++
++void CMedalManager::SetSteamClient(IExtendedSocket* socket, bool steam)
++{
++	if (steam)
++		m_SteamSockets.insert(socket->GetID());
++	else
++		m_SteamSockets.erase(socket->GetID());
++}
++
++void CMedalManager::SendSteam(IUser* user, MedalContext& ctx)
++{
++	IExtendedSocket* socket = user->GetExtendedSocket();
++	if (!m_bSteamEnabled || m_Steam.empty() || !socket || !m_SteamSockets.count(socket->GetID()))
++		return;
++
++	bool first = m_SteamSent.find(user->GetID()) == m_SteamSent.end();
++	map<string, int>& last = m_SteamSent[user->GetID()];
++
++	vector<SteamStat_s> stats;
++	vector<string> unlocked;
++	double bestStep = 0;
++	int indicate = -1;
++	for (auto& a : m_Steam)
++	{
++		double fraction;
++		bool done;
++		if (a.medal)
++		{
++			done = ctx.earned.count(a.medal) > 0;
++			const Medal* medal = NULL;
++			for (auto& m : m_Medals)
++				if (m.id == a.medal)
++					medal = &m;
++			fraction = done ? 1.0 : medal ? Fraction(ctx, medal->conditions, user) : 0.0;
++		}
++		else
++		{
++			fraction = Fraction(ctx, a.conditions, user);
++			done = fraction >= 1.0;
++		}
++		if (done)
++			unlocked.push_back(a.name);
++		if (a.stat.empty() || a.max <= 0)
++			continue;
++
++		int value = done ? a.max : min(a.max - 1, (int)(fraction * a.max));
++		auto prev = last.find(a.stat);
++		if (prev != last.end() && prev->second >= value)
++			continue; // Steam stats only go up
++		// the Steam overlay shows the progress of one achievement per update: the furthest one that passed a quarter
++		int before = prev == last.end() ? 0 : prev->second;
++		if (!first && !done && value * 4 / a.max > before * 4 / a.max && fraction > bestStep)
++		{
++			bestStep = fraction;
++			indicate = (int)stats.size();
++		}
++		stats.push_back({ a.stat, value, a.name, a.max, false });
++		last[a.stat] = value;
++	}
++	if (indicate >= 0)
++		stats[indicate].indicate = true;
++
++	g_PacketManager.SendSteamStats(socket, stats, unlocked);
++	if (first)
++		Logger().Info("MedalManager: Steam for user %d: %d stats, %d achievements unlocked\n", user->GetID(),
++			(int)stats.size(), (int)unlocked.size());
++}
++
++json CMedalManager::QuestTexts() const
++{
++	json texts = json::object();
++	for (auto& m : m_Medals)
++	{
++		string key = "CSO_Quest" + to_string(2000 + m.id);
++		texts[key + "_Desc1"] = m.text;
++		// one text per requirement (the game's "Cond" lines), from the medal's text "a; b; c"
++		vector<string> parts;
++		size_t start = 0;
++		for (;;)
++		{
++			size_t end = m.text.find("; ", start);
++			parts.push_back(m.text.substr(start, end == string::npos ? string::npos : end - start));
++			if (end == string::npos)
++				break;
++			start = end + 2;
++		}
++		if (parts.size() != m.conditions.size())
++			parts.assign(m.conditions.size(), m.text);
++		for (size_t i = 0; i < parts.size(); i++)
++			texts[key + "_Cond" + to_string(i + 1)] = parts[i];
++	}
++	return texts;
 +}
 +
 +// ---------------------------------------------------------------- profile page
@@ -1566,16 +1768,11 @@ index 0000000..3e01378
 +json CMedalManager::BuildProfile(IUser* user)
 +{
 +	CUserCharacter ch = user->GetCharacter(UFLAG_LOW_ALL);
-+	vector<UserCounter_s> counters;
-+	g_UserDatabase.GetCounters(user->GetID(), counters);
-+	AddPassStats(user, counters);
-+	set<int> ownedSet = g_WarbondManager.OwnedItems(user);
-+	vector<int> owned(ownedSet.begin(), ownedSet.end());
-+	set<int> earned(ch.achievementList.begin(), ch.achievementList.end());
++	MedalContext ctx = Context(user);
 +
 +	json total = json::object();
 +	json modes = json::object();
-+	for (auto& c : counters)
++	for (auto& c : ctx.counters)
 +	{
 +		if (c.name == "LastPlayDay")
 +			continue;
@@ -1585,21 +1782,14 @@ index 0000000..3e01378
 +			modes[to_string(c.mode)][c.name] = c.value;
 +	}
 +
-+	map<vector<int>, map<string, long long>> totals;
 +	json medals = json::array();
 +	for (auto& m : m_Medals)
 +	{
 +		json progress = json::array();
 +		for (auto& cond : m.conditions)
-+		{
-+			auto it = totals.find(cond.modes);
-+			if (it == totals.end())
-+				it = totals.emplace(cond.modes, Totals(counters, cond.modes)).first;
-+			long long have = Progress(cond, it->second, user, ch.level, ch.points, (int)earned.size(), owned);
-+			progress.push_back({ { "have", min(have, Target(cond)) }, { "need", Target(cond) } });
-+		}
++			progress.push_back({ { "have", min(Have(ctx, cond, user), Target(cond)) }, { "need", Target(cond) } });
 +		medals.push_back({ { "id", m.id }, { "name", m.name }, { "group", m.group }, { "text", m.text }, { "lore", m.lore },
-+			{ "earned", earned.count(m.id) > 0 }, { "progress", progress } });
++			{ "earned", ctx.earned.count(m.id) > 0 }, { "progress", progress } });
 +	}
 +
 +	return { { "name", ch.gameName }, { "level", ch.level }, { "exp", ch.exp }, { "medals", ch.points },
@@ -1607,24 +1797,26 @@ index 0000000..3e01378
 +}
 diff --git a/src/manager/medalmanager.h b/src/manager/medalmanager.h
 new file mode 100644
-index 0000000..d8db753
+index 0000000..745d383
 --- /dev/null
 +++ b/src/manager/medalmanager.h
-@@ -0,0 +1,67 @@
+@@ -0,0 +1,107 @@
 +#pragma once
 +
 +#include <string>
 +#include <vector>
 +#include <map>
++#include <set>
 +
 +#include "interface/imedalmanager.h"
 +#include "manager.h"
 +#include "nlohmann/json.hpp"
++#include "definitions.h"
 +
 +class CGameMatch;
++class IExtendedSocket;
 +class CGameMatchUserStat;
 +struct GameMatch_KillEvent;
-+struct UserCounter_s;
 +
 +// one requirement of a medal (Data/Medals.json "Conditions"): all of them must hold
 +struct MedalCondition
@@ -1647,6 +1839,28 @@ index 0000000..d8db753
 +	std::vector<MedalCondition> conditions;
 +};
 +
++// a Steam achievement of the game (Data/SteamAchievements.json, tools/gen_steam_achievements.py): unlocked with a
++// medal, or by its own conditions; `stat` (if any) is its progress bar in Steam, 0..max
++struct SteamAchievement
++{
++	std::string name, stat, text;
++	int max = 0;
++	int medal = 0;
++	std::vector<MedalCondition> conditions;
++};
++
++// what a player has towards the medals: statistics (summed per mode list, cached), level, medals held and earned,
++// items owned
++struct MedalContext
++{
++	std::vector<UserCounter_s> counters;
++	std::map<std::vector<int>, std::map<std::string, long long>> totals;
++	int level = 0;
++	long long points = 0;
++	std::set<int> earned;
++	std::vector<int> owned;
++};
++
 +class CMedalManager : public CBaseManager<IMedalManager>
 +{
 +public:
@@ -1663,6 +1877,12 @@ index 0000000..d8db753
 +
 +	// GET /api/profile
 +	nlohmann::json BuildProfile(IUser* user);
++	// GET /api/questtexts (botassist): the medals' texts in the game's Medals tab, CSO_Quest<2000+id>_Desc1 / _Cond<n>
++	nlohmann::json QuestTexts() const;
++
++	// the client logged in through Steam (login packet): only then the Steam packet may be sent (the game has no
++	// ISteamUserStats otherwise and would crash on it)
++	void SetSteamClient(IExtendedSocket* socket, bool steam);
 +
 +private:
 +	bool LoadConfig();
@@ -1671,9 +1891,19 @@ index 0000000..d8db753
 +		int level, long long points, int earned, const std::vector<int>& owned) const;
 +	std::map<std::string, long long> Totals(const std::vector<UserCounter_s>& counters, const std::vector<int>& modes) const;
 +	void AddPassStats(IUser* user, std::vector<UserCounter_s>& counters);
++	MedalContext Context(IUser* user);
++	long long Have(MedalContext& ctx, const MedalCondition& cond, IUser* user);
++	// 0..1: the least complete requirement of a list
++	double Fraction(MedalContext& ctx, const std::vector<MedalCondition>& conditions, IUser* user);
++	void SendHonorQuests(IUser* user, MedalContext& ctx);
++	void SendSteam(IUser* user, MedalContext& ctx);
 +
 +	std::vector<Medal> m_Medals;
 +	std::vector<std::string> m_Groups;
++	std::vector<SteamAchievement> m_Steam;
++	bool m_bSteamEnabled = true;
++	std::set<unsigned int> m_SteamSockets;
++	std::map<int, std::map<std::string, int>> m_SteamSent; // user -> stat -> value last sent
 +};
 +
 +extern CMedalManager g_MedalManager;
@@ -2244,7 +2474,7 @@ index 0000000..6175716
 +
 +extern CMissionManager g_MissionManager;
 diff --git a/src/manager/packetmanager.cpp b/src/manager/packetmanager.cpp
-index 0defb02..94edd28 100644
+index 0defb02..9f56bb4 100644
 --- a/src/manager/packetmanager.cpp
 +++ b/src/manager/packetmanager.cpp
 @@ -892,7 +892,7 @@ void CPacketManager::SendMetadataUnk8(IExtendedSocket* socket)
@@ -2337,8 +2567,91 @@ index 0defb02..94edd28 100644
  		msg->WriteUInt8(0); // frag kills
  		msg->WriteUInt8(0); // knife kills
  
+@@ -6072,7 +6128,82 @@ void CPacketManager::SendTitle(IExtendedSocket* socket, int id)
+ 
+ 	msg->WriteUInt8(0);
+ 	msg->WriteUInt16(id);
++	msg->WriteUInt8(0); // read by the client too (Packet_Title type 0: u16 title, u8), passed to its listeners
++
++	socket->Send(msg);
++}
++
++// offline build: the medals as the client's honor quests (hw.dll Packet_Quest type 1, the full quest list): they are
++// what My Info's Medals tab shows, with a gauge per requirement. Quest ID = 2000 + title ID.
++void CPacketManager::SendHonorQuests(IExtendedSocket* socket, const vector<HonorQuest_s>& quests, int honorPoints)
++{
++	CSendPacket* msg = CreatePacket(socket, PacketId::Quest);
++	msg->BuildHeader();
+ 
++	msg->WriteUInt8(1);
++	msg->WriteUInt8(0); // kept by the quest manager (+100), unknown
++	msg->WriteUInt16(quests.size());
++	for (auto& q : quests)
++	{
++		// main info: flag 1 present, 2 type, 0x20 status, 0x400 title, 0x800 tab; any flag adds the "hidden" byte
++		msg->WriteUInt32(2000 + q.titleID);
++		msg->WriteUInt16(0x1 | 0x2 | 0x20 | 0x400 | 0x800);
++		msg->WriteUInt8(0);                 // hidden: 0 shows the medal's name and text
++		msg->WriteUInt8(2);                 // type: honor
++		msg->WriteUInt8(q.done ? 2 : 0);    // status: 0 in progress, 1 done, 2 done and rewarded
++		msg->WriteUInt16(q.titleID);
++		msg->WriteUInt8(q.category);
++
++		// tasks (the requirements): flag 1 present, 4 goals (cumulative, one per stage), 8 progress
++		msg->WriteUInt8(q.tasks.size());
++		for (size_t i = 0; i < q.tasks.size(); i++)
++		{
++			msg->WriteUInt8(i);
++			msg->WriteUInt8(0x1 | 0x4 | 0x8);
++			msg->WriteUInt8(1);
++			msg->WriteUInt32((unsigned int)min(q.tasks[i].first, 0x7fffffffLL));
++			msg->WriteUInt32((unsigned int)min(q.tasks[i].second, 0x7fffffffLL));
++		}
++		msg->WriteUInt8(0); // no rewards
++	}
++	// quest stat: flag 1 = honor points (the Medals tab's "Honor Points": the medals currency here)
++	msg->WriteUInt16(1);
++	msg->WriteUInt32(honorPoints);
++
++	socket->Send(msg);
++}
++
++// offline build: the game's Steam achievements (hw.dll Packet_Steam, id 192, calls ISteamUserStats). Type 0: stats
++// (SetStat, optionally IndicateAchievementProgress); type 1: achievements (SetAchievement), then StoreStats.
++// Only for clients started through Steam: the game has no ISteamUserStats otherwise.
++void CPacketManager::SendSteamStats(IExtendedSocket* socket, const vector<SteamStat_s>& stats, const vector<string>& achievements)
++{
++	if (!stats.empty())
++	{
++		CSendPacket* msg = CreatePacket(socket, PacketId::Steam);
++		msg->BuildHeader();
++		msg->WriteUInt8(0);
++		msg->WriteUInt16(stats.size());
++		for (auto& s : stats)
++		{
++			msg->WriteString(s.stat);
++			msg->WriteUInt32(s.value);
++			msg->WriteUInt8(s.indicate);
++			if (s.indicate)
++			{
++				msg->WriteUInt32(s.max);
++				msg->WriteString(s.achievement);
++			}
++		}
++		socket->Send(msg);
++	}
++
++	CSendPacket* msg = CreatePacket(socket, PacketId::Steam);
++	msg->BuildHeader();
++	msg->WriteUInt8(1);
++	msg->WriteUInt16(achievements.size());
++	for (auto& a : achievements)
++		msg->WriteString(a);
+ 	socket->Send(msg);
+ }
+ 
 diff --git a/src/manager/packetmanager.h b/src/manager/packetmanager.h
-index b9ca2f3..76eb9b9 100644
+index b9ca2f3..a92e620 100644
 --- a/src/manager/packetmanager.h
 +++ b/src/manager/packetmanager.h
 @@ -96,7 +96,7 @@ public:
@@ -2368,6 +2681,70 @@ index b9ca2f3..76eb9b9 100644
  	void SendRoomPlayerLeaveIngame(IExtendedSocket* socket);
  	void SendRoomInviteUserList(IExtendedSocket* socket, IUser* user);
  	void SendRoomGameResult(IExtendedSocket* socket, IRoom* room, CGameMatch* match);
+@@ -232,6 +234,8 @@ public:
+ 	void SendUpdateInfoNicknameChangeReply(IExtendedSocket* socket, int replyCode);
+ 
+ 	void SendTitle(IExtendedSocket* socket, int id);
++	void SendHonorQuests(IExtendedSocket* socket, const std::vector<HonorQuest_s>& quests, int honorPoints);
++	void SendSteamStats(IExtendedSocket* socket, const std::vector<SteamStat_s>& stats, const std::vector<std::string>& achievements);
+ 
+ 	void SendUDPHostData(IExtendedSocket* socket, bool host, int userID, const std::string& ipAddress, int port);
+ 
+diff --git a/src/manager/questmanager.cpp b/src/manager/questmanager.cpp
+index 223166a..9b3a5a0 100644
+--- a/src/manager/questmanager.cpp
++++ b/src/manager/questmanager.cpp
+@@ -1,4 +1,5 @@
+ #include "questmanager.h"
++#include <algorithm>
+ #include "itemmanager.h"
+ #include "usermanager.h"
+ #include "userdatabase.h"
+@@ -560,20 +561,18 @@ void CQuestManager::OnSetFavouriteRequest(IUser* user, CReceivePacket* msg)
+ 	g_PacketManager.SendQuestUpdateMainInfo(user->GetExtendedSocket(), 0xFFFF, quest, questProgress);
+ }
+ 
++// offline build: medals come from CMedalManager (the achievement list), there are no honor CQuest objects
++static bool HasMedal(IUser* user, int titleID)
++{
++	CUserCharacter character = user->GetCharacter(UFLAG_LOW_ACHIEVEMENTLIST);
++	return find(character.achievementList.begin(), character.achievementList.end(), titleID) != character.achievementList.end();
++}
++
+ void CQuestManager::OnTitleSetPrefixRequest(IUser* user, CReceivePacket* msg)
+ {
+ 	int titleID = msg->ReadInt16();
+-	if (titleID != 0)
+-	{
+-		int honorQuestID = titleID + 2000;
+-		CQuest* quest = GetQuest(honorQuestID);
+-		if (!quest)
+-			return;
+-
+-		UserQuestProgress questProgress = GetUserQuestProgress(quest, user->GetID());
+-		if (questProgress.status == UserQuestStatus::QUEST_IN_PROGRESS)
+-			return;
+-	}
++	if (titleID != 0 && !HasMedal(user, titleID))
++		return;
+ 
+ 	user->UpdatePrefix(titleID);
+ }
+@@ -583,13 +582,7 @@ void CQuestManager::OnTitleListSetRequest(IUser* user, CReceivePacket* msg)
+ 	int slot = msg->ReadInt8();
+ 	int titleID = msg->ReadInt16();
+ 
+-	int honorQuestID = titleID + 2000;
+-	CQuest* quest = GetQuest(honorQuestID);
+-	if (!quest)
+-		return;
+-
+-	UserQuestProgress questProgress = GetUserQuestProgress(quest, user->GetID());
+-	if (questProgress.status == UserQuestStatus::QUEST_IN_PROGRESS)
++	if (slot < 0 || slot >= 5 || !HasMedal(user, titleID))
+ 		return;
+ 
+ 	user->UpdateTitles(slot, titleID);
 diff --git a/src/manager/userdatabase.cpp b/src/manager/userdatabase.cpp
 index 0d23de4..52dbc67 100644
 --- a/src/manager/userdatabase.cpp
@@ -2872,7 +3249,7 @@ index 0e1d7d2..a6efa65 100644
  
  	// clan related
 diff --git a/src/manager/usermanager.cpp b/src/manager/usermanager.cpp
-index b426874..7b10fda 100644
+index b426874..952a7f4 100644
 --- a/src/manager/usermanager.cpp
 +++ b/src/manager/usermanager.cpp
 @@ -1,3 +1,4 @@
@@ -2889,7 +3266,19 @@ index b426874..7b10fda 100644
  
  using namespace std;
  
-@@ -316,7 +319,7 @@ bool CUserManager::OnVersionPacket(CReceivePacket* msg, IExtendedSocket* socket)
+@@ -157,6 +160,11 @@ bool CUserManager::OnLoginPacket(CReceivePacket* msg, IExtendedSocket* socket)
+ 
+ 	socket->SetHWID(hwid);
+ 
++	// offline build: a client without Steam has no ISteamUserStats, the Steam achievement packet would crash it
++	bool steam = !steamID.empty() && steamID != "0" && !authSessionTicket.empty();
++	g_MedalManager.SetSteamClient(socket, steam);
++	Logger().Info("Client (%s) Steam: %s\n", socket->GetIP().c_str(), steam ? "yes" : "no (no Steam achievements)");
++
+ 	if (g_UserDatabase.IsHWIDBanned(hwid))
+ 	{
+ 		Logger().Info("Client (%s) disconnected from the server due to banned HWID\n", socket->GetIP().c_str());
+@@ -316,7 +324,7 @@ bool CUserManager::OnVersionPacket(CReceivePacket* msg, IExtendedSocket* socket)
  		GuestData_s& data = socket->GetGuestData();
  		if (!data.isGuest)
  			g_PacketManager.SendVersion(socket, 0);
@@ -2898,7 +3287,7 @@ index b426874..7b10fda 100644
  			SendGuestUserPacket(socket);
  
  		data.isGuest = true;
-@@ -630,6 +633,252 @@ void CUserManager::SendGuestUserPacket(IExtendedSocket* socket)
+@@ -630,6 +638,252 @@ void CUserManager::SendGuestUserPacket(IExtendedSocket* socket)
  	g_PacketManager.SendUMsgNoticeMessageInChat(socket, OBFUSCATE("Server developers: Jusic, Hardee, NekoMeow, Smilex_Gamer, xRiseless. Our Discord: https://discord.gg/EvUAY6D"));
  }
  
@@ -3151,7 +3540,7 @@ index b426874..7b10fda 100644
  void CUserManager::SendLoginPacket(IUser* user, const CUserCharacter& character)
  {
  	IExtendedSocket* socket = user->GetExtendedSocket();
-@@ -659,7 +908,9 @@ void CUserManager::SendLoginPacket(IUser* user, const CUserCharacter& character)
+@@ -659,7 +913,9 @@ void CUserManager::SendLoginPacket(IUser* user, const CUserCharacter& character)
  
  	g_PacketManager.SendEventUnk(socket);
  
@@ -3162,7 +3551,7 @@ index b426874..7b10fda 100644
  
  	if (g_pServerConfig->activeMiniGamesFlag & kEventFlag_WeaponRelease)
  		g_MiniGameManager.SendWeaponReleaseUpdate(user);
-@@ -879,6 +1130,7 @@ bool CUserManager::OnCharacterPacket(CReceivePacket* msg, IExtendedSocket* socke
+@@ -879,6 +1135,7 @@ bool CUserManager::OnCharacterPacket(CReceivePacket* msg, IExtendedSocket* socke
  	g_QuestManager.OnUserLogin(user);
  
  	SendLoginPacket(user, character);
@@ -3170,7 +3559,7 @@ index b426874..7b10fda 100644
  
  	return true;
  }
-@@ -989,6 +1241,15 @@ void CUserManager::OnSecondTick(time_t curTime)
+@@ -989,6 +1246,15 @@ void CUserManager::OnSecondTick(time_t curTime)
  {
  	for (auto u : m_Users)
  		u->OnTick();
@@ -3186,7 +3575,7 @@ index b426874..7b10fda 100644
  }
  
  void CUserManager::SendNoticeMessageToAll(const string& msg)
-@@ -1082,6 +1343,7 @@ int CUserManager::LoginUser(IExtendedSocket* socket, const string& userName, con
+@@ -1082,6 +1348,7 @@ int CUserManager::LoginUser(IExtendedSocket* socket, const string& userName, con
  		g_QuestManager.OnUserLogin(newUser);
  
  		SendLoginPacket(newUser, character);
@@ -3194,7 +3583,7 @@ index b426874..7b10fda 100644
  	}
  
  	return LOGIN_OK;
-@@ -1285,7 +1547,7 @@ bool CUserManager::OnUserSurveyPacket(CReceivePacket* msg, IExtendedSocket* sock
+@@ -1285,7 +1552,7 @@ bool CUserManager::OnUserSurveyPacket(CReceivePacket* msg, IExtendedSocket* sock
  
  	IUser* user = GetUserBySocket(socket);
  	if (user == NULL)
@@ -3227,10 +3616,10 @@ index 3054001..9c14f6b 100644
  	void SendUserLoadout(IUser* user);
 diff --git a/src/manager/warbondmanager.cpp b/src/manager/warbondmanager.cpp
 new file mode 100644
-index 0000000..8f338a6
+index 0000000..b7862ef
 --- /dev/null
 +++ b/src/manager/warbondmanager.cpp
-@@ -0,0 +1,945 @@
+@@ -0,0 +1,950 @@
 +#include "warbondmanager.h"
 +#include "usermanager.h"
 +#include "userdatabase.h"
@@ -3418,6 +3807,11 @@ index 0000000..8f338a6
 +			bots.push_back(bot);
 +		}
 +		result = { { "mode", g_LastMatchMode }, { "hostTeam", g_LastMatchHostTeam }, { "bots", bots } };
++	}
++	else if (req.method == "GET" && req.path == "/api/questtexts")
++	{
++		// for botassist.asi: the medals' offline conditions replace the game's texts in My Info's Medals tab
++		result = g_MedalManager.QuestTexts();
 +	}
 +	else if (!user)
 +	{
@@ -5474,7 +5868,7 @@ index d15aa0c..dd80aea 160000
 -Subproject commit d15aa0c3789fdd6765b010886a09e9eac021b06f
 +Subproject commit dd80aeab4293d1e11e31af20fabfd538d88625ef-dirty
 diff --git a/src/user/user.cpp b/src/user/user.cpp
-index 079d40e..11bbd25 100644
+index 079d40e..c9efe2f 100644
 --- a/src/user/user.cpp
 +++ b/src/user/user.cpp
 @@ -2,6 +2,7 @@
@@ -5504,3 +5898,11 @@ index 079d40e..11bbd25 100644
  }
  
  int CUser::UpdatePasswordBoxes(int passwordBoxes)
+@@ -336,6 +342,7 @@ int CUser::UpdatePasswordBoxes(int passwordBoxes)
+ void CUser::UpdateTitles(int slot, int titleID)
+ {
+ 	CUserCharacter character = GetCharacter(UFLAG_LOW_TITLES);
++	character.titles.resize(5); // empty for a new character
+ 	character.titles[slot] = titleID;
+ 
+ 	g_UserDatabase.UpdateCharacter(m_nID, character);
