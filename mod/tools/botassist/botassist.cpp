@@ -1080,6 +1080,7 @@ struct MatchBot
     std::string name;
     int team = 2, primary = 0, secondary = 0, melee = 0, character = 0, skill = -1;
     std::vector<int> allowPrimary, allowSecondary, allowMelee; // weapon filter: random weapons come from these
+    std::vector<int> allowCharacter; // the filter's characters (both teams): a random character comes from them
     void* edict = nullptr; // the bot playing it
     bool fakePlayer = false; // Zombie Giant: played by a fake player who can be the giant (no bot), see ZgPlayer
 };
@@ -1180,6 +1181,7 @@ static DWORD WINAPI FetchMatchBots(LPVOID)
         m.allowPrimary = JsonInts(obj, "allowPrimary");
         m.allowSecondary = JsonInts(obj, "allowSecondary");
         m.allowMelee = JsonInts(obj, "allowMelee");
+        m.allowCharacter = JsonInts(obj, "allowCharacter");
         // a filter whose slot is "None" ([-1]): a bot with a random weapon there gets none
         auto none = [](int& slot, std::vector<int>& allow) {
             bool isNone = std::find(allow.begin(), allow.end(), -1) != allow.end();
@@ -1200,9 +1202,9 @@ static DWORD WINAPI FetchMatchBots(LPVOID)
     InterlockedExchange(&g_matchFetch, 2);
     Log("room AI players for this match: %d%s", (int)bots.size(), json.empty() ? " (server not reachable)" : "");
     for (auto& m : bots)
-        Log("  '%s' team %d, primary %d, secondary %d, melee %d, character %d, skill %d, filter %d/%d/%d weapons",
+        Log("  '%s' team %d, primary %d, secondary %d, melee %d, character %d, skill %d, filter %d/%d/%d weapons, %d characters",
             m.name.c_str(), m.team, m.primary, m.secondary, m.melee, m.character, m.skill, (int)m.allowPrimary.size(),
-            (int)m.allowSecondary.size(), (int)m.allowMelee.size());
+            (int)m.allowSecondary.size(), (int)m.allowMelee.size(), (int)m.allowCharacter.size());
     return 0;
 }
 
@@ -2362,8 +2364,9 @@ static int BuyAliasSlot(const char* cmd)
     return 0;
 }
 
-// the character a bot joins as: its room AI player's (if of its team), else a random one in co-op modes, else 0.
-// Returns the class number the game takes (InGameID).
+// the character a bot joins as: its room AI player's (if of its team); a room AI player on Random gets one of its
+// filter's characters of its team, or any character of its team when the filter has none; other bots get a random
+// one in co-op modes, else 0. Returns the class number the game takes (InGameID).
 static int BotCharacter(void* bot, int team)
 {
     LoadNav();
@@ -2377,9 +2380,18 @@ static int BotCharacter(void* bot, int team)
         if (rb && rb->character > 0)
             Log("bot '%s': character %d is of the other team (bot on team %d): not used", rb->name.c_str(),
                 rb->character, team);
-        if (!cfg.randomCharacters || !CoopMode() || (team != 1 && team != 2) || cfg.characters[team].empty())
+        if (team != 1 && team != 2)
             return 0;
-        id = cfg.characters[team][rand() % cfg.characters[team].size()];
+        std::vector<int> pool;
+        if (rb)
+            for (int c : rb->allowCharacter)
+                if (CharacterFits(c, team) && CharacterClassNumber(c))
+                    pool.push_back(c);
+        if (pool.empty() && cfg.randomCharacters && (rb || CoopMode()))
+            pool = cfg.characters[team];
+        if (pool.empty())
+            return 0;
+        id = pool[rand() % pool.size()];
     }
     StateFor(bot).appliedClass = id;
     int number = CharacterClassNumber(id);
@@ -4863,6 +4875,18 @@ static struct
 } g_cheats;
 static float g_consoleNextCheck = -1;
 static void CalibrateEdict(void* edict);
+static bool HttpPost(const wchar_t* path, const char* body);
+static volatile LONG g_cheatsReported = 0; // 0 not yet in this match, 1 sending or told
+
+// sv_cheats is on: CSNZ_Server cuts this match's medals (POST /api/cheats); a failed call is tried again later
+static DWORD WINAPI ReportCheats(LPVOID)
+{
+    bool told = HttpPost(L"/api/cheats", "{}");
+    Log("sv_cheats is on: %s", told ? "the server cuts this match's medals" : "server not reachable, trying again");
+    if (!told)
+        InterlockedExchange(&g_cheatsReported, 0);
+    return 0;
+}
 
 static void Con(const char* fmt, ...)
 {
@@ -5106,6 +5130,7 @@ static void ConsoleFrame()
             Log("console: new map, cheats off");
         g_cheats.god = g_cheats.noclip = g_cheats.notarget = g_cheats.fly = false;
         g_consoleNextCheck = -1;
+        InterlockedExchange(&g_cheatsReported, 0);
     }
     g_cheats.lastFrame = now;
     g_cheats.lastTick = GetTickCount();
@@ -5113,6 +5138,14 @@ static void ConsoleFrame()
     {
         g_consoleNextCheck = now + 2.0f;
         InstallConsoleCommands();
+        if (g_CVarGetFloat && g_CVarGetFloat("sv_cheats") != 0.0f && !InterlockedExchange(&g_cheatsReported, 1))
+        {
+            HANDLE h = CreateThread(NULL, 0, ReportCheats, NULL, 0, NULL);
+            if (h)
+                CloseHandle(h);
+            else
+                InterlockedExchange(&g_cheatsReported, 0);
+        }
     }
     if (!(g_cheats.god || g_cheats.noclip || g_cheats.notarget || g_cheats.fly))
         return;

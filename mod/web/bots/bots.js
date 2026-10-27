@@ -10,8 +10,9 @@
     "Yuki", "Bruno", "Elena", "Tariq", "Ivan", "Chloe", "Marco", "Aiko", "Pablo", "Ingrid", "Dmitri", "Rosa", "Felix",
     "Leila", "Hugo", "Sora", "Mateo", "Freya", "Kofi", "Carmen", "Axel", "Nina", "Joon", "Vera", "Emil", "Iris",
     "Santi", "Greta"];
-  // Counter-Strike 1.6's own weapons: pistols 1-6, shotguns..machine gun 7-24, the default knife
-  const CLASSIC = { primary: range(7, 24), secondary: range(1, 6), melee: [161] };
+  // Counter-Strike 1.6's own weapons (pistols 1-6, shotguns..machine gun 7-24, the default knife) and characters
+  // (Guerilla, Phoenix, L337, Arctic; SEAL, GSG-9, GIGN, SAS)
+  const CLASSIC = { primary: range(7, 24), secondary: range(1, 6), melee: [161], character: [40, 41, 42, 43, 49, 50, 51, 52] };
 
   const $ = id => document.getElementById(id);
   let room = null;          // {host, mode, maxPlayers, players, bots: [...]}
@@ -24,7 +25,11 @@
   let saveTimer = null;
   let newTeam = 2;
   let newPreset = 0;
-  try { newPreset = +(localStorage.getItem("bots.newPreset") || 0); } catch (e) { /* no storage */ }
+  let newSkill = -1;        // -1: the room's AI difficulty
+  try {
+    newPreset = +(localStorage.getItem("bots.newPreset") || 0);
+    newSkill = +(localStorage.getItem("bots.newSkill") || -1);
+  } catch (e) { /* no storage */ }
 
   function range(a, b) { const r = []; for (let i = a; i <= b; i++) r.push(i); return r; }
 
@@ -65,7 +70,7 @@
     if (body && (body.action === "add" || body.action === "fill")) {
       const n = body.action === "fill" ? mock.maxPlayers - mock.players : body.count || 1;
       for (let i = 0; i < n && mock.bots.length + 1 < mock.maxPlayers; i++)
-        mock.bots.push({ id: Date.now() + i, name: NAMES[mock.bots.length % NAMES.length], level: 20, team: body.team || 2, primary: 0, secondary: 0, melee: 0, character: 0, skill: -1, preset: body.preset || 0 });
+        mock.bots.push({ id: Date.now() + i, name: NAMES[mock.bots.length % NAMES.length], level: 20, team: body.team || 2, primary: 0, secondary: 0, melee: 0, character: 0, skill: body.skill === undefined ? -1 : body.skill, preset: body.preset || 0 });
     }
     if (body && body.action === "update") Object.assign(mock.bots.find(b => b.id === body.id), body, { action: undefined });
     if (body && body.action === "remove") mock.bots = mock.bots.filter(b => b.id !== body.id);
@@ -109,6 +114,9 @@
     if (!presets.some(p => p.id === newPreset)) newPreset = 0;
     $("newpreset").innerHTML = opts;
     $("newpreset").value = String(newPreset);
+    if (!$("newskill").options.length)
+      $("newskill").innerHTML = `<option value="-1">Room skill</option>` + SKILLS.map((s, i) => `<option value="${i}">${s}</option>`).join("");
+    $("newskill").value = String(newSkill >= 0 && newSkill < SKILLS.length ? newSkill : -1);
   }
 
   function renderList() {
@@ -183,7 +191,7 @@
       return `${it && it.icon ? `<img src="${it.icon}" alt="">` : ""}<span class="pn">${esc(it ? it.name : "#" + id)}</span>`;
     }
     if (filterNone(filter, slot)) return `<span class="none">&#10005;</span><span class="pn">None (${esc(filter.name)})</span>`;
-    const text = filter && slot !== "character" ? `Random (${esc(filter.name)})` : "Random";
+    const text = filterApplies(filter, slot, b) ? `Random (${esc(filter.name)})` : "Random";
     return small ? `<span class="pn">${text}</span>` : `<span class="rnd">?</span><span class="pn">${text}</span>`;
   }
 
@@ -223,7 +231,7 @@
     const cur = b[pickSlot];
     const filter = presets.find(p => p.id === b.preset);
     const randomText = filterNone(filter, pickSlot) ? `Filter &ldquo;${esc(filter.name)}&rdquo;: none`
-      : filter && pickSlot !== "character" ? `Random from &ldquo;${esc(filter.name)}&rdquo;` : "Random";
+      : filterApplies(filter, pickSlot, b) ? `Random from &ldquo;${esc(filter.name)}&rdquo;` : "Random";
     let head = `<button type="button" class="cell${!cur ? " on" : ""}" data-id="0"><span class="rnd">?</span><span class="cn">${randomText}</span></button>`;
     if (pickSlot !== "character")
       head += `<button type="button" class="cell${cur < 0 ? " on" : ""}" data-id="-1" title="${pickSlot === "melee" ? "Only the default knife" : "No weapon in this slot"}"><span class="none">&#10005;</span><span class="cn">${pickSlot === "melee" ? "Default knife" : "None"}</span></button>`;
@@ -245,6 +253,11 @@
   // a filter's primary / secondary can be "None" ([-1]): its bots carry no weapon there (they drop the one they get)
   const NONE_SLOTS = ["primary", "secondary"];
   const filterNone = (p, slot) => !!p && NONE_SLOTS.includes(slot) && (p[slot] || []).includes(-1);
+  // characters are filtered per team (CT and T tabs): a team without any keeps every character of its team
+  const teamCat = i => (i.team === 1 ? "T" : "CT");
+  const filterChars = (p, team) => (p && p.character ? p.character : []).filter(id => !byId[id] || !byId[id].team || byId[id].team === team);
+  const filterApplies = (p, slot, b) => !!p && (slot !== "character" || filterChars(p, b.team).length > 0);
+  const catOf = i => (fmSlot === "character" ? teamCat(i) : i.category);
 
   function openFilters() {
     $("fm").classList.remove("hidden");
@@ -254,6 +267,7 @@
 
   function fmEdit(p) {
     fmSel = JSON.parse(JSON.stringify(p));
+    if (!Array.isArray(fmSel.character)) fmSel.character = [];
     fmSlot = "primary";
     fmCat = "All";
     $("fmsearch").value = "";
@@ -263,21 +277,22 @@
   function fmShown() {
     const q = $("fmsearch").value.trim().toLowerCase();
     const allowed = new Set(fmSel ? fmSel[fmSlot] : []);
-    return (catalog[fmSlot] || []).filter(i => (fmCat === "All" || i.category === fmCat) && (!q || i.name.toLowerCase().includes(q)) &&
+    return (catalog[fmSlot] || []).filter(i => (fmCat === "All" || catOf(i) === fmCat) && (!q || i.name.toLowerCase().includes(q)) &&
       (!fmOnly || allowed.has(i.id)));
   }
 
   function renderFilters() {
     $("fmlist").innerHTML = presets.map(p => `<button type="button" class="fm-item${fmSel && fmSel.id === p.id ? " on" : ""}" data-id="${p.id}">${esc(p.name)}
-      <small>${filterNone(p, "primary") ? "no" : p.primary.length} primary &middot; ${filterNone(p, "secondary") ? "no" : p.secondary.length} secondary &middot; ${p.melee.length} melee</small></button>`).join("") ||
+      <small>${filterNone(p, "primary") ? "no" : p.primary.length} primary &middot; ${filterNone(p, "secondary") ? "no" : p.secondary.length} secondary &middot; ${p.melee.length} melee &middot; ${(p.character || []).length} characters</small></button>`).join("") ||
       `<p class="hint">No filters yet.</p>`;
     $("fmedit").classList.toggle("hidden", !fmSel);
     if (!fmSel) return;
     document.querySelectorAll("#fmslots button").forEach(x => x.classList.toggle("active", x.dataset.slot === fmSlot));
     const items = catalog[fmSlot] || [];
-    const cats = ["All", ...new Set(items.map(i => i.category))];
-    if (!cats.includes(fmCat)) fmCat = "All";
-    $("fmcats").innerHTML = cats.length > 2 ? cats.map(c => `<button type="button" class="${c === fmCat ? "active" : ""}" data-cat="${esc(c)}">${esc(c)}</button>`).join("") : "";
+    const chars = fmSlot === "character";
+    const cats = chars ? ["CT", "T"] : ["All", ...new Set(items.map(i => i.category))];
+    if (!cats.includes(fmCat)) fmCat = cats[0];
+    $("fmcats").innerHTML = chars || cats.length > 2 ? cats.map(c => `<button type="button" class="${c === fmCat ? "active" : ""}" data-cat="${esc(c)}">${esc(c)}</button>`).join("") : "";
     const q = $("fmsearch").value.trim().toLowerCase();
     const allowed = new Set(fmSel[fmSlot]);
     const keep = $("fmgrid").scrollTop;
@@ -292,6 +307,12 @@
     renderFilters.lastKey = key;
     const n = fmSel[fmSlot].length;
     $("fmonly").classList.toggle("on", fmOnly);
+    if (chars) {
+      const ct = fmSel.character.filter(id => byId[id] && byId[id].team !== 1).length, t = n - ct;
+      $("fmcount").textContent = !n ? "No character chosen: bots with this filter get a random character of their team"
+        : `${ct} CT and ${t} T character${n > 1 ? "s" : ""} allowed` + (!ct || !t ? `; ${!ct ? "CT" : "T"} bots get any character of their team` : "");
+      return;
+    }
     $("fmcount").textContent = none ? `No ${fmSlot} weapon: bots don't buy one and drop the one they get` : n ? `${n} ${fmSlot} weapon${n > 1 ? "s" : ""} allowed` : `No ${fmSlot} weapon chosen: bots with this filter get any ${fmSlot} weapon`;
   }
 
@@ -327,14 +348,14 @@
 
   // export / import: the filter as a short text code
   function encode(p) {
-    return "CSOBOT1:" + btoa(JSON.stringify({ n: p.name, p: p.primary, s: p.secondary, m: p.melee }));
+    return "CSOBOT1:" + btoa(JSON.stringify({ n: p.name, p: p.primary, s: p.secondary, m: p.melee, c: p.character || [] }));
   }
   function decode(code) {
     const m = /CSOBOT1:([A-Za-z0-9+/=]+)/.exec(code.trim());
     if (!m) throw new Error("That isn't a weapon filter code.");
     const o = JSON.parse(atob(m[1]));
     const ids = a => (Array.isArray(a) ? a.filter(x => Number.isInteger(x)) : []);
-    return { name: String(o.n || "Imported").slice(0, 40), primary: ids(o.p), secondary: ids(o.s), melee: ids(o.m) };
+    return { name: String(o.n || "Imported").slice(0, 40), primary: ids(o.p), secondary: ids(o.s), melee: ids(o.m), character: ids(o.c) };
   }
 
   let codeAction = null;
@@ -439,7 +460,11 @@
     newPreset = +$("newpreset").value;
     try { localStorage.setItem("bots.newPreset", String(newPreset)); } catch (e) { /* no storage */ }
   });
-  const newBot = () => ({ team: isCoop() ? 2 : newTeam, preset: newPreset });
+  $("newskill").addEventListener("change", () => {
+    newSkill = +$("newskill").value;
+    try { localStorage.setItem("bots.newSkill", String(newSkill)); } catch (e) { /* no storage */ }
+  });
+  const newBot = () => ({ team: isCoop() ? 2 : newTeam, preset: newPreset, skill: newSkill });
   $("add").addEventListener("click", () => send(Object.assign({ action: "add", count: Math.max(1, +$("count").value || 1) }, newBot())));
   $("fill").addEventListener("click", () => send(Object.assign({ action: "fill" }, newBot())));
   $("scramble").addEventListener("click", scramble);
@@ -494,10 +519,10 @@
     const p = presets.find(x => x.id === +it.dataset.id);
     if (p) { fmEdit(p); renderFilters(); }
   });
-  $("fmnew").addEventListener("click", () => fmCreate({ name: "New filter", primary: [], secondary: [], melee: [] }));
+  $("fmnew").addEventListener("click", () => fmCreate({ name: "New filter", primary: [], secondary: [], melee: [], character: [] }));
   $("fmclassic").addEventListener("click", () => {
     const have = slot => CLASSIC[slot].filter(id => byId[id]);
-    fmCreate({ name: "Counter-Strike classic", primary: have("primary"), secondary: have("secondary"), melee: have("melee") });
+    fmCreate({ name: "Counter-Strike classic", primary: have("primary"), secondary: have("secondary"), melee: have("melee"), character: have("character") });
   });
   $("fmimport").addEventListener("click", () => codeBox("Paste a weapon filter code", "", text => {
     try { fmCreate(decode(text)); } catch (e) { toast(e.message, true); }
@@ -518,7 +543,7 @@
   });
   $("fmslots").addEventListener("click", e => {
     const s = e.target.closest("[data-slot]");
-    if (s) { fmSlot = s.dataset.slot; fmCat = "All"; $("fmsearch").value = ""; renderFilters(); }
+    if (s) { fmSlot = s.dataset.slot; fmCat = fmSlot === "character" ? "CT" : "All"; $("fmsearch").value = ""; renderFilters(); }
   });
   $("fmcats").addEventListener("click", e => {
     const c = e.target.closest("[data-cat]");

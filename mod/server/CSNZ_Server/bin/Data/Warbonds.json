@@ -3,8 +3,9 @@
 	"Web": { "IP": "127.0.0.1", "Port": 30080, "Root": "../../../web" },
 
 	// medals per finished match: PerMatch + PerWin (if your team won) + 1 per KillsPerMedal kills (up to MaxKillMedals,
-	// 0 = no limit); reaching level N gives N x LevelUpPerLevel
-	"Medals": { "PerMatch": 2, "PerWin": 2, "KillsPerMedal": 6, "MaxKillMedals": 0, "LevelUpPerLevel": 3 },
+	// 0 = no limit); reaching level N gives N x LevelUpPerLevel. CheatPenalty: % of the medals lost (match, orders
+	// and level-ups) when sv_cheats was on in the match
+	"Medals": { "PerMatch": 2, "PerWin": 2, "KillsPerMedal": 6, "MaxKillMedals": 0, "LevelUpPerLevel": 3, "CheatPenalty": 60 },
 
 	// LogKills: kill events and match results in the server log. HeadshotKillType: the kill events' victimKillType
 	// value that means a headshot (-1 until the telemetry shows which one); headshots show in the match report

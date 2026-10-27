@@ -1,5 +1,5 @@
 diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
-index b5e72be..8496851 100644
+index b5e72be..3232287 100644
 --- a/src/CMakeLists.txt
 +++ b/src/CMakeLists.txt
 @@ -38,6 +38,9 @@ endif()
@@ -12,6 +12,15 @@ index b5e72be..8496851 100644
  target_sources(PROJECTNAME PRIVATE "command.cpp")
  target_sources(PROJECTNAME PRIVATE "common/buffer.cpp")
  target_sources(PROJECTNAME PRIVATE "common/buildnum.cpp")
+@@ -148,6 +151,8 @@ if (MSVC)
+ else()
+ 	# don't treat some warnings as errors
+ 	target_compile_options(PROJECTNAME PRIVATE -Wno-error=sign-compare -Wno-error=unused-variable -Wno-error=delete-non-virtual-dtor -Wno-error=unused-parameter -Wno-error=conversion-null -Wno-error=register -Wno-error=unused-value -Wno-error=reorder -Wno-error=attributes)
++	# offline build, GCC 16: warnings that used to be hidden by the precompiled header's system_header pragma
++	target_compile_options(PROJECTNAME PRIVATE -Wno-error=cpp -Wno-error=unused-function -Wno-error=overloaded-virtual -Wno-error=pedantic -Wno-error=format -Wno-error=parentheses -Wno-error=cast-function-type -Wno-error=maybe-uninitialized -Wno-error=nonnull -Wno-error=type-limits -Wno-error=unused-label -Wno-error=unused-but-set-variable)
+ endif()
+ 
+ # Fix mutex not locking in Release builds
 diff --git a/src/common/logger.cpp b/src/common/logger.cpp
 index e38a7df..b6ca10d 100644
 --- a/src/common/logger.cpp
@@ -132,6 +141,36 @@ index 50cc528..f7394eb 100644
  
  	virtual void SendGameMatchInfo(IExtendedSocket* socket) = 0;
  	virtual void SendGameMatchUnk(IExtendedSocket* socket) = 0;
+diff --git a/src/interface/iroom.h b/src/interface/iroom.h
+index b6d950f..6430867 100644
+--- a/src/interface/iroom.h
++++ b/src/interface/iroom.h
+@@ -10,9 +10,8 @@ class CReceivePacket;
+ class CRoomSettings;
+ class CChannel;
+ class CRoomUser;
+-enum RoomStatus;
+-enum RoomTeamNum;
+-enum RoomReadyStatus;
++#include <cstdint>
++#include "definitions.h" // GCC 16: no forward-declared enums without an underlying type
+ 
+ class IRoom
+ {
+diff --git a/src/interface/iuser.h b/src/interface/iuser.h
+index 4e7a9ed..26f10a7 100644
+--- a/src/interface/iuser.h
++++ b/src/interface/iuser.h
+@@ -3,7 +3,8 @@
+ #include <string>
+ #include <vector>
+ 
+-enum UserStatus;
++#include <cstdint>
++#include "definitions.h" // GCC 16: no forward-declared enums without an underlying type
+ class IExtendedSocket;
+ class IRoom;
+ class CRoomUser;
 diff --git a/src/interface/iuserdatabase.h b/src/interface/iuserdatabase.h
 index 48b869d..ebbb0d0 100644
 --- a/src/interface/iuserdatabase.h
@@ -1925,10 +1964,10 @@ index 3054001..9c14f6b 100644
  	void SendUserLoadout(IUser* user);
 diff --git a/src/manager/warbondmanager.cpp b/src/manager/warbondmanager.cpp
 new file mode 100644
-index 0000000..a53c1eb
+index 0000000..16208cd
 --- /dev/null
 +++ b/src/manager/warbondmanager.cpp
-@@ -0,0 +1,840 @@
+@@ -0,0 +1,881 @@
 +#include "warbondmanager.h"
 +#include "usermanager.h"
 +#include "userdatabase.h"
@@ -1938,6 +1977,7 @@ index 0000000..a53c1eb
 +#include "main.h"
 +#include "common/utils.h"
 +#include "room/room.h"
++#include "room/gamematch.h"
 +#include "bingomanager.h"
 +
 +#include <fstream>
@@ -1997,6 +2037,7 @@ index 0000000..a53c1eb
 +		m_Medals.killsPerMedal = max(1, medals.value("KillsPerMedal", 6));
 +		m_Medals.maxKillMedals = medals.value("MaxKillMedals", 0);
 +		m_Medals.levelUpPerLevel = medals.value("LevelUpPerLevel", 3);
++		m_Medals.cheatPenalty = min(100, max(0, medals.value("CheatPenalty", 60)));
 +		json telemetry = cfg.value("Telemetry", json::object());
 +		m_Medals.headshotKillType = telemetry.value("HeadshotKillType", -1);
 +		m_Medals.logKills = telemetry.value("LogKills", true);
@@ -2107,6 +2148,7 @@ index 0000000..a53c1eb
 +					bot["allowPrimary"] = p.value("primary", json::array());
 +					bot["allowSecondary"] = p.value("secondary", json::array());
 +					bot["allowMelee"] = p.value("melee", json::array());
++					bot["allowCharacter"] = p.value("character", json::array());
 +				}
 +			bots.push_back(bot);
 +		}
@@ -2116,6 +2158,21 @@ index 0000000..a53c1eb
 +	{
 +		resp.status = 403;
 +		result = { { "error", "No logged in character for this computer." } };
++	}
++	else if (req.method == "POST" && req.path == "/api/cheats")
++	{
++		// botassist.asi: sv_cheats is on in the match this computer's player is playing; its medals will be cut
++		CRoom* room = static_cast<CRoom*>(user->GetCurrentRoom());
++		CGameMatch* match = room ? room->GetGameMatch() : NULL;
++		if (match && !match->m_bCheats)
++		{
++			match->m_bCheats = true;
++			Logger().Info("WarbondManager: sv_cheats is on in user %d's match (room %d): medals -%d%%\n", user->GetID(),
++				room->GetID(), m_Medals.cheatPenalty);
++			g_PacketManager.SendUMsgNoticeMessageInChat(user->GetExtendedSocket(),
++				va("sv_cheats is on: this match's medals will be cut by %d%%.", m_Medals.cheatPenalty));
++		}
++		result = { { "ok", true }, { "match", match != NULL }, { "penalty", m_Medals.cheatPenalty } };
 +	}
 +	else if (req.method == "POST" && req.path == "/api/openview")
 +	{
@@ -2332,6 +2389,7 @@ index 0000000..a53c1eb
 +			(*target)["primary"] = ids("primary");
 +			(*target)["secondary"] = ids("secondary");
 +			(*target)["melee"] = ids("melee");
++			(*target)["character"] = ids("character");
 +			SaveBotPresets();
 +			json out = { { "presets", presets }, { "saved", (*target)["id"] } };
 +			return out;
@@ -2706,8 +2764,9 @@ index 0000000..a53c1eb
 +		if (current.progress >= o.target)
 +		{
 +			current.completed = true;
-+			user->UpdatePoints(o.reward);
-+			string reward = o.reward ? va("+%d medals", o.reward) : "";
++			int medals = PenalizedMedals(user, o.reward);
++			user->UpdatePoints(medals);
++			string reward = o.reward ? va("+%d medals%s", medals, medals < o.reward ? " (sv_cheats)" : "") : "";
 +			if (o.tickets)
 +				reward += string(reward.empty() ? "" : ", ") + va("+%d Bingo Ticket%s", o.tickets, o.tickets == 1 ? "" : "s");
 +			g_PacketManager.SendUMsgNoticeMessageInChat(user->GetExtendedSocket(),
@@ -2732,11 +2791,13 @@ index 0000000..a53c1eb
 +	int killMedals = kills / m_Medals.killsPerMedal;
 +	if (m_Medals.maxKillMedals > 0)
 +		killMedals = min(killMedals, m_Medals.maxKillMedals);
-+	int medals = m_Medals.perMatch + (won ? m_Medals.perWin : 0) + killMedals;
++	int full = m_Medals.perMatch + (won ? m_Medals.perWin : 0) + killMedals;
++	int medals = PenalizedMedals(user, full);
 +
 +	if (m_Medals.logKills)
-+		Logger().Info("WarbondManager: user %d match result: mode %d, kills %d, headshots %d, won %d, first %d -> %d medals (%d match + %d win + %d kills)\n",
-+			user->GetID(), gameMode, kills, headshots, won, topPlayer, medals, m_Medals.perMatch, won ? m_Medals.perWin : 0, killMedals);
++		Logger().Info("WarbondManager: user %d match result: mode %d, kills %d, headshots %d, won %d, first %d -> %d medals (%d match + %d win + %d kills%s)\n",
++			user->GetID(), gameMode, kills, headshots, won, topPlayer, medals, m_Medals.perMatch, won ? m_Medals.perWin : 0, killMedals,
++			medals < full ? va(", sv_cheats: -%d%% of %d", m_Medals.cheatPenalty, full) : "");
 +
 +	AdvanceOrders(user, gameMode, { { "Matches", 1 }, { "Wins", won ? 1 : 0 }, { "Kills", kills }, { "BestKills", kills },
 +		{ "TopPlayer", topPlayer ? 1 : 0 }, { "Headshots", headshots } });
@@ -2744,15 +2805,34 @@ index 0000000..a53c1eb
 +	return medals;
 +}
 +
++void CWarbondManager::SetCheatPenalty(IUser* user, bool on)
++{
++	if (on)
++		m_CheatUsers.insert(user->GetID());
++	else
++		m_CheatUsers.erase(user->GetID());
++}
++
++// what is left of medals earned in a match played with sv_cheats on (rounded)
++int CWarbondManager::PenalizedMedals(IUser* user, int medals) const
++{
++	if (medals <= 0 || !m_CheatUsers.count(user->GetID()))
++		return medals;
++	return (medals * (100 - m_Medals.cheatPenalty) + 50) / 100;
++}
++
 +void CWarbondManager::OnLevelUp(IUser* user, int oldLevel, int newLevel)
 +{
 +	int medals = 0;
 +	for (int level = oldLevel + 1; level <= newLevel; level++)
 +		medals += level * m_Medals.levelUpPerLevel;
++	int full = medals;
++	medals = PenalizedMedals(user, medals);
 +	if (medals > 0)
 +	{
 +		user->UpdatePoints(medals);
-+		g_PacketManager.SendUMsgNoticeMessageInChat(user->GetExtendedSocket(), va("Level %d reached! +%d medals", newLevel, medals));
++		g_PacketManager.SendUMsgNoticeMessageInChat(user->GetExtendedSocket(), va("Level %d reached! +%d medals%s", newLevel, medals,
++			medals < full ? " (sv_cheats)" : ""));
 +	}
 +	AdvanceOrders(user, -1, { { "LevelUps", newLevel - oldLevel }, { "Level", newLevel } });
 +	g_BingoManager.OnLevelUp(user, oldLevel, newLevel);
@@ -2771,10 +2851,10 @@ index 0000000..a53c1eb
 +}
 diff --git a/src/manager/warbondmanager.h b/src/manager/warbondmanager.h
 new file mode 100644
-index 0000000..4c5b4b8
+index 0000000..e6ee4e0
 --- /dev/null
 +++ b/src/manager/warbondmanager.h
-@@ -0,0 +1,111 @@
+@@ -0,0 +1,117 @@
 +#pragma once
 +
 +#include <string>
@@ -2837,6 +2917,7 @@ index 0000000..4c5b4b8
 +	int levelUpPerLevel = 3; // medals for reaching level N: N x this
 +	int headshotKillType = -1; // victimKillType value meaning a headshot (-1: unknown yet, see the telemetry log)
 +	bool logKills = true; // telemetry: log every kill event and each player's match summary
++	int cheatPenalty = 60; // % of a match's medals (match, orders, level-ups) lost when sv_cheats was on in it
 +};
 +
 +class CWarbondManager : public CBaseManager<IWarbondManager>
@@ -2851,6 +2932,9 @@ index 0000000..4c5b4b8
 +	virtual int CountHeadshots(const std::map<int, int>& killTypes);
 +	bool LogKills() const { return m_Medals.logKills; }
 +	virtual void OnLevelUp(IUser* user, int oldLevel, int newLevel);
++	// sv_cheats was on in the match whose result is being applied to this player: its medals are cut
++	void SetCheatPenalty(IUser* user, bool on);
++	int CheatPenalty() const { return m_Medals.cheatPenalty; }
 +	// non-repeatable items of the battle passes with their medal cost (bingo prizes)
 +	std::vector<std::pair<int, int>> PassItems() const;
 +	std::set<int> OwnedItems(IUser* user);
@@ -2873,6 +2957,8 @@ index 0000000..4c5b4b8
 +	int CurrentPeriodStart(const std::string& period);
 +	void AdvanceOrders(IUser* user, int gameMode, const std::map<std::string, int>& events);
 +	int CountItemUnlocks(IUser* user);
++	int PenalizedMedals(IUser* user, int medals) const;
++	std::set<int> m_CheatUsers; // users whose match result is applied with the cheat penalty
 +
 +	std::vector<Warbond> m_Warbonds;
 +	std::vector<WarbondOrder> m_Orders;
@@ -2886,6 +2972,21 @@ index 0000000..4c5b4b8
 +};
 +
 +extern CWarbondManager g_WarbondManager;
+diff --git a/src/net/CMakeLists.txt b/src/net/CMakeLists.txt
+index ee6c781..01ba6f8 100644
+--- a/src/net/CMakeLists.txt
++++ b/src/net/CMakeLists.txt
+@@ -24,4 +24,8 @@ target_include_directories(net PUBLIC
+ 	"../public"
+ 	"../thirdparty/wolfssl"
+ 	"../thirdparty/json/include"
+-)
+\ No newline at end of file
++)
++# GCC 15+: the packet code uses the fixed-width integer types without including <cstdint>
++if(NOT MSVC)
++	target_compile_options(net PRIVATE -include cstdint)
++endif()
 diff --git a/src/net/extendedsocket.cpp b/src/net/extendedsocket.cpp
 index b380300..6184835 100644
 --- a/src/net/extendedsocket.cpp
@@ -3278,7 +3379,7 @@ index 4c688f4..c1e0b2a 100644
 +	bool m_bWouldBlock; // last read hit WOLFSSL_ERROR_WANT_READ/WRITE (non-blocking SSL, retry on next poll)
  };
 diff --git a/src/room/gamematch.cpp b/src/room/gamematch.cpp
-index 65418d8..2c281d9 100644
+index 65418d8..9b6d2a2 100644
 --- a/src/room/gamematch.cpp
 +++ b/src/room/gamematch.cpp
 @@ -6,6 +6,7 @@
@@ -3320,7 +3421,30 @@ index 65418d8..2c281d9 100644
  
  	g_QuestManager.OnKillEvent(stat, this, killEvent);
  
-@@ -532,7 +542,6 @@ void CGameMatch::CalculateGameResult()
+@@ -430,9 +440,22 @@ void CGameMatch::OnKiteKill(IUser* user)
+ 
+ void CGameMatch::OnGameMatchEnd()
+ {
++	// offline build: a match played with sv_cheats on gives less medals (match, orders and level-ups)
++	if (m_bCheats)
++		for (auto stat : m_UserStats)
++			g_WarbondManager.SetCheatPenalty(stat->m_pUser, true);
++
+ 	CalculateGameResult();
+ 	ApplyGameResult();
+ 
++	if (m_bCheats)
++		for (auto stat : m_UserStats)
++		{
++			g_WarbondManager.SetCheatPenalty(stat->m_pUser, false);
++			g_PacketManager.SendUMsgNoticeMessageInChat(stat->m_pUser->GetExtendedSocket(),
++				va("sv_cheats was on in this match: its medals were cut by %d%%.", g_WarbondManager.CheatPenalty()));
++		}
++
+ 	Logger().Info("CGameMatch::OnGameMatchEnd: gamemode: %d, CT rounds win count: %d, T rounds win count: %d\n", m_nGameMode, m_nCtWinCount, m_nTerWinCount);
+ }
+ 
+@@ -532,7 +555,6 @@ void CGameMatch::CalculateGameResult()
  	CalculateFirstPlace();
  
  	int expCoef = GetExpCoefficient();
@@ -3328,7 +3452,7 @@ index 65418d8..2c281d9 100644
  
  	for (auto stat : m_UserStats)
  	{
-@@ -541,8 +550,21 @@ void CGameMatch::CalculateGameResult()
+@@ -541,8 +563,21 @@ void CGameMatch::CalculateGameResult()
  		// calc exp
  		stat->m_nExpEarned = stat->m_nKills > 0 ? expCoef * stat->m_nKills : expCoef;
  
@@ -3352,7 +3476,7 @@ index 65418d8..2c281d9 100644
  
  		// calc bonus exp/points
  		auto bonusPercentageClass = find_if(g_pServerConfig->gameMatch.bonusPercentageClasses.begin(), g_pServerConfig->gameMatch.bonusPercentageClasses.end(),
-@@ -601,6 +623,10 @@ void CGameMatch::CalculateGameResult()
+@@ -601,6 +636,10 @@ void CGameMatch::CalculateGameResult()
  			}
  		}
  
@@ -3364,7 +3488,7 @@ index 65418d8..2c281d9 100644
  		{
  			stat->m_nExpEarned = 9999;
 diff --git a/src/room/gamematch.h b/src/room/gamematch.h
-index 68a4dc7..6fa12f4 100644
+index 68a4dc7..10628f1 100644
 --- a/src/room/gamematch.h
 +++ b/src/room/gamematch.h
 @@ -57,6 +57,10 @@ public:
@@ -3378,6 +3502,14 @@ index 68a4dc7..6fa12f4 100644
  };
  
  class CGameMatch
+@@ -102,6 +106,7 @@ public:
+ 
+ 	int m_nGameMode;
+ 	int m_nMapID;
++	bool m_bCheats = false; // offline build: sv_cheats was on (botassist.asi tells the web API): medals are cut
+ 	int m_nCtWinCount;
+ 	int m_nTerWinCount;
+ 	int m_nFirstPlaceUserId;
 diff --git a/src/room/room.cpp b/src/room/room.cpp
 index 616959e..d9f861f 100644
 --- a/src/room/room.cpp
@@ -3899,7 +4031,7 @@ index bcb4c78..d07876c 160000
 +++ b/src/thirdparty/SQLiteCpp
 @@ -1 +1 @@
 -Subproject commit bcb4c78fed6628f150c28fa6377c2b0430f7f99b
-+Subproject commit d07876c3090fa57f92af9e7fc92bb4b3f3c27390
++Subproject commit d07876c3090fa57f92af9e7fc92bb4b3f3c27390-dirty
 diff --git a/src/thirdparty/doctest b/src/thirdparty/doctest
 index ae7a135..d44d4f6 160000
 --- a/src/thirdparty/doctest
@@ -3928,6 +4060,13 @@ index 008d495..7a6e8f8 160000
 @@ -1 +1 @@
 -Subproject commit 008d4958bffcafa9e22f21abcf20268b6bbd632a
 +Subproject commit 7a6e8f87dea8fe13cf7eba4e5fabe4cc8d0689ae
+diff --git a/src/thirdparty/zip b/src/thirdparty/zip
+index d15aa0c..dd80aea 160000
+--- a/src/thirdparty/zip
++++ b/src/thirdparty/zip
+@@ -1 +1 @@
+-Subproject commit d15aa0c3789fdd6765b010886a09e9eac021b06f
++Subproject commit dd80aeab4293d1e11e31af20fabfd538d88625ef-dirty
 diff --git a/src/user/user.cpp b/src/user/user.cpp
 index 079d40e..11bbd25 100644
 --- a/src/user/user.cpp

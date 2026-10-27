@@ -155,6 +155,10 @@ automatic ones join CT. No more kicks in co-op modes.
   secondary and melee weapons; "Counter-Strike classic" (primaries 7-24, pistols 1-6, knife 161), export/import
   as a `CSOBOT1:<base64 json>` code. A bot's filter goes to botassist in /api/matchbots (allowPrimary/Secondary/
   Melee): a weapon slot left on Random is picked from the filter on every life.
+- Filters also hold characters (CT and T tabs; "Counter-Strike classic" = 40-43 and 49-52), sent as
+  allowCharacter. A room AI player whose character is Random joins as one of the filter's characters of its team,
+  or as any character of its team (botassist_characters.txt) when the filter has none or there is no filter.
+- The top bar's skill list sets the skill of the bots it adds (room skill or 0..7).
 
 - A new match can load the same map again, so per-match state (room AI players, bot quota, barricades, monster
   detection) is keyed on a level counter: `gpGlobals->time` starting again (checked by LoadNav and every 500 ms by
@@ -330,6 +334,10 @@ automatic ones join CT. No more kicks in co-op modes.
   earned by dealing damage, so the soldiers don't go there (they stood at them pressing use).
 
 ## Console: cheats and bot_add
+
+- sv_cheats on during a match: botassist checks it every 2 s and tells CSNZ_Server once per match (POST
+  /api/cheats). The server flags the match; its medals (match, orders completed by it, level-ups) are cut by
+  Data/Warbonds.json Medals.CheatPenalty (60%), with a chat message.
 
 - Nexon's hw.dll registers god, noclip, notarget, fly, kill (and pause, setpause, unpause, save) with an empty
   handler (`ret`). botassist writes its own handlers into those entries of the engine's command list (head at hw rva

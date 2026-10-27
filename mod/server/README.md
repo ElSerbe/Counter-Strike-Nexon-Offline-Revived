@@ -36,8 +36,17 @@ Escucha en `127.0.0.1:30002` con SSL. El log va a `server.log` y a `CSNZ_Server/
 
 ## Recompilar
 
-1. `git clone https://github.com/JusicP/CSNZ_Server` y `git checkout` del commit base.
-2. `git apply patches/csnz_server-local.patch` y, dentro de `src/thirdparty/zip`,
-   `git apply ../../../patches/kuba-zip-no-zip64.patch` (ajusta la ruta a donde esté `patches`).
-3. Con WinLibs en el PATH: `cmake -S src -B src/build -G "MinGW Makefiles"` y
-   `cmake --build src/build --target PROJECTNAME` (el target `test` no compila y no hace falta).
+El código se clona en `mod/server/src-repo` (ignorado por Git; el parche es la copia que se guarda).
+
+1. `git clone https://github.com/JusicP/CSNZ_Server src-repo`, `git checkout` del commit base y
+   `git submodule update --init --recursive`. Si git falla con "SSL certificate problem", añade
+   `-c http.sslBackend=schannel` (usa los certificados de Windows).
+2. `git apply patches/csnz_server-local.patch`. Los submódulos no los mueve `git apply`: pon cada uno en el
+   commit que dice el parche (líneas `+Subproject commit ...`). Dentro de `src/thirdparty/zip`,
+   `git apply ../../../../patches/kuba-zip-no-zip64.patch`.
+3. Con WinLibs en el PATH: `cmake -S src -B src/build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release` y
+   `cmake --build src/build --target PROJECTNAME` (el target `test` no compila y no hace falta). Sale en
+   `src-repo/bin/CSNZ_Server.exe`; cópialo a `CSNZ_Server/bin` (y las DLL de WinLibs si cambia de versión).
+   Compila con GCC 16 (el parche ya incluye los arreglos para él).
+4. Para regenerar el parche tras cambiar el código: `git add -N` de los archivos nuevos y
+   `git diff > ../patches/csnz_server-local.patch`.

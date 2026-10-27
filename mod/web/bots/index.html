@@ -17,6 +17,7 @@
       <button type="button" id="minus">&minus;</button><input id="count" value="1" maxlength="2" spellcheck="false"><button type="button" id="plus">+</button>
     </span>
     <select id="newpreset" class="select" title="Weapon filter of the bots you add"></select>
+    <select id="newskill" class="select" title="Skill of the bots you add"></select>
     <button id="add" class="cta" type="button">+ Add</button>
     <button id="fill" class="cta ghost" type="button" title="Add bots until the room is full">Fill room</button>
     <button id="scramble" class="small" type="button" title="Shuffle the AI players between CT and T, half on each team">&#8644; Scramble teams</button>
@@ -98,7 +99,7 @@
   <div class="fm">
     <header class="fm-head">
       <h2>Weapon filters</h2>
-      <span class="fm-help">Bots with a filter pick their random weapons only from it.</span>
+      <span class="fm-help">Bots with a filter pick their random weapons and character only from it.</span>
       <button id="fmclose" class="close" type="button">Done</button>
     </header>
     <div class="fm-body">
@@ -120,6 +121,7 @@
             <button type="button" data-slot="primary" class="active">Primary</button>
             <button type="button" data-slot="secondary">Secondary</button>
             <button type="button" data-slot="melee">Melee</button>
+            <button type="button" data-slot="character">Characters</button>
           </nav>
           <input id="fmsearch" class="search" placeholder="Search" spellcheck="false" autocomplete="off">
         </div>
