@@ -327,10 +327,10 @@ index 0000000..5405ded
 +};
 diff --git a/src/interface/izsriftmanager.h b/src/interface/izsriftmanager.h
 new file mode 100644
-index 0000000..0ab85aa
+index 0000000..ac260e5
 --- /dev/null
 +++ b/src/interface/izsriftmanager.h
-@@ -0,0 +1,23 @@
+@@ -0,0 +1,25 @@
 +#pragma once
 +
 +#include <vector>
@@ -353,6 +353,8 @@ index 0000000..0ab85aa
 +	virtual void OnMatchResult(IUser* user, int kills, bool won) = 0;
 +	// the player's 9 trait levels (ZSRIFT_StatInfo.json order)
 +	virtual std::vector<int> Levels(IUser* user) = 0;
++	// the highest rift level (room difficulty) players can pick
++	virtual int MaxDifficulty() = 0;
 +};
 diff --git a/src/interface/net/iextendedsocket.h b/src/interface/net/iextendedsocket.h
 index 6768f4e..f62cd69 100644
@@ -4813,10 +4815,10 @@ index 0000000..3dda56f
 +extern CWarbondManager g_WarbondManager;
 diff --git a/src/manager/zsriftmanager.cpp b/src/manager/zsriftmanager.cpp
 new file mode 100644
-index 0000000..aa2dafc
+index 0000000..fd8f13d
 --- /dev/null
 +++ b/src/manager/zsriftmanager.cpp
-@@ -0,0 +1,252 @@
+@@ -0,0 +1,257 @@
 +#include "zsriftmanager.h"
 +#include "usermanager.h"
 +#include "packetmanager.h"
@@ -4842,8 +4844,9 @@ index 0000000..aa2dafc
 + *   3 p s  ranking (party type, season)       4 p s name   ranking search          5   reset the traits
 + *
 + * server -> client, first byte the reply:
-+ *   0  u8 flags: 1 = 9 x {u8 trait, u16 level}; 2 = u16 total level, u32 trait EXP, u32 EXP earned today,
-+ *      u32 daily maximum ("Max daily: today/max"). The panel refreshes on it (and unlocks its buttons).
++ *   0  u8 flags: 1 = 9 x {u8 trait, u16 level}; 2 = u16 highest unlocked rift level (the room's difficulty list
++ *      offers 1..this: GameUI 0x105c2cf0; 0 left it empty), u32 trait EXP, u32 EXP earned today, u32 daily maximum
++ *      ("Max daily: today/max"). The panel refreshes on it (and unlocks its buttons).
 + *   2  rift info: u8 season, u32 cost base, u32 cost rate (x1000), 5 x u32 difficulty unlock values, u8 n x
 + *      {u32 difficulty, u8}. The panel prices trait level L + 1 as round(base * (rate / 1000) ^ (L + 1) / 10) * 10.
 + * Traits in resource/ZSRift/ZSRIFT_StatInfo.json order: Health, Armor, DamageRate, Ammo, HealthRegen, Critical,
@@ -4883,6 +4886,7 @@ index 0000000..aa2dafc
 +	r.matchExp = cfg.value("MatchExp", r.matchExp);
 +	r.killExp = cfg.value("KillExp", r.killExp);
 +	r.winExp = cfg.value("WinExp", r.winExp);
++	r.maxDifficulty = max(1, min(cfg.value("MaxDifficulty", r.maxDifficulty), 100));
 +	m_Rules = r;
 +	return true;
 +}
@@ -4930,6 +4934,11 @@ index 0000000..aa2dafc
 +	return levels;
 +}
 +
++int CZSRiftManager::MaxDifficulty()
++{
++	return m_Rules.maxDifficulty;
++}
++
 +void CZSRiftManager::SendRules(IUser* user)
 +{
 +	CSendPacket* msg = g_PacketManager.CreatePacket(user->GetExtendedSocket(), PacketId::ZSRift);
@@ -4947,7 +4956,6 @@ index 0000000..aa2dafc
 +void CZSRiftManager::SendTraits(IUser* user)
 +{
 +	json& st = State(user);
-+	int total = 0;
 +	CSendPacket* msg = g_PacketManager.CreatePacket(user->GetExtendedSocket(), PacketId::ZSRift);
 +	msg->BuildHeader();
 +	msg->WriteUInt8(0);
@@ -4955,11 +4963,10 @@ index 0000000..aa2dafc
 +	for (int i = 0; i < kTraits; i++)
 +	{
 +		int level = st["levels"][i].get<int>();
-+		total += level;
 +		msg->WriteUInt8(i);
 +		msg->WriteUInt16(level);
 +	}
-+	msg->WriteUInt16(total);
++	msg->WriteUInt16(m_Rules.maxDifficulty); // every level open (no clear-time unlocks offline)
 +	msg->WriteUInt32(st.value("exp", 0));
 +	msg->WriteUInt32(st.value("today", 0));
 +	msg->WriteUInt32(m_Rules.dailyExpMax);
@@ -5071,10 +5078,10 @@ index 0000000..aa2dafc
 +}
 diff --git a/src/manager/zsriftmanager.h b/src/manager/zsriftmanager.h
 new file mode 100644
-index 0000000..d0041d1
+index 0000000..5b28fc5
 --- /dev/null
 +++ b/src/manager/zsriftmanager.h
-@@ -0,0 +1,49 @@
+@@ -0,0 +1,51 @@
 +#pragma once
 +
 +#include <string>
@@ -5093,6 +5100,7 @@ index 0000000..d0041d1
 +	// with level the one bought (1 for the first): 952 / 1050 make the first one 1000, then about 5% more each
 +	int costBase = 952, costRate = 1050;
 +	int matchExp = 100, killExp = 10, winExp = 100; // per finished match, before the daily maximum
++	int maxDifficulty = 20; // rift levels open to everyone in the room's difficulty list (1..this)
 +};
 +
 +class CZSRiftManager : public CBaseManager<IZSRiftManager>
@@ -5106,6 +5114,7 @@ index 0000000..d0041d1
 +	virtual void OnUserLogin(IUser* user);
 +	virtual void OnMatchResult(IUser* user, int kills, bool won);
 +	virtual std::vector<int> Levels(IUser* user);
++	virtual int MaxDifficulty();
 +
 +private:
 +	bool LoadConfig();
@@ -6086,20 +6095,18 @@ index 13a4ee8..c36e019 100644
  	std::vector<int> m_KickedUsers;
  	std::vector<int> m_FamilyBattleUsers;
 diff --git a/src/room/roomsettings.cpp b/src/room/roomsettings.cpp
-index 0ba9234..d2a0534 100644
+index 0ba9234..25ceeaf 100644
 --- a/src/room/roomsettings.cpp
 +++ b/src/room/roomsettings.cpp
-@@ -9,6 +9,9 @@
+@@ -8,6 +8,7 @@
+ #include "serverconfig.h"
  
  #include "manager/voxelmanager.h"
++#include "manager/zsriftmanager.h" // Zombie Disaster Zone (mode 59): highest rift level a room can pick
  
-+// Zombie Disaster Zone (mode 59): highest rift level a room can pick
-+static const int ZSRIFT_MAX_LEVEL = 20;
-+
  using namespace std;
  
- CRoomSettings::CRoomSettings()
-@@ -775,14 +778,18 @@ int CRoomSettings::GetMapSetting(int mapId, const string& setting)
+@@ -775,14 +776,18 @@ int CRoomSettings::GetMapSetting(int mapId, const string& setting)
  	return g_pMapListTable->GetCell<int>(setting, to_string(mapId));
  }
  
@@ -6120,7 +6127,7 @@ index 0ba9234..d2a0534 100644
  }
  
  int CRoomSettings::GetDefaultBuyTime(int gameModeId)
-@@ -899,6 +906,15 @@ int CRoomSettings::GetDefaultFriendlyBots(int gameModeId)
+@@ -899,6 +904,15 @@ int CRoomSettings::GetDefaultFriendlyBots(int gameModeId)
  		case 58:
  			friendlyBots = 8;
  			break;
@@ -6136,7 +6143,7 @@ index 0ba9234..d2a0534 100644
  	}
  
  	return friendlyBots;
-@@ -931,7 +947,14 @@ int CRoomSettings::GetDefaultEnemyBots(int gameModeId)
+@@ -931,7 +945,14 @@ int CRoomSettings::GetDefaultEnemyBots(int gameModeId)
  	return enemyBots;
  }
  
@@ -6151,7 +6158,7 @@ index 0ba9234..d2a0534 100644
  {
  	int botAdd = 0;
  
-@@ -1416,7 +1439,7 @@ void CRoomSettings::LoadDefaultSettings(int gameModeId, int mapId)
+@@ -1416,7 +1437,7 @@ void CRoomSettings::LoadDefaultSettings(int gameModeId, int mapId)
  	botDifficulty = 0;
  	friendlyBots = GetDefaultFriendlyBots(gameModeId);
  	enemyBots = GetDefaultEnemyBots(gameModeId);
@@ -6160,7 +6167,7 @@ index 0ba9234..d2a0534 100644
  	botAdd = GetDefaultBotAdd(gameModeId);
  	kdRule = 0;
  	startingCash = GetDefaultStartingCash(gameModeId);
-@@ -1425,7 +1448,9 @@ void CRoomSettings::LoadDefaultSettings(int gameModeId, int mapId)
+@@ -1425,7 +1446,9 @@ void CRoomSettings::LoadDefaultSettings(int gameModeId, int mapId)
  	statusSymbol = 0;
  	mapPlaylistIndex = mapPlaylistSize ? 1 : 0;
  	enhanceRestrict = (gameModeId == 22 || gameModeId == 32) ? 1 : 0;
@@ -6171,7 +6178,7 @@ index 0ba9234..d2a0534 100644
  	{
  		zsDifficulty = 0;
  		unk56 = 0;
-@@ -1530,7 +1555,7 @@ void CRoomSettings::LoadZbCompetitiveSettings(int gameModeId)
+@@ -1530,7 +1553,7 @@ void CRoomSettings::LoadZbCompetitiveSettings(int gameModeId)
  	botDifficulty = 0;
  	friendlyBots = GetDefaultFriendlyBots(gameModeId);
  	enemyBots = GetDefaultEnemyBots(gameModeId);
@@ -6180,7 +6187,7 @@ index 0ba9234..d2a0534 100644
  	botAdd = GetDefaultBotAdd(gameModeId);
  
  	lowMidFlag |= ROOM_LOWMID_KDRULE;
-@@ -1766,12 +1791,10 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
+@@ -1766,12 +1789,10 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
  		lowFlag |= ROOM_LOW_ROUNDTIME;
  		roundTime = GetGameModeDefaultSetting(gameModeId, "mode_roundtime_id");
  
@@ -6197,7 +6204,7 @@ index 0ba9234..d2a0534 100644
  
  		lowFlag |= ROOM_LOW_HOSTAGEKILLLIMIT;
  		hostageKillLimit = 0;
-@@ -1807,7 +1830,7 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
+@@ -1807,7 +1828,7 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
  		botDifficulty = 0;
  		friendlyBots = GetDefaultFriendlyBots(gameModeId);
  		enemyBots = GetDefaultEnemyBots(gameModeId);
@@ -6206,7 +6213,7 @@ index 0ba9234..d2a0534 100644
  		botAdd = GetDefaultBotAdd(gameModeId);
  
  		lowMidFlag |= ROOM_LOWMID_KDRULE;
-@@ -1829,7 +1852,7 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
+@@ -1829,7 +1850,7 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
  			sd = 0;
  
  		lowMidFlag |= ROOM_LOWMID_ZSDIFFICULTY;
@@ -6215,7 +6222,7 @@ index 0ba9234..d2a0534 100644
  		{
  			zsDifficulty = 0;
  			unk56 = 0;
-@@ -2026,7 +2049,7 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
+@@ -2026,7 +2047,7 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
  					Logger().Warn("User '%s' tried to update a room\'s settings with gameModeId that doesn't allow bots, gameModeId: %d\n", user->GetLogName(), gameModeId);
  					lowMidFlag &= ~ROOM_LOWMID_BOT;
  				}
@@ -6224,7 +6231,7 @@ index 0ba9234..d2a0534 100644
  				{
  					if (botDifficulty > 7)
  						botDifficulty = 7;
-@@ -2034,31 +2057,22 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
+@@ -2034,31 +2055,22 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
  					if (friendlyBots > 15)
  						friendlyBots = 15;
  
@@ -6269,7 +6276,7 @@ index 0ba9234..d2a0534 100644
  				}
  			}
  
-@@ -2094,11 +2108,13 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
+@@ -2094,11 +2106,13 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
  
  			if (lowMidFlag & ROOM_LOWMID_ZSDIFFICULTY)
  			{
@@ -6280,11 +6287,11 @@ index 0ba9234..d2a0534 100644
  					lowMidFlag &= ~ROOM_LOWMID_ZSDIFFICULTY;
  				}
 +				else if (gameModeId == 59)
-+					zsDifficulty = max(1, min(zsDifficulty, ZSRIFT_MAX_LEVEL));
++					zsDifficulty = max(1, min(zsDifficulty, g_ZSRiftManager.MaxDifficulty()));
  				else if (gameModeId == 15)
  				{
  					int mapMaxZsDifficulty = g_pMapListTable->GetCell<int>("ZSmaxDifficulty", to_string(mapId));
-@@ -2364,12 +2380,8 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
+@@ -2364,12 +2378,8 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
  			maxPlayers = g_pMapListTable->GetCell<int>("max_player", to_string(mapId));
  		}
  

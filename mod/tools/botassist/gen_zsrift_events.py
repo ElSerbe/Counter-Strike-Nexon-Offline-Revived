@@ -11,7 +11,7 @@ list all of them: a missing key throws):
   Round_MonsterAdd: AddPassZombie, AddPsychoZombie, AddDeimosZombie, AddBoomerZombie, AddHealZombie,
       AddRevivalZombie, AddUndertakerZombie, AddGoldenZombie (ZombieType = id in maps/zbs_zt_zsrift_splinter)
   Round_MonsterChange: ChangeLightZombieRound, ChangeHeavyZombieRound, ChangeEliteZombieRound, ChangeMidBossRound
-  Player: Primary/Secondary/Third/Melee_Attack_Decrease, Max_MoveSpeed_Limit, Weapon_Reset
+  Player: Primary/Secondary/Third/Melee_Attack_Decrease, Max_MoveSpeed_Limit, Weapon_Reset (all off here)
   Monster: Common_HP_Dec_Attack_Inc, Common_HP_Inc_Attack_Dec, MoveSpeed_Inc
 Hazard values marked "by level" are lists of {"Difficulty": first rift level, "Value": v}: the entry with the highest
 Difficulty not above the rift level applies. Damage = DamageBase + DamageIncrease per level (scaled by the game).
@@ -76,13 +76,14 @@ def main() -> None:
         "Round_MonsterChange": {"Type": 2, **{
             key: common(prob, level, group=10, first=False, boss=False, SubType=i, ZombieType=zt, KillCount=kills)
             for i, (key, zt, kills, level, prob) in enumerate(CHANGES)}},
+        # player penalties: off (Prob 0, never drawn); the group must still list every entry
         "Player": {"Type": 3,
-                   "Primary_Attack_Decrease": common(5, 3, group=20, SubType=0, Value=0.3),
-                   "Secondary_Attack_Decrease": common(5, 3, group=20, SubType=1, Value=0.3),
-                   "Third_Attack_Decrease": common(4, 3, group=20, SubType=2, Value=0.3),
-                   "Melee_Attack_Decrease": common(4, 3, group=20, SubType=3, Value=0.3),
-                   "Max_MoveSpeed_Limit": common(5, 4, SubType=4, Value=100.0),
-                   "Weapon_Reset": common(2, 8, first=False, boss=False, SubType=5)},
+                   "Primary_Attack_Decrease": common(0, 3, group=20, SubType=0, Value=0.3),
+                   "Secondary_Attack_Decrease": common(0, 3, group=20, SubType=1, Value=0.3),
+                   "Third_Attack_Decrease": common(0, 3, group=20, SubType=2, Value=0.3),
+                   "Melee_Attack_Decrease": common(0, 3, group=20, SubType=3, Value=0.3),
+                   "Max_MoveSpeed_Limit": common(0, 4, SubType=4, Value=100.0),
+                   "Weapon_Reset": common(0, 8, first=False, boss=False, SubType=5)},
         "Monster": {"Type": 4,
                     "Common_HP_Dec_Attack_Inc": common(8, 1, group=30, SubType=0, HP_Ratio=0.7, Attack_Ratio=1.3),
                     "Common_HP_Inc_Attack_Dec": common(8, 1, group=30, SubType=1, HP_Ratio=1.3, Attack_Ratio=0.7),

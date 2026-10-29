@@ -458,7 +458,7 @@
    "AppearNormalRound": true,
    "AppearBossRound": true,
    "AppearFirstRound": true,
-   "Prob": 5,
+   "Prob": 0,
    "SubType": 0,
    "Value": 0.3
   },
@@ -468,7 +468,7 @@
    "AppearNormalRound": true,
    "AppearBossRound": true,
    "AppearFirstRound": true,
-   "Prob": 5,
+   "Prob": 0,
    "SubType": 1,
    "Value": 0.3
   },
@@ -478,7 +478,7 @@
    "AppearNormalRound": true,
    "AppearBossRound": true,
    "AppearFirstRound": true,
-   "Prob": 4,
+   "Prob": 0,
    "SubType": 2,
    "Value": 0.3
   },
@@ -488,7 +488,7 @@
    "AppearNormalRound": true,
    "AppearBossRound": true,
    "AppearFirstRound": true,
-   "Prob": 4,
+   "Prob": 0,
    "SubType": 3,
    "Value": 0.3
   },
@@ -498,7 +498,7 @@
    "AppearNormalRound": true,
    "AppearBossRound": true,
    "AppearFirstRound": true,
-   "Prob": 5,
+   "Prob": 0,
    "SubType": 4,
    "Value": 100.0
   },
@@ -508,7 +508,7 @@
    "AppearNormalRound": true,
    "AppearBossRound": false,
    "AppearFirstRound": false,
-   "Prob": 2,
+   "Prob": 0,
    "SubType": 5
   }
  },

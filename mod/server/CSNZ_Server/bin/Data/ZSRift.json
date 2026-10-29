@@ -9,5 +9,8 @@
 	// EXP per finished match: MatchExp + KillExp per kill + WinExp for a win (then the daily maximum)
 	"MatchExp": 100,
 	"KillExp": 10,
-	"WinExp": 100
+	"WinExp": 100,
+	// highest rift level (room difficulty, 1..100) everyone can pick; monsters get stronger and more random events
+	// come each round as it rises
+	"MaxDifficulty": 20
 }

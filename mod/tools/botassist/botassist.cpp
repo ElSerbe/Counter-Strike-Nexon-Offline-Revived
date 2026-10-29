@@ -5089,9 +5089,17 @@ static bool LoadTableOverride(void* table, const char* file)
     size_t len = file ? strlen(file) : 0;
     if (len < 5 || _stricmp(file + len - 4, ".cso"))
         return false;
-    std::string text;
-    if (!ReadOverride((std::string(file, len - 4) + ".csv").c_str(), text))
+    std::string raw, text;
+    if (!ReadOverride((std::string(file, len - 4) + ".csv").c_str(), raw))
         return false;
+    // the parser splits rows on "\r\n" only (the game's tables have them; a file with bare "\n" became one column of
+    // 2535 cells and the rift spawned nothing)
+    for (size_t i = 0; i < raw.size(); i++)
+    {
+        if (raw[i] == '\n' && (i == 0 || raw[i - 1] != '\r'))
+            text += '\r';
+        text += raw[i];
+    }
     ((DWORD*)table)[2] = ((DWORD*)table)[3] = 0; // rows, columns: what the .cso loader clears first
     ((ParseTableFn)(g_hwLo + HW_PARSETABLE - HW_BASE))(table, text.c_str(), (int)text.size());
     Log("table %s: loaded from botassist_tables (%lu rows, %lu columns)", file, ((DWORD*)table)[2], ((DWORD*)table)[3]);

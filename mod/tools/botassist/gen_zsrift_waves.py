@@ -61,7 +61,7 @@ def main() -> None:
             row[ratio] = " ".join(str(w) for w in mix.values())
         out.append(",".join(row))
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text("\n".join(out) + "\n", encoding="ascii", newline="\n")
+    OUT.write_bytes(("\r\n".join(out) + "\r\n").encode("ascii"))  # the game's tables use CRLF
     print(f"{OUT}: {len(out) - 1} spawn rows")
 
 
