@@ -29,6 +29,9 @@ EXTRA_FILES = [
     # data tables botassist loads instead of the game's (gen_zsrift_waves.py: Zombie Disaster Zone's zombie mix)
     (MOD / "tools" / "botassist" / "tables" / "maps" / "ZBS_WAVE_zsrift_splinter.csv",
      "botassist_tables/maps/ZBS_WAVE_zsrift_splinter.csv", True),
+    # Zombie Disaster Zone's random round events (gen_zsrift_events.py), a dedicated-server file the game lacks
+    (MOD / "tools" / "botassist" / "tables" / "maps" / "ZBS_ENC_zsrift_splinter_dedi.json",
+     "botassist_tables/maps/ZBS_ENC_zsrift_splinter_dedi.json", True),
 ]
 
 # (file, va, expected original bytes, patched bytes, note)

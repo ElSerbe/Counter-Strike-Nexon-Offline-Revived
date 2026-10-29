@@ -149,6 +149,8 @@ static struct
     float followDistance = 180.0f;
     int zgPlayers = -1;        // Zombie Giant: room AI players that join as fake players who can be the giant (-1 all)
     bool zgPlayerGiant = true; // Zombie Giant: you can be the giant too
+    float zsrEventDivisor = 3.0f; // Zombie Disaster Zone: events per round = rift level / this (the game's: 32)
+    int zsrBotMoney = 10000;   // Zombie Disaster Zone: a bot's money on each new life, at least (0: the game's)
     float rescan = 0.15f;
     bool logTargets = true;
     bool logCommands = true;
@@ -278,6 +280,8 @@ static void LoadSettings()
     }
     cfg.followDistance = IniFloat(ini, "FollowDistance", "180");
     cfg.zgPlayers = GetPrivateProfileIntA("BotAssist", "ZombieGiantPlayers", -1, ini);
+    cfg.zsrEventDivisor = IniFloat(ini, "ZSRiftEventDivisor", "3");
+    cfg.zsrBotMoney = GetPrivateProfileIntA("BotAssist", "ZSRiftBotMoney", 10000, ini);
     cfg.zgPlayerGiant = GetPrivateProfileIntA("BotAssist", "ZombieGiantYouCanBeGiant", 1, ini) != 0;
     cfg.logTargets = GetPrivateProfileIntA("BotAssist", "LogTargets", 1, ini) != 0;
     cfg.logCommands = GetPrivateProfileIntA("BotAssist", "LogCommands", 1, ini) != 0;
@@ -1891,6 +1895,16 @@ static void FreeSlot(void* bot, const char* slot, int minCat, int maxCat)
 }
 
 // a moment after spawning (after the bot's own CS purchases), buy a random weapon from the whole game
+// Zombie Disaster Zone pays money once per round, and a player who dies keeps the weapon in hand but bots come back
+// with nothing (not even the knife): they buy again on each new life, so they get at least ZSRiftBotMoney then
+// (player +0xca8, the money 0x114b76d0 reads)
+static void ZsrBotMoney(void* bot)
+{
+    unsigned char* pl = (unsigned char*)PrivateOf(bot);
+    if (pl && GameMode() == 59 && cfg.zsrBotMoney > 0 && *(int*)(pl + 0xca8) < cfg.zsrBotMoney)
+        *(int*)(pl + 0xca8) = cfg.zsrBotMoney;
+}
+
 static void UpdateBuying(void* bot, BotState& st)
 {
     float now = Now();
@@ -2054,6 +2068,7 @@ static void UpdateBuying(void* bot, BotState& st)
             // game rules vfunc 0x400): the room's weapons always cost too much there, so the bot gets enough
             if (pl && GameMode() == 30 && *(int*)(pl + 0xca8) < 16000)
                 *(int*)(pl + 0xca8) = 16000;
+            ZsrBotMoney(bot);
             if (st.loadoutPrimary > 0)
                 FreeSlot(bot, "slot1", 2, 5);
             if (st.loadoutSecondary > 0)
@@ -2098,6 +2113,8 @@ static void UpdateBuying(void* bot, BotState& st)
         const char* model = String(F<int>(Vars(bot), EV_WEAPONMODEL));
         st.modelBeforeBuy = model ? model : "";
         st.buyTries++;
+        if (st.buyTries == 1)
+            ZsrBotMoney(bot);
         FakeCommand(bot, "client_buy_open");
         if (st.boughtPrimary > 0)
             BuyAs(bot, st.boughtPrimary);
@@ -5038,72 +5055,146 @@ static void FixCrossbowCls(DWORD delta)
 }
 
 // ---------------------------------------------------------------- table overrides
-// mp.dll reads its data tables (Zombie Scenario's maps/ZBS_*_<map>, resource/...) with 0x1146cb10(table, name,
-// encrypted): table vfunc 4 loads "<name>.csv", vfunc 8 "<name>.cso" (hw.dll 0x027583e0: reads the file, TEA-decrypts
-// it, calls the CSV parser 0x02758ba0 on the text). A file botassist_tables/<name>.csv next to botassist.asi now
-// replaces the game's table: its text goes to that same parser. Zombie Disaster Zone's waves come from there
-// (tables/maps/ZBS_WAVE_zsrift_splinter.csv, made by gen_zsrift_waves.py).
-static const DWORD MP_LOADTABLE = 0x1146cb10;
-typedef void (*LoadTableFn)(void* table, const char* name, char encrypted);
+// The games' data tables (Zombie Scenario's maps/ZBS_*_<map>, resource/...) are CSV files encrypted with TEA (.cso).
+// mp.dll asks for them through 0x1146cb10(table, name, encrypted); all of them end in hw.dll's .cso loader 0x027583e0
+// (thiscall table, "<name>.cso", returns rows && columns): it reads the file, decrypts it (0x02758c80, the only other
+// caller is unrelated) and hands the text to the CSV parser 0x02758ba0 (thiscall table, text, size). botassist
+// detours that loader: a file botassist_tables/<name>.csv next to botassist.asi goes to the parser instead.
+// Zombie Disaster Zone's waves come from there (tables/maps/ZBS_WAVE_zsrift_splinter.csv, gen_zsrift_waves.py).
+static const DWORD HW_LOADCSO = 0x027583e0, HW_PARSETABLE = 0x02758ba0, HW_BASE = 0x1d00000;
+typedef bool(__thiscall* LoadCsoFn)(void* table, const char* file);
 typedef void(__thiscall* ParseTableFn)(void* table, const char* text, int size);
-static LoadTableFn g_LoadTableTramp;
+static LoadCsoFn g_LoadCsoTramp;
 
-// the CSV parser, found through the table's own .cso loader (its call at +0x8f)
-static ParseTableFn TableParser(void* table)
-{
-    static const unsigned char head[] = { 0x55, 0x8b, 0xec, 0x51, 0x53, 0x8b, 0xd9, 0x56 };
-    unsigned char* load = Readable(table, 4) && Readable(*(void***)table + 2, 4) ? (*(unsigned char***)table)[2] : nullptr;
-    if (!load || !Readable(load, 0x94) || memcmp(load, head, sizeof(head)) || load[0x8f] != 0xe8)
-        return nullptr;
-    return (ParseTableFn)(load + 0x94 + *(int*)(load + 0x90));
-}
-
-static bool LoadTableOverride(void* table, const char* name)
+// botassist_tables\<name> next to botassist.asi, read whole
+static bool ReadOverride(const char* name, std::string& text)
 {
     char path[MAX_PATH];
-    snprintf(path, sizeof(path), "%sbotassist_tables\\%s.csv", g_dir, name);
+    snprintf(path, sizeof(path), "%sbotassist_tables\\%s", g_dir, name);
     for (char* c = path; *c; c++)
         if (*c == '/')
             *c = '\\';
     FILE* f = fopen(path, "rb");
     if (!f)
         return false;
-    std::string text;
     char buf[4096];
     for (size_t n; (n = fread(buf, 1, sizeof(buf), f)) > 0;)
         text.append(buf, n);
     fclose(f);
-    ParseTableFn parse = TableParser(table);
-    if (!parse || text.empty())
-    {
-        Log("table %s: override NOT loaded (%s)", name, parse ? "empty file" : "unexpected table code");
+    return !text.empty();
+}
+
+static bool LoadTableOverride(void* table, const char* file)
+{
+    size_t len = file ? strlen(file) : 0;
+    if (len < 5 || _stricmp(file + len - 4, ".cso"))
         return false;
-    }
+    std::string text;
+    if (!ReadOverride((std::string(file, len - 4) + ".csv").c_str(), text))
+        return false;
     ((DWORD*)table)[2] = ((DWORD*)table)[3] = 0; // rows, columns: what the .cso loader clears first
-    parse(table, text.c_str(), (int)text.size());
-    Log("table %s: loaded from botassist_tables (%lu rows, %lu columns)", name, ((DWORD*)table)[2], ((DWORD*)table)[3]);
-    return ((DWORD*)table)[2] != 0;
+    ((ParseTableFn)(g_hwLo + HW_PARSETABLE - HW_BASE))(table, text.c_str(), (int)text.size());
+    Log("table %s: loaded from botassist_tables (%lu rows, %lu columns)", file, ((DWORD*)table)[2], ((DWORD*)table)[3]);
+    return true;
 }
 
-static void HookedLoadTable(void* table, const char* name, char encrypted)
+static bool __fastcall HookedLoadCso(void* table, void*, const char* file)
 {
-    if (!name || !LoadTableOverride(table, name))
-        g_LoadTableTramp(table, name, encrypted);
+    if (LoadTableOverride(table, file))
+        return ((DWORD*)table)[2] && ((DWORD*)table)[3];
+    return g_LoadCsoTramp(table, file);
 }
 
-static void InstallTableOverrides(DWORD delta)
+static void InstallTableOverrides()
 {
-    unsigned char* fn = (unsigned char*)(MP_LOADTABLE + delta);
-    static const unsigned char code[] = { 0x55, 0x8b, 0xec, 0x81, 0xec, 0x04, 0x01, 0x00, 0x00 };
-    if (Readable(fn, sizeof(code)) && !memcmp(fn, code, sizeof(code)))
-        g_LoadTableTramp = (LoadTableFn)DetourCdecl(fn, sizeof(code), (void*)HookedLoadTable);
-    Log("table overrides: %s", g_LoadTableTramp ? "botassist_tables\\<table>.csv replaces the game's table" : "NOT hooked (unexpected code)");
+    if (g_LoadCsoTramp)
+        return; // hw.dll stays loaded across matches
+    if (!g_hwLo)
+        ModuleRange("hw.dll", g_hwLo, g_hwHi);
+    unsigned char* fn = (unsigned char*)(g_hwLo + HW_LOADCSO - HW_BASE);
+    unsigned char* parse = (unsigned char*)(g_hwLo + HW_PARSETABLE - HW_BASE);
+    static const unsigned char code[] = { 0x55, 0x8b, 0xec, 0x51, 0x53, 0x8b, 0xd9 };
+    static const unsigned char parseCode[] = { 0x55, 0x8b, 0xec, 0x56, 0x57, 0x8b, 0x7d, 0x0c, 0x8b, 0xf1 };
+    if (g_hwLo && Readable(fn, sizeof(code)) && !memcmp(fn, code, sizeof(code)) && Readable(parse, sizeof(parseCode)) &&
+        !memcmp(parse, parseCode, sizeof(parseCode)))
+        g_LoadCsoTramp = (LoadCsoFn)DetourCdecl(fn, sizeof(code), (void*)HookedLoadCso);
+    Log("table overrides: %s", g_LoadCsoTramp ? "botassist_tables\\<table>.csv replaces the game's table" : "NOT hooked (unexpected code)");
+}
+
+// Plain data files the game reads whole through SharedDataMgr (hw.dll vtable 0x2c05d3c) vfunc 0x4c8 (0x025b3c70,
+// stdcall: std::string path, std::string out: open, size, read into out). Zombie Disaster Zone's random events come
+// from maps/ZBS_ENC_<map>_dedi.json that way (mp.dll 0x107633d0), a file Nexon kept on its dedicated servers: without
+// it the mode has no hazards, special zombies or modifiers. botassist_tables\<path> is read instead when it exists
+// (tables/maps/ZBS_ENC_zsrift_splinter_dedi.json). The output string grows with the game's own append (0x01ea1d30,
+// thiscall string, count, char), as the original does, so its memory stays the game's.
+struct MsvcString
+{
+    union
+    {
+        char buf[16];
+        char* ptr;
+    };
+    unsigned size, capacity;
+    char* data() { return capacity > 15 ? ptr : buf; }
+};
+static const DWORD HW_SHAREDDATA_VT = 0x2c05d3c, HW_READPLAIN = 0x025b3c70, HW_STRING_APPEND = 0x01ea1d30;
+typedef void(__stdcall* ReadPlainFn)(MsvcString* path, MsvcString* out);
+typedef void(__thiscall* StringAppendFn)(MsvcString* s, unsigned count, char ch);
+static ReadPlainFn g_ReadPlain;
+
+static void __stdcall HookedReadPlain(MsvcString* path, MsvcString* out)
+{
+    std::string text;
+    if (path && out && ReadOverride(path->data(), text))
+    {
+        if (out->size < text.size())
+            ((StringAppendFn)(g_hwLo + HW_STRING_APPEND - HW_BASE))(out, (unsigned)text.size() - out->size, 0);
+        else
+            out->size = (unsigned)text.size();
+        memcpy(out->data(), text.data(), text.size());
+        out->data()[text.size()] = 0;
+        Log("file %s: read from botassist_tables (%u bytes)", path->data(), (unsigned)text.size());
+        return;
+    }
+    g_ReadPlain(path, out);
+}
+
+static void InstallFileOverrides()
+{
+    if (g_ReadPlain || !g_hwLo)
+        return;
+    void** slot = (void**)(g_hwLo + HW_SHAREDDATA_VT - HW_BASE + 0x4c8);
+    static const unsigned char append[] = { 0x55, 0x8b, 0xec, 0x83, 0xec, 0x10, 0x53, 0x8b, 0x5d, 0x08 };
+    unsigned char* app = (unsigned char*)(g_hwLo + HW_STRING_APPEND - HW_BASE);
+    if (Readable(slot, 4) && *slot == (void*)(g_hwLo + HW_READPLAIN - HW_BASE) && Readable(app, sizeof(append)) &&
+        !memcmp(app, append, sizeof(append)))
+    {
+        g_ReadPlain = (ReadPlainFn)*slot;
+        PatchSlot(slot, (void*)HookedReadPlain);
+    }
+    Log("file overrides: %s", g_ReadPlain ? "botassist_tables\\<file> replaces the game's plain data files" : "NOT hooked (unexpected code)");
+}
+
+// How many random events a Zombie Disaster Zone round gets (0x10769630): rift level / a tweakable value (a vector of
+// floats at 0x11e438f8, 32 from mp.dll's static init 0x1004f7f0, no callback), at most 10, the remainder a chance of
+// one more. 32 was made for rift levels up to 100; ZSRiftEventDivisor replaces it.
+static const DWORD MP_ZSRIFT_EVENT_DIVISOR = 0x11e438f8;
+static void SetZsrEventDivisor(DWORD delta)
+{
+    float** vec = (float**)(MP_ZSRIFT_EVENT_DIVISOR + delta);
+    bool ok = cfg.zsrEventDivisor > 0 && Readable(vec, 8) && vec[0] && vec[1] > vec[0] && Readable(vec[0], 4) &&
+              *vec[0] == 32.0f;
+    if (ok)
+        *vec[0] = cfg.zsrEventDivisor;
+    Log("ZSRift: events per round = rift level / %.1f%s", ok ? cfg.zsrEventDivisor : 32.0f, ok ? "" : " (game's value kept)");
 }
 
 static void HookBotManager(DWORD delta)
 {
     FixCrossbowCls(delta);
-    InstallTableOverrides(delta);
+    InstallTableOverrides();
+    InstallFileOverrides();
+    SetZsrEventDivisor(delta);
     DetourBotAddCommand(delta);
     HookZombieGiant(delta);
     InstallZgDebug(delta);

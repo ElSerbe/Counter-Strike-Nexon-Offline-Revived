@@ -384,10 +384,22 @@ automatic ones join CT. No more kicks in co-op modes.
 ## Table overrides: Zombie Disaster Zone's zombie mix
 mp.dll loads its data tables (Zombie Scenario's `maps/ZBS_*_<map>`, `resource/...`) through 0x1146cb10; the `.cso`
 files are CSV encrypted with TEA (fixed key, hw.dll 0x02758c80; `tools/csodec.py` decrypts and encrypts them).
-botassist detours that loader: `Bin/botassist_tables/<table>.csv` (e.g. `maps/ZBS_WAVE_zsrift_splinter.csv`), when it
-exists, is parsed into the table instead (hw.dll's CSV parser, the one its `.cso` loader calls).
+botassist detours hw.dll's `.cso` loader (0x027583e0, every table load ends there; mp.dll's tables are
+`StringTableWrapper`s with the table at +4): `Bin/botassist_tables/<table>.csv` (e.g.
+`maps/ZBS_WAVE_zsrift_splinter.csv`), when it exists, goes to hw.dll's CSV parser (0x02758ba0) instead. Plain files
+read whole through SharedDataMgr vfunc 0x4c8 (0x025b3c70) are served from `Bin/botassist_tables/<path>` the same way.
 
 Zombie Disaster Zone's own waves spawn only zombie types 1 and 2 every round, though its type table
 (`maps/zbs_zt_zsrift_splinter`) lists the scenario's special zombies. `gen_zsrift_waves.py` rebuilds the wave table
 from the game's with a mix that grows each round (speed, psycho, healer, heavy, boomer, deimos, climber, light,
 revival, golden speed) and the boss's escort mixed too; `apply_patches.py` copies it into Bin.
+
+## Zombie Disaster Zone's random events
+Each round the mode draws random events from `maps/ZBS_ENC_<map>_dedi.json` (mp.dll 0x107633d0, jsoncons): stage
+hazards (hurricanes, magnetic fields, high gravity, petrifying statues, fire bombs, airstrikes, vigilant eye), special
+zombies joining the round, rounds of one kind of zombie, weapon / speed penalties and zombie HP / attack / speed
+modifiers. Nexon kept that file on its dedicated servers, so the mode had none of them offline.
+`gen_zsrift_events.py` writes one (its docstring has the format), served through the file overrides. The number of
+events per round is rift level / 32 in the game (made for levels up to 100); `ZSRiftEventDivisor` (botassist.ini,
+3 by default) replaces 32. Bots get at least `ZSRiftBotMoney` on each new life there, since the mode pays once per
+round and they come back with nothing.
