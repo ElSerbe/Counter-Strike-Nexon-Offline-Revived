@@ -1,20 +1,21 @@
 diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
-index b5e72be..299b588 100644
+index b5e72be..57dd1e6 100644
 --- a/src/CMakeLists.txt
 +++ b/src/CMakeLists.txt
-@@ -38,6 +38,11 @@ endif()
+@@ -38,6 +38,12 @@ endif()
  target_sources(PROJECTNAME PRIVATE "main.cpp")
  target_sources(PROJECTNAME PRIVATE "serverinstance.cpp")
  target_sources(PROJECTNAME PRIVATE "serverconfig.cpp")
 +target_sources(PROJECTNAME PRIVATE "manager/warbondmanager.cpp")
 +target_sources(PROJECTNAME PRIVATE "manager/bingomanager.cpp")
++target_sources(PROJECTNAME PRIVATE "manager/zsriftmanager.cpp")
 +target_sources(PROJECTNAME PRIVATE "manager/medalmanager.cpp")
 +target_sources(PROJECTNAME PRIVATE "manager/missionmanager.cpp")
 +target_sources(PROJECTNAME PRIVATE "net/webserver.cpp")
  target_sources(PROJECTNAME PRIVATE "command.cpp")
  target_sources(PROJECTNAME PRIVATE "common/buffer.cpp")
  target_sources(PROJECTNAME PRIVATE "common/buildnum.cpp")
-@@ -148,6 +153,8 @@ if (MSVC)
+@@ -148,6 +154,8 @@ if (MSVC)
  else()
  	# don't treat some warnings as errors
  	target_compile_options(PROJECTNAME PRIVATE -Wno-error=sign-compare -Wno-error=unused-variable -Wno-error=delete-non-virtual-dtor -Wno-error=unused-parameter -Wno-error=conversion-null -Wno-error=register -Wno-error=unused-value -Wno-error=reorder -Wno-error=attributes)
@@ -323,6 +324,35 @@ index 0000000..5405ded
 +	virtual int CountHeadshots(const std::map<int, int>& killTypes) = 0;
 +	// medals for levelling up (LevelUpPerLevel x each new level)
 +	virtual void OnLevelUp(IUser* user, int oldLevel, int newLevel) = 0;
++};
+diff --git a/src/interface/izsriftmanager.h b/src/interface/izsriftmanager.h
+new file mode 100644
+index 0000000..0ab85aa
+--- /dev/null
++++ b/src/interface/izsriftmanager.h
+@@ -0,0 +1,23 @@
++#pragma once
++
++#include <vector>
++
++#include "imanager.h"
++
++class IUser;
++
++/**
++ * Offline build: Zombie Disaster Zone's traits (packet 125). Trait EXP is earned by finishing matches of any mode
++ * (up to a daily maximum) and spent on the 9 traits' levels, which the match host gets when the player joins.
++ */
++class IZSRiftManager : public IBaseManager
++{
++public:
++	virtual void OnPacket(CReceivePacket* msg, IExtendedSocket* socket) = 0;
++	// the trait panel's data, sent at login (the client keeps it for the panel)
++	virtual void OnUserLogin(IUser* user) = 0;
++	// trait EXP for a finished match (any mode)
++	virtual void OnMatchResult(IUser* user, int kills, bool won) = 0;
++	// the player's 9 trait levels (ZSRIFT_StatInfo.json order)
++	virtual std::vector<int> Levels(IUser* user) = 0;
 +};
 diff --git a/src/interface/net/iextendedsocket.h b/src/interface/net/iextendedsocket.h
 index 6768f4e..f62cd69 100644
@@ -1259,18 +1289,26 @@ index 35561e8..f7edea1 100644
  	rooms.erase(
  		remove_if(
 diff --git a/src/manager/hostmanager.cpp b/src/manager/hostmanager.cpp
-index 24d1ccc..4f813f3 100644
+index 24d1ccc..e4b37a8 100644
 --- a/src/manager/hostmanager.cpp
 +++ b/src/manager/hostmanager.cpp
-@@ -292,6 +292,13 @@ bool CHostManager::OnUpdateUserStatus(CReceivePacket* msg, IExtendedSocket* sock
+@@ -1,4 +1,5 @@
+ #include "hostmanager.h"
++#include "zsriftmanager.h"
+ #include "packetmanager.h"
+ #include "dedicatedservermanager.h"
+ #include "usermanager.h"
+@@ -292,6 +293,15 @@ bool CHostManager::OnUpdateUserStatus(CReceivePacket* msg, IExtendedSocket* sock
  	int status = msg->ReadUInt8();
  	if (status == 1)
  	{
-+		// Zombie Disaster Zone: the player's stat levels, or the match computes their health, damage... from nothing
++		// Zombie Disaster Zone: the player's trait levels, or the match computes their health, damage... from nothing
 +		if (destRoom->GetSettings()->gameModeId == 59)
 +		{
-+			g_PacketManager.SendHostZSRiftStats(socket, userID, vector<int>(9, 0));
-+			Logger().Info("ZS Rift: sent user %d's stat levels to the host\n", userID);
++			vector<int> levels = g_ZSRiftManager.Levels(destUser);
++			g_PacketManager.SendHostZSRiftStats(socket, userID, levels);
++			Logger().Info("ZS Rift: sent user %d's trait levels to the host: %d %d %d %d %d %d %d %d %d\n", userID, levels[0],
++				levels[1], levels[2], levels[3], levels[4], levels[5], levels[6], levels[7], levels[8]);
 +		}
 +
  		// send zbs addon info
@@ -3308,15 +3346,16 @@ index 0e1d7d2..a6efa65 100644
  
  	// clan related
 diff --git a/src/manager/usermanager.cpp b/src/manager/usermanager.cpp
-index b426874..952a7f4 100644
+index b426874..8807c85 100644
 --- a/src/manager/usermanager.cpp
 +++ b/src/manager/usermanager.cpp
-@@ -1,3 +1,4 @@
+@@ -1,3 +1,5 @@
++#include "zsriftmanager.h"
 +#include "medalmanager.h"
  #include "usermanager.h"
  #include "channelmanager.h"
  #include "userdatabase.h"
-@@ -16,6 +17,8 @@
+@@ -16,6 +18,8 @@
  #include "csvtable.h"
  #include "serverinstance.h"
  #include "serverconfig.h"
@@ -3325,7 +3364,7 @@ index b426874..952a7f4 100644
  
  using namespace std;
  
-@@ -157,6 +160,11 @@ bool CUserManager::OnLoginPacket(CReceivePacket* msg, IExtendedSocket* socket)
+@@ -157,6 +161,11 @@ bool CUserManager::OnLoginPacket(CReceivePacket* msg, IExtendedSocket* socket)
  
  	socket->SetHWID(hwid);
  
@@ -3337,7 +3376,7 @@ index b426874..952a7f4 100644
  	if (g_UserDatabase.IsHWIDBanned(hwid))
  	{
  		Logger().Info("Client (%s) disconnected from the server due to banned HWID\n", socket->GetIP().c_str());
-@@ -316,7 +324,7 @@ bool CUserManager::OnVersionPacket(CReceivePacket* msg, IExtendedSocket* socket)
+@@ -316,7 +325,7 @@ bool CUserManager::OnVersionPacket(CReceivePacket* msg, IExtendedSocket* socket)
  		GuestData_s& data = socket->GetGuestData();
  		if (!data.isGuest)
  			g_PacketManager.SendVersion(socket, 0);
@@ -3346,7 +3385,7 @@ index b426874..952a7f4 100644
  			SendGuestUserPacket(socket);
  
  		data.isGuest = true;
-@@ -630,6 +638,252 @@ void CUserManager::SendGuestUserPacket(IExtendedSocket* socket)
+@@ -630,6 +639,252 @@ void CUserManager::SendGuestUserPacket(IExtendedSocket* socket)
  	g_PacketManager.SendUMsgNoticeMessageInChat(socket, OBFUSCATE("Server developers: Jusic, Hardee, NekoMeow, Smilex_Gamer, xRiseless. Our Discord: https://discord.gg/EvUAY6D"));
  }
  
@@ -3599,7 +3638,7 @@ index b426874..952a7f4 100644
  void CUserManager::SendLoginPacket(IUser* user, const CUserCharacter& character)
  {
  	IExtendedSocket* socket = user->GetExtendedSocket();
-@@ -659,7 +913,9 @@ void CUserManager::SendLoginPacket(IUser* user, const CUserCharacter& character)
+@@ -659,7 +914,9 @@ void CUserManager::SendLoginPacket(IUser* user, const CUserCharacter& character)
  
  	g_PacketManager.SendEventUnk(socket);
  
@@ -3610,15 +3649,18 @@ index b426874..952a7f4 100644
  
  	if (g_pServerConfig->activeMiniGamesFlag & kEventFlag_WeaponRelease)
  		g_MiniGameManager.SendWeaponReleaseUpdate(user);
-@@ -879,6 +1135,7 @@ bool CUserManager::OnCharacterPacket(CReceivePacket* msg, IExtendedSocket* socke
+@@ -877,8 +1134,10 @@ bool CUserManager::OnCharacterPacket(CReceivePacket* msg, IExtendedSocket* socke
+ 	g_ItemManager.OnUserLogin(user);
+ 	g_ClanManager.OnUserLogin(user);
  	g_QuestManager.OnUserLogin(user);
++	g_ZSRiftManager.OnUserLogin(user);
  
  	SendLoginPacket(user, character);
 +	g_MedalManager.CheckMedals(user); // offline build: medals whose conditions changed (Data/Medals.json)
  
  	return true;
  }
-@@ -989,6 +1246,15 @@ void CUserManager::OnSecondTick(time_t curTime)
+@@ -989,6 +1248,15 @@ void CUserManager::OnSecondTick(time_t curTime)
  {
  	for (auto u : m_Users)
  		u->OnTick();
@@ -3634,15 +3676,18 @@ index b426874..952a7f4 100644
  }
  
  void CUserManager::SendNoticeMessageToAll(const string& msg)
-@@ -1082,6 +1348,7 @@ int CUserManager::LoginUser(IExtendedSocket* socket, const string& userName, con
+@@ -1080,8 +1348,10 @@ int CUserManager::LoginUser(IExtendedSocket* socket, const string& userName, con
+ 		g_ItemManager.OnUserLogin(newUser);
+ 		g_ClanManager.OnUserLogin(newUser);
  		g_QuestManager.OnUserLogin(newUser);
++		g_ZSRiftManager.OnUserLogin(newUser);
  
  		SendLoginPacket(newUser, character);
 +		g_MedalManager.CheckMedals(newUser);
  	}
  
  	return LOGIN_OK;
-@@ -1285,7 +1552,7 @@ bool CUserManager::OnUserSurveyPacket(CReceivePacket* msg, IExtendedSocket* sock
+@@ -1285,7 +1555,7 @@ bool CUserManager::OnUserSurveyPacket(CReceivePacket* msg, IExtendedSocket* sock
  
  	IUser* user = GetUserBySocket(socket);
  	if (user == NULL)
@@ -3675,10 +3720,10 @@ index 3054001..9c14f6b 100644
  	void SendUserLoadout(IUser* user);
 diff --git a/src/manager/warbondmanager.cpp b/src/manager/warbondmanager.cpp
 new file mode 100644
-index 0000000..a8f0410
+index 0000000..5f43da6
 --- /dev/null
 +++ b/src/manager/warbondmanager.cpp
-@@ -0,0 +1,960 @@
+@@ -0,0 +1,962 @@
 +#include "warbondmanager.h"
 +#include "usermanager.h"
 +#include "userdatabase.h"
@@ -3690,6 +3735,7 @@ index 0000000..a8f0410
 +#include "room/room.h"
 +#include "room/gamematch.h"
 +#include "bingomanager.h"
++#include "zsriftmanager.h"
 +#include "medalmanager.h"
 +#include "missionmanager.h"
 +
@@ -4565,6 +4611,7 @@ index 0000000..a8f0410
 +	AdvanceOrders(user, gameMode, { { "Matches", 1 }, { "Wins", won ? 1 : 0 }, { "Kills", kills }, { "BestKills", kills },
 +		{ "TopPlayer", topPlayer ? 1 : 0 }, { "Headshots", headshots } });
 +	g_BingoManager.OnMatchResult(user, kills, won);
++	g_ZSRiftManager.OnMatchResult(user, kills, won);
 +	return medals;
 +}
 +
@@ -4764,6 +4811,307 @@ index 0000000..3dda56f
 +};
 +
 +extern CWarbondManager g_WarbondManager;
+diff --git a/src/manager/zsriftmanager.cpp b/src/manager/zsriftmanager.cpp
+new file mode 100644
+index 0000000..38c4a5c
+--- /dev/null
++++ b/src/manager/zsriftmanager.cpp
+@@ -0,0 +1,240 @@
++#include "zsriftmanager.h"
++#include "usermanager.h"
++#include "packetmanager.h"
++#include "serverinstance.h"
++#include "main.h"
++#include "common/utils.h"
++
++#include <cmath>
++#include <ctime>
++#include <fstream>
++
++using namespace std;
++using json = nlohmann::json;
++
++CZSRiftManager g_ZSRiftManager;
++
++/*
++ * Zombie Disaster Zone's trait panel (packet 125), from hw.dll Packet_ZSRift (parser 0x20c1490, requests
++ * 0x20c1e50..0x20c2110 through SharedDataMgr 0x91c..0x92c) and GameUI CZSRiftStatDlg (0x10408cc0):
++ *
++ * client -> server, first byte the request:
++ *   0      traits (the panel opens)           1 s    upgrade trait s (0..8)
++ *   3 p s  ranking (party type, season)       4 p s name   ranking search          5   reset the traits
++ *
++ * server -> client, first byte the reply:
++ *   0  u8 flags: 1 = 9 x {u8 trait, u16 level}; 2 = u16 total level, u32 trait EXP, u32 EXP earned today,
++ *      u32 daily maximum ("Max daily: today/max"). The panel refreshes on it (and unlocks its buttons).
++ *   2  rift info: u8 season, u32 cost base, u32 cost rate (x1000), 5 x u32 difficulty unlock values, u8 n x
++ *      {u32 difficulty, u8}. The panel prices trait level L + 1 as round(base * (rate / 1000) ^ (L + 1) / 10) * 10.
++ * Traits in resource/ZSRift/ZSRIFT_StatInfo.json order: Health, Armor, DamageRate, Ammo, HealthRegen, Critical,
++ * BossDamageRate, StartMoney, RoundMoney.
++ */
++static const int kTraits = 9;
++
++CZSRiftManager::CZSRiftManager() : CBaseManager("ZSRiftManager")
++{
++}
++
++bool CZSRiftManager::Init()
++{
++	LoadConfig();
++
++	ifstream f("Data/ZSRiftState.json");
++	m_State = json::parse(f, nullptr, false);
++	if (m_State.is_discarded() || !m_State.is_object())
++		m_State = json::object();
++	return true;
++}
++
++bool CZSRiftManager::LoadConfig()
++{
++	ifstream f("Data/ZSRift.json");
++	json cfg = json::parse(f, nullptr, false, true);
++	if (cfg.is_discarded())
++	{
++		Logger().Warn("ZSRiftManager: couldn't load Data/ZSRift.json, using the defaults\n");
++		return false;
++	}
++	ZSRiftRules r;
++	r.dailyExpMax = cfg.value("DailyExpMax", r.dailyExpMax);
++	r.maxLevel = cfg.value("MaxLevel", r.maxLevel);
++	r.costBase = cfg.value("CostBase", r.costBase);
++	r.costRate = cfg.value("CostRate", r.costRate);
++	r.matchExp = cfg.value("MatchExp", r.matchExp);
++	r.killExp = cfg.value("KillExp", r.killExp);
++	r.winExp = cfg.value("WinExp", r.winExp);
++	m_Rules = r;
++	return true;
++}
++
++void CZSRiftManager::Save()
++{
++	ofstream f("Data/ZSRiftState.json");
++	f << m_State.dump(1);
++}
++
++int CZSRiftManager::Today()
++{
++	time_t now = time(NULL);
++	tm local = *localtime(&now);
++	return (local.tm_year + 1900) * 1000 + local.tm_yday;
++}
++
++json& CZSRiftManager::State(IUser* user)
++{
++	json& st = m_State[to_string(user->GetID())];
++	if (!st.is_object() || !st.contains("levels") || st["levels"].size() != kTraits)
++		st = { { "levels", json::array({ 0, 0, 0, 0, 0, 0, 0, 0, 0 }) }, { "exp", 0 }, { "day", Today() }, { "today", 0 } };
++	if (st.value("day", 0) != Today())
++	{
++		st["day"] = Today();
++		st["today"] = 0;
++	}
++	return st;
++}
++
++int CZSRiftManager::Cost(int level)
++{
++	double cost = m_Rules.costBase * pow(m_Rules.costRate / 1000.0, level + 1);
++	return (int)(round(cost / 10.0) * 10.0);
++}
++
++vector<int> CZSRiftManager::Levels(IUser* user)
++{
++	vector<int> levels(kTraits, 0);
++	if (!user)
++		return levels;
++	json& st = State(user);
++	for (int i = 0; i < kTraits; i++)
++		levels[i] = st["levels"][i].get<int>();
++	return levels;
++}
++
++void CZSRiftManager::SendRules(IUser* user)
++{
++	CSendPacket* msg = g_PacketManager.CreatePacket(user->GetExtendedSocket(), PacketId::ZSRift);
++	msg->BuildHeader();
++	msg->WriteUInt8(2);
++	msg->WriteUInt8(1); // season
++	msg->WriteUInt32(m_Rules.costBase);
++	msg->WriteUInt32(m_Rules.costRate);
++	for (int i = 0; i < 5; i++)
++		msg->WriteUInt32(0);
++	msg->WriteUInt8(0);
++	user->GetExtendedSocket()->Send(msg);
++}
++
++void CZSRiftManager::SendTraits(IUser* user)
++{
++	json& st = State(user);
++	int total = 0;
++	CSendPacket* msg = g_PacketManager.CreatePacket(user->GetExtendedSocket(), PacketId::ZSRift);
++	msg->BuildHeader();
++	msg->WriteUInt8(0);
++	msg->WriteUInt8(1 | 2);
++	for (int i = 0; i < kTraits; i++)
++	{
++		int level = st["levels"][i].get<int>();
++		total += level;
++		msg->WriteUInt8(i);
++		msg->WriteUInt16(level);
++	}
++	msg->WriteUInt16(total);
++	msg->WriteUInt32(st.value("exp", 0));
++	msg->WriteUInt32(st.value("today", 0));
++	msg->WriteUInt32(m_Rules.dailyExpMax);
++	user->GetExtendedSocket()->Send(msg);
++}
++
++void CZSRiftManager::OnUserLogin(IUser* user)
++{
++	if (!user)
++		return;
++	SendRules(user);
++	SendTraits(user);
++}
++
++void CZSRiftManager::OnPacket(CReceivePacket* msg, IExtendedSocket* socket)
++{
++	IUser* user = g_UserManager.GetUserBySocket(socket);
++	if (!user)
++		return;
++
++	int request = msg->ReadUInt8();
++	switch (request)
++	{
++	case 0:
++		SendRules(user);
++		SendTraits(user);
++		break;
++	case 1:
++		OnUpgrade(user, msg->ReadUInt8());
++		break;
++	case 5:
++		OnReset(user);
++		break;
++	default:
++		Logger().Info("ZSRiftManager: request %d from user %d not handled (rankings)\n", request, user->GetID());
++		break;
++	}
++}
++
++void CZSRiftManager::OnUpgrade(IUser* user, int stat)
++{
++	json& st = State(user);
++	if (stat >= 0 && stat < kTraits)
++	{
++		int level = st["levels"][stat].get<int>();
++		int cost = Cost(level);
++		int exp = st.value("exp", 0);
++		if (level < m_Rules.maxLevel && exp >= cost)
++		{
++			st["levels"][stat] = level + 1;
++			st["exp"] = exp - cost;
++			Save();
++			Logger().Info("ZSRiftManager: user %d raised trait %d to level %d for %d EXP\n", user->GetID(), stat, level + 1, cost);
++		}
++		else
++			g_PacketManager.SendUMsgNoticeMessageInChat(user->GetExtendedSocket(),
++				level >= m_Rules.maxLevel ? va("This trait is at the maximum level (%d).", m_Rules.maxLevel)
++										  : va("Not enough trait EXP: %d needed, %d held.", cost, exp));
++	}
++	SendTraits(user); // also unlocks the panel's buttons
++}
++
++// every level back, every EXP spent on them returned
++void CZSRiftManager::OnReset(IUser* user)
++{
++	json& st = State(user);
++	int refund = 0;
++	for (int i = 0; i < kTraits; i++)
++	{
++		int level = st["levels"][i].get<int>();
++		for (int l = 0; l < level; l++)
++			refund += Cost(l);
++		st["levels"][i] = 0;
++	}
++	st["exp"] = st.value("exp", 0) + refund;
++	Save();
++	Logger().Info("ZSRiftManager: user %d reset the traits, %d EXP returned\n", user->GetID(), refund);
++	SendTraits(user);
++}
++
++void CZSRiftManager::OnMatchResult(IUser* user, int kills, bool won)
++{
++	if (!user)
++		return;
++	json& st = State(user);
++	int today = st.value("today", 0);
++	int gain = m_Rules.matchExp + m_Rules.killExp * max(kills, 0) + (won ? m_Rules.winExp : 0);
++	gain = min(gain, m_Rules.dailyExpMax - today);
++	if (gain <= 0)
++		return;
++	st["today"] = today + gain;
++	st["exp"] = st.value("exp", 0) + gain;
++	Save();
++	g_PacketManager.SendUMsgNoticeMessageInChat(user->GetExtendedSocket(),
++		va("Trait EXP +%d (today %d/%d)", gain, today + gain, m_Rules.dailyExpMax));
++	SendTraits(user);
++}
+diff --git a/src/manager/zsriftmanager.h b/src/manager/zsriftmanager.h
+new file mode 100644
+index 0000000..d0041d1
+--- /dev/null
++++ b/src/manager/zsriftmanager.h
+@@ -0,0 +1,49 @@
++#pragma once
++
++#include <string>
++#include <vector>
++
++#include "interface/izsriftmanager.h"
++#include "manager.h"
++#include "nlohmann/json.hpp"
++
++// Data/ZSRift.json
++struct ZSRiftRules
++{
++	int dailyExpMax = 1500;
++	int maxLevel = 20;
++	// cost of a trait's next level, as the client computes it: round(costBase * (costRate / 1000) ^ level / 10) * 10
++	// with level the one bought (1 for the first): 952 / 1050 make the first one 1000, then about 5% more each
++	int costBase = 952, costRate = 1050;
++	int matchExp = 100, killExp = 10, winExp = 100; // per finished match, before the daily maximum
++};
++
++class CZSRiftManager : public CBaseManager<IZSRiftManager>
++{
++public:
++	CZSRiftManager();
++
++	virtual bool Init();
++
++	virtual void OnPacket(CReceivePacket* msg, IExtendedSocket* socket);
++	virtual void OnUserLogin(IUser* user);
++	virtual void OnMatchResult(IUser* user, int kills, bool won);
++	virtual std::vector<int> Levels(IUser* user);
++
++private:
++	bool LoadConfig();
++	nlohmann::json& State(IUser* user); // the player's traits (created on first use, today's EXP reset each day)
++	void Save();
++	int Today();
++	int Cost(int level); // EXP for the level after `level`
++
++	void SendRules(IUser* user);
++	void SendTraits(IUser* user);
++	void OnUpgrade(IUser* user, int stat);
++	void OnReset(IUser* user);
++
++	ZSRiftRules m_Rules;
++	nlohmann::json m_State;
++};
++
++extern CZSRiftManager g_ZSRiftManager;
 diff --git a/src/net/CMakeLists.txt b/src/net/CMakeLists.txt
 index ee6c781..01ba6f8 100644
 --- a/src/net/CMakeLists.txt
@@ -5952,7 +6300,7 @@ index 69a1cd9..823c6f8 100644
  	int GetDefaultZbRespawn(int gameModeId);
  	int GetDefaultZbBalance(int gameModeId);
 diff --git a/src/serverinstance.cpp b/src/serverinstance.cpp
-index b7b0aaa..524f259 100644
+index b7b0aaa..6caf90f 100644
 --- a/src/serverinstance.cpp
 +++ b/src/serverinstance.cpp
 @@ -1,3 +1,5 @@
@@ -5961,15 +6309,16 @@ index b7b0aaa..524f259 100644
  #include "serverinstance.h"
  
  #include "manager/packetmanager.h"
-@@ -11,6 +13,7 @@
+@@ -11,6 +13,8 @@
  #include "manager/dedicatedservermanager.h"
  #include "manager/questmanager.h"
  #include "manager/minigamemanager.h"
 +#include "manager/bingomanager.h"
++#include "manager/zsriftmanager.h"
  #include "manager/clanmanager.h"
  #include "manager/rankmanager.h"
  #include "manager/voxelmanager.h"
-@@ -305,7 +308,13 @@ void* ReadConsoleThread(void*)
+@@ -305,7 +309,13 @@ void* ReadConsoleThread(void*)
  	while (g_pServerInstance->IsServerActive())
  	{
  		string cmd;
@@ -5984,11 +6333,14 @@ index b7b0aaa..524f259 100644
  
  		// TODO: ignore empty line?
  
-@@ -399,6 +408,7 @@ void CServerInstance::OnPackets(IExtendedSocket* s, CReceivePacket* msg)
+@@ -399,6 +409,10 @@ void CServerInstance::OnPackets(IExtendedSocket* s, CReceivePacket* msg)
  		g_MiniGameManager.OnPacket(msg, s);
  		break;
  	case PacketId::MileageBingo:
 +		g_BingoManager.OnPacket(msg, s);
++		break;
++	case PacketId::ZSRift:
++		g_ZSRiftManager.OnPacket(msg, s);
  		break;
  	case PacketId::UpdateInfo:
  		g_UserManager.OnUpdateInfoPacket(msg, s);

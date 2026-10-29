@@ -1,0 +1,13 @@
+{
+	// Zombie Disaster Zone traits (the "Trait upgrade" panel): EXP earned by finishing matches of any mode
+	"DailyExpMax": 1500,
+	"MaxLevel": 20,
+	// cost of the level bought: round(CostBase * (CostRate / 1000) ^ level / 10) * 10 -> 1000 for the first,
+	// about 5% more for each next one (the client shows the same formula on the panel)
+	"CostBase": 952,
+	"CostRate": 1050,
+	// EXP per finished match: MatchExp + KillExp per kill + WinExp for a win (then the daily maximum)
+	"MatchExp": 100,
+	"KillExp": 10,
+	"WinExp": 100
+}
