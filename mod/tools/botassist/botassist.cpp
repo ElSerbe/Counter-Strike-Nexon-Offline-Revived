@@ -1861,6 +1861,35 @@ static bool GiveRoomPrimary(void* bot, int item)
     return true;
 }
 
+// CSNZ's drop command is "cl_drop" (it throws the weapon in hand), thrown behind the bot: the drop goes where the
+// player faces, and thrown ahead the bot and the ones it fights walked onto it, picked it up and threw it again
+static void DropBehind(void* bot)
+{
+    float* va = (float*)(Vars(bot) + EV_VANGLE);
+    float* an = (float*)(Vars(bot) + EV_ANGLES);
+    float saved[6] = { va[0], va[1], va[2], an[0], an[1], an[2] };
+    va[0] = an[0] = 0;
+    va[1] = an[1] = AngleDiff(va[1] + 180.0f, 0.0f);
+    FakeCommand(bot, "cl_drop");
+    memcpy(va, saved, sizeof(float) * 3);
+    memcpy(an, saved + 3, sizeof(float) * 3);
+}
+
+// The room's weapon only fits a free slot: the modes that hand out a weapon at spawn (an AWP in some deathmatch
+// rooms) kept it, and the bought one stayed on the ground. Before buying, the bot throws away what it carries in
+// that slot (slot1: categories 2-5, slot2: 1); an empty slot selects nothing and nothing is thrown.
+static void FreeSlot(void* bot, const char* slot, int minCat, int maxCat)
+{
+    FakeCommand(bot, slot);
+    const char* m = String(F<int>(Vars(bot), EV_WEAPONMODEL));
+    std::string held = m ? m : "";
+    for (auto& ch : held)
+        ch = (char)tolower(ch);
+    auto cat = cfg.weaponCategory.find(held);
+    if (cat != cfg.weaponCategory.end() && cat->second >= minCat && cat->second <= maxCat)
+        DropBehind(bot);
+}
+
 // a moment after spawning (after the bot's own CS purchases), buy a random weapon from the whole game
 static void UpdateBuying(void* bot, BotState& st)
 {
@@ -1922,16 +1951,7 @@ static void UpdateBuying(void* bot, BotState& st)
         st.probedSlot = 0;
         if ((rb->primary < 0 && c >= 2 && c <= 5) || (rb->secondary < 0 && c == 1))
         {
-            // thrown behind the bot (the drop goes where the player faces): thrown ahead, the bot and the ones it
-            // fights walked onto it, picked it up and threw it again, round and round
-            float* va = (float*)(Vars(bot) + EV_VANGLE);
-            float* an = (float*)(Vars(bot) + EV_ANGLES);
-            float saved[6] = { va[0], va[1], va[2], an[0], an[1], an[2] };
-            va[0] = an[0] = 0;
-            va[1] = an[1] = AngleDiff(va[1] + 180.0f, 0.0f);
-            FakeCommand(bot, "cl_drop");
-            memcpy(va, saved, sizeof(float) * 3);
-            memcpy(an, saved + 3, sizeof(float) * 3);
+            DropBehind(bot);
             st.strips++;
             st.stripProbe = 0; // it may carry the other slot's one too
             static int reports = 0;
@@ -2034,6 +2054,10 @@ static void UpdateBuying(void* bot, BotState& st)
             // game rules vfunc 0x400): the room's weapons always cost too much there, so the bot gets enough
             if (pl && GameMode() == 30 && *(int*)(pl + 0xca8) < 16000)
                 *(int*)(pl + 0xca8) = 16000;
+            if (st.loadoutPrimary > 0)
+                FreeSlot(bot, "slot1", 2, 5);
+            if (st.loadoutSecondary > 0)
+                FreeSlot(bot, "slot2", 1, 1);
             FakeCommand(bot, "client_buy_open");
             if (st.loadoutPrimary > 0)
                 BuyAs(bot, st.loadoutPrimary);
@@ -2041,6 +2065,9 @@ static void UpdateBuying(void* bot, BotState& st)
                 BuyAs(bot, st.loadoutSecondary);
             if (st.loadoutMelee > 0)
                 BuyAs(bot, st.loadoutMelee);
+            FakeCommand(bot, "primammo"); // full ammo for what it bought
+            FakeCommand(bot, "primammo");
+            FakeCommand(bot, "secammo");
             FakeCommand(bot, "client_buy_close");
             if (pl)
                 pl[0x18b4] = wasInternal;
@@ -2094,9 +2121,11 @@ static void UpdateBuying(void* bot, BotState& st)
         st.checkBuyAt = 0;
         const char* model = String(F<int>(Vars(bot), EV_WEAPONMODEL));
         std::string held = model ? model : "";
-        // nothing changed (the item isn't sold here, no money...): try another weapon a few times
+        // nothing changed (the item isn't sold here, no money...): try another weapon a few times. In the other modes
+        // the room's primary must be in hand (holding another one, e.g. the spawn's, is a failure too)
         auto want = cfg.weaponModel.find(st.boughtPrimary);
-        bool failed = held == st.modelBeforeBuy && (want == cfg.weaponModel.end() || _stricmp(held.c_str(), want->second.c_str()));
+        bool wrong = want != cfg.weaponModel.end() && _stricmp(held.c_str(), want->second.c_str());
+        bool failed = (held == st.modelBeforeBuy && (want == cfg.weaponModel.end() || wrong)) || (!scenario && wrong);
         static int reports = 0;
         if (reports++ < 40)
             Log("bot %d bought item %d, now holding %s%s", st.slot, st.boughtPrimary, held.c_str(),
