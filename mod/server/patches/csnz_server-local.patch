@@ -4813,10 +4813,10 @@ index 0000000..3dda56f
 +extern CWarbondManager g_WarbondManager;
 diff --git a/src/manager/zsriftmanager.cpp b/src/manager/zsriftmanager.cpp
 new file mode 100644
-index 0000000..38c4a5c
+index 0000000..aa2dafc
 --- /dev/null
 +++ b/src/manager/zsriftmanager.cpp
-@@ -0,0 +1,240 @@
+@@ -0,0 +1,252 @@
 +#include "zsriftmanager.h"
 +#include "usermanager.h"
 +#include "packetmanager.h"
@@ -5047,15 +5047,27 @@ index 0000000..38c4a5c
 +	json& st = State(user);
 +	int today = st.value("today", 0);
 +	int gain = m_Rules.matchExp + m_Rules.killExp * max(kills, 0) + (won ? m_Rules.winExp : 0);
-+	gain = min(gain, m_Rules.dailyExpMax - today);
-+	if (gain <= 0)
-+		return;
-+	st["today"] = today + gain;
-+	st["exp"] = st.value("exp", 0) + gain;
-+	Save();
++	gain = max(0, min(gain, m_Rules.dailyExpMax - today));
++	if (gain > 0)
++	{
++		st["today"] = today + gain;
++		st["exp"] = st.value("exp", 0) + gain;
++		Save();
++	}
++	// every finished match: what it gave, today's total against the daily maximum, and the EXP held
 +	g_PacketManager.SendUMsgNoticeMessageInChat(user->GetExtendedSocket(),
-+		va("Trait EXP +%d (today %d/%d)", gain, today + gain, m_Rules.dailyExpMax));
-+	SendTraits(user);
++		va("ZSR XP report: Gained %d XP out of %d/%d daily XP | %d TOTAL XP.", gain, today + gain, m_Rules.dailyExpMax,
++			st.value("exp", 0)));
++	// the match that reached the daily maximum: a notification too
++	if (gain > 0 && today + gain >= m_Rules.dailyExpMax)
++	{
++		RewardNotice notice = {};
++		notice.status = true;
++		g_PacketManager.SendUMsgRewardNotice(user->GetExtendedSocket(), notice, "Zombie Disaster Zone - XP Report",
++			"You've reached the maximum amount of XP available for today.", false);
++	}
++	if (gain > 0)
++		SendTraits(user);
 +}
 diff --git a/src/manager/zsriftmanager.h b/src/manager/zsriftmanager.h
 new file mode 100644
