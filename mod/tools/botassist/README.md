@@ -403,3 +403,10 @@ modifiers. Nexon kept that file on its dedicated servers, so the mode had none o
 events per round is rift level / 32 in the game (made for levels up to 100); `ZSRiftEventDivisor` (botassist.ini,
 3 by default) replaces 32. Bots get at least `ZSRiftBotMoney` on each new life there, since the mode pays once per
 round and they come back with nothing.
+
+## Zombie Disaster Zone's Rift Tickets
+botassist clears every round of the rift itself (see above), so it counts them: when the match's cleared rounds reach
+the round count of the rift (zombie round manager +0x290, the boss round included) it posts
+`/api/zsrift/clear {"difficulty", "rounds"}` to CSNZ_Server (tried 5 times, 3 s apart). The server pays everyone in
+the room Rift Tickets for the room's rift level, once per match (Data/ZSRift.json `ClearTickets`, `TicketsPerLevel`),
+spent at the Rift Exchange tab of the Missions page. Log line: "ZSRift: rift cleared at level N: told the server".

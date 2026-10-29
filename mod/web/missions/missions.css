@@ -91,6 +91,33 @@
 .mitem.owned { opacity: .6; }
 .mitem .owned-tag { color: var(--owned); font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; }
 
+/* ---------- rift exchange ---------- */
+.wallet.tickets { color: #7fd6d0; }
+.ticket-icon { display: inline-block; width: 20px; height: 14px; flex: none; position: relative; background: #2f8f8a;
+  -webkit-mask: radial-gradient(circle at 0 50%, transparent 3.5px, #000 4px) left / 51% 100% no-repeat,
+    radial-gradient(circle at 100% 50%, transparent 3.5px, #000 4px) right / 51% 100% no-repeat;
+  mask: radial-gradient(circle at 0 50%, transparent 3.5px, #000 4px) left / 51% 100% no-repeat,
+    radial-gradient(circle at 100% 50%, transparent 3.5px, #000 4px) right / 51% 100% no-repeat; }
+.ticket-icon::after { content: ""; position: absolute; top: 2px; bottom: 2px; left: 50%; border-left: 1px dashed #bff0ec; }
+.ticket-icon.small { width: 15px; height: 11px; }
+.rift .market-head h2 { color: #bff0ec; }
+.rift .price { color: #7fd6d0; }
+.rift-section { margin-bottom: 20px; }
+.rift-section .section-title { color: #7fd6d0; }
+.mitem.rift-item { border-color: #1f3f3d; background: radial-gradient(circle at 50% 30%, #13282a, var(--panel) 70%); }
+.mitem.held { border-color: #2f8f8a; }
+.rift .market-grid { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+.mitem .held-tag { margin-top: 3px; font-size: 10px; color: #7fd6d0; letter-spacing: 1.5px; text-transform: uppercase; }
+.mitem .actions { display: flex; gap: 6px; }
+.mitem .actions .btn { padding: 7px 10px; white-space: nowrap; }
+.btn.hold { background: none; color: #7fd6d0; border: 1px solid #2f8f8a; font-weight: 600; padding: 7px 10px; }
+.btn.hold:hover { background: #12302e; filter: none; }
+.btn.hold:disabled { color: var(--muted); border-color: var(--line-strong); background: none; }
+.btn.hold.confirm { background: #2f8f8a; color: #fff; }
+.rift-empty { border: 1px dashed var(--line-strong); padding: 14px; color: var(--muted); font-size: 12px; letter-spacing: 1px; text-transform: uppercase; text-align: center; }
+.preview .hold-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 12px; color: var(--muted); }
+.preview .note b { color: #7fd6d0; font-weight: 600; }
+
 @media (max-width: 1100px) {
   .requests { grid-template-columns: 1fr 270px; }
   .briefing .portrait { height: 180px; }

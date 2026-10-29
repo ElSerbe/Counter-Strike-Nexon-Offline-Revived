@@ -5841,10 +5841,36 @@ static void ZSRiftRespawnBots(float now)
     });
 }
 
+// The last round cleared: CSNZ_Server pays the room's players their Rift Tickets (POST /api/zsrift/clear, body
+// {"difficulty": rift level, "rounds": rounds cleared}); a failed call is tried again from a new thread.
+static volatile LONG g_zsrClearSending = 0;
+static int g_zsrClearDifficulty = 0, g_zsrClearRounds = 0;
+static DWORD WINAPI ReportZSRiftClear(LPVOID)
+{
+    char body[96];
+    snprintf(body, sizeof(body), "{\"difficulty\":%d,\"rounds\":%d}", g_zsrClearDifficulty, g_zsrClearRounds);
+    for (int attempt = 0; attempt < 5; attempt++)
+    {
+        std::string reply;
+        if (HttpPost(L"/api/zsrift/clear", body, &reply))
+        {
+            Log("ZSRift: rift cleared at level %d: told the server (%s)", g_zsrClearDifficulty, reply.substr(0, 200).c_str());
+            InterlockedExchange(&g_zsrClearSending, 0);
+            return 0;
+        }
+        Sleep(3000);
+    }
+    Log("ZSRift: rift cleared at level %d, but the server isn't reachable: no Rift Tickets", g_zsrClearDifficulty);
+    InterlockedExchange(&g_zsrClearSending, 0);
+    return 0;
+}
+
 static void ZSRiftWatch()
 {
     static float next = 0;
     static std::string last;
+    static void* clearsRules = nullptr; // the rules object the count below belongs to (a new one each map)
+    static int clears = 0;              // rounds this match cleared (botassist clears every one of them)
     if (!g_mpDelta || !g_pGlobals || !*g_pGlobals || g_edictToVars < 0 || GameMode() != 59)
         return;
     float now = Now();
@@ -5892,6 +5918,7 @@ static void ZSRiftWatch()
     {
         introOver = -1;
         bool ok = ZSRiftStart(cso);
+        clears = 0;
         Log("ZSRift: the match didn't start by itself (room-match check 0x318 off): started it%s", ok ? "" : " - FAILED");
     }
     // clear the round once its kills reach the target
@@ -5901,8 +5928,26 @@ static void ZSRiftWatch()
         *(int*)(r + 0x284) >= target && !zsm[0x12c8])
     {
         bool ok = ZSRiftClearRound(zsm);
-        Log("ZSRift: round %d cleared (%d of %d kills; %d rounds played of %d)%s", *(short*)(zsm + 0x288),
-            *(int*)(r + 0x284), target, *(int*)(cso + 0x4cc), *(int*)(zsm + 0x290), ok ? "" : " - FAILED");
+        if (r != clearsRules)
+        {
+            clearsRules = r;
+            clears = 0;
+        }
+        clears += ok;
+        int total = *(int*)(zsm + 0x290);
+        Log("ZSRift: round %d cleared (%d of %d kills; %d rounds played of %d; %d cleared)%s", *(short*)(zsm + 0x288),
+            *(int*)(r + 0x284), target, *(int*)(cso + 0x4cc), total, clears, ok ? "" : " - FAILED");
+        // the boss round was the last one: the rift is cleared
+        if (ok && total > 0 && clears == total && InterlockedCompareExchange(&g_zsrClearSending, 1, 0) == 0)
+        {
+            g_zsrClearDifficulty = v214;
+            g_zsrClearRounds = clears;
+            HANDLE t = CreateThread(nullptr, 0, ReportZSRiftClear, nullptr, 0, nullptr);
+            if (t)
+                CloseHandle(t);
+            else
+                InterlockedExchange(&g_zsrClearSending, 0);
+        }
     }
     if (cso[0x27c] == 1)
         ZSRiftRespawnBots(now);

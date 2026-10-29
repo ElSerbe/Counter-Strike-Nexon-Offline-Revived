@@ -3722,10 +3722,10 @@ index 3054001..9c14f6b 100644
  	void SendUserLoadout(IUser* user);
 diff --git a/src/manager/warbondmanager.cpp b/src/manager/warbondmanager.cpp
 new file mode 100644
-index 0000000..5f43da6
+index 0000000..1841ebf
 --- /dev/null
 +++ b/src/manager/warbondmanager.cpp
-@@ -0,0 +1,962 @@
+@@ -0,0 +1,971 @@
 +#include "warbondmanager.h"
 +#include "usermanager.h"
 +#include "userdatabase.h"
@@ -3953,6 +3953,15 @@ index 0000000..5f43da6
 +	else if (req.path == "/api/missions")
 +	{
 +		result = g_MissionManager.Api(user, req.method, req.body, resp.status);
++	}
++	else if (req.method == "POST" && req.path == "/api/zsrift/clear")
++	{
++		// botassist.asi: the last round of this computer's Zombie Disaster Zone match was cleared
++		result = g_ZSRiftManager.OnRiftClear(user, req.body, resp.status);
++	}
++	else if (req.path == "/api/riftexchange")
++	{
++		result = g_ZSRiftManager.ExchangeApi(user, req.method, req.body, resp.status);
 +	}
 +	else if (req.method == "GET" && req.path == "/api/profile")
 +	{
@@ -4815,13 +4824,19 @@ index 0000000..3dda56f
 +extern CWarbondManager g_WarbondManager;
 diff --git a/src/manager/zsriftmanager.cpp b/src/manager/zsriftmanager.cpp
 new file mode 100644
-index 0000000..fd8f13d
+index 0000000..d7836ec
 --- /dev/null
 +++ b/src/manager/zsriftmanager.cpp
-@@ -0,0 +1,257 @@
+@@ -0,0 +1,492 @@
 +#include "zsriftmanager.h"
 +#include "usermanager.h"
 +#include "packetmanager.h"
++#include "medalmanager.h"
++#include "warbondmanager.h"
++#include "itemmanager.h"
++#include "userdatabase.h"
++#include "room/room.h"
++#include "room/gamematch.h"
 +#include "serverinstance.h"
 +#include "main.h"
 +#include "common/utils.h"
@@ -4829,6 +4844,9 @@ index 0000000..fd8f13d
 +#include <cmath>
 +#include <ctime>
 +#include <fstream>
++#include <random>
++#include <set>
++#include <algorithm>
 +
 +using namespace std;
 +using json = nlohmann::json;
@@ -4866,6 +4884,18 @@ index 0000000..fd8f13d
 +	m_State = json::parse(f, nullptr, false);
 +	if (m_State.is_discarded() || !m_State.is_object())
 +		m_State = json::object();
++
++	ifstream items("Data/RiftExchange.json");
++	json cfg = json::parse(items, nullptr, false, true);
++	if (cfg.is_object())
++		for (auto& i : cfg.value("Items", json::array()))
++		{
++			RiftExchangeItem item = { i.value("ItemID", 0), i.value("Name", ""), i.value("Kind", "Costume"), i.value("Price", 50) };
++			if (item.itemID > 0 && item.price > 0)
++				m_Exchange.push_back(item);
++		}
++	Logger().Info("ZSRiftManager: %d Rift Exchange items%s\n", (int)m_Exchange.size(),
++		cfg.is_object() ? "" : " (couldn't load Data/RiftExchange.json)");
 +	return true;
 +}
 +
@@ -4887,6 +4917,13 @@ index 0000000..fd8f13d
 +	r.killExp = cfg.value("KillExp", r.killExp);
 +	r.winExp = cfg.value("WinExp", r.winExp);
 +	r.maxDifficulty = max(1, min(cfg.value("MaxDifficulty", r.maxDifficulty), 100));
++	r.clearTickets = max(0, cfg.value("ClearTickets", r.clearTickets));
++	r.ticketsPerLevel = max(0, cfg.value("TicketsPerLevel", r.ticketsPerLevel));
++	r.exchangeStock = max(1, cfg.value("ExchangeStock", r.exchangeStock));
++	r.holdCostPercent = max(0, cfg.value("HoldCostPercent", r.holdCostPercent));
++	r.holdMinCost = max(0, cfg.value("HoldMinCost", r.holdMinCost));
++	r.maxHoldDays = max(1, cfg.value("MaxHoldDays", r.maxHoldDays));
++	r.maxHolds = max(0, cfg.value("MaxHolds", r.maxHolds));
 +	m_Rules = r;
 +	return true;
 +}
@@ -5076,12 +5113,219 @@ index 0000000..fd8f13d
 +	if (gain > 0)
 +		SendTraits(user);
 +}
++
++// ---------------------------------------------------------------- Rift Tickets and the Rift Exchange
++
++int CZSRiftManager::DayNumber()
++{
++	time_t now = time(NULL);
++	tm midnight = *localtime(&now);
++	midnight.tm_hour = midnight.tm_min = midnight.tm_sec = 0;
++	return (int)((mktime(&midnight) + 43200) / 86400); // noon of that day: safe against DST
++}
++
++static int SecondsToMidnight()
++{
++	time_t now = time(NULL);
++	tm local = *localtime(&now);
++	return 86400 - (local.tm_hour * 3600 + local.tm_min * 60 + local.tm_sec);
++}
++
++long long CZSRiftManager::Tickets(IUser* user)
++{
++	vector<UserCounter_s> counters;
++	g_UserDatabase.GetCounters(user->GetID(), counters);
++	for (auto& c : counters)
++		if (c.mode == -1 && c.name == "RiftTickets")
++			return c.value;
++	return 0;
++}
++
++int CZSRiftManager::HoldCost(const RiftExchangeItem& item)
++{
++	return max(m_Rules.holdMinCost, (item.price * m_Rules.holdCostPercent + 50) / 100);
++}
++
++const RiftExchangeItem* CZSRiftManager::FindItem(int itemID)
++{
++	for (auto& i : m_Exchange)
++		if (i.itemID == itemID)
++			return &i;
++	return NULL;
++}
++
++// botassist.asi saw the last round of the rift cleared in this computer's match: everyone in the room gets the
++// tickets of the room's rift level (once per match; cut like the medals when sv_cheats was on)
++json CZSRiftManager::OnRiftClear(IUser* user, const string& body, int& status)
++{
++	CRoom* room = static_cast<CRoom*>(user->GetCurrentRoom());
++	CGameMatch* match = room ? room->GetGameMatch() : NULL;
++	if (!match || room->GetSettings()->gameModeId != 59)
++	{
++		status = 409;
++		return { { "error", "Not in a Zombie Disaster Zone match." } };
++	}
++	if (match->m_bZSRiftCleared)
++		return { { "ok", true }, { "already", true } };
++	match->m_bZSRiftCleared = true;
++
++	int level = max(1, (int)room->GetSettings()->zsDifficulty);
++	int full = m_Rules.clearTickets + m_Rules.ticketsPerLevel * (level - 1);
++	int tickets = match->m_bCheats ? full * (100 - g_WarbondManager.CheatPenalty()) / 100 : full;
++	for (IUser* u : room->GetUsers())
++	{
++		json& st = State(u);
++		st["bestClear"] = max(st.value("bestClear", 0), level);
++		g_MedalManager.AddCounter(u, "RiftTickets", tickets);
++		g_MedalManager.AddCounter(u, "RiftClears", 1);
++		string cut = tickets < full ? va(" (sv_cheats: -%d%%)", g_WarbondManager.CheatPenalty()) : "";
++		g_PacketManager.SendUMsgNoticeMessageInChat(u->GetExtendedSocket(),
++			va("Rift cleared at level %d: +%d Rift Tickets%s. Spend them at the Rift Exchange (Missions).", level, tickets, cut.c_str()));
++		RewardNotice notice = {};
++		notice.status = true;
++		g_PacketManager.SendUMsgRewardNotice(u->GetExtendedSocket(), notice, "Zombie Disaster Zone - Rift Cleared",
++			va("Level %d cleared: +%d Rift Tickets.", level, tickets), false);
++		Logger().Info("ZSRiftManager: user %d cleared the rift at level %d: +%d Rift Tickets\n", u->GetID(), level, tickets);
++	}
++	Save();
++	return { { "ok", true }, { "level", level }, { "tickets", tickets } };
++}
++
++json& CZSRiftManager::Exchange(IUser* user)
++{
++	json& st = State(user);
++	json& ex = st["exchange"];
++	if (!ex.is_object())
++		ex = { { "day", 0 }, { "stock", json::array() }, { "holds", json::object() } };
++	int today = DayNumber();
++	if (ex.value("day", 0) == today)
++		return ex;
++
++	// a new day: holds that ran out go, then a new stock from what the player doesn't own and isn't holding
++	json holds = json::object();
++	for (auto& h : ex["holds"].items())
++		if (h.value().value("until", 0) >= today)
++			holds[h.key()] = h.value();
++	set<int> owned = g_WarbondManager.OwnedItems(user);
++	vector<int> pool;
++	for (auto& i : m_Exchange)
++		if (!owned.count(i.itemID) && !holds.contains(to_string(i.itemID)))
++			pool.push_back(i.itemID);
++	mt19937 rng((unsigned)today * 2654435761u ^ (unsigned)user->GetID() * 40503u);
++	shuffle(pool.begin(), pool.end(), rng);
++	pool.resize(min((int)pool.size(), m_Rules.exchangeStock));
++	ex = { { "day", today }, { "stock", pool }, { "holds", holds } };
++	Save();
++	return ex;
++}
++
++json CZSRiftManager::BuildExchange(IUser* user)
++{
++	json& ex = Exchange(user);
++	int today = DayNumber();
++	set<int> owned = g_WarbondManager.OwnedItems(user);
++	auto itemJson = [&](const RiftExchangeItem& i) {
++		return json{ { "itemID", i.itemID }, { "name", i.name }, { "kind", i.kind }, { "price", i.price },
++			{ "holdCost", HoldCost(i) }, { "owned", owned.count(i.itemID) > 0 } };
++	};
++	json stock = json::array(), held = json::array();
++	for (auto& id : ex["stock"])
++		if (const RiftExchangeItem* i = FindItem(id.get<int>()))
++			stock.push_back(itemJson(*i));
++	for (auto& h : ex["holds"].items())
++		if (const RiftExchangeItem* i = FindItem(atoi(h.key().c_str())))
++		{
++			json j = itemJson(*i);
++			int until = h.value().value("until", today), start = h.value().value("start", today);
++			j["daysLeft"] = until - today; // days after today it stays
++			j["heldDays"] = until - start;
++			j["canExtend"] = until < start + m_Rules.maxHoldDays;
++			held.push_back(j);
++		}
++	json& st = State(user);
++	return { { "tickets", Tickets(user) }, { "refreshIn", SecondsToMidnight() }, { "stock", stock }, { "held", held },
++		{ "bestClear", st.value("bestClear", 0) },
++		{ "rules", { { "clearTickets", m_Rules.clearTickets }, { "ticketsPerLevel", m_Rules.ticketsPerLevel },
++			{ "maxDifficulty", m_Rules.maxDifficulty }, { "maxHolds", m_Rules.maxHolds }, { "maxHoldDays", m_Rules.maxHoldDays } } } };
++}
++
++json CZSRiftManager::ExchangeApi(IUser* user, const string& method, const string& body, int& status)
++{
++	if (method != "POST")
++		return BuildExchange(user);
++	auto fail = [&](int code, const string& message) {
++		status = code;
++		return json{ { "error", message } };
++	};
++	json in = json::parse(body, nullptr, false);
++	if (in.is_discarded())
++		return fail(400, "Invalid request.");
++	string action = in.value("action", "");
++	int itemID = in.value("itemID", 0);
++	json& ex = Exchange(user);
++	int today = DayNumber();
++	string key = to_string(itemID);
++	bool inStock = false;
++	for (auto& id : ex["stock"])
++		inStock |= id.get<int>() == itemID;
++	bool isHeld = ex["holds"].contains(key);
++	const RiftExchangeItem* item = FindItem(itemID);
++	if (!item || (!inStock && !isHeld))
++		return fail(404, "That item isn't in your Rift Exchange today.");
++	if (g_WarbondManager.OwnedItems(user).count(itemID))
++		return fail(409, "You already own this item.");
++	long long tickets = Tickets(user);
++
++	if (action == "buy")
++	{
++		if (tickets < item->price)
++			return fail(409, "Not enough Rift Tickets.");
++		int added = g_ItemManager.AddItem(user->GetID(), user, itemID, 1, 0);
++		if (added == ITEM_ADD_INVENTORY_FULL)
++			return fail(409, "Your inventory is full.");
++		if (added != ITEM_ADD_SUCCESS)
++			return fail(500, "Couldn't add the item.");
++		g_MedalManager.AddCounter(user, "RiftTickets", -item->price);
++		g_MedalManager.AddCounter(user, "RiftExchangeBuys", 1);
++		ex["holds"].erase(key);
++		Save();
++		g_MedalManager.CheckMedals(user);
++		Logger().Info("ZSRiftManager: user %d bought item %d at the Rift Exchange for %d tickets\n", user->GetID(), itemID, item->price);
++	}
++	else if (action == "hold")
++	{
++		// one more day: a held item stays after midnight up to its last day ("until")
++		if (!isHeld && (int)ex["holds"].size() >= m_Rules.maxHolds)
++			return fail(409, va("You can hold %d items at most.", m_Rules.maxHolds));
++		json hold = isHeld ? ex["holds"][key] : json{ { "start", today }, { "until", today } };
++		int until = hold.value("until", today), start = hold.value("start", today);
++		if (until >= start + m_Rules.maxHoldDays)
++			return fail(409, va("An item can be held for %d days at most.", m_Rules.maxHoldDays));
++		int cost = HoldCost(*item);
++		if (tickets < cost)
++			return fail(409, "Not enough Rift Tickets.");
++		hold["until"] = until + 1;
++		ex["holds"][key] = hold;
++		// a held item leaves the day's stock list: it's shown with the held ones
++		json stock = json::array();
++		for (auto& id : ex["stock"])
++			if (id.get<int>() != itemID)
++				stock.push_back(id);
++		ex["stock"] = stock;
++		g_MedalManager.AddCounter(user, "RiftTickets", -cost);
++		Save();
++		Logger().Info("ZSRiftManager: user %d holds item %d until day %d for %d tickets\n", user->GetID(), itemID, until + 1, cost);
++	}
++	else
++		return fail(400, "Unknown action.");
++	return BuildExchange(user);
++}
 diff --git a/src/manager/zsriftmanager.h b/src/manager/zsriftmanager.h
 new file mode 100644
-index 0000000..5b28fc5
+index 0000000..bc49c38
 --- /dev/null
 +++ b/src/manager/zsriftmanager.h
-@@ -0,0 +1,51 @@
+@@ -0,0 +1,77 @@
 +#pragma once
 +
 +#include <string>
@@ -5101,6 +5345,19 @@ index 0000000..5b28fc5
 +	int costBase = 952, costRate = 1050;
 +	int matchExp = 100, killExp = 10, winExp = 100; // per finished match, before the daily maximum
 +	int maxDifficulty = 20; // rift levels open to everyone in the room's difficulty list (1..this)
++	// Rift Tickets for clearing the rift (every round, boss included): clearTickets + ticketsPerLevel per level above 1
++	int clearTickets = 3, ticketsPerLevel = 1;
++	// the Rift Exchange: exchangeStock cosmetics a day for each player; holding one keeps it for one more day for
++	// holdCostPercent of its price (at least holdMinCost), up to maxHoldDays after the first hold, maxHolds at once
++	int exchangeStock = 8, holdCostPercent = 10, holdMinCost = 2, maxHoldDays = 7, maxHolds = 3;
++};
++
++// Data/RiftExchange.json (tools/gen_rift_exchange.py): the cosmetics the Rift Exchange sells
++struct RiftExchangeItem
++{
++	int itemID;
++	std::string name, kind;
++	int price;
 +};
 +
 +class CZSRiftManager : public CBaseManager<IZSRiftManager>
@@ -5116,6 +5373,11 @@ index 0000000..5b28fc5
 +	virtual std::vector<int> Levels(IUser* user);
 +	virtual int MaxDifficulty();
 +
++	// web API (CWarbondManager routes it): POST /api/zsrift/clear from botassist.asi when the last round is cleared;
++	// GET / POST /api/riftexchange {action: buy|hold (itemID)}
++	nlohmann::json OnRiftClear(IUser* user, const std::string& body, int& status);
++	nlohmann::json ExchangeApi(IUser* user, const std::string& method, const std::string& body, int& status);
++
 +private:
 +	bool LoadConfig();
 +	nlohmann::json& State(IUser* user); // the player's traits (created on first use, today's EXP reset each day)
@@ -5128,7 +5390,15 @@ index 0000000..5b28fc5
 +	void OnUpgrade(IUser* user, int stat);
 +	void OnReset(IUser* user);
 +
++	static int DayNumber(); // days since 1970 of the local date (the stock changes at midnight)
++	long long Tickets(IUser* user);
++	int HoldCost(const RiftExchangeItem& item);
++	const RiftExchangeItem* FindItem(int itemID);
++	nlohmann::json& Exchange(IUser* user); // the player's stock of the day and holds (made at the first look each day)
++	nlohmann::json BuildExchange(IUser* user);
++
 +	ZSRiftRules m_Rules;
++	std::vector<RiftExchangeItem> m_Exchange;
 +	nlohmann::json m_State;
 +};
 +
@@ -5722,7 +5992,7 @@ index 65418d8..57f782e 100644
  		{
  			stat->m_nExpEarned = 9999;
 diff --git a/src/room/gamematch.h b/src/room/gamematch.h
-index 68a4dc7..0dfb2a9 100644
+index 68a4dc7..5c924cb 100644
 --- a/src/room/gamematch.h
 +++ b/src/room/gamematch.h
 @@ -57,6 +57,14 @@ public:
@@ -5740,11 +6010,12 @@ index 68a4dc7..0dfb2a9 100644
  };
  
  class CGameMatch
-@@ -102,6 +110,7 @@ public:
+@@ -102,6 +110,8 @@ public:
  
  	int m_nGameMode;
  	int m_nMapID;
 +	bool m_bCheats = false; // offline build: sv_cheats was on (botassist.asi tells the web API): medals are cut
++	bool m_bZSRiftCleared = false; // offline build: Zombie Disaster Zone's last round cleared, Rift Tickets paid
  	int m_nCtWinCount;
  	int m_nTerWinCount;
  	int m_nFirstPlaceUserId;

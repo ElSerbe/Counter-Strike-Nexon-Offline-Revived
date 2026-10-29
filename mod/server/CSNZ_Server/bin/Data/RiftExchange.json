@@ -1,0 +1,2471 @@
+{
+ "Version": 1,
+ "Items": [
+  {
+   "ItemID": 373,
+   "Name": "Flame Tattoo",
+   "Kind": "Tattoo",
+   "Price": 25
+  },
+  {
+   "ItemID": 375,
+   "Name": "Dragon Tattoo",
+   "Kind": "Tattoo",
+   "Price": 25
+  },
+  {
+   "ItemID": 386,
+   "Name": "Bamboo Tattoo + Bonus 20,000 Points",
+   "Kind": "Tattoo",
+   "Price": 25
+  },
+  {
+   "ItemID": 387,
+   "Name": "Chi You King of Heaven Tattoo + Bonus 20,000 Points",
+   "Kind": "Tattoo",
+   "Price": 25
+  },
+  {
+   "ItemID": 471,
+   "Name": "Cat Ears",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 472,
+   "Name": "Cat Fish",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 473,
+   "Name": "Cat Tail",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 475,
+   "Name": "Angel Halo",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 476,
+   "Name": "Angel Wings",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 477,
+   "Name": "Devil Horns",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 478,
+   "Name": "Devil Wings",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 479,
+   "Name": "Devil Tail",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 489,
+   "Name": "Pumpkin Head",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 490,
+   "Name": "Little Ghost",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 494,
+   "Name": "Golden Clock Key",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 505,
+   "Name": "Snowman Mask",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 506,
+   "Name": "Christmas Stocking",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 508,
+   "Name": "Christmas Hat Set",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 512,
+   "Name": "Alice Bunny Ears",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 515,
+   "Name": "Golden Mask",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 516,
+   "Name": "Golden Shield",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 526,
+   "Name": "Pig Ears",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 527,
+   "Name": "Pig Fork",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 528,
+   "Name": "Pig Tail",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 541,
+   "Name": "Panda Ears",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 542,
+   "Name": "Panda Doll",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 543,
+   "Name": "Panda Tail",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 550,
+   "Name": "Dao Mask",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 551,
+   "Name": "Bazzi Mask",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 557,
+   "Name": "Squirrel Ears",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 558,
+   "Name": "Acorn Bag",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 559,
+   "Name": "Squirrel Tail",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 574,
+   "Name": "Polar Bear Head",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 575,
+   "Name": "Fierce Penguin",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 612,
+   "Name": "Oberon's Horn",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 613,
+   "Name": "Oberon Bomb Headband",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 614,
+   "Name": "Angra Wings",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 615,
+   "Name": "Poison Fire",
+   "Kind": "Tattoo",
+   "Price": 25
+  },
+  {
+   "ItemID": 616,
+   "Name": "Titan Doll",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 617,
+   "Name": "Lost Guardian Bazooka",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 618,
+   "Name": "Frozen Wrath Club",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 619,
+   "Name": "Snow Crystal Tattoo",
+   "Kind": "Tattoo",
+   "Price": 25
+  },
+  {
+   "ItemID": 651,
+   "Name": "Headquarters Armband",
+   "Kind": "Arm",
+   "Price": 30
+  },
+  {
+   "ItemID": 652,
+   "Name": "Corps 1 Armband",
+   "Kind": "Arm",
+   "Price": 30
+  },
+  {
+   "ItemID": 653,
+   "Name": "Corps 2 Armband",
+   "Kind": "Arm",
+   "Price": 30
+  },
+  {
+   "ItemID": 654,
+   "Name": "Corps 3 Armband",
+   "Kind": "Arm",
+   "Price": 30
+  },
+  {
+   "ItemID": 655,
+   "Name": "Corps 4 Armband",
+   "Kind": "Arm",
+   "Price": 30
+  },
+  {
+   "ItemID": 656,
+   "Name": "Division 1 Armband",
+   "Kind": "Arm",
+   "Price": 30
+  },
+  {
+   "ItemID": 657,
+   "Name": "Division 2 Armband",
+   "Kind": "Arm",
+   "Price": 30
+  },
+  {
+   "ItemID": 658,
+   "Name": "Division 3 Armband",
+   "Kind": "Arm",
+   "Price": 30
+  },
+  {
+   "ItemID": 659,
+   "Name": "Division 4 Armband",
+   "Kind": "Arm",
+   "Price": 30
+  },
+  {
+   "ItemID": 660,
+   "Name": "Regiment 1 Armband",
+   "Kind": "Arm",
+   "Price": 30
+  },
+  {
+   "ItemID": 661,
+   "Name": "Regiment 2 Armband",
+   "Kind": "Arm",
+   "Price": 30
+  },
+  {
+   "ItemID": 662,
+   "Name": "Regiment 3 Armband",
+   "Kind": "Arm",
+   "Price": 30
+  },
+  {
+   "ItemID": 663,
+   "Name": "Regiment 4 Armband",
+   "Kind": "Arm",
+   "Price": 30
+  },
+  {
+   "ItemID": 664,
+   "Name": "Battalion 1 Armband",
+   "Kind": "Arm",
+   "Price": 30
+  },
+  {
+   "ItemID": 665,
+   "Name": "Battalion 2 Armband",
+   "Kind": "Arm",
+   "Price": 30
+  },
+  {
+   "ItemID": 666,
+   "Name": "Battalion 3 Armband",
+   "Kind": "Arm",
+   "Price": 30
+  },
+  {
+   "ItemID": 667,
+   "Name": "Battalion 4 Armband",
+   "Kind": "Arm",
+   "Price": 30
+  },
+  {
+   "ItemID": 696,
+   "Name": "Snake Tattoo",
+   "Kind": "Tattoo",
+   "Price": 25
+  },
+  {
+   "ItemID": 699,
+   "Name": "Indian Warbonnet",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 700,
+   "Name": "Indian_face",
+   "Kind": "Face",
+   "Price": 30
+  },
+  {
+   "ItemID": 701,
+   "Name": "Indian Shield",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 702,
+   "Name": "Indian Belt",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 704,
+   "Name": "Afro Hair",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 705,
+   "Name": "Elegant Hair",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 707,
+   "Name": "Dinosaur Head",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 708,
+   "Name": "Dinosaur Buddy",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 712,
+   "Name": "Wings of Laser Wing",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 730,
+   "Name": "Applehead",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 731,
+   "Name": "Target Practice",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 732,
+   "Name": "Direction Arrow",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 736,
+   "Name": "Gentleman Moustache",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 738,
+   "Name": "Gentleman Cane",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 739,
+   "Name": "Gentleman Pocketwatch",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 765,
+   "Name": "Jack's Mask",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 772,
+   "Name": "Idol Microphone",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 773,
+   "Name": "Idol Sunglasses",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 779,
+   "Name": "Non La",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 785,
+   "Name": "Boxing Headgear",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 786,
+   "Name": "Boxer Champion Belt",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 790,
+   "Name": "Cronobotics Mask",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 797,
+   "Name": "Superhero Backpack",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 798,
+   "Name": "Superhero Helmet",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 819,
+   "Name": "Pharaoh Mask",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 820,
+   "Name": "Mummy Doll",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 829,
+   "Name": "Sprout Headband",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 850,
+   "Name": "Crono Wing's Wings",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 851,
+   "Name": "Phobos Sample Tattoo",
+   "Kind": "Tattoo",
+   "Price": 25
+  },
+  {
+   "ItemID": 852,
+   "Name": "Dione Tattoo",
+   "Kind": "Tattoo",
+   "Price": 25
+  },
+  {
+   "ItemID": 853,
+   "Name": "Scorpion Tattoo",
+   "Kind": "Tattoo",
+   "Price": 25
+  },
+  {
+   "ItemID": 854,
+   "Name": "Robot Tattoo",
+   "Kind": "Tattoo",
+   "Price": 25
+  },
+  {
+   "ItemID": 855,
+   "Name": "Gluttony Tattoo",
+   "Kind": "Tattoo",
+   "Price": 25
+  },
+  {
+   "ItemID": 856,
+   "Name": "Envy Tattoo",
+   "Kind": "Tattoo",
+   "Price": 25
+  },
+  {
+   "ItemID": 900,
+   "Name": "Mr. X's shell",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 946,
+   "Name": "Santa Light Zombie (Costume)",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 947,
+   "Name": "Santa Heavy Zombie (Costume)",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 948,
+   "Name": "Dark Knight Mask",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 949,
+   "Name": "Paladin Crown",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 963,
+   "Name": "Tyrant Crab's Bag",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8009,
+   "Name": "Evolution Level 2 Zombie",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8010,
+   "Name": "Evolution Level 2 Light Zombie",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8011,
+   "Name": "Evolution Level 2 Heavy Zombie",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8012,
+   "Name": "Evolution Level 2 Psycho Zombie",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8013,
+   "Name": "Evolution Level 2 Voodoo Zombie",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8014,
+   "Name": "Evolution Level 2 Deimos",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8015,
+   "Name": "Evolution Level 2 Ganymede",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8016,
+   "Name": "Evolution Level 2 Stamper",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8017,
+   "Name": "Evolution Level 2 Banshee",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8018,
+   "Name": "Evolution Level 2 Jiang Shi",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8019,
+   "Name": "Evolution Level 2 Venom Guard",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8020,
+   "Name": "Evolution Level 2 Sting Finger",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8021,
+   "Name": "Evolution Level 3 Zombie",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8022,
+   "Name": "Evolution Level 3 Light Zombie",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8023,
+   "Name": "Evolution Level 3 Heavy Zombie",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8024,
+   "Name": "Evolution Level 3 Psycho Zombie",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8025,
+   "Name": "Evolution Level 3 Voodoo Zombie",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8026,
+   "Name": "Evolution Level 3 Deimos",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8027,
+   "Name": "Evolution Level 3 Ganymede",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8028,
+   "Name": "Evolution Level 3 Stamper",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8029,
+   "Name": "Evolution Level 3 Banshee",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8030,
+   "Name": "Evolution Level 3 Jiang Shi",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8031,
+   "Name": "Evolution Level 3 Venom Guard",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8032,
+   "Name": "Evolution Level 3 Sting Finger",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8052,
+   "Name": "Chef Heavy Zombie (Costume)",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8053,
+   "Name": "Nurse Sting Finger (Costume)",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8073,
+   "Name": "Santaizi Heavy Zombie (Costume)",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8074,
+   "Name": "Succubus Light Zombie (Costume)",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8089,
+   "Name": "Lycanthrope Wolf Tail",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 8090,
+   "Name": "Crimson Hunter Bat Wing Headband",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8096,
+   "Name": "10thbirth (Head)",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8102,
+   "Name": "Stone Ganymede (Costume)",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8105,
+   "Name": "Mummy Stamper (Costume)",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8112,
+   "Name": "Female Student Light Zombie (Costume)",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8166,
+   "Name": "Stoneboomer_sr",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8168,
+   "Name": "Phoenix Wings",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8186,
+   "Name": "Bunny Ears",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8187,
+   "Name": "Bunny Tail",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 8188,
+   "Name": "Butterfly Antennae",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8189,
+   "Name": "Butterfly Wings",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8190,
+   "Name": "Chicken Head",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8191,
+   "Name": "Military Assault Pack",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8197,
+   "Name": "Axion's Battle Helmet",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8198,
+   "Name": "Aetheris' Beacon",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8211,
+   "Name": "Scarecrow Blotter (Costume)",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8212,
+   "Name": "Cowgirl Light Zombie (Costume)",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8213,
+   "Name": "Lantern",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 8214,
+   "Name": "Sheriff's Hat",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8215,
+   "Name": "Anarchist's Hat",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8216,
+   "Name": "Decorative Tomahawk",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8217,
+   "Name": "Leather Auxiliary Bag",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 8218,
+   "Name": "Lasso",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 8225,
+   "Name": "Kal-El's Wings",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8226,
+   "Name": "Medea's Wings",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8241,
+   "Name": "Snorkeling Mask",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8242,
+   "Name": "Shark Mask",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8243,
+   "Name": "Backpack Duckie Tube",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8244,
+   "Name": "Alin Hat",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8245,
+   "Name": "Dominique Flower Hairpiece",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8246,
+   "Name": "Octopus Hairpiece",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8253,
+   "Name": "Angel Hamster Momo",
+   "Kind": "Pet",
+   "Price": 60
+  },
+  {
+   "ItemID": 8254,
+   "Name": "Rascal Cat Nana",
+   "Kind": "Pet",
+   "Price": 60
+  },
+  {
+   "ItemID": 8255,
+   "Name": "Kartrider Balloon",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8256,
+   "Name": "Kartrider Goggles",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8257,
+   "Name": "Kartrider Headband",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8274,
+   "Name": "Wraith Bride's Veil",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8275,
+   "Name": "Phantom Hat",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8276,
+   "Name": "Werewolf Mask",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8277,
+   "Name": "Little Ghost",
+   "Kind": "Pet",
+   "Price": 60
+  },
+  {
+   "ItemID": 8278,
+   "Name": "Kitty Basket",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 8279,
+   "Name": "Jack-o'-lantern Basket",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 8280,
+   "Name": "Pirate Psycho Zombie (Costume)",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8281,
+   "Name": "Fallen Angel Rusty Wing (Costume)",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8289,
+   "Name": "Queen's Battle Mask",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8290,
+   "Name": "Combat Booster",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8340,
+   "Name": "King Voodoo Zombie (Costume)",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8341,
+   "Name": "Nurse Banshee (Costume)",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8342,
+   "Name": "Life-and-Death Flower Headband",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8343,
+   "Name": "Hopae",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 8344,
+   "Name": "Gat",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8345,
+   "Name": "Chengziguan",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8346,
+   "Name": "Kaksi Tal",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8347,
+   "Name": "Ik-Sun Kwan",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8348,
+   "Name": "Jeonnip",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8349,
+   "Name": "Bamboo Hat",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8354,
+   "Name": "Erica's Beret",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8355,
+   "Name": "Gerard's Peaked Cap",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8362,
+   "Name": "Good Witch Glinda Venom Sting (Costume)",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8363,
+   "Name": "Witch of the West Elphaba Chaser (Costume)",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8364,
+   "Name": "Tin Man's Helmet",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8365,
+   "Name": "Dorothy's Dog",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8366,
+   "Name": "Tin Man's Axe",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8367,
+   "Name": "Lion Head Backpack",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8368,
+   "Name": "Scarecrow's Bag",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8369,
+   "Name": "Dorothy's Picnic Basket",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 8397,
+   "Name": "Android Light Zombie (Costume)",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8398,
+   "Name": "Boombox Stamper (Costume)",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8399,
+   "Name": "Cyber Helmet",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8400,
+   "Name": "Combat Mask",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8401,
+   "Name": "Hover Board",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8402,
+   "Name": "Hover Wings",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8403,
+   "Name": "Cube Bot",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8404,
+   "Name": "Pulse",
+   "Kind": "Pet",
+   "Price": 60
+  },
+  {
+   "ItemID": 8420,
+   "Name": "Black's Sunglasses",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8421,
+   "Name": "Criss' Military Cap",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8441,
+   "Name": "Buffclass 20s 4tr (Back)",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8442,
+   "Name": "Buffclass 20s 4ct_face",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8461,
+   "Name": "S 1aksha",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8462,
+   "Name": "S 1flyingzombie",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8463,
+   "Name": "S 1sword (Back)",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8464,
+   "Name": "S 1bearbag (Back)",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8465,
+   "Name": "S 1dragonbag (Back)",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8466,
+   "Name": "S 1snowman (Back)",
+   "Kind": "Pet",
+   "Price": 60
+  },
+  {
+   "ItemID": 8467,
+   "Name": "S 1snowhelmet (Head)",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8468,
+   "Name": "S 1snowflower (Back)",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8490,
+   "Name": "Buffclass 21s 1tr (Back)",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8491,
+   "Name": "Buffclass 21s 1ct (Back)",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8508,
+   "Name": "S21-2 Head Costume A",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8509,
+   "Name": "S21-2 Head Costume B",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8510,
+   "Name": "S21-2 Back Costume A",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8511,
+   "Name": "S21-2 Back Costume B",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8512,
+   "Name": "S21-2 Pet Costume A",
+   "Kind": "Pet",
+   "Price": 60
+  },
+  {
+   "ItemID": 8513,
+   "Name": "S21-2 Pet Costume B",
+   "Kind": "Pet",
+   "Price": 60
+  },
+  {
+   "ItemID": 8528,
+   "Name": "Buffclass 21s 2tr (Back)",
+   "Kind": "Pet",
+   "Price": 60
+  },
+  {
+   "ItemID": 8529,
+   "Name": "Buffclass 21s 2ct (Head)",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8549,
+   "Name": "S21-3 Head Costume A",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8550,
+   "Name": "S21-3 Head Costume B",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8551,
+   "Name": "S21-3 Back Costume A",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8552,
+   "Name": "S21-3 Back Costume B",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8553,
+   "Name": "S21-3 Pet Costume A",
+   "Kind": "Pet",
+   "Price": 60
+  },
+  {
+   "ItemID": 8554,
+   "Name": "S21-3 Pet Costume B",
+   "Kind": "Pet",
+   "Price": 60
+  },
+  {
+   "ItemID": 8561,
+   "Name": "Buffclass 21s 3tr (Back)",
+   "Kind": "Pet",
+   "Price": 60
+  },
+  {
+   "ItemID": 8562,
+   "Name": "Buffclass 21s 3ct (Back)",
+   "Kind": "Pet",
+   "Price": 60
+  },
+  {
+   "ItemID": 8574,
+   "Name": "Buffclass 21s 4tr (Back)",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8575,
+   "Name": "Buffclass 21s 4ct (Pelvis)",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 8592,
+   "Name": "S21-4 Head Costume A",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8593,
+   "Name": "S21-4 Back Costume A",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8594,
+   "Name": "S21-4 Back Costume B",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8595,
+   "Name": "S21-4 Pelvis Costume A",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 8596,
+   "Name": "S21-4 Pelvis Costume B",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 8597,
+   "Name": "S21-4 Pet Costume A",
+   "Kind": "Pet",
+   "Price": 60
+  },
+  {
+   "ItemID": 8619,
+   "Name": "Letteringglass_face",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8626,
+   "Name": "Tttiger 22",
+   "Kind": "Tattoo",
+   "Price": 25
+  },
+  {
+   "ItemID": 8631,
+   "Name": "Buffclass 22s 1tr (Back)",
+   "Kind": "Pet",
+   "Price": 60
+  },
+  {
+   "ItemID": 8632,
+   "Name": "Buffclass 22s 1ct (Head)",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8640,
+   "Name": "S 1parkhairband (Head)",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8641,
+   "Name": "S 1parkballoon (Back)",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8642,
+   "Name": "S 1parksnackbag (Pelvis)",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 8661,
+   "Name": "Buffclass 22s 2tr_face",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8662,
+   "Name": "Buffclass 22s 2ct_face",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8690,
+   "Name": "S22-2 Head Costume",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8691,
+   "Name": "S22-2 Back Costume",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8692,
+   "Name": "S22-2 Pelvis Costume",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 8701,
+   "Name": "Wing_divinetitan (Back)",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8705,
+   "Name": "Buffclass 22s 3tr (Back)",
+   "Kind": "Pet",
+   "Price": 60
+  },
+  {
+   "ItemID": 8706,
+   "Name": "Buffclass 22s 3ct (Head)",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8714,
+   "Name": "S22-3 Head Costume",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8715,
+   "Name": "S22-3 Back Costume",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8716,
+   "Name": "S22-3 Pelvis Costume",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 8749,
+   "Name": "Buffclass 22s 4tr (Back)",
+   "Kind": "Pet",
+   "Price": 60
+  },
+  {
+   "ItemID": 8750,
+   "Name": "Buffclass 22s 4ct (Back)",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8755,
+   "Name": "Competitioncos_chn (Head)",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8756,
+   "Name": "Competitioncos_chn (Pet)",
+   "Kind": "Pet",
+   "Price": 60
+  },
+  {
+   "ItemID": 8757,
+   "Name": "Competitioncos_chn (Pelvis)",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 8758,
+   "Name": "Competitioncos_kr (Head)",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8759,
+   "Name": "Competitioncos_kr (Back)",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8760,
+   "Name": "Competitioncos_kr (Pelvis)",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 8761,
+   "Name": "Competitioncos_tw (Head)",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8762,
+   "Name": "Competitioncos_tw (Pet)",
+   "Kind": "Pet",
+   "Price": 60
+  },
+  {
+   "ItemID": 8763,
+   "Name": "Competitioncos_tw (Pelvis)",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 8764,
+   "Name": "Competitioncos_na (Head)",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8765,
+   "Name": "Competitioncos_na (Back)",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8766,
+   "Name": "Competitioncos_na (Pelvis)",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 8790,
+   "Name": "Wingcos (Back)",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8791,
+   "Name": "Newyearcos (Head)",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8805,
+   "Name": "S23-1 Head Costume",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8806,
+   "Name": "S23-1 Back Costume",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8807,
+   "Name": "S23-1 Pelvis Costume",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 8815,
+   "Name": "Buffclass 23s 1tr (Back)",
+   "Kind": "Pet",
+   "Price": 60
+  },
+  {
+   "ItemID": 8816,
+   "Name": "Buffclass 23s 1ct (Back)",
+   "Kind": "Pet",
+   "Price": 60
+  },
+  {
+   "ItemID": 8823,
+   "Name": "Foolsday (Head)",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8824,
+   "Name": "Foolsday 2 (Head)",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8826,
+   "Name": "Lanternpelvis",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 8828,
+   "Name": "Childrenday (Head)",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8829,
+   "Name": "Childrenday (Back)",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8844,
+   "Name": "S23-2 Back Costume",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8845,
+   "Name": "S23-2 Head Costume",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8846,
+   "Name": "S23-2 Pet Costume",
+   "Kind": "Pet",
+   "Price": 60
+  },
+  {
+   "ItemID": 8859,
+   "Name": "Buffclass 23s 2tr (Pelvis)",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 8860,
+   "Name": "Buffclass 23s 2ct (Back)",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8863,
+   "Name": "Dano (Head)",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8864,
+   "Name": "Eidaladha (Head)",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8882,
+   "Name": "Wingcos 2 (Back)",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8905,
+   "Name": "Buffclass 23s 3tr (Pet)",
+   "Kind": "Pet",
+   "Price": 60
+  },
+  {
+   "ItemID": 8906,
+   "Name": "Buffclass 23s 3ct (Head)",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8917,
+   "Name": "S23-3 Head Costume",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8918,
+   "Name": "S23-3 Back Costume",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8919,
+   "Name": "S23-3 Pelvis Costume",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 8931,
+   "Name": "Chuseok",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8934,
+   "Name": "Buffclass 23s 4tr (Pet)",
+   "Kind": "Pet",
+   "Price": 60
+  },
+  {
+   "ItemID": 8935,
+   "Name": "Buffclass 23s 4ct (Head)",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8966,
+   "Name": "S24-1 Head Costume",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8967,
+   "Name": "S24-1 Back Costume",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8968,
+   "Name": "S24-1 Pelvis Costume",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 8982,
+   "Name": "Wingcos 1 (Back)",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8990,
+   "Name": "Buffclass 24s 1tr (Pet)",
+   "Kind": "Pet",
+   "Price": 60
+  },
+  {
+   "ItemID": 8991,
+   "Name": "Buffclass 24s 1ct (Pet)",
+   "Kind": "Pet",
+   "Price": 60
+  },
+  {
+   "ItemID": 8998,
+   "Name": "Foolsday 1 (Head)",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8999,
+   "Name": "Foolsday 2 (Back)",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 9011,
+   "Name": "Cathat (Head)",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 9014,
+   "Name": "S24-2 Head Costume",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 9015,
+   "Name": "S24-2 Back Costume",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 9016,
+   "Name": "S24-2 Pelvis Costume",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 9027,
+   "Name": "Buffclass 24s 2tr (Pet)",
+   "Kind": "Pet",
+   "Price": 60
+  },
+  {
+   "ItemID": 9028,
+   "Name": "Buffclass 24s 2ct (Pet)",
+   "Kind": "Pet",
+   "Price": 60
+  },
+  {
+   "ItemID": 9042,
+   "Name": "Burger (Head)",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 9043,
+   "Name": "Sodabag (Back)",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 9060,
+   "Name": "Buffclass 24s 3tr (Pet)",
+   "Kind": "Pet",
+   "Price": 60
+  },
+  {
+   "ItemID": 9061,
+   "Name": "Buffclass 24s 3ct (Pet)",
+   "Kind": "Pet",
+   "Price": 60
+  },
+  {
+   "ItemID": 9073,
+   "Name": "Wingcos 2 (Back)",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 9090,
+   "Name": "S24-3 Head Costume",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 9091,
+   "Name": "S24-3 Back Costume",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 9092,
+   "Name": "S24-3 Pelvis Costume",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 9100,
+   "Name": "08_pig (Head)",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 9101,
+   "Name": "08_pig (Pelvis)",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 9122,
+   "Name": "Octopus (Head)",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 9123,
+   "Name": "Sushi (Head)",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 9124,
+   "Name": "Turtle (Back)",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 9125,
+   "Name": "Rolledseaweed (Back)",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 9129,
+   "Name": "Buffclass 24s 4tr (Head)",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 9130,
+   "Name": "Buffclass 24s 4ct (Pelvis)",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 9139,
+   "Name": "Baseball (Head)",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 9140,
+   "Name": "Baseball (Back)",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 9145,
+   "Name": "Shark (Head)",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 9146,
+   "Name": "Sheephorn (Head)",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 9172,
+   "Name": "Ftwreward_flying 1 (Pet)",
+   "Kind": "Pet",
+   "Price": 60
+  },
+  {
+   "ItemID": 9173,
+   "Name": "Ftwreward_flying 2 (Pet)",
+   "Kind": "Pet",
+   "Price": 60
+  },
+  {
+   "ItemID": 9174,
+   "Name": "Ftwreward_crown 3 (Head)",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 9175,
+   "Name": "Ftwreward_crown 4 (Head)",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 9176,
+   "Name": "Ftwreward_crown 5 (Head)",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 9188,
+   "Name": "S25-1 Head Costume",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 9189,
+   "Name": "S25-1 Back Costume",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 9190,
+   "Name": "S25-1 Pelvis Costume",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 9219,
+   "Name": "Wingcos 1 (Back)",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 9222,
+   "Name": "Buffclass 25s 1tr (Pet)",
+   "Kind": "Pet",
+   "Price": 60
+  },
+  {
+   "ItemID": 9223,
+   "Name": "Buffclass 25s 1ct (Back)",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 9227,
+   "Name": "Zbs 93boss (Back)",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 9274,
+   "Name": "S25-2 Head Costume",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 9275,
+   "Name": "S25-2 Back Costume",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 9276,
+   "Name": "S25-2 Pelvis Costume",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 9287,
+   "Name": "Cupidarrow (Back)",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 9291,
+   "Name": "Buffclass 25s 2tr (Back)",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 9292,
+   "Name": "Buffclass 25s 2ct (Pet)",
+   "Kind": "Pet",
+   "Price": 60
+  },
+  {
+   "ItemID": 9298,
+   "Name": "Classic_normalhand",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 9299,
+   "Name": "Classic_lighthand",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 9300,
+   "Name": "Classic_heavyhand",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 9396,
+   "Name": "Buffclass 25s 3tr (Head)",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 9397,
+   "Name": "Buffclass 25s 3ct (Pet)",
+   "Kind": "Pet",
+   "Price": 60
+  },
+  {
+   "ItemID": 9403,
+   "Name": "Wingcos 2 (Back)",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 9416,
+   "Name": "S25-3 Pet Costume",
+   "Kind": "Pet",
+   "Price": 60
+  },
+  {
+   "ItemID": 9417,
+   "Name": "S25-3 Back Costume",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 9418,
+   "Name": "S25-3 Pelvis Costume",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 9525,
+   "Name": "Soulreaperex (Pelvis)",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 9538,
+   "Name": "Buffclass 25s 4tr (Pet)",
+   "Kind": "Pet",
+   "Price": 60
+  },
+  {
+   "ItemID": 9539,
+   "Name": "Buffclass 25s 4ct (Pet)",
+   "Kind": "Pet",
+   "Price": 60
+  },
+  {
+   "ItemID": 9575,
+   "Name": "S25-4 Head Costume",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 9576,
+   "Name": "S25-4 Back Costume",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 9577,
+   "Name": "S25-4 Pelvis Costume",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 9581,
+   "Name": "S 4witchskin",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 9611,
+   "Name": "Petcosc 17th",
+   "Kind": "Pet",
+   "Price": 60
+  },
+  {
+   "ItemID": 9612,
+   "Name": "Petcosd 17th",
+   "Kind": "Pet",
+   "Price": 60
+  },
+  {
+   "ItemID": 9622,
+   "Name": "Silverdeercos (Pet)",
+   "Kind": "Pet",
+   "Price": 60
+  },
+  {
+   "ItemID": 9623,
+   "Name": "Silverantlerscos (Head)",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 9624,
+   "Name": "Luckycharmcos (Pelvis)",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 9625,
+   "Name": "Luckypocketcos (Back)",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 9628,
+   "Name": "Wintertreecos (Head)",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 9629,
+   "Name": "Wintertreecos (Pelvis)",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 9630,
+   "Name": "Wintertreecos_back_m",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 9636,
+   "Name": "Assaultbackpack",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 9639,
+   "Name": "Wingcos 1 (Back)",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 9651,
+   "Name": "S 1heavyskin",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 9652,
+   "Name": "S26-1 Head Costume",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 9653,
+   "Name": "S26-1 Back Costume",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 9654,
+   "Name": "S26-1 Pelvis Costume",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 9661,
+   "Name": "Detectivecos (Head)",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 9662,
+   "Name": "Detectivecos (Pelvis)",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 9663,
+   "Name": "Detectivecos (Pet)",
+   "Kind": "Pet",
+   "Price": 60
+  },
+  {
+   "ItemID": 9670,
+   "Name": "Chickknitcos (Head)",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 9671,
+   "Name": "Snowbeaniecos (Head)",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 9672,
+   "Name": "Snowboardcos (Back)",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 9678,
+   "Name": "Beamguncos (Head)",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 9679,
+   "Name": "Beamguncos (Pelvis)",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 9688,
+   "Name": "S 1gift (Pet)",
+   "Kind": "Pet",
+   "Price": 60
+  },
+  {
+   "ItemID": 9689,
+   "Name": "Kronosagentcos (Head)",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 9690,
+   "Name": "Kronosagentcos (Back)",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 9691,
+   "Name": "Tianmacos (Pet)",
+   "Kind": "Pet",
+   "Price": 60
+  },
+  {
+   "ItemID": 9712,
+   "Name": "Buffclass 26s 1tr (Head)",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 9874,
+   "Name": "Kronosbeltcos_pelvis_m",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 9875,
+   "Name": "Kronoskitcos (Back)",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 9881,
+   "Name": "Divinespearexcos (Pelvis)",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 9885,
+   "Name": "Kronosagentcos_head 2",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 9886,
+   "Name": "Kronosagentcos_back 2",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 9890,
+   "Name": "Buffclass 26s 2ct (Pelvis)",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 9895,
+   "Name": "Zsmegalodon",
+   "Kind": "Pet",
+   "Price": 60
+  },
+  {
+   "ItemID": 9896,
+   "Name": "Zshelmet",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 9897,
+   "Name": "Zsscorpion",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 9903,
+   "Name": "Danocoshead",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 9904,
+   "Name": "Danocospelvis",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 9905,
+   "Name": "Danocosback",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 9998,
+   "Name": "Revenge at the Speed of Light Text Tattoo",
+   "Kind": "Tattoo",
+   "Price": 25
+  },
+  {
+   "ItemID": 9999,
+   "Name": "Road Blocks Prohibited Text Tattoo",
+   "Kind": "Tattoo",
+   "Price": 25
+  }
+ ]
+}

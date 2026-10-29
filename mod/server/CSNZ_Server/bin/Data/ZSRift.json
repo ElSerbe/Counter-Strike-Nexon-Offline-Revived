@@ -12,5 +12,17 @@
 	"WinExp": 100,
 	// highest rift level (room difficulty, 1..100) everyone can pick; monsters get stronger and more random events
 	// come each round as it rises
-	"MaxDifficulty": 20
+	"MaxDifficulty": 20,
+	// Rift Tickets for clearing the rift (every round, boss included): ClearTickets + TicketsPerLevel for each level
+	// above 1 (level 1: 3, level 10: 12, level 20: 22); cut like the medals when sv_cheats was on
+	"ClearTickets": 3,
+	"TicketsPerLevel": 1,
+	// the Rift Exchange (Missions page): ExchangeStock cosmetics a day for each player (items in Data/RiftExchange.json,
+	// tools/gen_rift_exchange.py). Holding one keeps it one more day for HoldCostPercent % of its price (at least
+	// HoldMinCost), up to MaxHoldDays days after the first hold, MaxHolds items at once
+	"ExchangeStock": 8,
+	"HoldCostPercent": 10,
+	"HoldMinCost": 2,
+	"MaxHoldDays": 7,
+	"MaxHolds": 3
 }

@@ -10,7 +10,8 @@ viewer's COSTUME_ROOTS). Zombie skins are whole zombie models (models/player/<re
 
 Usage:
   python export_shop_assets.py            items of the battle passes (Data/Warbonds.json), the Black Market
-                                          (Data/Missions.json) and every character
+                                          (Data/Missions.json), the Rift Exchange (Data/RiftExchange.json)
+                                          and every character
   python export_shop_assets.py --all      every weapon and character in Item.csv
 Writes web/shop/icons/<itemID>.png, web/shop/models/* (+ models/index.json) and
 server/CSNZ_Server/bin/Data/ItemNames.json.
@@ -115,6 +116,14 @@ def market_item_ids():
     text = open(os.path.join(SERVER_DATA, "Missions.json"), encoding="utf-8").read()
     cfg = json.loads(re.sub(r"(?m)^\s*//.*$", "", text))
     return {i["ItemID"] for i in cfg.get("BlackMarket", {}).get("Items", [])}
+
+
+def rift_item_ids():
+    """The Rift Exchange's cosmetics (Data/RiftExchange.json, gen_rift_exchange.py)."""
+    path = os.path.join(SERVER_DATA, "RiftExchange.json")
+    if not os.path.exists(path):
+        return set()
+    return {i["ItemID"] for i in json.load(open(path, encoding="utf-8")).get("Items", [])}
 
 
 def warbond_art():
@@ -478,7 +487,7 @@ def main():
     if "--all" in sys.argv:
         wanted = [i for i, it in items.items() if it["class"] in ("Equipment", "Class")]
     else:
-        wanted = sorted(warbond_item_ids() | market_item_ids() |
+        wanted = sorted(warbond_item_ids() | market_item_ids() | rift_item_ids() |
                         {i for i, it in items.items() if it["class"] == "Class"})
     available = nar_files()
 
