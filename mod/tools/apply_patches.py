@@ -26,6 +26,9 @@ EXTRA_FILES = [
     (MOD / "tools" / "botassist" / "botassist.ini", "botassist.ini", False),  # keeps the player's settings
     (MOD / "tools" / "botassist" / "botassist_weapons.txt", "botassist_weapons.txt", False),
     (MOD / "tools" / "botassist" / "botassist_characters.txt", "botassist_characters.txt", False),
+    # data tables botassist loads instead of the game's (gen_zsrift_waves.py: Zombie Disaster Zone's zombie mix)
+    (MOD / "tools" / "botassist" / "tables" / "maps" / "ZBS_WAVE_zsrift_splinter.csv",
+     "botassist_tables/maps/ZBS_WAVE_zsrift_splinter.csv", True),
 ]
 
 # (file, va, expected original bytes, patched bytes, note)
@@ -513,6 +516,7 @@ def apply(bin_dir: Path) -> None:
         if dst.exists() and not overwrite:
             print(f"[skip] {name} already present")
             continue
+        dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dst)
         print(f"[ok]   {name} copied")
 

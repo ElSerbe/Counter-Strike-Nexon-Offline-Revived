@@ -5037,9 +5037,73 @@ static void FixCrossbowCls(DWORD delta)
     Log("classic crossbow: %s", ok ? "fires crossbow_bolt (its own bolt class doesn't exist)" : "NOT patched (unexpected code)");
 }
 
+// ---------------------------------------------------------------- table overrides
+// mp.dll reads its data tables (Zombie Scenario's maps/ZBS_*_<map>, resource/...) with 0x1146cb10(table, name,
+// encrypted): table vfunc 4 loads "<name>.csv", vfunc 8 "<name>.cso" (hw.dll 0x027583e0: reads the file, TEA-decrypts
+// it, calls the CSV parser 0x02758ba0 on the text). A file botassist_tables/<name>.csv next to botassist.asi now
+// replaces the game's table: its text goes to that same parser. Zombie Disaster Zone's waves come from there
+// (tables/maps/ZBS_WAVE_zsrift_splinter.csv, made by gen_zsrift_waves.py).
+static const DWORD MP_LOADTABLE = 0x1146cb10;
+typedef void (*LoadTableFn)(void* table, const char* name, char encrypted);
+typedef void(__thiscall* ParseTableFn)(void* table, const char* text, int size);
+static LoadTableFn g_LoadTableTramp;
+
+// the CSV parser, found through the table's own .cso loader (its call at +0x8f)
+static ParseTableFn TableParser(void* table)
+{
+    static const unsigned char head[] = { 0x55, 0x8b, 0xec, 0x51, 0x53, 0x8b, 0xd9, 0x56 };
+    unsigned char* load = Readable(table, 4) && Readable(*(void***)table + 2, 4) ? (*(unsigned char***)table)[2] : nullptr;
+    if (!load || !Readable(load, 0x94) || memcmp(load, head, sizeof(head)) || load[0x8f] != 0xe8)
+        return nullptr;
+    return (ParseTableFn)(load + 0x94 + *(int*)(load + 0x90));
+}
+
+static bool LoadTableOverride(void* table, const char* name)
+{
+    char path[MAX_PATH];
+    snprintf(path, sizeof(path), "%sbotassist_tables\\%s.csv", g_dir, name);
+    for (char* c = path; *c; c++)
+        if (*c == '/')
+            *c = '\\';
+    FILE* f = fopen(path, "rb");
+    if (!f)
+        return false;
+    std::string text;
+    char buf[4096];
+    for (size_t n; (n = fread(buf, 1, sizeof(buf), f)) > 0;)
+        text.append(buf, n);
+    fclose(f);
+    ParseTableFn parse = TableParser(table);
+    if (!parse || text.empty())
+    {
+        Log("table %s: override NOT loaded (%s)", name, parse ? "empty file" : "unexpected table code");
+        return false;
+    }
+    ((DWORD*)table)[2] = ((DWORD*)table)[3] = 0; // rows, columns: what the .cso loader clears first
+    parse(table, text.c_str(), (int)text.size());
+    Log("table %s: loaded from botassist_tables (%lu rows, %lu columns)", name, ((DWORD*)table)[2], ((DWORD*)table)[3]);
+    return ((DWORD*)table)[2] != 0;
+}
+
+static void HookedLoadTable(void* table, const char* name, char encrypted)
+{
+    if (!name || !LoadTableOverride(table, name))
+        g_LoadTableTramp(table, name, encrypted);
+}
+
+static void InstallTableOverrides(DWORD delta)
+{
+    unsigned char* fn = (unsigned char*)(MP_LOADTABLE + delta);
+    static const unsigned char code[] = { 0x55, 0x8b, 0xec, 0x81, 0xec, 0x04, 0x01, 0x00, 0x00 };
+    if (Readable(fn, sizeof(code)) && !memcmp(fn, code, sizeof(code)))
+        g_LoadTableTramp = (LoadTableFn)DetourCdecl(fn, sizeof(code), (void*)HookedLoadTable);
+    Log("table overrides: %s", g_LoadTableTramp ? "botassist_tables\\<table>.csv replaces the game's table" : "NOT hooked (unexpected code)");
+}
+
 static void HookBotManager(DWORD delta)
 {
     FixCrossbowCls(delta);
+    InstallTableOverrides(delta);
     DetourBotAddCommand(delta);
     HookZombieGiant(delta);
     InstallZgDebug(delta);

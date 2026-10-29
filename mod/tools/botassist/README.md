@@ -380,3 +380,14 @@ automatic ones join CT. No more kicks in co-op modes.
 - The pages: mod/web/profile (statistics and medals, CSNZ_Server CMedalManager, Data/Medals.json from
   tools/gen_medals.py) and mod/web/missions (requests, weekly event, Black Market, orders, challenges;
   CMissionManager, Data/Missions.json from tools/gen_missions.py).
+
+## Table overrides: Zombie Disaster Zone's zombie mix
+mp.dll loads its data tables (Zombie Scenario's `maps/ZBS_*_<map>`, `resource/...`) through 0x1146cb10; the `.cso`
+files are CSV encrypted with TEA (fixed key, hw.dll 0x02758c80; `tools/csodec.py` decrypts and encrypts them).
+botassist detours that loader: `Bin/botassist_tables/<table>.csv` (e.g. `maps/ZBS_WAVE_zsrift_splinter.csv`), when it
+exists, is parsed into the table instead (hw.dll's CSV parser, the one its `.cso` loader calls).
+
+Zombie Disaster Zone's own waves spawn only zombie types 1 and 2 every round, though its type table
+(`maps/zbs_zt_zsrift_splinter`) lists the scenario's special zombies. `gen_zsrift_waves.py` rebuilds the wave table
+from the game's with a mix that grows each round (speed, psycho, healer, heavy, boomer, deimos, climber, light,
+revival, golden speed) and the boss's escort mixed too; `apply_patches.py` copies it into Bin.
