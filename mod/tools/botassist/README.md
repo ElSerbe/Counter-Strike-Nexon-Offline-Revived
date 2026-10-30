@@ -410,3 +410,18 @@ the round count of the rift (zombie round manager +0x290, the boss round include
 `/api/zsrift/clear {"difficulty", "rounds"}` to CSNZ_Server (tried 5 times, 3 s apart). The server pays everyone in
 the room Rift Tickets for the room's rift level, once per match (Data/ZSRift.json `ClearTickets`, `TicketsPerLevel`),
 spent at the Rift Exchange tab of the Missions page. Log line: "ZSRift: rift cleared at level N: told the server".
+
+## Zombie Disaster Zone's monster strength per rift level
+mp.dll's monster setup (0x11360de0) multiplies a monster's attack, health, armour and speed by
+1 + rate * (level - 1) ^ 1.85, the rates of its kind coming from `resource/ZSRift/ZSRIFT_Monster` (hw SharedDataMgr
+vfunc 0x8ac(type): attack, health, armour, speed; type 0 common zombies, 1 and 2 special ones, 3 bosses). The room's
+difficulty tooltip (GameUI 0x105b4c50) uses the same formula. At level 20 that was +325% attack and +2321% health.
+botassist hooks that vfunc to hand out `ZSRiftMonsterAttack` / `ZSRiftMonsterHealth` / `ZSRiftBossAttack` /
+`ZSRiftBossHealth` (percent per level, 1.5 / 5 / 1 / 4) and sets the exponent (mp 0x11945470, GameUI 0x1096ff50, read
+only there) to `ZSRiftLevelExponent` (1: the same step every level). Armour and speed keep the game's rates.
+
+The room panel redraws itself (and the tooltip) after a settings change only when the changed options include bit 59
+(GameUI 0x105bcd10 ands them with the mask at 0x10aff218; the bits are the server's room flags low / lowMid / highMid /
+high). A new rift level (lowMid ZSDIFFICULTY, bit 45) left the tooltip on the room's first level: botassist points
+that load (0x105bcd2b) at its own mask with bit 45 added. Rift levels unlock one by one on the server (Data/ZSRift.json
+`UnlockByClearing`): the highest one unlocked is the best clear + 1, sent in Packet_ZSRift type 0.

@@ -1,6 +1,14 @@
 /* Missions page: uses the shop's colours, top bar, orders and challenge book (../shop/style.css) */
-.wallets { margin-left: auto; display: flex; gap: 18px; }
-.wallets .wallet { margin-left: 0; }
+/* a tighter top bar than the shop's: six tabs and three wallets fit in the game's ~1000 px window; when they don't,
+   the tabs scroll sideways instead of pushing the wallets and the close button out */
+.topbar { height: 48px; gap: 12px; padding: 0 12px 0 16px; }
+.topbar h1 { font-size: 16px; letter-spacing: 3px; flex: none; }
+.tabs { margin-left: 0; flex: 0 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.tabs button { padding: 15px 9px 13px; font-size: 12px; letter-spacing: 1px; white-space: nowrap; flex: none; }
+.wallets { margin-left: auto; display: flex; gap: 14px; flex: none; }
+.wallets .wallet { margin-left: 0; font-size: 15px; gap: 6px; }
+.close { flex: none; width: 30px; height: 30px; padding: 0; font-size: 20px; line-height: 1; letter-spacing: 0; display: flex; align-items: center; justify-content: center; }
 .wallet.badges { color: #e7e2d4; }
 .badge-icon { display: inline-block; width: 18px; height: 18px; flex: none; position: relative; background: #2a2f36;
   clip-path: polygon(50% 0, 100% 22%, 92% 78%, 50% 100%, 8% 78%, 0 22%); box-shadow: inset 0 0 0 2px #6b7380; }
@@ -121,5 +129,10 @@
 @media (max-width: 1100px) {
   .requests { grid-template-columns: 1fr 270px; }
   .briefing .portrait { height: 180px; }
-  .wallets { gap: 12px; }
+  .wallets { gap: 10px; }
+  .market .preview { width: 280px; padding: 14px; }
+  .market .preview .stage { height: 240px; }
+  .market-main { padding: 14px 16px; }
+  .rift .market-grid { grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); }
+  .event { padding: 16px 18px; }
 }

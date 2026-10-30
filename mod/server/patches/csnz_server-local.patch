@@ -327,10 +327,10 @@ index 0000000..5405ded
 +};
 diff --git a/src/interface/izsriftmanager.h b/src/interface/izsriftmanager.h
 new file mode 100644
-index 0000000..ac260e5
+index 0000000..b7513cd
 --- /dev/null
 +++ b/src/interface/izsriftmanager.h
-@@ -0,0 +1,25 @@
+@@ -0,0 +1,27 @@
 +#pragma once
 +
 +#include <vector>
@@ -355,6 +355,8 @@ index 0000000..ac260e5
 +	virtual std::vector<int> Levels(IUser* user) = 0;
 +	// the highest rift level (room difficulty) players can pick
 +	virtual int MaxDifficulty() = 0;
++	// the highest rift level this player has unlocked: 1, then one more for each level cleared (up to MaxDifficulty)
++	virtual int UnlockedDifficulty(IUser* user) = 0;
 +};
 diff --git a/src/interface/net/iextendedsocket.h b/src/interface/net/iextendedsocket.h
 index 6768f4e..f62cd69 100644
@@ -4824,10 +4826,10 @@ index 0000000..3dda56f
 +extern CWarbondManager g_WarbondManager;
 diff --git a/src/manager/zsriftmanager.cpp b/src/manager/zsriftmanager.cpp
 new file mode 100644
-index 0000000..d7836ec
+index 0000000..c66cc21
 --- /dev/null
 +++ b/src/manager/zsriftmanager.cpp
-@@ -0,0 +1,492 @@
+@@ -0,0 +1,507 @@
 +#include "zsriftmanager.h"
 +#include "usermanager.h"
 +#include "packetmanager.h"
@@ -4917,6 +4919,7 @@ index 0000000..d7836ec
 +	r.killExp = cfg.value("KillExp", r.killExp);
 +	r.winExp = cfg.value("WinExp", r.winExp);
 +	r.maxDifficulty = max(1, min(cfg.value("MaxDifficulty", r.maxDifficulty), 100));
++	r.unlockByClearing = cfg.value("UnlockByClearing", r.unlockByClearing);
 +	r.clearTickets = max(0, cfg.value("ClearTickets", r.clearTickets));
 +	r.ticketsPerLevel = max(0, cfg.value("TicketsPerLevel", r.ticketsPerLevel));
 +	r.exchangeStock = max(1, cfg.value("ExchangeStock", r.exchangeStock));
@@ -4976,6 +4979,13 @@ index 0000000..d7836ec
 +	return m_Rules.maxDifficulty;
 +}
 +
++int CZSRiftManager::UnlockedDifficulty(IUser* user)
++{
++	if (!user || !m_Rules.unlockByClearing)
++		return m_Rules.maxDifficulty;
++	return max(1, min(State(user).value("bestClear", 0) + 1, m_Rules.maxDifficulty));
++}
++
 +void CZSRiftManager::SendRules(IUser* user)
 +{
 +	CSendPacket* msg = g_PacketManager.CreatePacket(user->GetExtendedSocket(), PacketId::ZSRift);
@@ -5003,7 +5013,7 @@ index 0000000..d7836ec
 +		msg->WriteUInt8(i);
 +		msg->WriteUInt16(level);
 +	}
-+	msg->WriteUInt16(m_Rules.maxDifficulty); // every level open (no clear-time unlocks offline)
++	msg->WriteUInt16(UnlockedDifficulty(user)); // the room's difficulty list and the tooltip's "can unlock" line
 +	msg->WriteUInt32(st.value("exp", 0));
 +	msg->WriteUInt32(st.value("today", 0));
 +	msg->WriteUInt32(m_Rules.dailyExpMax);
@@ -5174,8 +5184,15 @@ index 0000000..d7836ec
 +	int tickets = match->m_bCheats ? full * (100 - g_WarbondManager.CheatPenalty()) / 100 : full;
 +	for (IUser* u : room->GetUsers())
 +	{
++		int unlocked = UnlockedDifficulty(u);
 +		json& st = State(u);
 +		st["bestClear"] = max(st.value("bestClear", 0), level);
++		if (UnlockedDifficulty(u) > unlocked)
++		{
++			SendTraits(u); // the client's difficulty list grows
++			g_PacketManager.SendUMsgNoticeMessageInChat(u->GetExtendedSocket(),
++				va("Zombie Disaster Zone: level %d unlocked.", UnlockedDifficulty(u)));
++		}
 +		g_MedalManager.AddCounter(u, "RiftTickets", tickets);
 +		g_MedalManager.AddCounter(u, "RiftClears", 1);
 +		string cut = tickets < full ? va(" (sv_cheats: -%d%%)", g_WarbondManager.CheatPenalty()) : "";
@@ -5246,7 +5263,7 @@ index 0000000..d7836ec
 +	return { { "tickets", Tickets(user) }, { "refreshIn", SecondsToMidnight() }, { "stock", stock }, { "held", held },
 +		{ "bestClear", st.value("bestClear", 0) },
 +		{ "rules", { { "clearTickets", m_Rules.clearTickets }, { "ticketsPerLevel", m_Rules.ticketsPerLevel },
-+			{ "maxDifficulty", m_Rules.maxDifficulty }, { "maxHolds", m_Rules.maxHolds }, { "maxHoldDays", m_Rules.maxHoldDays } } } };
++			{ "maxDifficulty", m_Rules.maxDifficulty }, { "unlocked", UnlockedDifficulty(user) }, { "maxHolds", m_Rules.maxHolds }, { "maxHoldDays", m_Rules.maxHoldDays } } } };
 +}
 +
 +json CZSRiftManager::ExchangeApi(IUser* user, const string& method, const string& body, int& status)
@@ -5322,10 +5339,10 @@ index 0000000..d7836ec
 +}
 diff --git a/src/manager/zsriftmanager.h b/src/manager/zsriftmanager.h
 new file mode 100644
-index 0000000..bc49c38
+index 0000000..ffacc10
 --- /dev/null
 +++ b/src/manager/zsriftmanager.h
-@@ -0,0 +1,77 @@
+@@ -0,0 +1,79 @@
 +#pragma once
 +
 +#include <string>
@@ -5344,7 +5361,8 @@ index 0000000..bc49c38
 +	// with level the one bought (1 for the first): 952 / 1050 make the first one 1000, then about 5% more each
 +	int costBase = 952, costRate = 1050;
 +	int matchExp = 100, killExp = 10, winExp = 100; // per finished match, before the daily maximum
-+	int maxDifficulty = 20; // rift levels open to everyone in the room's difficulty list (1..this)
++	int maxDifficulty = 20; // highest rift level (room difficulty list 1..this)
++	bool unlockByClearing = true; // level 1 open, the next one opens when the highest unlocked one is cleared
 +	// Rift Tickets for clearing the rift (every round, boss included): clearTickets + ticketsPerLevel per level above 1
 +	int clearTickets = 3, ticketsPerLevel = 1;
 +	// the Rift Exchange: exchangeStock cosmetics a day for each player; holding one keeps it for one more day for
@@ -5372,6 +5390,7 @@ index 0000000..bc49c38
 +	virtual void OnMatchResult(IUser* user, int kills, bool won);
 +	virtual std::vector<int> Levels(IUser* user);
 +	virtual int MaxDifficulty();
++	virtual int UnlockedDifficulty(IUser* user);
 +
 +	// web API (CWarbondManager routes it): POST /api/zsrift/clear from botassist.asi when the last round is cleared;
 +	// GET / POST /api/riftexchange {action: buy|hold (itemID)}
@@ -6366,7 +6385,7 @@ index 13a4ee8..c36e019 100644
  	std::vector<int> m_KickedUsers;
  	std::vector<int> m_FamilyBattleUsers;
 diff --git a/src/room/roomsettings.cpp b/src/room/roomsettings.cpp
-index 0ba9234..25ceeaf 100644
+index 0ba9234..70e6280 100644
 --- a/src/room/roomsettings.cpp
 +++ b/src/room/roomsettings.cpp
 @@ -8,6 +8,7 @@
@@ -6558,7 +6577,7 @@ index 0ba9234..25ceeaf 100644
  					lowMidFlag &= ~ROOM_LOWMID_ZSDIFFICULTY;
  				}
 +				else if (gameModeId == 59)
-+					zsDifficulty = max(1, min(zsDifficulty, g_ZSRiftManager.MaxDifficulty()));
++					zsDifficulty = max(1, min(zsDifficulty, g_ZSRiftManager.UnlockedDifficulty(user)));
  				else if (gameModeId == 15)
  				{
  					int mapMaxZsDifficulty = g_pMapListTable->GetCell<int>("ZSmaxDifficulty", to_string(mapId));
@@ -6577,6 +6596,17 @@ index 0ba9234..25ceeaf 100644
  
  		lowMidFlag |= ROOM_LOWMID_BALLNUMBER;
  		ballNumber = GetMapSetting(mapId, "ball_default");
+@@ -2668,6 +2678,10 @@ bool CRoomSettings::CheckSettings(IUser* user)
+ 			}
+ 		}
+ 
++		// Zombie Disaster Zone: only the rift levels the creator has unlocked
++		if (gameModeId == 59 && (lowMidFlag & ROOM_LOWMID_ZSDIFFICULTY))
++			zsDifficulty = max(1, min(zsDifficulty, g_ZSRiftManager.UnlockedDifficulty(user)));
++
+ 		if (gameModeId == 15)
+ 		{
+ 			if (lowMidFlag & ROOM_LOWMID_ZSDIFFICULTY)
 diff --git a/src/room/roomsettings.h b/src/room/roomsettings.h
 index 69a1cd9..823c6f8 100644
 --- a/src/room/roomsettings.h

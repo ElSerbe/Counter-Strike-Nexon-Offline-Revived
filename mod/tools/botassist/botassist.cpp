@@ -151,6 +151,9 @@ static struct
     bool zgPlayerGiant = true; // Zombie Giant: you can be the giant too
     float zsrEventDivisor = 3.0f; // Zombie Disaster Zone: events per round = rift level / this (the game's: 32)
     int zsrBotMoney = 10000;   // Zombie Disaster Zone: a bot's money on each new life, at least (0: the game's)
+    // Zombie Disaster Zone: monsters' attack / health bonus per rift level above 1, in percent (negative: the game's)
+    float zsrMonsterAttack = 1.5f, zsrMonsterHealth = 5.0f, zsrBossAttack = 1.0f, zsrBossHealth = 4.0f;
+    float zsrExponent = 1.0f; // bonus = rate * (level - 1) ^ this (the game's: 1.85)
     float rescan = 0.15f;
     bool logTargets = true;
     bool logCommands = true;
@@ -282,6 +285,11 @@ static void LoadSettings()
     cfg.zgPlayers = GetPrivateProfileIntA("BotAssist", "ZombieGiantPlayers", -1, ini);
     cfg.zsrEventDivisor = IniFloat(ini, "ZSRiftEventDivisor", "3");
     cfg.zsrBotMoney = GetPrivateProfileIntA("BotAssist", "ZSRiftBotMoney", 10000, ini);
+    cfg.zsrMonsterAttack = IniFloat(ini, "ZSRiftMonsterAttack", "1.5");
+    cfg.zsrMonsterHealth = IniFloat(ini, "ZSRiftMonsterHealth", "5");
+    cfg.zsrBossAttack = IniFloat(ini, "ZSRiftBossAttack", "1");
+    cfg.zsrBossHealth = IniFloat(ini, "ZSRiftBossHealth", "4");
+    cfg.zsrExponent = IniFloat(ini, "ZSRiftLevelExponent", "1");
     cfg.zgPlayerGiant = GetPrivateProfileIntA("BotAssist", "ZombieGiantYouCanBeGiant", 1, ini) != 0;
     cfg.logTargets = GetPrivateProfileIntA("BotAssist", "LogTargets", 1, ini) != 0;
     cfg.logCommands = GetPrivateProfileIntA("BotAssist", "LogCommands", 1, ini) != 0;
@@ -5197,12 +5205,101 @@ static void SetZsrEventDivisor(DWORD delta)
     Log("ZSRift: events per round = rift level / %.1f%s", ok ? cfg.zsrEventDivisor : 32.0f, ok ? "" : " (game's value kept)");
 }
 
+// How much stronger Zombie Disaster Zone's monsters get with the rift level. mp.dll's monster setup (0x11360de0)
+// multiplies a monster's attack, health, armour and speed by 1 + rate * (level - 1) ^ 1.85, with its kind's rates from
+// resource/ZSRift/ZSRIFT_Monster (hw SharedDataMgr vfunc 0x8ac(type) -> float attack, health, armor, speed; type 0 the
+// common zombies, 1 and 2 the special ones, 3 the bosses). The room's difficulty tooltip (GameUI 0x105b4c50) shows the
+// same formula for types 0 and 3: +325% attack and +2321% health at level 20. botassist makes the growth linear (the
+// 1.85, read only there: mp 0x11945470, GameUI 0x1096ff50, becomes ZSRiftLevelExponent) and hands out the ini's
+// attack and health rates (percent per level); armour and speed keep the game's rates.
+static const DWORD HW_SDM_MONSTER_RATES = 0x2590e20, MP_ZSRIFT_EXPONENT = 0x11945470, GAMEUI_ZSRIFT_EXPONENT = 0x1096ff50;
+typedef float*(__thiscall* MonsterRatesFn)(void* sdm, unsigned type);
+static MonsterRatesFn g_MonsterRates;
+
+static float* __fastcall HookedMonsterRates(void* sdm, void*, unsigned type)
+{
+    float* r = g_MonsterRates(sdm, type);
+    if (r && type <= 3)
+    {
+        float attack = type == 3 ? cfg.zsrBossAttack : cfg.zsrMonsterAttack;
+        float health = type == 3 ? cfg.zsrBossHealth : cfg.zsrMonsterHealth;
+        if (attack >= 0)
+            r[0] = attack / 100;
+        if (health >= 0)
+            r[1] = health / 100;
+    }
+    return r;
+}
+
+static void InstallZsrMonsterRates()
+{
+    if (g_MonsterRates)
+        return; // hw.dll stays loaded
+    if (!g_hwLo)
+        ModuleRange("hw.dll", g_hwLo, g_hwHi);
+    void** slot = (void**)(g_hwLo + HW_SHAREDDATA_VT - HW_BASE + 0x8ac);
+    if (g_hwLo && Readable(slot, 4) && *slot == (void*)(g_hwLo + HW_SDM_MONSTER_RATES - HW_BASE))
+    {
+        g_MonsterRates = (MonsterRatesFn)*slot;
+        PatchSlot(slot, (void*)HookedMonsterRates);
+    }
+    Log("ZSRift: monster bonus per level: attack %.1f%%, health %.1f%%, boss attack %.1f%%, boss health %.1f%%%s",
+        cfg.zsrMonsterAttack, cfg.zsrMonsterHealth, cfg.zsrBossAttack, cfg.zsrBossHealth,
+        g_MonsterRates ? "" : " NOT set (unexpected code)");
+}
+
+static void SetZsrExponent(double* c, const char* where)
+{
+    bool ok = cfg.zsrExponent > 0 && Readable(c, 8) && (*c == 1.85 || *c == (double)cfg.zsrExponent);
+    if (ok)
+    {
+        DWORD old;
+        VirtualProtect(c, 8, PAGE_READWRITE, &old);
+        *c = cfg.zsrExponent;
+        VirtualProtect(c, 8, old, &old);
+    }
+    Log("ZSRift: %s: monster bonus = rate * (level - 1) ^ %.2f%s", where, ok ? cfg.zsrExponent : 1.85,
+        ok ? "" : " (game's value kept)");
+}
+
+// The room panel redraws itself (GameUI 0x105b4c50, the difficulty tooltip with the monsters' bonuses too) after a
+// room settings change only when the changed options include bit 59: 0x105bcd10 ands them with the mask at 0x10aff218
+// (movups xmm1, [mask] at 0x105bcd2b). The bits are the server's room setting flags (low, lowMid, highMid, high), so a
+// new rift level (lowMid ZSDIFFICULTY, bit 45) left the tooltip on the level the room was made with. botassist points
+// the instruction at its own mask with bit 45 added.
+static const DWORD GAMEUI_REDRAW_MASK_LOAD = 0x105bcd2b, GAMEUI_REDRAW_MASK = 0x10aff218;
+static DWORD g_redrawMask[4];
+
+static void FixRiftTooltip(HMODULE gameUi)
+{
+    DWORD delta = (DWORD)gameUi - 0x10000000; // GameUI.dll's preferred base
+    SetZsrExponent((double*)(GAMEUI_ZSRIFT_EXPONENT + delta), "difficulty tooltip");
+    unsigned char* p = (unsigned char*)(GAMEUI_REDRAW_MASK_LOAD + delta);
+    DWORD* mask = (DWORD*)(GAMEUI_REDRAW_MASK + delta);
+    if (!Readable(p, 7) || p[0] != 0x0f || p[1] != 0x10 || p[2] != 0x0d || *(DWORD**)(p + 3) != mask ||
+        !Readable(mask, 16))
+    {
+        Log("GameUI room panel has unexpected code: difficulty tooltip left as it is");
+        return;
+    }
+    memcpy(g_redrawMask, mask, sizeof(g_redrawMask));
+    g_redrawMask[1] |= 1u << (59 - 32) | 1u << (45 - 32);
+    DWORD old;
+    VirtualProtect(p + 3, 4, PAGE_EXECUTE_READWRITE, &old);
+    *(DWORD**)(p + 3) = g_redrawMask;
+    VirtualProtect(p + 3, 4, old, &old);
+    FlushInstructionCache(GetCurrentProcess(), p, 7);
+    Log("GameUI room panel: redrawn after a new rift level too (difficulty tooltip)");
+}
+
 static void HookBotManager(DWORD delta)
 {
     FixCrossbowCls(delta);
     InstallTableOverrides();
     InstallFileOverrides();
     SetZsrEventDivisor(delta);
+    InstallZsrMonsterRates();
+    SetZsrExponent((double*)(MP_ZSRIFT_EXPONENT + delta), "mp.dll");
     DetourBotAddCommand(delta);
     HookZombieGiant(delta);
     InstallZgDebug(delta);
@@ -7238,6 +7335,8 @@ static DWORD WINAPI Watcher(LPVOID)
             HookTaskbarButton(GAMEUI_VIP_PAGE, GAMEUI_VIP_RETURN, (void*)VipStub, &g_vipReturn, "VIP");
             HookTaskbarButton(GAMEUI_QUEST_PAGE, GAMEUI_QUEST_RETURN, (void*)MissionsStub, &g_questReturn, "Missions");
             HookModeDialog();
+            InstallZsrMonsterRates();
+            FixRiftTooltip(ui);
         }
         HMODULE mp = GetModuleHandleA("mp.dll");
         if (mp && mp != hooked)

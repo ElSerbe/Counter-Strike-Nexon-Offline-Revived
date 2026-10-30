@@ -10,9 +10,12 @@
 	"MatchExp": 100,
 	"KillExp": 10,
 	"WinExp": 100,
-	// highest rift level (room difficulty, 1..100) everyone can pick; monsters get stronger and more random events
-	// come each round as it rises
+	// highest rift level (room difficulty, 1..100); monsters get stronger and more random events come each round as
+	// it rises (how much stronger: botassist.ini, ZSRiftMonster*)
 	"MaxDifficulty": 20,
+	// true: every player starts with level 1 and clearing the highest level they have unlocked opens the next one;
+	// false: every level open
+	"UnlockByClearing": true,
 	// Rift Tickets for clearing the rift (every round, boss included): ClearTickets + TicketsPerLevel for each level
 	// above 1 (level 1: 3, level 10: 12, level 20: 22); cut like the medals when sv_cheats was on
 	"ClearTickets": 3,

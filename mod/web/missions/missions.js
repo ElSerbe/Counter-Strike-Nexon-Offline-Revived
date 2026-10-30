@@ -241,7 +241,7 @@
     const scroll = view.querySelector(".market-main") ? view.querySelector(".market-main").scrollTop : 0;
     view.innerHTML = `<div class="market rift"><div class="market-main">
       <div class="market-head"><div><h2>Rift Exchange</h2>
-        <p>Cosmetics paid with Rift Tickets. Clear Zombie Disaster Zone to earn them: ${r.clearTickets} at level 1, ${r.ticketsPerLevel} more for each level above (${atMax} at level ${r.maxDifficulty}).${rift.bestClear ? ` Your best clear: level ${rift.bestClear}.` : ""}</p></div>
+        <p>Clear Zombie Disaster Zone for Rift Tickets: ${r.clearTickets} at level 1, +${r.ticketsPerLevel} per level (${atMax} at level ${r.maxDifficulty}).${r.unlocked ? ` Unlocked: level ${r.unlocked}.` : ""}${rift.bestClear ? ` Best clear: ${rift.bestClear}.` : ""}</p></div>
         <span class="refresh">New stock in ${timeLeft(rift.refreshIn)}</span></div>
       <section class="rift-section"><h2 class="section-title">Held for you<small>${held.length} / ${r.maxHolds} · up to ${r.maxHoldDays} days each</small></h2>
         ${held.length ? `<div class="market-grid">${held.map(riftCard).join("")}</div>` : `<div class="rift-empty">Hold an item of today's stock to keep it for another day</div>`}</section>
@@ -317,7 +317,7 @@
   document.addEventListener("keydown", e => { if (e.key === "Escape") close(); });
   $("tabs").addEventListener("click", e => {
     const b = e.target.closest("[data-tab]");
-    if (b && data) { tab = b.dataset.tab; confirmBuy = riftConfirm = null; render(); }
+    if (b && data) { tab = b.dataset.tab; confirmBuy = riftConfirm = null; render(); b.scrollIntoView({ block: "nearest", inline: "nearest" }); }
   });
   view.addEventListener("click", e => {
     const t = e.target;
@@ -402,7 +402,7 @@
           [8597, "S21-4 Pet Costume A", "Pet", 60], [8030, "Evolution Level 3 Jiang Shi", "Zombie Skin", 55], [949, "Paladin Crown", "Head", 45],
           [8626, "Tttiger 22", "Tattoo", 25], [8364, "Tin Man's Helmet", "Head", 45], [9124, "Turtle (Back)", "Back", 50]];
         const items = kinds.map(([itemID, name, kind, price]) => ({ itemID, name, kind, price, holdCost: Math.max(2, Math.round(price / 10)), owned: false }));
-        mock.rift = { tickets: 64, refreshIn: 30000, bestClear: 12, rules: { clearTickets: 3, ticketsPerLevel: 1, maxDifficulty: 20, maxHolds: 3, maxHoldDays: 7 },
+        mock.rift = { tickets: 64, refreshIn: 30000, bestClear: 12, rules: { clearTickets: 3, ticketsPerLevel: 1, maxDifficulty: 20, unlocked: 13, maxHolds: 3, maxHoldDays: 7 },
           held: [Object.assign({ daysLeft: 3, heldDays: 3, canExtend: true }, items[8])], stock: items.slice(0, 8) };
       }
       const r = mock.rift;
