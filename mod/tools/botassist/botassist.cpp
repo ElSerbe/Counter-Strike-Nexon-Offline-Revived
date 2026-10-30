@@ -5135,20 +5135,42 @@ static struct
     int repaired = -1;
 } g_zhe;
 
+enum ZheZombieMode
+{
+    ZZ_PATROL,      // walking around near the humans, looking around
+    ZZ_INVESTIGATE, // a generator made noise: going there
+    ZZ_CHASE,       // a human in sight (or just lost): after them
+    ZZ_SEARCH,      // lost them: where they were last seen, looking around, then gives up
+};
+
 struct ZheBot
 {
     float lastThink = 0, yaw = 0, pitch = 0;
     bool init = false;
+    float sweep = 0;                // looking around while walking: amplitude in degrees
     void* gen = nullptr;            // generator it repairs
-    float lastGauge = -1, gaugeCheck = 0, closerUntil = 0;
+    float lastGauge = -1, gaugeCheck = 0, nudgeUntil = 0, nudgeYaw = 0;
     float fleeUntil = 0;
     V3 fleeGoal{};
     float zombieSeenAt = -100;
     V3 zombiePos{};
-    void* target = nullptr;         // zombie: the human it hunts
-    float nextTarget = 0, nextAttack = 0;
-    void* hitGen = nullptr;         // zombie: generator it smashes
-    float hitUntil = 0, hitDoneUntil = 0;
+    float hideUntil = 0, nextJump = 0;
+    void* useTarget = nullptr;      // what +use is held on (reported once when it doesn't take)
+    bool useReported = false;
+    // the zombie
+    int zmode = ZZ_PATROL;
+    void* target = nullptr;         // the human it chases
+    V3 lastSeen{};
+    float lastSeenAt = -100, seenSince = -1, giveUpAt = 0, lookAroundUntil = 0, nextAttack = 0, aimError = 0;
+    V3 via{};                       // a detour on the way (it doesn't always take the shortest route)
+    bool hasVia = false;
+    V3 patrolGoal{};
+    float patrolUntil = 0, nextAlertCheck = 0, lookBase = 0, lookStart = 0;
+    float speedScale = 1;           // walks while patrolling
+    void* hitGen = nullptr;         // generator it investigates / smashes
+    float hitUntil = 0;
+    std::unordered_map<void*, float> genDoneUntil; // generators it just dealt with
+    // movement
     V3 stuckFrom{};
     float stuckCheck = 0, detourUntil = 0, detourYaw = 0;
     int stuckCount = 0;
@@ -5287,23 +5309,53 @@ static const ZhePlayer* ZheZombieNear(V3 me)
     return best;
 }
 
-// somewhere to run to: far from the zombie, not past it, not too far from here
-static V3 ZheFleeGoal(V3 me, V3 zombie)
+// a nav area centre between minR and maxR (2D) from `around`, about its height
+static bool ZheRandomArea(V3 around, float minR, float maxR, V3& out)
 {
-    V3 best = me + (me - zombie) * 2.0f;
-    float bestScore = -1e30f;
+    if (!g_nav.ok || g_nav.areas.empty())
+        return false;
+    for (int tries = 0; tries < 80; tries++)
+    {
+        const NavArea& a = g_nav.areas[rand() % g_nav.areas.size()];
+        float d = Len2D(a.center - around);
+        if (d >= minR && d <= maxR && fabsf(a.center.z - around.z) < 200.0f)
+        {
+            out = a.center;
+            return true;
+        }
+    }
+    return false;
+}
+
+// a point off to the side of the straight way there: the long way round
+static bool ZheDetour(V3 me, V3 goal, V3& via)
+{
+    float len = Len2D(goal - me);
+    return ZheRandomArea((me + goal) * 0.5f, len * 0.3f, len * 0.7f, via);
+}
+
+// somewhere to run to: away from the zombie, not past it, best behind a wall (out of its sight)
+static V3 ZheFleeGoal(void* bot, V3 me, V3 zombie)
+{
     V3 away = me - zombie;
     float al = Len2D(away) > 1 ? Len2D(away) : 1;
-    for (V3 s : g_zhe.spots)
+    V3 best = me + away * (600.0f / al);
+    float bestScore = -1e30f;
+    V3 zeye = zombie + V3{ 0, 0, 28 };
+    TraceResult tr;
+    for (int i = 0; i < 40; i++)
     {
+        V3 s;
+        if (!ZheRandomArea(me, 350.0f, 1300.0f, s))
+            break;
         V3 d = s - me;
         float dl = Len2D(d);
-        if (dl < 300.0f)
-            continue;
         float dot = (d.x * away.x + d.y * away.y) / (dl * al);
-        if (dot < -0.2f)
+        if (dot < -0.1f)
             continue; // the way there goes past the zombie
-        float score = Len2D(s - zombie) - 0.5f * dl + dot * 300.0f;
+        float score = Len2D(s - zombie) - 0.4f * dl + dot * 300.0f;
+        if (!Trace(zeye, s + V3{ 0, 0, 36 }, bot, 1, tr))
+            score += 600.0f; // a wall in between
         if (score > bestScore)
         {
             bestScore = score;
@@ -5347,6 +5399,120 @@ static const ZheGen* ZheGenOf(void* e)
     return nullptr;
 }
 
+// Using things the way the game checks it:
+// - CBasePlayer::PlayerUse (0x114c4ea0) takes, among the usable entities within 64 u of the player's origin (their
+//   box), the one the view (v_angle) points at best from the eyes: aim at the middle of its box;
+// - while +use stays down, the generator (0x108e9380) and the human module (0x10803140, a teammate hurt or down) keep
+//   the player only with no attack button and when 0x11516f90 passes: the target's position (vfunc 0x128) seen from
+//   the player's, normalised in 3D, then only x/y against the model's facing (pev->angles), within the cone
+//   *(float*)[0x11e49458] degrees. Too close to something lower (a teammate down) fails it: step back a little.
+static const DWORD MP_ZHE_USE_CONE = 0x11e49458;
+typedef float*(__thiscall* EntVecFn)(void* self);
+
+static bool ZheUsePoint(void* edict, V3& out)
+{
+    __try
+    {
+        void* p = PrivateOf(edict);
+        if (!p)
+            return false;
+        float* v = ((EntVecFn)(*(void***)p)[0x128 / 4])(p);
+        if (!v)
+            return false;
+        out = Vec(v);
+        return true;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        return false;
+    }
+}
+
+static float ZheUseConeDeg()
+{
+    __try
+    {
+        float* p = *(float**)(MP_ZHE_USE_CONE + g_mpDelta);
+        if (p && *p >= 1.0f && *p <= 180.0f)
+            return *p;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER) {}
+    return 45.0f;
+}
+
+// from p to the closest point of e's box
+static float ZheBoxDist(V3 p, void* e)
+{
+    unsigned char* v = Vars(e);
+    V3 lo = Vec((float*)(v + EV_ABSMIN)), hi = Vec((float*)(v + EV_ABSMAX));
+    V3 c{ p.x < lo.x ? lo.x : p.x > hi.x ? hi.x : p.x, p.y < lo.y ? lo.y : p.y > hi.y ? hi.y : p.y,
+          p.z < lo.z ? lo.z : p.z > hi.z ? hi.z : p.z };
+    return Len(p - c);
+}
+
+// x/y share of the way from the player's use point to the target's (the cone test without the facing)
+static float ZheUseRatio(void* bot, void* target)
+{
+    V3 a, t;
+    if (!ZheUsePoint(bot, a) || !ZheUsePoint(target, t))
+        return 1.0f;
+    V3 d = t - a;
+    float l = Len(d);
+    return l > 1 ? Len2D(d) / l : 1.0f;
+}
+
+// hold +use on target (a generator, a teammate): gets in reach, aims at the middle of its box, steps back when too
+// close for the cone test; false while still on the way
+static bool ZheUseOn(void* bot, ZheBot& z, void* target, V3 me, float now, V3& goal, bool& hasGoal, float& arrive,
+                     bool& act, V3& lookAt, unsigned short& b)
+{
+    V3 c = Center(target);
+    float reach = ZheBoxDist(me, target);
+    if (z.useTarget != target)
+    {
+        z.useTarget = target;
+        z.useReported = false;
+    }
+    act = true;
+    lookAt = c;
+    if (reach > 52.0f)
+    {
+        goal = c;
+        hasGoal = true;
+        arrive = Len2D(c - me) - reach + 40.0f;
+        if (arrive < 12.0f)
+            arrive = 12.0f;
+        return false;
+    }
+    float need = cosf(ZheUseConeDeg() / RAD) + 0.05f;
+    if (need < 1.0f && reach < 40.0f && ZheUseRatio(bot, target) < need)
+    {
+        V3 away = me - c;
+        away.z = 0;
+        float al = Len2D(away);
+        away = al > 1 ? away * (1.0f / al) : V3{ -cosf(z.yaw / RAD), -sinf(z.yaw / RAD), 0 };
+        goal = me + away * 48.0f;
+        hasGoal = true;
+        arrive = 8;
+    }
+    b |= IN_USE;
+    return true;
+}
+
+// +use held on something that doesn't take it: the numbers, once per target
+static void ZheUseReport(void* bot, ZheBot& z, void* target, const char* what, int users)
+{
+    if (z.useReported)
+        return;
+    z.useReported = true;
+    unsigned char* v = Vars(bot);
+    DLog("Manhunt bot '%s': +use on the %s does nothing: box %.0f u away, x/y share %.2f (cone %.0f deg needs %.2f), "
+         "users %d, view %.0f %.0f, model %.0f %.0f",
+         String(F<int>(v, EV_NETNAME)), what, ZheBoxDist(Origin(bot), target), ZheUseRatio(bot, target), ZheUseConeDeg(),
+         cosf(ZheUseConeDeg() / RAD), users, F<float>(v, EV_VANGLE), F<float>(v, EV_VANGLE + 4), F<float>(v, EV_ANGLES),
+         F<float>(v, EV_ANGLES + 4));
+}
+
 // a human bot: what to do, where to go and look
 static void ZheHumanThink(void* bot, ZheBot& z, int state, V3 me, V3 eye, float now, V3& goal, bool& hasGoal, float& arrive,
                           bool& act, V3& lookAt, float& lookPitch, unsigned short& b)
@@ -5354,29 +5520,52 @@ static void ZheHumanThink(void* bot, ZheBot& z, int state, V3 me, V3 eye, float 
     const ZhePlayer* zom = ZheZombieNear(me);
     if (zom)
     {
+        // heard close by (steps, the heartbeat), seen in front, or in plain sight not far
         float zd = Len(zom->pos - me);
-        if (zd < 350.0f || (zd < 1100.0f && CanSee(bot, eye, zom->e)))
+        float rel = fabsf(AngleDiff(YawOf(zom->pos - me), z.yaw));
+        if (zd < 380.0f || ((zd < 1400.0f && rel < 75.0f) || zd < 700.0f) && CanSee(bot, eye, zom->e))
         {
             z.zombieSeenAt = now;
             z.zombiePos = zom->pos;
         }
     }
-    bool threat = now - z.zombieSeenAt < 4.0f && Len(z.zombiePos - me) < 900.0f;
-    bool calm = now - z.zombieSeenAt > 6.0f || Len(z.zombiePos - me) > 1400.0f;
+    float since = now - z.zombieSeenAt, zdist = Len(z.zombiePos - me);
+    bool threat = since < 3.0f && zdist < 1000.0f;
+    bool calm = since > 8.0f || zdist > 1500.0f;
+    z.sweep = 25; // looks around while walking
 
-    // run from the zombie (also when down: crawl away)
+    // run from the zombie (also when down: crawl away), out of its sight
     if (threat)
     {
-        if (now >= z.fleeUntil || Len2D(z.fleeGoal - me) < 150.0f)
+        if (now >= z.fleeUntil || Len2D(z.fleeGoal - me) < 120.0f)
         {
-            z.fleeGoal = ZheFleeGoal(me, z.zombiePos);
-            z.fleeUntil = now + 3.0f;
+            z.fleeGoal = ZheFleeGoal(bot, me, z.zombiePos);
+            z.fleeUntil = now + 2.5f;
         }
         goal = z.fleeGoal;
         hasGoal = true;
         arrive = 60;
-        z.doing = "running from the zombie";
+        z.sweep = 0;
+        z.doing = state == ZHE_DOWN ? "crawling away from the zombie" : "running from the zombie";
         z.gen = nullptr;
+        z.hideUntil = -1; // hides once it is lost
+        // right behind: jump about (harder to hit, up onto things)
+        if (state != ZHE_DOWN && zdist < 300.0f && now >= z.nextJump)
+        {
+            b |= IN_JUMP;
+            z.nextJump = now + 0.9f + Rnd() * 1.2f;
+        }
+        return;
+    }
+    // just lost it: hide a moment, crouched, watching where it was, before going back to work
+    if (z.hideUntil < 0)
+        z.hideUntil = now + 3.0f + Rnd() * 4.0f;
+    if (state != ZHE_DOWN && now < z.hideUntil)
+    {
+        z.doing = "hiding";
+        act = true;
+        lookAt = z.zombiePos + V3{ 0, 0, 40 };
+        b |= IN_DUCK;
         return;
     }
     if (state == ZHE_DOWN)
@@ -5418,18 +5607,18 @@ static void ZheHumanThink(void* bot, ZheBot& z, int state, V3 me, V3 eye, float 
     if (down)
     {
         z.gen = nullptr;
-        z.doing = "helping a teammate up";
-        if (Len2D(down->pos - me) > 60.0f)
+        if (ZheUseOn(bot, z, down->e, me, now, goal, hasGoal, arrive, act, lookAt, b))
         {
-            goal = down->pos;
-            hasGoal = true;
-            arrive = 50;
+            z.doing = "helping a teammate up";
+            if (z.gaugeCheck == 0)
+                z.gaugeCheck = now + 6.0f;
+            else if (now >= z.gaugeCheck)
+                ZheUseReport(bot, z, down->e, "teammate down", 0);
         }
         else
         {
-            act = true;
-            lookAt = down->pos + V3{ 0, 0, -10 };
-            b |= IN_USE;
+            z.doing = "going to help a teammate up";
+            z.gaugeCheck = 0;
         }
         return;
     }
@@ -5471,26 +5660,37 @@ static void ZheHumanThink(void* bot, ZheBot& z, int state, V3 me, V3 eye, float 
         }
         return;
     }
-    float d = Len2D(g->pos - me);
-    if (d > 78.0f || now < z.closerUntil)
-    {
-        goal = g->pos;
-        hasGoal = true;
-        arrive = now < z.closerUntil ? 20 : 60;
-        z.doing = "going to a generator";
-        return;
-    }
-    act = true;
-    lookAt = g->pos + V3{ 0, 0, 36 };
     if (g->state == 5 || g->state == 6)
     {
-        z.doing = "waiting: the generator overheats";
+        // hands off while it overheats (or after it blew), next to it
+        if (Len2D(g->pos - me) > 140.0f)
+        {
+            goal = g->pos;
+            hasGoal = true;
+            arrive = 100;
+        }
+        act = true;
+        lookAt = Center(g->e);
+        z.doing = g->state == 5 ? "waiting: the generator overheats" : "waiting: the generator blew";
         z.lastGauge = -1;
-        return; // hands off
+        return;
     }
-    b |= IN_USE;
+    if (!ZheUseOn(bot, z, g->e, me, now, goal, hasGoal, arrive, act, lookAt, b))
+    {
+        z.doing = "going to a generator";
+        z.lastGauge = -1;
+        return;
+    }
     z.doing = "repairing";
-    // no progress while holding +use: not close enough (or not facing it), step in
+    z.sweep = 0;
+    if (now < z.nudgeUntil)
+    {
+        // a sidestep: another angle on it
+        goal = me + V3{ cosf(z.nudgeYaw / RAD), sinf(z.nudgeYaw / RAD), 0 } * 40.0f;
+        hasGoal = true;
+        arrive = 4;
+    }
+    // no progress while holding +use: report it once, try another spot
     if (z.lastGauge < 0 || g->gauge > z.lastGauge + 0.01f)
     {
         z.lastGauge = g->gauge;
@@ -5498,106 +5698,239 @@ static void ZheHumanThink(void* bot, ZheBot& z, int state, V3 me, V3 eye, float 
     }
     else if (now >= z.gaugeCheck)
     {
-        z.closerUntil = now + 0.6f;
+        ZheUseReport(bot, z, g->e, "generator", g->users);
+        z.nudgeYaw = YawOf(me - g->pos) + (Rnd() < 0.5f ? 70.0f : -70.0f);
+        z.nudgeUntil = now + 0.5f;
         z.gaugeCheck = now + 3.0f;
     }
 }
 
-// the zombie: hunt, else go where the humans repair
+// what the zombie notices: right next to it always, else in its field of view and in plain sight (crouched humans
+// far away go unseen)
+static const int FL_DUCKING_ = 0x4000;
+static bool ZheZombieSees(void* bot, ZheBot& z, V3 eye, const ZhePlayer& p)
+{
+    float d = Len(p.pos - eye);
+    if (d < 200.0f)
+        return true;
+    if (d > 1700.0f || fabsf(AngleDiff(YawOf(p.pos - eye), z.yaw)) > 55.0f)
+        return false;
+    if ((F<int>(Vars(p.e), EV_FLAGS) & FL_DUCKING_) && d > 700.0f)
+        return false;
+    return CanSee(bot, eye, p.e);
+}
+
+// the zombie: patrols near the humans looking around, goes to generators that make noise, chases whoever it sees
+// (not always the shortest way, it can guess wrong where they went) and gives up a few seconds after losing them
 static void ZheZombieThink(void* bot, ZheBot& z, V3 me, V3 eye, float now, V3& goal, bool& hasGoal, float& arrive, bool& act,
                            V3& lookAt, float& lookPitch, unsigned short& b)
 {
-    if (now >= z.nextTarget || (z.target && !Alive(z.target)))
+    // who is in sight
+    const ZhePlayer* seen = nullptr;
+    float seenD = 1e30f;
+    for (auto& p : g_zhe.players)
     {
-        z.nextTarget = now + 0.4f;
-        void* best = nullptr;
-        float bestD = 1e30f;
-        for (auto& p : g_zhe.players)
+        if (!ZheStanding(p.state) || !ZheZombieSees(bot, z, eye, p))
+            continue;
+        float d = Len(p.pos - me) * (p.e == z.target ? 0.6f : 1.0f); // keeps its prey
+        if (d < seenD)
         {
-            if (!ZheStanding(p.state))
-                continue; // the zombie, humans who are down, who escaped
-            float d = Len(p.pos - me);
-            bool known = d < 500.0f || (d < 1600.0f && CanSee(bot, eye, p.e)) || (p.e == z.target && d < 2000.0f);
-            if (known && d < bestD)
-            {
-                bestD = d;
-                best = p.e;
-            }
+            seenD = d;
+            seen = &p;
         }
-        z.target = best;
     }
-    if (z.target)
+    if (!seen)
+        z.seenSince = -1;
+    else
+    {
+        if (z.seenSince < 0)
+            z.seenSince = now;
+        // a moment to react, unless already after them
+        bool hunting = z.zmode == ZZ_CHASE || z.zmode == ZZ_SEARCH;
+        if (hunting || now - z.seenSince > 0.4f || Len(seen->pos - me) < 250.0f)
+        {
+            if (z.zmode != ZZ_CHASE || z.target != seen->e)
+            {
+                z.hasVia = !hunting && Len(seen->pos - me) > 700.0f && Rnd() < 0.3f && ZheDetour(me, seen->pos, z.via);
+                Log("Manhunt: the zombie '%s' spots '%s' (%.0f u)%s", String(F<int>(Vars(bot), EV_NETNAME)),
+                    String(F<int>(Vars(seen->e), EV_NETNAME)), Len(seen->pos - me), z.hasVia ? ", takes the long way" : "");
+            }
+            z.zmode = ZZ_CHASE;
+            z.target = seen->e;
+            z.lastSeen = seen->pos;
+            z.lastSeenAt = now;
+        }
+    }
+
+    if (z.zmode == ZZ_CHASE)
+    {
+        if (!z.target || !Alive(z.target) || !ZheStanding(ZheState(z.target)))
+        {
+            z.zmode = ZZ_PATROL; // down or gone: on with the patrol
+            z.target = nullptr;
+            z.patrolUntil = 0;
+        }
+        else if (now - z.lastSeenAt > 0.6f)
+        {
+            // out of sight: after them where they were (or a wrong guess now and then)
+            z.zmode = ZZ_SEARCH;
+            V3 guess;
+            if (Rnd() < 0.3f && ZheRandomArea(z.lastSeen, 200.0f, 550.0f, guess))
+                z.lastSeen = guess;
+            z.giveUpAt = now + 3.0f + Rnd() * 3.0f;
+            z.lookAroundUntil = 0;
+            z.hasVia = false;
+        }
+    }
+    if (z.zmode == ZZ_CHASE)
     {
         V3 tp = Origin(z.target);
         float d = Len(tp - me);
-        goal = tp;
+        if (z.hasVia && (Len2D(z.via - me) < 120.0f || d < 500.0f))
+            z.hasVia = false;
+        goal = z.hasVia ? z.via : tp;
         hasGoal = true;
         arrive = 20;
-        z.doing = "hunting";
-        z.hitGen = nullptr;
-        if (d < 90.0f)
+        z.doing = z.hasVia ? "chasing (the long way)" : "chasing";
+        if (d < 110.0f)
         {
-            act = d < 70.0f;
-            lookAt = Center(z.target);
-            if (now >= z.nextAttack)
+            // aims with a small error: it can miss
+            V3 c = Center(z.target);
+            float ay = YawOf(c - eye) + z.aimError, d2 = Len2D(c - eye);
+            act = true;
+            lookAt = { eye.x + cosf(ay / RAD) * d2, eye.y + sinf(ay / RAD) * d2, c.z };
+            if (d < 85.0f && now >= z.nextAttack)
             {
                 b |= IN_ATTACK;
-                z.nextAttack = now + 0.5f;
+                z.nextAttack = now + 0.55f + Rnd() * 0.35f;
+                z.aimError = (Rnd() - 0.5f) * 30.0f;
             }
         }
         return;
     }
-    // nobody in sight: the generators being repaired (the zombie knows where they are), else the most repaired one
-    const ZheGen* g = z.hitGen ? ZheGenOf(z.hitGen) : nullptr;
-    if (!g || g->state == 4 || (now > z.hitUntil && z.hitUntil > 0))
+    if (z.zmode == ZZ_SEARCH)
     {
-        if (g && now > z.hitUntil && z.hitUntil > 0)
-            z.hitDoneUntil = now + 20.0f; // done with this one for a while
-        const ZheGen* best = nullptr;
-        float bestScore = 1e30f;
-        for (auto& c : g_zhe.gens)
+        if (now >= z.giveUpAt)
         {
-            if (!c.active || c.state == 4 || (c.e == z.hitGen && now < z.hitDoneUntil))
-                continue;
-            float score = Len(c.pos - me) - c.users * 3000.0f - c.gauge * 20.0f;
-            if (score < bestScore)
+            Log("Manhunt: the zombie '%s' lost them, patrols again", String(F<int>(Vars(bot), EV_NETNAME)));
+            z.zmode = ZZ_PATROL;
+            z.target = nullptr;
+            z.patrolUntil = 0;
+        }
+        else if (z.lookAroundUntil == 0 && Len2D(z.lastSeen - me) > 60.0f)
+        {
+            goal = z.lastSeen;
+            hasGoal = true;
+            arrive = 50;
+            z.sweep = 35;
+            z.doing = "searching where they went";
+            return;
+        }
+        else
+        {
+            // there: stands and looks around
+            if (z.lookAroundUntil == 0)
             {
-                bestScore = score;
-                best = &c;
+                z.lookAroundUntil = now + 2.0f;
+                z.lookBase = z.yaw;
+                z.lookStart = now;
+            }
+            float ly = z.lookBase + sinf((now - z.lookStart) * 1.8f) * 110.0f;
+            act = true;
+            lookAt = eye + V3{ cosf(ly / RAD), sinf(ly / RAD), 0 } * 100.0f;
+            z.doing = "looking around";
+            return;
+        }
+    }
+
+    // generators make noise: the ones being repaired now and then (more often close by), an overheating one always
+    if (now >= z.nextAlertCheck)
+    {
+        z.nextAlertCheck = now + 1.0f;
+        for (auto& g : g_zhe.gens)
+        {
+            if (!g.active || g.state == 4 || g.e == z.hitGen && z.zmode == ZZ_INVESTIGATE)
+                continue;
+            auto done = z.genDoneUntil.find(g.e);
+            if (done != z.genDoneUntil.end() && now < done->second)
+                continue;
+            float d = Len(g.pos - me);
+            bool heard = g.state == 5 ? d < 3500.0f
+                                      : g.users > 0 && Rnd() < (d < 1200.0f ? 0.35f : d < 2500.0f ? 0.12f : 0.0f);
+            if (heard)
+            {
+                z.zmode = ZZ_INVESTIGATE;
+                z.hitGen = g.e;
+                z.hitUntil = 0;
+                z.hasVia = d > 900.0f && Rnd() < 0.3f && ZheDetour(me, g.pos, z.via);
+                Log("Manhunt: the zombie '%s' hears a generator %.0f u away (%s)%s", String(F<int>(Vars(bot), EV_NETNAME)),
+                    d, g.state == 5 ? "overheating" : "being repaired", z.hasVia ? ", takes the long way" : "");
+                break;
             }
         }
-        if (best != g)
+    }
+    if (z.zmode == ZZ_INVESTIGATE)
+    {
+        const ZheGen* g = ZheGenOf(z.hitGen);
+        if (!g || g->state == 4)
         {
-            z.hitGen = best ? best->e : nullptr;
-            z.hitUntil = 0;
+            z.zmode = ZZ_PATROL;
+            z.patrolUntil = 0;
         }
-        g = best;
+        else
+        {
+            if (z.hasVia && Len2D(z.via - me) < 120.0f)
+                z.hasVia = false;
+            if (Len2D(g->pos - me) > 90.0f)
+            {
+                goal = z.hasVia ? z.via : g->pos;
+                hasGoal = true;
+                arrive = 70;
+                z.sweep = 20;
+                z.doing = "going to a noisy generator";
+                return;
+            }
+            // there, nobody in sight: smashes it if it has progress, then patrols around
+            if (z.hitUntil == 0)
+                z.hitUntil = now + (g->gauge > 0 ? 3.0f : 0.3f);
+            if (now < z.hitUntil && g->state != 6)
+            {
+                act = true;
+                lookAt = Center(g->e);
+                z.doing = "smashing a generator";
+                if (now >= z.nextAttack)
+                {
+                    b |= IN_ATTACK;
+                    z.nextAttack = now + 0.5f;
+                }
+                return;
+            }
+            z.genDoneUntil[g->e] = now + 25.0f;
+            z.zmode = ZZ_PATROL;
+            z.patrolUntil = 0;
+        }
     }
-    if (!g)
+
+    // patrol: somewhere near one of the humans (it never knows exactly where), walking, looking around
+    if (now >= z.patrolUntil || Len2D(z.patrolGoal - me) < 100.0f)
     {
-        z.doing = "patrolling";
-        return;
+        std::vector<const ZhePlayer*> humans;
+        for (auto& p : g_zhe.players)
+            if (ZheStanding(p.state))
+                humans.push_back(&p);
+        V3 around = humans.empty() ? me : humans[rand() % humans.size()]->pos;
+        V3 s;
+        if (!ZheRandomArea(around, 350.0f, 1000.0f, s) && !ZheRandomArea(me, 300.0f, 1200.0f, s))
+            s = me;
+        z.patrolGoal = s;
+        z.patrolUntil = now + 12.0f + Rnd() * 8.0f;
     }
-    float d = Len2D(g->pos - me);
-    if (d > 85.0f)
-    {
-        goal = g->pos;
-        hasGoal = true;
-        arrive = 70;
-        z.doing = g->users ? "going to a generator being repaired" : "patrolling the generators";
-        return;
-    }
-    // at the generator, nobody around: smash it for a few seconds if it has progress
-    if (z.hitUntil == 0)
-        z.hitUntil = now + (g->gauge > 0 ? 5.0f : 1.0f);
-    act = true;
-    lookAt = g->pos + V3{ 0, 0, 30 };
-    z.doing = "smashing a generator";
-    if (g->gauge > 0 && now >= z.nextAttack)
-    {
-        b |= IN_ATTACK;
-        z.nextAttack = now + 0.5f;
-    }
+    goal = z.patrolGoal;
+    hasGoal = true;
+    arrive = 60;
+    z.sweep = 40;
+    z.speedScale = 0.75f;
+    z.doing = "patrolling near the humans";
 }
 
 // a room bot in Manhunt: botassist plays it (true: aim, movement and buttons replaced)
@@ -5637,6 +5970,8 @@ static bool DriveZheBot(void* bot, float& yaw, float& pitch, float& fwd, float& 
     bool hasGoal = false, act = false;
     float arrive = 40, lookPitch = 0;
     unsigned short b = 0;
+    z.sweep = 0;
+    z.speedScale = 1;
     if (state == ZHE_ZOMBIE)
         ZheZombieThink(bot, z, me, eye, now, goal, hasGoal, arrive, act, lookAt, lookPitch, b);
     else
@@ -5652,7 +5987,9 @@ static bool DriveZheBot(void* bot, float& yaw, float& pitch, float& fwd, float& 
     }
     if (move && now < z.detourUntil)
         moveYaw = z.detourYaw;
-    float lookYaw = move ? moveYaw : z.yaw;
+    // walking: looks along the way, glancing left and right
+    float phase = (float)(((DWORD)bot >> 4) % 7);
+    float lookYaw = move ? moveYaw + sinf(now * 1.3f + phase) * z.sweep : z.yaw;
     float wantPitch = 0;
     if (act)
     {
@@ -5667,8 +6004,8 @@ static bool DriveZheBot(void* bot, float& yaw, float& pitch, float& fwd, float& 
     if (move)
     {
         float rel = AngleDiff(moveYaw, z.yaw) / RAD;
-        f = cosf(rel) * 400.0f;
-        s = -sinf(rel) * 400.0f;
+        f = cosf(rel) * 400.0f * z.speedScale;
+        s = -sinf(rel) * 400.0f * z.speedScale;
     }
     // stuck: a jump, then a way round
     if (now >= z.stuckCheck)

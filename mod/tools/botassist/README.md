@@ -435,11 +435,25 @@ open for the bots once its door has moved). The round waits ("#CSO_WaitEnemy", r
 everyone in the room is in game, so every room AI player joins CT even when the game asks for terrorists to balance
 the teams (the zombie is drawn from the CT players). The stock bot AI knows none of it, so botassist plays every bot
 there (`DriveZheBot`):
-- humans repair the closest generator nobody else takes (hold +use facing it; let go while it overheats, state 5, or
-  it blows, state 6), run from the zombie when it is seen or close, pick up teammates who are down (+use facing
-  them), heal themselves when hurt and safe (+use looking at the floor), and run to an open exit;
-- the zombie hunts the standing humans it sees or hears, else goes to the generators being repaired (the zombie knows
-  where they are) and hits one that has progress when nobody is around; humans who are down are left alone.
+- humans repair the closest generator nobody else takes and pick up teammates who are down, holding +use the way the
+  game accepts it (below); they let go while a generator overheats (state 5) or after it blew (6). When the zombie is
+  heard (close) or seen they run to a place away from it, preferably behind a wall, jumping about when it is right
+  behind; once it is lost they hide crouched for a few seconds, watching where it was, then go back to work. Hurt
+  and safe, they heal (+use looking at the floor); with the exits open they run out;
+- the zombie sees in a 110 degree cone (up to 1700 u, crouched humans only up to 700 u, anyone within 200 u) and
+  reacts after 0.4 s. It patrols, walking and looking around, near a random human (it never knows exactly where);
+  generators being repaired are heard now and then (more often close by), an overheating one always: it goes there
+  and smashes it if it has progress. It chases whoever it sees, sometimes the long way round (a detour point), and
+  aims with an error (it can miss); after losing sight it goes where they were (30 % of the time a wrong guess
+  nearby), looks around, and gives up after 3 to 6 s. botassist.log tells when it spots, hears and gives up.
+
+Using things the way the game checks it: CBasePlayer::PlayerUse (0x114c4ea0) picks, among the usable entities whose
+box is within 64 u of the player's origin, the one the view (v_angle) points at best from the eyes, so the bots aim at
+the middle of the box. While +use is held, the generator (0x108e9380) and the human module (0x10803140, also hurt
+teammates) keep a helper only with no attack button and when 0x11516f90 passes: the target's vfunc 0x128 position
+seen from the player's, normalised in 3D, then only x/y against pev->angles, within the cone *(float*)[0x11e49458]
+degrees. Too close to something lower (a teammate down) fails it, so the bots step back. When +use doesn't take,
+botassist_debug.log gets the numbers once ("+use on the ... does nothing").
 
 Facts: player module by id 0x1087f310 (thiscall player, id; 9 = CZHEHumanModule, state +0x18: 0 healthy, 1 / 2 hurt,
 3 down, 5 escaped); CBasePlayer +0x2166 = the zombie; CZHEGenerator +0x1bc state (0..3 progress, 4 repaired,
