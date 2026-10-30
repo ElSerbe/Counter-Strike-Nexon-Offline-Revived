@@ -4826,10 +4826,10 @@ index 0000000..3dda56f
 +extern CWarbondManager g_WarbondManager;
 diff --git a/src/manager/zsriftmanager.cpp b/src/manager/zsriftmanager.cpp
 new file mode 100644
-index 0000000..c66cc21
+index 0000000..b6444e8
 --- /dev/null
 +++ b/src/manager/zsriftmanager.cpp
-@@ -0,0 +1,507 @@
+@@ -0,0 +1,534 @@
 +#include "zsriftmanager.h"
 +#include "usermanager.h"
 +#include "packetmanager.h"
@@ -4922,6 +4922,7 @@ index 0000000..c66cc21
 +	r.unlockByClearing = cfg.value("UnlockByClearing", r.unlockByClearing);
 +	r.clearTickets = max(0, cfg.value("ClearTickets", r.clearTickets));
 +	r.ticketsPerLevel = max(0, cfg.value("TicketsPerLevel", r.ticketsPerLevel));
++	r.levelsPerTicket = max(1, cfg.value("LevelsPerTicket", r.levelsPerTicket));
 +	r.exchangeStock = max(1, cfg.value("ExchangeStock", r.exchangeStock));
 +	r.holdCostPercent = max(0, cfg.value("HoldCostPercent", r.holdCostPercent));
 +	r.holdMinCost = max(0, cfg.value("HoldMinCost", r.holdMinCost));
@@ -5151,6 +5152,11 @@ index 0000000..c66cc21
 +	return 0;
 +}
 +
++int CZSRiftManager::ClearTickets(int level)
++{
++	return m_Rules.clearTickets + m_Rules.ticketsPerLevel * ((max(1, level) - 1) / m_Rules.levelsPerTicket);
++}
++
 +int CZSRiftManager::HoldCost(const RiftExchangeItem& item)
 +{
 +	return max(m_Rules.holdMinCost, (item.price * m_Rules.holdCostPercent + 50) / 100);
@@ -5180,7 +5186,7 @@ index 0000000..c66cc21
 +	match->m_bZSRiftCleared = true;
 +
 +	int level = max(1, (int)room->GetSettings()->zsDifficulty);
-+	int full = m_Rules.clearTickets + m_Rules.ticketsPerLevel * (level - 1);
++	int full = ClearTickets(level);
 +	int tickets = match->m_bCheats ? full * (100 - g_WarbondManager.CheatPenalty()) / 100 : full;
 +	for (IUser* u : room->GetUsers())
 +	{
@@ -5216,7 +5222,27 @@ index 0000000..c66cc21
 +		ex = { { "day", 0 }, { "stock", json::array() }, { "holds", json::object() } };
 +	int today = DayNumber();
 +	if (ex.value("day", 0) == today)
++	{
++		// ExchangeStock went up: today's stock gets the extra items now
++		json& stock = ex["stock"];
++		if ((int)stock.size() < m_Rules.exchangeStock)
++		{
++			set<int> owned = g_WarbondManager.OwnedItems(user);
++			set<int> taken;
++			for (auto& id : stock)
++				taken.insert(id.get<int>());
++			vector<int> pool;
++			for (auto& i : m_Exchange)
++				if (!owned.count(i.itemID) && !taken.count(i.itemID) && !ex["holds"].contains(to_string(i.itemID)))
++					pool.push_back(i.itemID);
++			mt19937 rng((unsigned)today * 2654435761u ^ (unsigned)user->GetID() * 40503u ^ (unsigned)stock.size());
++			shuffle(pool.begin(), pool.end(), rng);
++			for (size_t i = 0; i < pool.size() && (int)stock.size() < m_Rules.exchangeStock; i++)
++				stock.push_back(pool[i]);
++			Save();
++		}
 +		return ex;
++	}
 +
 +	// a new day: holds that ran out go, then a new stock from what the player doesn't own and isn't holding
 +	json holds = json::object();
@@ -5263,6 +5289,7 @@ index 0000000..c66cc21
 +	return { { "tickets", Tickets(user) }, { "refreshIn", SecondsToMidnight() }, { "stock", stock }, { "held", held },
 +		{ "bestClear", st.value("bestClear", 0) },
 +		{ "rules", { { "clearTickets", m_Rules.clearTickets }, { "ticketsPerLevel", m_Rules.ticketsPerLevel },
++			{ "levelsPerTicket", m_Rules.levelsPerTicket }, { "maxTickets", ClearTickets(m_Rules.maxDifficulty) },
 +			{ "maxDifficulty", m_Rules.maxDifficulty }, { "unlocked", UnlockedDifficulty(user) }, { "maxHolds", m_Rules.maxHolds }, { "maxHoldDays", m_Rules.maxHoldDays } } } };
 +}
 +
@@ -5339,10 +5366,10 @@ index 0000000..c66cc21
 +}
 diff --git a/src/manager/zsriftmanager.h b/src/manager/zsriftmanager.h
 new file mode 100644
-index 0000000..ffacc10
+index 0000000..bffd796
 --- /dev/null
 +++ b/src/manager/zsriftmanager.h
-@@ -0,0 +1,79 @@
+@@ -0,0 +1,81 @@
 +#pragma once
 +
 +#include <string>
@@ -5363,11 +5390,12 @@ index 0000000..ffacc10
 +	int matchExp = 100, killExp = 10, winExp = 100; // per finished match, before the daily maximum
 +	int maxDifficulty = 20; // highest rift level (room difficulty list 1..this)
 +	bool unlockByClearing = true; // level 1 open, the next one opens when the highest unlocked one is cleared
-+	// Rift Tickets for clearing the rift (every round, boss included): clearTickets + ticketsPerLevel per level above 1
-+	int clearTickets = 3, ticketsPerLevel = 1;
++	// Rift Tickets for clearing the rift (every round, boss included): clearTickets, plus ticketsPerLevel for every
++	// levelsPerTicket levels above 1 (3, 3, 4, 4, ... 12 at level 20)
++	int clearTickets = 3, ticketsPerLevel = 1, levelsPerTicket = 2;
 +	// the Rift Exchange: exchangeStock cosmetics a day for each player; holding one keeps it for one more day for
 +	// holdCostPercent of its price (at least holdMinCost), up to maxHoldDays after the first hold, maxHolds at once
-+	int exchangeStock = 8, holdCostPercent = 10, holdMinCost = 2, maxHoldDays = 7, maxHolds = 3;
++	int exchangeStock = 9, holdCostPercent = 0, holdMinCost = 2, maxHoldDays = 7, maxHolds = 3;
 +};
 +
 +// Data/RiftExchange.json (tools/gen_rift_exchange.py): the cosmetics the Rift Exchange sells
@@ -5415,6 +5443,7 @@ index 0000000..ffacc10
 +	const RiftExchangeItem* FindItem(int itemID);
 +	nlohmann::json& Exchange(IUser* user); // the player's stock of the day and holds (made at the first look each day)
 +	nlohmann::json BuildExchange(IUser* user);
++	int ClearTickets(int level); // Rift Tickets for clearing the rift at that level (before the sv_cheats cut)
 +
 +	ZSRiftRules m_Rules;
 +	std::vector<RiftExchangeItem> m_Exchange;
@@ -5842,7 +5871,7 @@ index 4c688f4..c1e0b2a 100644
 +	bool m_bWouldBlock; // last read hit WOLFSSL_ERROR_WANT_READ/WRITE (non-blocking SSL, retry on next poll)
  };
 diff --git a/src/room/gamematch.cpp b/src/room/gamematch.cpp
-index 65418d8..57f782e 100644
+index 65418d8..ea9f7d4 100644
 --- a/src/room/gamematch.cpp
 +++ b/src/room/gamematch.cpp
 @@ -6,6 +6,8 @@
@@ -6010,6 +6039,16 @@ index 65418d8..57f782e 100644
  		if (stat->m_nExpEarned > 9999)
  		{
  			stat->m_nExpEarned = 9999;
+@@ -623,6 +674,9 @@ void CGameMatch::ApplyGameResult()
+ 
+ 		int totalPoints = stat->m_nPointsEarned + stat->m_nBonusPointsEarned;
+ 		user->UpdatePoints(totalPoints);
++		// offline build: Zombie Disaster Zone has no result screen with the points, so say it in the chat
++		if (m_nGameMode == 59 && totalPoints > 0)
++			g_PacketManager.SendUMsgNoticeMessageInChat(user->GetExtendedSocket(), va("Match result: +%d medals.", totalPoints));
+ 
+ 		if (m_nGameMode == 0 || m_nGameMode == 1 || m_nGameMode == 2 || m_nGameMode == 6 || m_nGameMode == 22)
+ 			user->UpdateStat(0, 0, stat->m_nKills, stat->m_nDeaths);
 diff --git a/src/room/gamematch.h b/src/room/gamematch.h
 index 68a4dc7..5c924cb 100644
 --- a/src/room/gamematch.h

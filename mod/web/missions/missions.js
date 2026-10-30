@@ -237,11 +237,12 @@
     if (!all.some(it => it.itemID === riftPick)) riftPick = (all.find(it => !it.owned) || all[0] || {}).itemID;
     const pick = all.find(it => it.itemID === riftPick);
     const r = rift.rules;
-    const atMax = r.clearTickets + r.ticketsPerLevel * (r.maxDifficulty - 1);
+    const every = r.levelsPerTicket || 1;
+    const atMax = r.maxTickets || r.clearTickets + r.ticketsPerLevel * Math.floor((r.maxDifficulty - 1) / every);
     const scroll = view.querySelector(".market-main") ? view.querySelector(".market-main").scrollTop : 0;
     view.innerHTML = `<div class="market rift"><div class="market-main">
       <div class="market-head"><div><h2>Rift Exchange</h2>
-        <p>Clear Zombie Disaster Zone for Rift Tickets: ${r.clearTickets} at level 1, +${r.ticketsPerLevel} per level (${atMax} at level ${r.maxDifficulty}).${r.unlocked ? ` Unlocked: level ${r.unlocked}.` : ""}${rift.bestClear ? ` Best clear: ${rift.bestClear}.` : ""}</p></div>
+        <p>Clear Zombie Disaster Zone for Rift Tickets: ${r.clearTickets} at level 1, +${r.ticketsPerLevel} ${every > 1 ? `every ${every} levels` : "per level"} (${atMax} at level ${r.maxDifficulty}).${r.unlocked ? ` Unlocked: level ${r.unlocked}.` : ""}${rift.bestClear ? ` Best clear: ${rift.bestClear}.` : ""}</p></div>
         <span class="refresh">New stock in ${timeLeft(rift.refreshIn)}</span></div>
       <section class="rift-section"><h2 class="section-title">Held for you<small>${held.length} / ${r.maxHolds} · up to ${r.maxHoldDays} days each</small></h2>
         ${held.length ? `<div class="market-grid">${held.map(riftCard).join("")}</div>` : `<div class="rift-empty">Hold an item of today's stock to keep it for another day</div>`}</section>
@@ -401,8 +402,8 @@
         const kinds = [[707, "Dinosaur Head", "Head", 45], [575, "Fierce Penguin", "Back", 50], [473, "Cat Tail", "Pelvis", 35],
           [8597, "S21-4 Pet Costume A", "Pet", 60], [8030, "Evolution Level 3 Jiang Shi", "Zombie Skin", 55], [949, "Paladin Crown", "Head", 45],
           [8626, "Tttiger 22", "Tattoo", 25], [8364, "Tin Man's Helmet", "Head", 45], [9124, "Turtle (Back)", "Back", 50]];
-        const items = kinds.map(([itemID, name, kind, price]) => ({ itemID, name, kind, price, holdCost: Math.max(2, Math.round(price / 10)), owned: false }));
-        mock.rift = { tickets: 64, refreshIn: 30000, bestClear: 12, rules: { clearTickets: 3, ticketsPerLevel: 1, maxDifficulty: 20, unlocked: 13, maxHolds: 3, maxHoldDays: 7 },
+        const items = kinds.map(([itemID, name, kind, price]) => ({ itemID, name, kind, price, holdCost: 2, owned: false }));
+        mock.rift = { tickets: 64, refreshIn: 30000, bestClear: 12, rules: { clearTickets: 3, ticketsPerLevel: 1, levelsPerTicket: 2, maxTickets: 12, maxDifficulty: 20, unlocked: 13, maxHolds: 3, maxHoldDays: 7 },
           held: [Object.assign({ daysLeft: 3, heldDays: 3, canExtend: true }, items[8])], stock: items.slice(0, 8) };
       }
       const r = mock.rift;

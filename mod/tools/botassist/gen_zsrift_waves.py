@@ -24,18 +24,23 @@ import csodec  # noqa: E402
 TABLE = "maps/zbs_wave_zsrift_splinter"
 OUT = HERE / "tables" / "maps" / "ZBS_WAVE_zsrift_splinter.csv"
 
-# wave id -> {zombie type: weight}; the weights are the zombiRatio column (one byte each)
-NORMAL = {1: 4, 2: 4}
-MIXES = {
-    1: {**NORMAL, 10: 1, 4: 1},
-    2: {1: 3, 2: 3, 10: 2, 4: 1, 7: 1},
-    3: {1: 3, 2: 3, 10: 2, 11: 2, 6: 1, 7: 1},
-    4: {1: 2, 2: 2, 10: 2, 11: 2, 5: 1, 6: 1, 9: 1, 3: 1},
-    5: {1: 2, 2: 2, 10: 2, 11: 2, 5: 2, 6: 1, 8: 1, 3: 1, 12: 1},
-    3001: {1: 2, 2: 2, 10: 2, 11: 2, 5: 1, 6: 1},
+# Common zombies (types 1 and 2, one each) come out of every spawn row; a special zombie is the exception: only one row
+# in SPECIAL_EVERY[wave] of each wave adds one, its type taken in turn from SPECIALS[wave] (a boomer at most once in
+# each list). zombiRatio stays 1 per type, as in the game's own tables, so this holds whether the game reads it as
+# weights or counts: about 5% of a wave is special in round 1, 14% in round 5. The round's random events
+# (gen_zsrift_events.py) can still bring more of them.
+NORMAL = [1, 2]
+SPECIALS = {
+    1: [10, 4],
+    2: [10, 4, 7],
+    3: [10, 11, 7, 6],
+    4: [10, 11, 4, 5, 9, 3, 6],
+    5: [10, 11, 5, 8, 3, 12, 6],
+    3001: [10, 11, 5, 6],
 }
+SPECIAL_EVERY = {1: 10, 2: 8, 3: 6, 4: 4, 5: 3, 3001: 5}
 for spare in (6, 7, 8):
-    MIXES[spare] = MIXES[5]
+    SPECIALS[spare], SPECIAL_EVERY[spare] = SPECIALS[5], SPECIAL_EVERY[5]
 
 
 def read_original(game: Path) -> str:
@@ -52,13 +57,18 @@ def main() -> None:
     head = lines[0].split(",")
     wave, zombi, ratio = head.index("waveID"), head.index("zombi"), head.index("zombiRatio")
     out = [lines[0]]
+    seen = {}
     for line in lines[1:]:
         row = line.split(",")
-        mix = MIXES.get(int(row[wave]))
+        w = int(row[wave])
         # the boss's own row (one type, the boss) stays as it is
-        if mix and row[zombi].split() != ["30800"]:
+        if w in SPECIALS and row[zombi].split() != ["30800"]:
+            k = seen[w] = seen.get(w, -1) + 1
+            mix = list(NORMAL)
+            if k % SPECIAL_EVERY[w] == SPECIAL_EVERY[w] - 1:
+                mix.append(SPECIALS[w][(k // SPECIAL_EVERY[w]) % len(SPECIALS[w])])
             row[zombi] = " ".join(str(t) for t in mix)
-            row[ratio] = " ".join(str(w) for w in mix.values())
+            row[ratio] = " ".join("1" for _ in mix)
         out.append(",".join(row))
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_bytes(("\r\n".join(out) + "\r\n").encode("ascii"))  # the game's tables use CRLF
