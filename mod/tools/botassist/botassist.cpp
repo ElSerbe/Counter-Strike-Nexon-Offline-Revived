@@ -1888,19 +1888,83 @@ static void DropBehind(void* bot)
     memcpy(an, saved + 3, sizeof(float) * 3);
 }
 
-// The room's weapon only fits a free slot: the modes that hand out a weapon at spawn (an AWP in some deathmatch
-// rooms) kept it, and the bought one stayed on the ground. Before buying, the bot throws away what it carries in
-// that slot (slot1: categories 2-5, slot2: 1); an empty slot selects nothing and nothing is thrown.
-static void FreeSlot(void* bot, const char* slot, int minCat, int maxCat)
+// The room's weapon only fits a free slot: the modes that hand out a weapon at spawn (an AWP in some rooms, e.g.
+// Zombie 4: Darkness) kept it, and the bought one fell to the ground (the buy handler doesn't make room). Before
+// buying, the bot throws away what its slot holds with the game's own DropPrimary / DropSecondary (0x113f1750 /
+// 0x113f1790, cdecl player: DropPlayerItem 0x114b4e60 by the class name of that slot's item), whatever is in its
+// hand: "slot1" + cl_drop missed whenever the switch hadn't happened yet. Thrown behind it, and its weaponbox can't
+// be picked up (touch +0x50 cleared), or the bot and the ones around it grabbed it again.
+static const DWORD MP_DROP_PRIMARY = 0x113f1750, MP_DROP_SECONDARY = 0x113f1790;
+static unsigned char* ZheHandle(unsigned char* h);
+
+// class name of the first item in an inventory slot (player +0xfb8 + 16 * slot: 8-byte handles), "" when empty
+static bool Readable(const void* p, size_t n);
+static const char* SlotClassRaw(void* bot, int slot)
 {
-    FakeCommand(bot, slot);
-    const char* m = String(F<int>(Vars(bot), EV_WEAPONMODEL));
-    std::string held = m ? m : "";
-    for (auto& ch : held)
-        ch = (char)tolower(ch);
-    auto cat = cfg.weaponCategory.find(held);
-    if (cat != cfg.weaponCategory.end() && cat->second >= minCat && cat->second <= maxCat)
-        DropBehind(bot);
+    __try
+    {
+        unsigned char* pl = (unsigned char*)PrivateOf(bot);
+        unsigned char* it = pl ? ZheHandle(pl + 0xfb8 + 16 * slot) : nullptr;
+        unsigned char* pev = it ? *(unsigned char**)(it + 8) : nullptr;
+        return pev && Readable(pev, 4) ? String(*(int*)pev) : nullptr;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        return nullptr;
+    }
+}
+static std::string SlotClass(void* bot, int slot)
+{
+    const char* c = SlotClassRaw(bot, slot);
+    return c ? c : "";
+}
+
+static bool CallDropSlot(void* player, int slot)
+{
+    __try
+    {
+        typedef void(__cdecl * DropFn)(void* player);
+        ((DropFn)((slot == 1 ? MP_DROP_PRIMARY : MP_DROP_SECONDARY) + g_mpDelta))(player);
+        return true;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        return false;
+    }
+}
+
+static void FreeSlot(void* bot, int slot)
+{
+    std::string had = SlotClass(bot, slot);
+    void* pl = PrivateOf(bot);
+    if (had.empty() || !pl)
+        return;
+    std::vector<void*> before;
+    V3 me = Origin(bot);
+    ForEntitiesNear(me, 300.0f, [&](void* e) {
+        const char* c = ClassName(e);
+        if (c && !strcmp(c, "weaponbox"))
+            before.push_back(e);
+    });
+    float* va = (float*)(Vars(bot) + EV_VANGLE);
+    float* an = (float*)(Vars(bot) + EV_ANGLES);
+    float saved[6] = { va[0], va[1], va[2], an[0], an[1], an[2] };
+    va[0] = an[0] = 0;
+    va[1] = an[1] = AngleDiff(va[1] + 180.0f, 0.0f);
+    bool ok = CallDropSlot(pl, slot);
+    memcpy(va, saved, sizeof(float) * 3);
+    memcpy(an, saved + 3, sizeof(float) * 3);
+    ForEntitiesNear(me, 300.0f, [&](void* e) {
+        const char* c = ClassName(e);
+        unsigned char* p = (unsigned char*)PrivateOf(e);
+        if (c && p && !strcmp(c, "weaponbox") && std::find(before.begin(), before.end(), e) == before.end())
+            *(void**)(p + 0x50) = nullptr; // CWeaponBox touch
+    });
+    std::string left = SlotClass(bot, slot);
+    static int reports = 0;
+    if (!left.empty() || reports++ < 30)
+        Log("bot '%s' throws away its %s to buy the room's weapon%s", String(F<int>(Vars(bot), EV_NETNAME)), had.c_str(),
+            !ok ? " - the drop FAILED" : left.empty() ? "" : (" - still carries " + left).c_str());
 }
 
 // a moment after spawning (after the bot's own CS purchases), buy a random weapon from the whole game
@@ -2083,9 +2147,9 @@ static void UpdateBuying(void* bot, BotState& st)
                 *(int*)(pl + 0xca8) = 16000;
             ZsrBotMoney(bot);
             if (st.loadoutPrimary > 0)
-                FreeSlot(bot, "slot1", 2, 5);
+                FreeSlot(bot, 1);
             if (st.loadoutSecondary > 0)
-                FreeSlot(bot, "slot2", 1, 1);
+                FreeSlot(bot, 2);
             FakeCommand(bot, "client_buy_open");
             if (st.loadoutPrimary > 0)
                 BuyAs(bot, st.loadoutPrimary);
