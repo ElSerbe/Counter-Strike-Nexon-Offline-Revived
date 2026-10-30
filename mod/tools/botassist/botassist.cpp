@@ -4938,6 +4938,7 @@ static bool ZgKeepClient(void* cl, const char* fmt, DWORD ret)
 // Zombie Disaster Zone: two of the room's three bots left within a second of joining, with nothing on the game's
 // side. In that mode the bots' drops and room kicks are logged with their caller, and the bots stay like Zombie
 // Giant's fake players (gone only on a level change, at the end of the session or when they leave the room).
+// Manhunt did the same (3 of 4 bots gone at once, the round waiting for them forever): same treatment.
 static const int MODE_ZSRIFT = 59;
 static void* BotWhere(std::function<bool(void*)> match)
 {
@@ -4949,7 +4950,7 @@ static void* BotWhere(std::function<bool(void*)> match)
     return found;
 }
 
-static bool ZsrKeepBot(void* cl, const char* fmt, DWORD ret)
+static bool ZsrKeepBot(void* cl, const char* fmt, DWORD ret, const char* mode)
 {
     const char* name = (const char*)cl + HW_CLIENT_NAME;
     if (!BotWhere([&](void* e) { return !strcmp(String(F<int>(Vars(e), EV_NETNAME)), name); }))
@@ -4962,7 +4963,7 @@ static bool ZsrKeepBot(void* cl, const char* fmt, DWORD ret)
     if (std::find(seen.begin(), seen.end(), key) == seen.end() && seen.size() < 200)
     {
         seen.push_back(key);
-        Log("ZSRift: the engine drops bot '%s': reason '%s', from hw+%lx%s", name, reason.c_str(), ret - g_hwLo,
+        Log("%s: the engine drops bot '%s': reason '%s', from hw+%lx%s", mode, name, reason.c_str(), ret - g_hwLo,
             allowed ? "" : ": KEPT");
     }
     return !allowed;
@@ -4973,7 +4974,13 @@ static void HookedDropClient(void* cl, int crash, const char* fmt, DWORD a1, DWO
     DWORD ret = (DWORD)_ReturnAddress();
     bool keep = false;
     __try { keep = cl && ZgActive() && ZgKeepClient(cl, fmt, ret); } __except (EXCEPTION_EXECUTE_HANDLER) {}
-    __try { keep = keep || (cl && GameMode() == MODE_ZSRIFT && ZsrKeepBot(cl, fmt, ret)); } __except (EXCEPTION_EXECUTE_HANDLER) {}
+    __try
+    {
+        int mode = GameMode();
+        if (!keep && cl && (mode == MODE_ZSRIFT || mode == MODE_ZHE))
+            keep = ZsrKeepBot(cl, fmt, ret, mode == MODE_ZHE ? "Manhunt" : "ZSRift");
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER) {}
     if (!keep)
         g_DropClientTramp(cl, crash, fmt, a1, a2, a3, a4);
 }
@@ -5008,14 +5015,15 @@ static bool ZgRoomKickBlocked(int index, DWORD ret)
     return e != nullptr;
 }
 
-static bool ZsrRoomKickBlocked(int index, DWORD ret)
+// Zombie Disaster Zone, Manhunt: the room kicks the bots a few seconds in (it doesn't know them); they stay
+static bool BotRoomKickBlocked(int index, DWORD ret, const char* mode)
 {
     void* bot = BotWhere([&](void* e) { return g_IndexOfEdict && g_IndexOfEdict(e) == index; });
     static std::vector<DWORD> seen;
     if (bot && std::find(seen.begin(), seen.end(), ret) == seen.end() && seen.size() < 50)
     {
         seen.push_back(ret);
-        Log("ZSRift: the room kicks bot '%s' (player %d) from %s+%lx: refused", String(F<int>(Vars(bot), EV_NETNAME)),
+        Log("%s: the room kicks bot '%s' (player %d) from %s+%lx: refused", mode, String(F<int>(Vars(bot), EV_NETNAME)),
             index, ret >= g_mpLo && ret < g_mpHi ? "mp" : "hw", ret >= g_mpLo && ret < g_mpHi ? ret - g_mpDelta : ret - g_hwLo);
     }
     return bot != nullptr;
@@ -5026,7 +5034,13 @@ static void __fastcall HookedRoomKick(void* self, void* edx, int index)
     DWORD ret = (DWORD)_ReturnAddress();
     bool blocked = false;
     __try { blocked = ZgActive() && ZgRoomKickBlocked(index, ret); } __except (EXCEPTION_EXECUTE_HANDLER) {}
-    __try { blocked = blocked || (GameMode() == MODE_ZSRIFT && ZsrRoomKickBlocked(index, ret)); } __except (EXCEPTION_EXECUTE_HANDLER) {}
+    __try
+    {
+        int mode = GameMode();
+        if (!blocked && (mode == MODE_ZSRIFT || mode == MODE_ZHE))
+            blocked = BotRoomKickBlocked(index, ret, mode == MODE_ZHE ? "Manhunt" : "ZSRift");
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER) {}
     if (!blocked)
         g_RoomKick(self, edx, index);
 }
