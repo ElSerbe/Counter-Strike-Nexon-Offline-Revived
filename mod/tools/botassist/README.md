@@ -441,11 +441,18 @@ there (`DriveZheBot`):
   human module counts its helpers, +0x24 list / +0x28 count), so a bot being healed or picked up stays still and
   looks at its helper. When the zombie is heard (within 550 u, 900 u while running) or seen within 1100 u they run,
   the knife out, to a nav spot out of its sight (a trace from the zombie blocked, the way there not past it) and keep
-  going until there; seen again or cut off: another spot; arrived and out of its sight: they hide crouched for 4 to
-  9 s, watching where it was (hiding, only a zombie within 700 u moves them), then go back to work. Down, they crawl
-  away from it or towards a teammate; with the exits open they run out;
+  going until there; seen again, cut off or no way there: another spot; arrived with the zombie still on their heels
+  (seen or heard in the last 3 s, or within 700 u): on to another spot; arrived and out of its sight: they hide
+  crouched for 4 to 9 s, watching where it was (hiding, only a zombie within 700 u moves them), then go back to work. Down, they crawl
+  away from it or towards a teammate; with the exits open they run out. The exit zones only let out what classifies
+  as a player (CZHEExitZone::ExitTouch 0x108ea1e0 wants vfunc 0x30 == 2; CCSBot says 15), so botassist lets a bot
+  out itself once its box is in an open exit's zone: the human module's escape 0x108017a0 (state 5, spectator flags,
+  the message), then g_pGameRules vfunc 0x100 (what ExitTouch calls next); escaped bots stay still;
 - the zombie sees in a 110 degree cone (up to 1700 u, crouched humans only up to 700 u, anyone within 200 u) and
-  reacts after 0.4 s. It patrols, walking and looking around, near a random human (it never knows exactly where);
+  reacts after 0.4 s. It patrols a wide, random round, at a random walking pace, stopping at each spot to look around:
+  mostly a ring 700 to 2400 u around a random human (it never knows exactly where), 20 % of the legs closer (300 to
+  900 u), 15 % anywhere; 85 % of the legs keep 900 u off the humans who are down, and after downing someone it keeps
+  1100 u off that place for 15 to 30 s, so the others can pick them up;
   generators being repaired are heard now and then (more often close by), an overheating one always: it goes there
   and smashes it if it has progress. It chases whoever it sees, sometimes the long way round (a detour point), and
   aims with an error (it can miss); after losing sight it goes where they were (30 % of the time a wrong guess
@@ -457,7 +464,7 @@ M60, cannon; the zhebox tools; smoke, flash, sticky bomb) open when walked into 
 0x108e9bb0). Calm humans open the close ones, and farther ones while they lack a gun with ammunition or a grenade.
 The zombie can't die but shots slow it down: with it in sight within 700 u the bots take out a gun with
 ammunition and shoot it while running backwards (reloading when the clip is empty), throw a grenade at it now and then
-(beyond 200 u), and otherwise carry the knife (faster on foot). An empty gun (clip and reserve) is thrown away off to
+(beyond 200 u; it waits 0.9 s after taking it out, its deploy, before pulling the pin), and otherwise carry the knife (faster on foot). An empty gun (clip and reserve) is thrown away off to
 the side behind them, a little up, away from where they run, and its weapon box loses its touch so nobody picks the
 empty gun up again. The items come from CBasePlayer::DropPlayerItem (0x114b4e60): CSNZ keeps entity pointers as
 8-byte handles {control block, pointer} (valid while the block's second dword is set); m_rgpPlayerItems is 6 slots

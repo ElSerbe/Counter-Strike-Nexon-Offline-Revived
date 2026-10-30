@@ -5180,6 +5180,7 @@ struct ZheBot
     int throwStage = 0;             // 1 taking the grenade out, 2 holding the pin, 3 thrown
     void* throwItem = nullptr;
     int throwClass = 0;
+    float throwReadyAt = 0;
     bool fireToggle = false;
     bool fleeing = false;           // on the way to somewhere out of the zombie's sight
     float gunUntil = 0;             // the gun out until (else the knife)
@@ -5193,6 +5194,9 @@ struct ZheBot
     V3 patrolGoal{};
     float patrolUntil = 0, nextAlertCheck = 0, lookBase = 0, lookStart = 0;
     float speedScale = 1;           // walks while patrolling
+    float patrolSpeed = 0.75f;
+    V3 leaveFrom{};                 // where it just downed someone: patrols away from there until leaveUntil
+    float leaveUntil = 0;
     void* hitGen = nullptr;         // generator it investigates / smashes
     float hitUntil = 0;
     std::unordered_map<void*, float> genDoneUntil; // generators it just dealt with
@@ -5387,16 +5391,16 @@ static V3 ZheFleeGoal(void* bot, V3 me, V3 zombie)
         V3 d = s - me;
         float dl = Len2D(d);
         float dot = (d.x * away.x + d.y * away.y) / (dl * al);
-        if (dot < -0.25f)
-            continue; // back towards it
         // the straight way there: how close it passes the zombie
         float t = ((zombie.x - me.x) * d.x + (zombie.y - me.y) * d.y) / (dl * dl);
         t = t < 0 ? 0 : t > 1 ? 1 : t;
         float pass = Len2D(me + d * t - zombie);
-        if (pass < 250.0f && pass < al * 0.8f)
-            continue;
         float zd = Len2D(s - zombie);
         float score = (zd < 1500.0f ? zd : 1500.0f) - 0.5f * dl + dot * 250.0f;
+        if (dot < -0.25f)
+            score -= 2500.0f; // back towards it: only when nothing else
+        if (pass < 250.0f && pass < al * 0.8f)
+            score -= 2000.0f; // past it
         if (!Trace(zeye, s + V3{ 0, 0, 28 }, bot, 1, tr))
             score += 1500.0f; // out of its sight
         if (score > bestScore)
@@ -5738,17 +5742,20 @@ static void ZheFight(void* bot, ZheBot& z, const ZhePlayer* zom, bool inSight, V
     float d = Len(zpos - eye);
     if (z.throwStage)
     {
-        // a grenade: out, the pin held a moment aiming a bit above the zombie, then let go
+        // a grenade: out (ready after its deploy, ~0.75 s), the pin held a moment aiming a bit above the zombie, then
+        // let go
         act = true;
         lookAt = zpos + V3{ 0, 0, 20.0f + d * 0.12f };
         if (z.throwStage == 1)
         {
-            if (active == z.throwItem)
+            if (active == z.throwItem && z.throwReadyAt == 0)
+                z.throwReadyAt = now + 0.9f;
+            if (active == z.throwItem && now >= z.throwReadyAt)
             {
                 z.throwStage = 2;
-                z.throwAt = now + 0.5f;
+                z.throwAt = now + 0.6f;
             }
-            else if (now > z.throwAt + 2.0f)
+            else if (active != z.throwItem && now > z.throwAt + 2.0f)
             {
                 z.throwStage = 0; // it wouldn't come out
                 z.nextThrow = now + 5.0f;
@@ -5760,7 +5767,7 @@ static void ZheFight(void* bot, ZheBot& z, const ZhePlayer* zom, bool inSight, V
             if (now >= z.throwAt)
             {
                 z.throwStage = 3;
-                z.throwAt = now + 0.8f;
+                z.throwAt = now + 1.0f;
                 Log("Manhunt: bot '%s' throws a %s at the zombie (%.0f u)", name, String(z.throwClass), d);
             }
         }
@@ -5768,6 +5775,9 @@ static void ZheFight(void* bot, ZheBot& z, const ZhePlayer* zom, bool inSight, V
         {
             z.throwStage = 0;
             z.nextThrow = now + 8.0f;
+            for (int k = 0; k < n; k++)
+                if (inv[k].w == z.throwItem)
+                    Log("Manhunt: bot '%s' still has its %s after the throw", name, String(z.throwClass));
         }
         return;
     }
@@ -5783,6 +5793,7 @@ static void ZheFight(void* bot, ZheBot& z, const ZhePlayer* zom, bool inSight, V
                 z.throwItem = inv[k].w;
                 z.throwClass = inv[k].cls;
                 z.throwAt = now;
+                z.throwReadyAt = 0;
                 FakeCommand(bot, String(inv[k].cls));
                 return;
             }
@@ -5979,7 +5990,8 @@ static void ZheHumanThink(void* bot, ZheBot& z, int state, V3 me, V3 eye, float 
         bool cutOff = since < 0.5f && Len2D(z.zombiePos - z.fleeGoal) < Len2D(me - z.fleeGoal);
         if (reached || now >= z.fleeUntil || cutOff)
         {
-            if (since > 1.5f && ZheHidden(bot, me, z.zombiePos))
+            // still on its heels (seen or heard in the last 3 s): keep running, somewhere else
+            if (since > 3.0f && zdist > 700.0f && ZheHidden(bot, me, z.zombiePos))
             {
                 z.fleeing = false;
                 z.hideUntil = now + 4.0f + Rnd() * 5.0f; // out of sight: hide a while
@@ -6257,7 +6269,13 @@ static void ZheZombieThink(void* bot, ZheBot& z, V3 me, V3 eye, float now, V3& g
     {
         if (!z.target || !Alive(z.target) || !ZheStanding(ZheState(z.target)))
         {
-            z.zmode = ZZ_PATROL; // down or gone: on with the patrol
+            // down or gone: on with the patrol, away from there for a while (room to pick them up)
+            if (z.target && Alive(z.target))
+            {
+                z.leaveFrom = Origin(z.target);
+                z.leaveUntil = now + 15.0f + Rnd() * 15.0f;
+            }
+            z.zmode = ZZ_PATROL;
             z.target = nullptr;
             z.patrolUntil = 0;
         }
@@ -6402,26 +6420,113 @@ static void ZheZombieThink(void* bot, ZheBot& z, V3 me, V3 eye, float now, V3& g
         }
     }
 
-    // patrol: somewhere near one of the humans (it never knows exactly where), walking, looking around
-    if (now >= z.patrolUntil || Len2D(z.patrolGoal - me) < 100.0f)
+    // patrol: a wide, random round about the humans (it never knows exactly where): mostly a ring 700 to 2400 u
+    // around one of them, now and then closer, now and then anywhere on the map; it keeps off the humans who are down
+    // (and where it just downed one) most of the time, so the others can pick them up. At each spot it stops and
+    // looks around a moment.
+    if (now >= z.patrolUntil)
     {
-        std::vector<const ZhePlayer*> humans;
+        std::vector<const ZhePlayer*> humans, down;
         for (auto& p : g_zhe.players)
             if (ZheStanding(p.state))
                 humans.push_back(&p);
+            else if (p.state == ZHE_DOWN)
+                down.push_back(&p);
         V3 around = humans.empty() ? me : humans[rand() % humans.size()]->pos;
-        V3 s;
-        if (!ZheRandomArea(around, 350.0f, 1000.0f, s) && !ZheRandomArea(me, 300.0f, 1200.0f, s))
-            s = me;
-        z.patrolGoal = s;
-        z.patrolUntil = now + 12.0f + Rnd() * 8.0f;
+        float r = Rnd(), minR = 700.0f, maxR = 2400.0f;
+        if (r < 0.2f)
+            minR = 300.0f, maxR = 900.0f; // closer: tension
+        else if (r > 0.85f)
+            around = me, minR = 800.0f, maxR = 4000.0f; // off somewhere else
+        bool keepOff = Rnd() < 0.85f;
+        V3 s = me, best = me;
+        bool found = false;
+        for (int tries = 0; tries < 12 && !found; tries++)
+        {
+            if (!ZheRandomArea(around, minR, maxR, s) && !ZheRandomArea(me, 400.0f, 2000.0f, s))
+                break;
+            best = s;
+            found = true;
+            if (keepOff)
+            {
+                for (auto* d : down)
+                    found &= Len2D(d->pos - s) > 900.0f;
+                if (now < z.leaveUntil)
+                    found &= Len2D(z.leaveFrom - s) > 1100.0f;
+            }
+        }
+        z.patrolGoal = best;
+        z.patrolUntil = now + 10.0f + Rnd() * 15.0f;
+        z.lookAroundUntil = 0;
+        z.speedScale = 0.6f + Rnd() * 0.3f;
+        z.patrolSpeed = z.speedScale;
+    }
+    if (Len2D(z.patrolGoal - me) < 100.0f)
+    {
+        // there: a look around, then on
+        if (z.lookAroundUntil == 0)
+        {
+            z.lookAroundUntil = now + 1.0f + Rnd() * 2.5f;
+            z.lookBase = z.yaw;
+            z.lookStart = now;
+        }
+        if (now >= z.lookAroundUntil)
+            z.patrolUntil = 0;
+        float ly = z.lookBase + sinf((now - z.lookStart) * 1.5f) * 90.0f;
+        act = true;
+        lookAt = eye + V3{ cosf(ly / RAD), sinf(ly / RAD), 0 } * 100.0f;
+        z.doing = "patrolling: looking around";
+        return;
     }
     goal = z.patrolGoal;
     hasGoal = true;
     arrive = 60;
     z.sweep = 40;
-    z.speedScale = 0.75f;
+    z.speedScale = z.patrolSpeed;
     z.doing = "patrolling near the humans";
+}
+
+// The exit zones only let out what classifies as a player (CZHEExitZone::ExitTouch 0x108ea1e0: vfunc 0x30 == 2), and
+// the bots classify as 15 (CCSBot 0x107f8c40): botassist lets a bot out the way ExitTouch does, once its box is in an
+// open exit's zone: the human module's escape (0x108017a0: state 5, spectator flags, the "escaped" message), then the
+// rules' check (g_pGameRules vfunc 0x100).
+static const DWORD MP_ZHE_ESCAPE = 0x108017a0;
+typedef void(__thiscall* ZheEscapeFn)(void* module);
+typedef void(__thiscall* RulesCheckFn)(void* rules);
+
+static bool ZheEscape(void* bot)
+{
+    __try
+    {
+        unsigned char* pl = (unsigned char*)PrivateOf(bot);
+        void* mod = pl ? ((PlayerModuleFn)(MP_PLAYER_MODULE + g_mpDelta))(pl, ZHE_HUMAN_MODULE) : nullptr;
+        if (!mod)
+            return false;
+        ((ZheEscapeFn)(MP_ZHE_ESCAPE + g_mpDelta))(mod);
+        void* rules = *(void**)(MP_GAMERULES + g_mpDelta);
+        if (rules)
+            ((RulesCheckFn)((*(void***)rules)[0x100 / 4]))(rules);
+        return true;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        return false;
+    }
+}
+
+static bool ZheInExit(void* bot, V3 me)
+{
+    for (auto& x : g_zhe.exits)
+    {
+        if (!x.open)
+            continue;
+        unsigned char* v = Vars(x.e);
+        V3 lo = Vec((float*)(v + EV_ABSMIN)), hi = Vec((float*)(v + EV_ABSMAX));
+        if (me.x + 16 > lo.x && me.x - 16 < hi.x && me.y + 16 > lo.y && me.y - 16 < hi.y && me.z + 36 > lo.z &&
+            me.z - 36 < hi.z)
+            return true;
+    }
+    return false;
 }
 
 // a room bot in Manhunt: botassist plays it (true: aim, movement and buttons replaced)
@@ -6432,8 +6537,25 @@ static bool DriveZheBot(void* bot, float& yaw, float& pitch, float& fwd, float& 
     float now = Now();
     ZheScan(now);
     int state = ZheState(bot);
-    if (state < 0 || state == ZHE_ESCAPED)
+    if (state < 0)
         return false;
+    if (state == ZHE_ESCAPED)
+    {
+        fwd = side = 0; // out: still, the stock AI kept away
+        buttons = 0;
+        return true;
+    }
+    if (state != ZHE_ZOMBIE && ZheInExit(bot, Origin(bot)))
+    {
+        bool ok = ZheEscape(bot);
+        static int reports = 0;
+        if (reports++ < 40)
+            Log("Manhunt: bot '%s' %s", String(F<int>(Vars(bot), EV_NETNAME)),
+                ok ? "escapes through an exit" : "is in an exit but couldn't be let out");
+        fwd = side = 0;
+        buttons = 0;
+        return true;
+    }
     ZheBot& z = g_zheBots[bot];
     BotState& st = StateFor(bot);
     if (!z.init || now < z.lastThink - 1.0f || now - z.lastThink > 2.0f)
@@ -6479,6 +6601,8 @@ static bool DriveZheBot(void* bot, float& yaw, float& pitch, float& fwd, float& 
         moveYaw = YawOf(wp - me);
         move = true;
     }
+    else if (hasGoal && z.fleeing && Len2D(goal - me) > arrive + 20.0f)
+        z.fleeUntil = now; // no way there: another spot next time
     if (move && now < z.detourUntil)
         moveYaw = z.detourYaw;
     // walking: looks along the way, glancing left and right
