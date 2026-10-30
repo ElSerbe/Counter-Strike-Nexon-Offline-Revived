@@ -448,15 +448,17 @@ there (`DriveZheBot`):
   as a player (CZHEExitZone::ExitTouch 0x108ea1e0 wants vfunc 0x30 == 2; CCSBot says 15), so botassist lets a bot
   out itself once its box is in an open exit's zone: the human module's escape 0x108017a0 (state 5, spectator flags,
   the message), then g_pGameRules vfunc 0x100 (what ExitTouch calls next); escaped bots stay still;
-- the zombie sees in a 110 degree cone (up to 1700 u, crouched humans only up to 700 u, anyone within 200 u) and
-  reacts after 0.4 s. It patrols a wide, random round, at a random walking pace, stopping at each spot to look around:
+- the zombie sees in a 140 degree cone (up to 3000 u, crouched humans only up to 1100 u, anyone within 350 u) and
+  reacts after 0.4 s; it also hears humans running (not crouched, over 170 u/s) within 900 u and goes to search there. It patrols a wide, random round, at a random walking pace, stopping at each spot to look around:
   mostly a ring 700 to 2400 u around a random human (it never knows exactly where), 20 % of the legs closer (300 to
   900 u), 15 % anywhere; 85 % of the legs keep 900 u off the humans who are down, and after downing someone it keeps
   1100 u off that place for 15 to 30 s, so the others can pick them up;
   generators being repaired are heard now and then (more often close by), an overheating one always: it goes there
   and smashes it if it has progress. It chases whoever it sees, sometimes the long way round (a detour point), and
-  aims with an error (it can miss); after losing sight it goes where they were (30 % of the time a wrong guess
-  nearby), looks around, and gives up after 3 to 6 s. botassist.log tells when it spots, hears and gives up.
+  aims with an error (it can miss); it keeps after their real position for 1.5 s once out of sight, then goes where
+  they were (20 % of the time a wrong guess nearby), looks around and stays on their trail for 14 to 24 s: every 2.5 to
+  5 s it hears them (their exact position, when within 900 u), picks up the trail (a spot within 450 u of them) or
+  takes a wrong turn, before it gives up. botassist.log tells when it spots, hears and gives up.
 
 Weapons: everyone starts with bare hands (botassist doesn't hand out the room's weapons in this mode). The map's
 item boxes (`customwb`, resource/ZHE/zheweaponbox_1..4.json: guns such as the MAC-10, M14 EBR, Glock, Deagle, XM1014,

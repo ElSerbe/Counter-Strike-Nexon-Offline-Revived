@@ -5189,6 +5189,7 @@ struct ZheBot
     void* target = nullptr;         // the human it chases
     V3 lastSeen{};
     float lastSeenAt = -100, seenSince = -1, giveUpAt = 0, lookAroundUntil = 0, nextAttack = 0, aimError = 0;
+    float nextTrack = 0;            // next time it picks up their trail while searching
     V3 via{};                       // a detour on the way (it doesn't always take the shortest route)
     bool hasVia = false;
     V3 patrolGoal{};
@@ -6214,13 +6215,22 @@ static const int FL_DUCKING_ = 0x4000;
 static bool ZheZombieSees(void* bot, ZheBot& z, V3 eye, const ZhePlayer& p)
 {
     float d = Len(p.pos - eye);
-    if (d < 200.0f)
+    if (d < 350.0f)
         return true;
-    if (d > 1700.0f || fabsf(AngleDiff(YawOf(p.pos - eye), z.yaw)) > 55.0f)
+    if (d > 3000.0f || fabsf(AngleDiff(YawOf(p.pos - eye), z.yaw)) > 70.0f)
         return false;
-    if ((F<int>(Vars(p.e), EV_FLAGS) & FL_DUCKING_) && d > 700.0f)
+    if ((F<int>(Vars(p.e), EV_FLAGS) & FL_DUCKING_) && d > 1100.0f)
         return false;
     return CanSee(bot, eye, p.e);
+}
+
+// what it hears: a human running (not crouched, not walking) close by
+static bool ZheZombieHears(V3 me, const ZhePlayer& p)
+{
+    float d = Len(p.pos - me);
+    if (d > 900.0f || (F<int>(Vars(p.e), EV_FLAGS) & FL_DUCKING_))
+        return false;
+    return Len2D(Vec((float*)(Vars(p.e) + EV_VELOCITY))) > 170.0f;
 }
 
 // the zombie: patrols near the humans looking around, goes to generators that make noise, chases whoever it sees
@@ -6243,7 +6253,24 @@ static void ZheZombieThink(void* bot, ZheBot& z, V3 me, V3 eye, float now, V3& g
         }
     }
     if (!seen)
+    {
         z.seenSince = -1;
+        if (z.zmode != ZZ_CHASE && z.zmode != ZZ_SEARCH)
+            for (auto& p : g_zhe.players)
+                if (ZheStanding(p.state) && ZheZombieHears(me, p))
+                {
+                    Log("Manhunt: the zombie '%s' hears '%s' running (%.0f u)", String(F<int>(Vars(bot), EV_NETNAME)),
+                        String(F<int>(Vars(p.e), EV_NETNAME)), Len(p.pos - me));
+                    z.zmode = ZZ_SEARCH;
+                    z.target = p.e;
+                    z.lastSeen = p.pos;
+                    z.giveUpAt = now + 10.0f + Rnd() * 6.0f;
+                    z.nextTrack = now + 2.0f;
+                    z.lookAroundUntil = 0;
+                    z.hasVia = false;
+                    break;
+                }
+    }
     else
     {
         if (z.seenSince < 0)
@@ -6279,14 +6306,15 @@ static void ZheZombieThink(void* bot, ZheBot& z, V3 me, V3 eye, float now, V3& g
             z.target = nullptr;
             z.patrolUntil = 0;
         }
-        else if (now - z.lastSeenAt > 0.6f)
+        else if (now - z.lastSeenAt > 1.5f)
         {
-            // out of sight: after them where they were (or a wrong guess now and then)
+            // out of sight: after them where they were (or a wrong guess now and then), and it keeps at it a long while
             z.zmode = ZZ_SEARCH;
             V3 guess;
-            if (Rnd() < 0.3f && ZheRandomArea(z.lastSeen, 200.0f, 550.0f, guess))
+            if (Rnd() < 0.2f && ZheRandomArea(z.lastSeen, 200.0f, 550.0f, guess))
                 z.lastSeen = guess;
-            z.giveUpAt = now + 3.0f + Rnd() * 3.0f;
+            z.giveUpAt = now + 14.0f + Rnd() * 10.0f;
+            z.nextTrack = now + 2.0f + Rnd() * 2.0f;
             z.lookAroundUntil = 0;
             z.hasVia = false;
         }
@@ -6326,7 +6354,40 @@ static void ZheZombieThink(void* bot, ZheBot& z, V3 me, V3 eye, float now, V3& g
             z.target = nullptr;
             z.patrolUntil = 0;
         }
-        else if (z.lookAroundUntil == 0 && Len2D(z.lastSeen - me) > 60.0f)
+        else
+        {
+            // on their trail: now and then it picks up where they really are (closer if it hears them running), or
+            // takes a wrong turn
+            if (now >= z.nextTrack && z.target && Alive(z.target) && ZheStanding(ZheState(z.target)))
+            {
+                z.nextTrack = now + 2.5f + Rnd() * 2.5f;
+                V3 tp = Origin(z.target), guess;
+                float r = Rnd();
+                const char* how = nullptr;
+                if (Len(tp - me) < 900.0f && r < 0.8f)
+                {
+                    z.lastSeen = tp;
+                    how = "hears them";
+                }
+                else if (r < 0.7f && ZheRandomArea(tp, 0.0f, 450.0f, guess))
+                {
+                    z.lastSeen = guess;
+                    how = "picks up the trail";
+                }
+                else if (ZheRandomArea(z.lastSeen, 300.0f, 900.0f, guess))
+                {
+                    z.lastSeen = guess;
+                    how = "takes a wrong turn";
+                }
+                if (how)
+                {
+                    z.lookAroundUntil = 0;
+                    DLog("Manhunt bot '%s': the zombie %s (%.0f u from them)", String(F<int>(Vars(bot), EV_NETNAME)), how,
+                         Len(z.lastSeen - tp));
+                }
+            }
+        }
+        if (z.zmode == ZZ_SEARCH && z.lookAroundUntil == 0 && Len2D(z.lastSeen - me) > 60.0f)
         {
             goal = z.lastSeen;
             hasGoal = true;
@@ -6335,12 +6396,12 @@ static void ZheZombieThink(void* bot, ZheBot& z, V3 me, V3 eye, float now, V3& g
             z.doing = "searching where they went";
             return;
         }
-        else
+        else if (z.zmode == ZZ_SEARCH)
         {
             // there: stands and looks around
             if (z.lookAroundUntil == 0)
             {
-                z.lookAroundUntil = now + 2.0f;
+                z.lookAroundUntil = now + 1.5f;
                 z.lookBase = z.yaw;
                 z.lookStart = now;
             }
