@@ -152,7 +152,7 @@ static struct
     float zsrEventDivisor = 3.0f; // Zombie Disaster Zone: events per round = rift level / this (the game's: 32)
     int zsrBotMoney = 10000;   // Zombie Disaster Zone: a bot's money on each new life, at least (0: the game's)
     // Zombie Disaster Zone: monsters' attack / health bonus per rift level above 1, in percent (negative: the game's)
-    float zsrMonsterAttack = 1.5f, zsrMonsterHealth = 5.0f, zsrBossAttack = 1.0f, zsrBossHealth = 4.0f;
+    float zsrMonsterAttack = 2.6316f, zsrMonsterHealth = 15.7895f, zsrBossAttack = 1.3158f, zsrBossHealth = 10.5263f;
     float zsrExponent = 1.0f; // bonus = rate * (level - 1) ^ this (the game's: 1.85)
     float rescan = 0.15f;
     bool logTargets = true;
@@ -285,10 +285,10 @@ static void LoadSettings()
     cfg.zgPlayers = GetPrivateProfileIntA("BotAssist", "ZombieGiantPlayers", -1, ini);
     cfg.zsrEventDivisor = IniFloat(ini, "ZSRiftEventDivisor", "3");
     cfg.zsrBotMoney = GetPrivateProfileIntA("BotAssist", "ZSRiftBotMoney", 10000, ini);
-    cfg.zsrMonsterAttack = IniFloat(ini, "ZSRiftMonsterAttack", "1.5");
-    cfg.zsrMonsterHealth = IniFloat(ini, "ZSRiftMonsterHealth", "5");
-    cfg.zsrBossAttack = IniFloat(ini, "ZSRiftBossAttack", "1");
-    cfg.zsrBossHealth = IniFloat(ini, "ZSRiftBossHealth", "4");
+    cfg.zsrMonsterAttack = IniFloat(ini, "ZSRiftMonsterAttack", "2.6316");
+    cfg.zsrMonsterHealth = IniFloat(ini, "ZSRiftMonsterHealth", "15.7895");
+    cfg.zsrBossAttack = IniFloat(ini, "ZSRiftBossAttack", "1.3158");
+    cfg.zsrBossHealth = IniFloat(ini, "ZSRiftBossHealth", "10.5263");
     cfg.zsrExponent = IniFloat(ini, "ZSRiftLevelExponent", "1");
     cfg.zgPlayerGiant = GetPrivateProfileIntA("BotAssist", "ZombieGiantYouCanBeGiant", 1, ini) != 0;
     cfg.logTargets = GetPrivateProfileIntA("BotAssist", "LogTargets", 1, ini) != 0;

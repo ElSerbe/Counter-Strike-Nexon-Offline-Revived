@@ -417,7 +417,7 @@ mp.dll's monster setup (0x11360de0) multiplies a monster's attack, health, armou
 vfunc 0x8ac(type): attack, health, armour, speed; type 0 common zombies, 1 and 2 special ones, 3 bosses). The room's
 difficulty tooltip (GameUI 0x105b4c50) uses the same formula. At level 20 that was +325% attack and +2321% health.
 botassist hooks that vfunc to hand out `ZSRiftMonsterAttack` / `ZSRiftMonsterHealth` / `ZSRiftBossAttack` /
-`ZSRiftBossHealth` (percent per level, 1.5 / 5 / 1 / 4) and sets the exponent (mp 0x11945470, GameUI 0x1096ff50, read
+`ZSRiftBossHealth` (percent per level: +50% / +300% / +25% / +200% at level 20) and sets the exponent (mp 0x11945470, GameUI 0x1096ff50, read
 only there) to `ZSRiftLevelExponent` (1: the same step every level). Armour and speed keep the game's rates.
 
 The room panel redraws itself (and the tooltip) after a settings change only when the changed options include bit 59
