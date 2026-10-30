@@ -435,11 +435,15 @@ open for the bots once its door has moved). The round waits ("#CSO_WaitEnemy", r
 everyone in the room is in game, so every room AI player joins CT even when the game asks for terrorists to balance
 the teams (the zombie is drawn from the CT players). The stock bot AI knows none of it, so botassist plays every bot
 there (`DriveZheBot`):
-- humans repair the closest generator nobody else takes and pick up teammates who are down, holding +use the way the
-  game accepts it (below); they let go while a generator overheats (state 5) or after it blew (6). When the zombie is
-  heard (close) or seen they run to a place away from it, preferably behind a wall, jumping about when it is right
-  behind; once it is lost they hide crouched for a few seconds, watching where it was, then go back to work. Hurt
-  and safe, they heal (+use looking at the floor); with the exits open they run out;
+- humans repair the closest generator nobody else takes, pick up teammates who are down and heal hurt ones (when
+  calm), one bot per teammate while the others carry on, holding +use the way the game accepts it (below); they let
+  go while a generator overheats (state 5) or after it blew (6). Healing only works on someone standing still (the
+  human module counts its helpers, +0x24 list / +0x28 count), so a bot being healed or picked up stays still and
+  looks at its helper. When the zombie is heard (within 550 u, 900 u while running) or seen within 1100 u they run,
+  the knife out, to a nav spot out of its sight (a trace from the zombie blocked, the way there not past it) and keep
+  going until there; seen again or cut off: another spot; arrived and out of its sight: they hide crouched for 4 to
+  9 s, watching where it was (hiding, only a zombie within 700 u moves them), then go back to work. Down, they crawl
+  away from it or towards a teammate; with the exits open they run out;
 - the zombie sees in a 110 degree cone (up to 1700 u, crouched humans only up to 700 u, anyone within 200 u) and
   reacts after 0.4 s. It patrols, walking and looking around, near a random human (it never knows exactly where);
   generators being repaired are heard now and then (more often close by), an overheating one always: it goes there
@@ -451,14 +455,18 @@ Weapons: everyone starts with bare hands (botassist doesn't hand out the room's 
 item boxes (`customwb`, resource/ZHE/zheweaponbox_1..4.json: guns such as the MAC-10, M14 EBR, Glock, Deagle, XM1014,
 M60, cannon; the zhebox tools; smoke, flash, sticky bomb) open when walked into (CCustomWeaponBox::CustomWBTouch
 0x108e9bb0). Calm humans open the close ones, and farther ones while they lack a gun with ammunition or a grenade.
-With the zombie in sight and close they shoot it with a gun that has ammunition while running from it (reloading when
-the clip is empty), throw a grenade at it now and then (200 to 750 u), and throw a gun away once it is empty (there
-is no ammunition to be had). The items are read from CBasePlayer m_rgpPlayerItems (offset found at run time, logged
-in botassist_debug.log with what each bot carries).
+The zombie can't die but shots slow it down: with it in sight within 700 u the bots take out a gun with
+ammunition and shoot it while running backwards (reloading when the clip is empty), throw a grenade at it now and then
+(beyond 200 u), and otherwise carry the knife (faster on foot). An empty gun (clip and reserve) is thrown away off to
+the side behind them, a little up, away from where they run, and its weapon box loses its touch so nobody picks the
+empty gun up again. The items come from CBasePlayer::DropPlayerItem (0x114b4e60): CSNZ keeps entity pointers as
+8-byte handles {control block, pointer} (valid while the block's second dword is set); m_rgpPlayerItems is 6 slots
+16 bytes apart from player +0xfb8 (1 primary, 2 pistol, 3 knife, 4 grenades), the chain through the item's m_pNext
+handle at +0xd8, the active item's handle at +0x1018. botassist_debug.log lists what each bot carries every 30 s.
 
 Radio: the stock AI's chatter is off (bot_chatter off, its radio commands dropped); the bots say "Enemy spotted"
 when they see the zombie, "Taking fire" when hurt, "Need backup" when down, "Affirmative" when they go to pick
-someone up, "Sector clear" when their generator is done and "Go go go" when the exits open (one message every
+someone up or heal them, "Sector clear" when their generator is done and "Go go go" when the exits open (one message every
 2.5 s at most).
 
 Using things the way the game checks it: CBasePlayer::PlayerUse (0x114c4ea0) picks, among the usable entities whose

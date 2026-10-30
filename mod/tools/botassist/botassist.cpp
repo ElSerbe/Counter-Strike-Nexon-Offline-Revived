@@ -5181,6 +5181,8 @@ struct ZheBot
     void* throwItem = nullptr;
     int throwClass = 0;
     bool fireToggle = false;
+    bool fleeing = false;           // on the way to somewhere out of the zombie's sight
+    float gunUntil = 0;             // the gun out until (else the knife)
     // the zombie
     int zmode = ZZ_PATROL;
     void* target = nullptr;         // the human it chases
@@ -5367,7 +5369,8 @@ static bool ZheDetour(V3 me, V3 goal, V3& via)
     return ZheRandomArea((me + goal) * 0.5f, len * 0.3f, len * 0.7f, via);
 }
 
-// somewhere to run to: away from the zombie, not past it, best behind a wall (out of its sight)
+// somewhere to run to: away from the zombie, the way there not past it, best out of its sight (a building, a wall in
+// between) and not too far
 static V3 ZheFleeGoal(void* bot, V3 me, V3 zombie)
 {
     V3 away = me - zombie;
@@ -5376,19 +5379,26 @@ static V3 ZheFleeGoal(void* bot, V3 me, V3 zombie)
     float bestScore = -1e30f;
     V3 zeye = zombie + V3{ 0, 0, 28 };
     TraceResult tr;
-    for (int i = 0; i < 40; i++)
+    for (int i = 0; i < 60; i++)
     {
         V3 s;
-        if (!ZheRandomArea(me, 350.0f, 1300.0f, s))
+        if (!ZheRandomArea(me, 300.0f, 1400.0f, s))
             break;
         V3 d = s - me;
         float dl = Len2D(d);
         float dot = (d.x * away.x + d.y * away.y) / (dl * al);
-        if (dot < -0.1f)
-            continue; // the way there goes past the zombie
-        float score = Len2D(s - zombie) - 0.4f * dl + dot * 300.0f;
-        if (!Trace(zeye, s + V3{ 0, 0, 36 }, bot, 1, tr))
-            score += 600.0f; // a wall in between
+        if (dot < -0.25f)
+            continue; // back towards it
+        // the straight way there: how close it passes the zombie
+        float t = ((zombie.x - me.x) * d.x + (zombie.y - me.y) * d.y) / (dl * dl);
+        t = t < 0 ? 0 : t > 1 ? 1 : t;
+        float pass = Len2D(me + d * t - zombie);
+        if (pass < 250.0f && pass < al * 0.8f)
+            continue;
+        float zd = Len2D(s - zombie);
+        float score = (zd < 1500.0f ? zd : 1500.0f) - 0.5f * dl + dot * 250.0f;
+        if (!Trace(zeye, s + V3{ 0, 0, 28 }, bot, 1, tr))
+            score += 1500.0f; // out of its sight
         if (score > bestScore)
         {
             bestScore = score;
@@ -5577,22 +5587,26 @@ static void ZheRadio(void* bot, int menu, int item, const char* what)
     DLog("Manhunt bot '%s' radio: %s", String(F<int>(Vars(bot), EV_NETNAME)), what);
 }
 
-// The player's items: CBasePlayer m_rgpPlayerItems[6] (slot 1 primary, 2 pistol, 3 melee, 4 grenades), each a chain
-// through CBasePlayerItem m_pNext (+0xe0), m_pPlayer at +0xdc; the active one at +0x101c. The array's offset is found
-// at run time (the six slots right before the active item, checked against m_pPlayer). Weapon +0x158 the ammo type,
-// +0x160 the clip; the player's reserve per ammo type at +0x1034.
+// The player's items (CBasePlayer::DropPlayerItem 0x114b4e60): CSNZ keeps entity pointers as handles of 8 bytes
+// {control block, pointer}, valid while the block's second dword is set. m_rgpPlayerItems: 6 slots 16 bytes apart from
+// player +0xfb8 (slot 1 primary, 2 pistol, 3 melee, 4 grenades), each a chain through the item's m_pNext handle at
+// +0xd8; the active item's handle at +0x1018. Weapon +0xe4 its id, +0x158 the ammo type, +0x160 the clip; the
+// player's reserve per ammo type at +0x1034.
 struct ZheItem
 {
     void* w;
     int cls; // classname (string_t)
     int slot, type, clip, reserve;
 };
-static int g_zheItemsOff = -1;
-static const int ITEM_PLAYER = 0xdc, ITEM_NEXT = 0xe0, PLAYER_ACTIVE_ITEM = 0x101c, PLAYER_AMMO = 0x1034;
+static const int PLAYER_ITEMS = 0xfb8, PLAYER_ACTIVE_ITEM = 0x1018, ITEM_NEXT = 0xd8, PLAYER_AMMO = 0x1034;
 
-static bool ZheItemOk(unsigned char* pl, unsigned char* it)
+static unsigned char* ZheHandle(unsigned char* h)
 {
-    return it && Readable(it, 0x170) && *(unsigned char**)(it + ITEM_PLAYER) == pl;
+    unsigned char* c = *(unsigned char**)h;
+    if (!c || !Readable(c + 4, 4) || !*(int*)(c + 4))
+        return nullptr;
+    unsigned char* p = *(unsigned char**)(h + 4);
+    return p && Readable(p, 0x170) ? p : nullptr;
 }
 
 static int ZheItemsRaw(void* bot, ZheItem* out, int max)
@@ -5603,41 +5617,11 @@ static int ZheItemsRaw(void* bot, ZheItem* out, int max)
         unsigned char* pl = (unsigned char*)PrivateOf(bot);
         if (!pl)
             return 0;
-        if (g_zheItemsOff < 0)
-        {
-            unsigned char* active = *(unsigned char**)(pl + PLAYER_ACTIVE_ITEM);
-            if (!ZheItemOk(pl, active))
-                return 0;
-            for (int o = PLAYER_ACTIVE_ITEM - 24; o >= 0xe00 && g_zheItemsOff < 0; o -= 4)
-            {
-                bool ok = true, found = false;
-                for (int sl = 0; sl < 6 && ok; sl++)
-                {
-                    unsigned char* it = *(unsigned char**)(pl + o + 4 * sl);
-                    for (int guard = 0; it && guard < 8; guard++)
-                    {
-                        if (!ZheItemOk(pl, it))
-                        {
-                            ok = false;
-                            break;
-                        }
-                        found |= it == active;
-                        it = *(unsigned char**)(it + ITEM_NEXT);
-                    }
-                }
-                if (ok && found)
-                    g_zheItemsOff = o;
-            }
-            if (g_zheItemsOff < 0)
-                return 0;
-        }
         for (int sl = 0; sl < 6; sl++)
         {
-            unsigned char* it = *(unsigned char**)(pl + g_zheItemsOff + 4 * sl);
+            unsigned char* it = ZheHandle(pl + PLAYER_ITEMS + 16 * sl);
             for (int guard = 0; it && guard < 8 && n < max; guard++)
             {
-                if (!ZheItemOk(pl, it))
-                    break;
                 ZheItem& i = out[n++];
                 i.w = it;
                 unsigned char* pev = *(unsigned char**)(it + 8);
@@ -5646,7 +5630,7 @@ static int ZheItemsRaw(void* bot, ZheItem* out, int max)
                 i.type = *(int*)(it + 0x158);
                 i.clip = *(int*)(it + 0x160);
                 i.reserve = i.type > 0 && i.type < 0x102 ? *(int*)(pl + PLAYER_AMMO + 4 * i.type) : 0;
-                it = *(unsigned char**)(it + ITEM_NEXT);
+                it = ZheHandle(it + ITEM_NEXT);
             }
         }
     }
@@ -5658,8 +5642,15 @@ static int ZheItemsRaw(void* bot, ZheItem* out, int max)
 
 static void* ZheActiveItem(void* bot)
 {
-    unsigned char* pl = (unsigned char*)PrivateOf(bot);
-    return pl && Readable(pl + PLAYER_ACTIVE_ITEM, 4) ? *(void**)(pl + PLAYER_ACTIVE_ITEM) : nullptr;
+    __try
+    {
+        unsigned char* pl = (unsigned char*)PrivateOf(bot);
+        return pl ? ZheHandle(pl + PLAYER_ACTIVE_ITEM) : nullptr;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        return nullptr;
+    }
 }
 
 static bool ZheThrowable(const ZheItem& i)
@@ -5672,10 +5663,38 @@ static bool ZheGun(const ZheItem& i)
     return (i.slot == 1 || i.slot == 2) && i.type > 0 && i.type < 0x102 && i.clip >= 0 && !ZheThrowable(i);
 }
 
-// weapons: an empty gun in hand is thrown away (there is no ammunition to be had); with the zombie in sight a gun
-// with ammunition shoots it (while running), a grenade is thrown at it now and then (out, pin, throw)
-static void ZheFight(void* bot, ZheBot& z, const ZhePlayer* zom, bool fight, V3 eye, float now, bool& act, V3& lookAt,
-                     unsigned short& b)
+// thrown away toward yaw, a little up (the drop flies along pev->angles' forward): off to the side behind, out of the
+// way it runs, so it doesn't walk over it again; the weapon box also loses its touch (empty, nobody needs it)
+static void ZheDropToward(void* bot, float yaw)
+{
+    std::vector<void*> before;
+    V3 me = Origin(bot);
+    ForEntitiesNear(me, 300.0f, [&](void* e) {
+        const char* c = ClassName(e);
+        if (c && !strcmp(c, "weaponbox"))
+            before.push_back(e);
+    });
+    float* va = (float*)(Vars(bot) + EV_VANGLE);
+    float* an = (float*)(Vars(bot) + EV_ANGLES);
+    float saved[6] = { va[0], va[1], va[2], an[0], an[1], an[2] };
+    va[0] = an[0] = -20.0f;
+    va[1] = an[1] = AngleDiff(yaw, 0.0f);
+    FakeCommand(bot, "cl_drop");
+    memcpy(va, saved, sizeof(float) * 3);
+    memcpy(an, saved + 3, sizeof(float) * 3);
+    ForEntitiesNear(me, 300.0f, [&](void* e) {
+        const char* c = ClassName(e);
+        unsigned char* p = (unsigned char*)PrivateOf(e);
+        if (c && p && !strcmp(c, "weaponbox") && std::find(before.begin(), before.end(), e) == before.end())
+            *(void**)(p + ZHE_ENT_TOUCH) = nullptr;
+    });
+}
+
+// weapons: an empty gun in hand is thrown away (there is no ammunition to be had), off to the side behind; with the
+// zombie in sight and close a gun with ammunition shoots it (it slows down: ground to win), a grenade is thrown at it
+// now and then (out, pin, throw); the rest of the time the knife is out (runs faster)
+static void ZheFight(void* bot, ZheBot& z, const ZhePlayer* zom, bool inSight, V3 me, V3 eye, float now, bool& act,
+                     V3& lookAt, unsigned short& b)
 {
     ZheItem inv[16];
     int n = ZheItemsRaw(bot, inv, 16);
@@ -5683,9 +5702,14 @@ static void ZheFight(void* bot, ZheBot& z, const ZhePlayer* zom, bool fight, V3 
         return;
     void* active = ZheActiveItem(bot);
     const ZheItem* hand = nullptr;
+    const ZheItem* knife = nullptr;
     for (int k = 0; k < n; k++)
+    {
         if (inv[k].w == active)
             hand = &inv[k];
+        if (inv[k].slot == 3 && !knife)
+            knife = &inv[k];
+    }
     const char* name = String(F<int>(Vars(bot), EV_NETNAME));
     if (now >= z.nextInvReport)
     {
@@ -5698,13 +5722,16 @@ static void ZheFight(void* bot, ZheBot& z, const ZhePlayer* zom, bool fight, V3 
                      inv[k].slot, inv[k].clip, inv[k].reserve);
             strncat(list, one, sizeof(list) - strlen(list) - 1);
         }
-        DLog("Manhunt bot '%s' carries (items at +0x%x): %s", name, g_zheItemsOff, list);
+        DLog("Manhunt bot '%s' carries %s; in hand %s", name, list, hand ? String(hand->cls) : "nothing");
     }
     if (hand && ZheGun(*hand) && hand->clip == 0 && hand->reserve == 0 && now >= z.nextDrop && z.throwStage == 0)
     {
+        float runYaw = z.fleeing ? YawOf(z.fleeGoal - me) : z.yaw;
+        float yaw = runYaw + 180.0f + (Rnd() < 0.5f ? 60.0f : -60.0f);
         Log("Manhunt: bot '%s' throws away its empty %s", name, String(hand->cls));
-        DropBehind(bot);
+        ZheDropToward(bot, yaw);
         z.nextDrop = now + 1.0f;
+        z.nextSwitch = now + 0.5f;
         return;
     }
     V3 zpos = zom ? zom->pos : z.zombiePos;
@@ -5744,59 +5771,68 @@ static void ZheFight(void* bot, ZheBot& z, const ZhePlayer* zom, bool fight, V3 
         }
         return;
     }
-    if (!fight || !zom)
-        return;
-    // a grenade, not too close
-    for (int k = 0; k < n; k++)
-        if (ZheThrowable(inv[k]) && d > 200.0f && d < 750.0f && now >= z.nextThrow)
-        {
-            z.throwStage = 1;
-            z.throwItem = inv[k].w;
-            z.throwClass = inv[k].cls;
-            z.throwAt = now;
-            FakeCommand(bot, String(inv[k].cls));
-            return;
-        }
-    if (d > 850.0f)
-        return;
+    bool close = zom && inSight && d < 700.0f;
+    if (close)
+    {
+        z.gunUntil = now + 2.0f; // the gun stays out a moment after losing it
+        // a grenade, not too close
+        for (int k = 0; k < n; k++)
+            if (ZheThrowable(inv[k]) && d > 200.0f && now >= z.nextThrow)
+            {
+                z.throwStage = 1;
+                z.throwItem = inv[k].w;
+                z.throwClass = inv[k].cls;
+                z.throwAt = now;
+                FakeCommand(bot, String(inv[k].cls));
+                return;
+            }
+    }
     // the gun in hand if it has ammunition, else another one (the primary first)
     const ZheItem* gun = hand && ZheGun(*hand) && hand->clip + hand->reserve > 0 ? hand : nullptr;
     for (int k = 0; k < n && !gun; k++)
         if (ZheGun(inv[k]) && inv[k].clip + inv[k].reserve > 0 && (inv[k].slot == 1 || !gun))
             gun = &inv[k];
-    if (!gun)
-        return;
-    if (gun != hand)
+    if (gun && now < z.gunUntil)
     {
-        if (now >= z.nextSwitch)
+        if (gun != hand)
         {
-            FakeCommand(bot, String(gun->cls));
-            z.nextSwitch = now + 1.0f;
+            if (now >= z.nextSwitch)
+            {
+                FakeCommand(bot, String(gun->cls));
+                z.nextSwitch = now + 1.0f;
+            }
+            return;
         }
+        if (!close)
+            return;
+        act = true;
+        lookAt = Center(zom->e) + V3{ (Rnd() - 0.5f) * 14.0f, (Rnd() - 0.5f) * 14.0f, 8.0f };
+        if (gun->clip == 0)
+        {
+            b |= IN_RELOAD;
+            return;
+        }
+        z.fireToggle = !z.fireToggle; // pressed every other frame: semi-automatic ones fire too
+        if (z.fireToggle)
+            b |= IN_ATTACK;
         return;
     }
-    act = true;
-    lookAt = Center(zom->e) + V3{ (Rnd() - 0.5f) * 10.0f, (Rnd() - 0.5f) * 10.0f, 6.0f };
-    if (gun->clip == 0)
+    // nothing to shoot: the knife (faster on foot)
+    if (knife && hand != knife && now >= z.nextSwitch)
     {
-        b |= IN_RELOAD;
-        return;
+        FakeCommand(bot, String(knife->cls));
+        z.nextSwitch = now + 1.5f;
     }
-    z.fireToggle = !z.fireToggle; // pressed every other frame: semi-automatic ones fire too
-    if (z.fireToggle)
-        b |= IN_ATTACK;
 }
 
-// the generator's repairers (CZHEGenerator +0x18c, a list of player indexes): is the bot one of them
-static bool ZheGenHas(void* gen, void* bot)
+// a std::list of player indexes (nodes: next, prev, the index at +8) from its head: is the bot in it
+static bool ZheListHas(unsigned char* head, void* bot)
 {
     __try
     {
-        unsigned char* p = (unsigned char*)PrivateOf(gen);
-        if (!p || !g_IndexOfEdict)
+        if (!head || !g_IndexOfEdict)
             return false;
         int index = g_IndexOfEdict(bot);
-        unsigned char* head = *(unsigned char**)(p + 0x18c);
         unsigned char* node = *(unsigned char**)head;
         for (int guard = 0; node && node != head && guard < 40; guard++)
         {
@@ -5811,17 +5847,64 @@ static bool ZheGenHas(void* gen, void* bot)
     return false;
 }
 
+// the generator's repairers (CZHEGenerator +0x18c): is the bot one of them
+static bool ZheGenHas(void* gen, void* bot)
+{
+    unsigned char* p = (unsigned char*)PrivateOf(gen);
+    return p && Readable(p + 0x18c, 4) && ZheListHas(*(unsigned char**)(p + 0x18c), bot);
+}
+
+// the ones healing / picking up a human (CZHEHumanModule +0x24, their count at +0x28, 0x10803140 adds them): is the
+// bot one of them
+static bool ZheHelpedBy(void* patient, void* bot)
+{
+    unsigned char* mod = nullptr;
+    __try
+    {
+        unsigned char* pl = (unsigned char*)PrivateOf(patient);
+        if (pl)
+            mod = (unsigned char*)((PlayerModuleFn)(MP_PLAYER_MODULE + g_mpDelta))(pl, ZHE_HUMAN_MODULE);
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        mod = nullptr;
+    }
+    return mod && Readable(mod + 0x24, 4) && ZheListHas(*(unsigned char**)(mod + 0x24), bot);
+}
+
+// the bot going to heal / pick up this human, if any (one is enough: the others carry on)
+static void* ZheHelperOf(void* patient, float now)
+{
+    for (auto& o : g_zheBots)
+        if (o.second.helping == patient && now - o.second.lastThink < 0.5f && Alive(o.first))
+            return o.first;
+    return nullptr;
+}
+
+// is a spot out of the zombie's sight (a wall, a building in between)
+static bool ZheHidden(void* bot, V3 spot, V3 zombie)
+{
+    TraceResult tr;
+    return !Trace(zombie + V3{ 0, 0, 28 }, spot + V3{ 0, 0, 28 }, bot, 1, tr);
+}
+
 // a human bot: what to do, where to go and look
 static void ZheHumanThink(void* bot, ZheBot& z, int state, V3 me, V3 eye, float now, V3& goal, bool& hasGoal, float& arrive,
                           bool& act, V3& lookAt, float& lookPitch, unsigned short& b)
 {
+    void* wasHelping = z.helping;
+    z.helping = nullptr; // claimed again below while it still goes to help
     const ZhePlayer* zom = ZheZombieNear(me);
+    bool inSight = false;
     if (zom)
     {
-        // heard close by (steps, the heartbeat), seen in front, or in plain sight not far
+        // heard close by (the heartbeat, its steps; while running it looks back now and then), seen in front, or in
+        // plain sight not far
         float zd = Len(zom->pos - me);
         float rel = fabsf(AngleDiff(YawOf(zom->pos - me), z.yaw));
-        if (zd < 380.0f || ((zd < 1400.0f && rel < 75.0f) || zd < 700.0f) && CanSee(bot, eye, zom->e))
+        bool los = zd < 1400.0f && CanSee(bot, eye, zom->e);
+        inSight = los && state != ZHE_DOWN;
+        if (zd < 550.0f || (z.fleeing && zd < 900.0f) || los && (rel < 75.0f || zd < 700.0f))
         {
             if (now - z.zombieSeenAt > 12.0f && state != ZHE_DOWN)
                 ZheRadio(bot, 3, 2, "enemy spotted");
@@ -5829,47 +5912,110 @@ static void ZheHumanThink(void* bot, ZheBot& z, int state, V3 me, V3 eye, float 
             z.zombiePos = zom->pos;
         }
     }
-    // weapons: shoot / throw at it when it is in sight, close
-    bool inSight = zom && now - z.zombieSeenAt < 0.3f && state != ZHE_DOWN;
-    ZheFight(bot, z, zom, inSight, eye, now, act, lookAt, b);
+    // weapons: shoot / throw at it when it is in sight, close; the knife out otherwise
+    if (state != ZHE_DOWN)
+        ZheFight(bot, z, zom, inSight, me, eye, now, act, lookAt, b);
     bool fighting = act;
     float since = now - z.zombieSeenAt, zdist = Len(z.zombiePos - me);
-    bool threat = since < 3.0f && zdist < 1000.0f;
-    bool calm = since > 8.0f || zdist > 1500.0f;
     z.sweep = 25; // looks around while walking
 
-    // run from the zombie (also when down: crawl away), out of its sight
-    if (threat)
+    // healed or picked up by a teammate close by: still (the help stops when the patient moves)
+    void* helper = state >= 1 && state <= ZHE_DOWN ? ZheHelperOf(bot, now) : nullptr;
+    if (helper && Len(Origin(helper) - me) < 200.0f)
     {
-        if (now >= z.fleeUntil || Len2D(z.fleeGoal - me) < 120.0f)
+        z.doing = state == ZHE_DOWN ? "down, being picked up" : "being healed";
+        z.fleeing = false;
+        act = true;
+        lookAt = Eye(helper);
+        b = 0;
+        return;
+    }
+    if (state == ZHE_DOWN)
+    {
+        z.fleeing = false;
+        z.gen = nullptr;
+        if (since < 3.0f && zdist < 1000.0f)
         {
-            z.fleeGoal = ZheFleeGoal(bot, me, z.zombiePos);
-            z.fleeUntil = now + 2.5f;
+            // crawl away from it, out of its sight
+            if (now >= z.fleeUntil || Len2D(z.fleeGoal - me) < 80.0f)
+            {
+                z.fleeGoal = ZheFleeGoal(bot, me, z.zombiePos);
+                z.fleeUntil = now + 4.0f;
+            }
+            goal = z.fleeGoal;
+            hasGoal = true;
+            arrive = 60;
+            z.doing = "crawling away from the zombie";
+            return;
         }
+        // crawl to the closest teammate standing, who can pick it up (still once one comes)
+        const ZhePlayer* mate = nullptr;
+        for (auto& p : g_zhe.players)
+            if (p.e != bot && ZheStanding(p.state) && (!mate || Len(p.pos - me) < Len(mate->pos - me)))
+                mate = &p;
+        if (mate && Len(mate->pos - me) > 160.0f && !helper)
+        {
+            goal = mate->pos;
+            hasGoal = true;
+            arrive = 140;
+        }
+        z.doing = helper ? "down, a teammate comes" : "down, waiting for help";
+        return;
+    }
+
+    // run from the zombie to somewhere out of its sight (behind a building, a wall), the whole way there; arrived and
+    // out of sight: hide; seen again or it comes closer to the spot than the bot: somewhere else
+    bool threat = since < 1.0f && zdist < (now < z.hideUntil ? 700.0f : 1100.0f);
+    if (threat && !z.fleeing)
+    {
+        z.fleeing = true;
+        z.fleeGoal = ZheFleeGoal(bot, me, z.zombiePos);
+        z.fleeUntil = now + 7.0f;
+        z.hideUntil = 0;
+    }
+    if (z.fleeing)
+    {
+        bool reached = Len2D(z.fleeGoal - me) < 90.0f;
+        bool cutOff = since < 0.5f && Len2D(z.zombiePos - z.fleeGoal) < Len2D(me - z.fleeGoal);
+        if (reached || now >= z.fleeUntil || cutOff)
+        {
+            if (since > 1.5f && ZheHidden(bot, me, z.zombiePos))
+            {
+                z.fleeing = false;
+                z.hideUntil = now + 4.0f + Rnd() * 5.0f; // out of sight: hide a while
+            }
+            else if (since > 10.0f)
+                z.fleeing = false; // long gone
+            else
+            {
+                z.fleeGoal = ZheFleeGoal(bot, me, z.zombiePos);
+                z.fleeUntil = now + 7.0f;
+            }
+        }
+    }
+    if (z.fleeing)
+    {
         goal = z.fleeGoal;
         hasGoal = true;
         arrive = 60;
         z.sweep = 0;
-        z.doing = state == ZHE_DOWN ? "crawling away from the zombie" : "running from the zombie";
+        z.doing = fighting ? "running from the zombie, shooting" : "running from the zombie";
         z.gen = nullptr;
-        z.hideUntil = -1; // hides once it is lost
         // right behind: jump about (harder to hit, up onto things)
-        if (state != ZHE_DOWN && zdist < 300.0f && now >= z.nextJump && !fighting)
+        if (zdist < 260.0f && since < 0.5f && now >= z.nextJump && !fighting)
         {
             b |= IN_JUMP;
             z.nextJump = now + 0.9f + Rnd() * 1.2f;
         }
         return;
     }
-    // just lost it: hide a moment, crouched, watching where it was, before going back to work
-    if (z.hideUntil < 0)
-        z.hideUntil = now + 3.0f + Rnd() * 4.0f;
     if (fighting)
     {
         z.doing = "fighting the zombie";
         return;
     }
-    if (state != ZHE_DOWN && now < z.hideUntil)
+    // hidden: crouched, still, watching the way it would come
+    if (now < z.hideUntil)
     {
         z.doing = "hiding";
         act = true;
@@ -5877,25 +6023,7 @@ static void ZheHumanThink(void* bot, ZheBot& z, int state, V3 me, V3 eye, float 
         b |= IN_DUCK;
         return;
     }
-    if (state == ZHE_DOWN)
-    {
-        // down: crawl to the closest teammate standing, who can pick it up
-        const ZhePlayer* mate = nullptr;
-        for (auto& p : g_zhe.players)
-            if (p.e != bot && ZheStanding(p.state) && (!mate || Len(p.pos - me) < Len(mate->pos - me)))
-                mate = &p;
-        bool helped = false;
-        for (auto& o : g_zheBots)
-            helped |= o.second.useTarget == bot && o.second.helping == bot;
-        if (mate && Len(mate->pos - me) > 160.0f && !helped)
-        {
-            goal = mate->pos;
-            hasGoal = true;
-            arrive = 140;
-        }
-        z.doing = helped ? "down, being helped" : "down, waiting for help";
-        return;
-    }
+    bool calm = since > 8.0f || zdist > 1500.0f;
     // the exits are open: out
     const ZheExit* exit = nullptr;
     for (auto& x : g_zhe.exits)
@@ -5914,49 +6042,45 @@ static void ZheHumanThink(void* bot, ZheBot& z, int state, V3 me, V3 eye, float 
         z.doing = "escaping";
         return;
     }
-    // a teammate down: pick them up (unless the zombie waits there)
-    const ZhePlayer* down = nullptr;
+    // a teammate down (first) or hurt (when calm): pick them up / heal them, one bot each, unless the zombie waits there
+    const ZhePlayer* patient = nullptr;
     for (auto& p : g_zhe.players)
-        if (p.e != bot && p.state == ZHE_DOWN && Len(p.pos - me) < 3500.0f &&
-            !(now - z.zombieSeenAt < 8.0f && Len(z.zombiePos - p.pos) < 500.0f) &&
-            (!down || Len(p.pos - me) < Len(down->pos - me)))
-            down = &p;
-    if (down)
+    {
+        if (p.e == bot || p.state < 1 || p.state > ZHE_DOWN || (p.state != ZHE_DOWN && !calm))
+            continue;
+        if (Len(p.pos - me) > (p.state == ZHE_DOWN ? 3500.0f : 1500.0f))
+            continue;
+        if (now - z.zombieSeenAt < 8.0f && Len(z.zombiePos - p.pos) < 500.0f)
+            continue;
+        void* other = ZheHelperOf(p.e, now);
+        if (other && other != bot)
+            continue;
+        if (!patient || (p.state == ZHE_DOWN) > (patient->state == ZHE_DOWN) ||
+            (p.state == ZHE_DOWN) == (patient->state == ZHE_DOWN) && Len(p.pos - me) < Len(patient->pos - me))
+            patient = &p;
+    }
+    if (patient)
     {
         z.gen = nullptr;
-        if (z.helping != down->e)
+        z.helping = patient->e;
+        bool down = patient->state == ZHE_DOWN;
+        if (wasHelping != patient->e)
+            ZheRadio(bot, 3, 1, down ? "affirmative (going to pick a teammate up)" : "affirmative (going to heal a teammate)");
+        if (ZheUseOn(bot, z, patient->e, me, now, goal, hasGoal, arrive, act, lookAt, b))
         {
-            z.helping = down->e;
-            ZheRadio(bot, 3, 1, "affirmative (going to help a teammate up)");
-        }
-        if (ZheUseOn(bot, z, down->e, me, now, goal, hasGoal, arrive, act, lookAt, b))
-        {
-            z.doing = "helping a teammate up";
-            // held a long time with no change: let go and press again
-            if (z.useDownAt > 0 && now - z.useDownAt > 12.0f)
+            z.doing = down ? "picking a teammate up" : "healing a teammate";
+            z.sweep = 0;
+            // pressed and not among its helpers: let go and press again
+            if (z.useDownAt > 0 && now - z.useDownAt > 0.8f && !ZheHelpedBy(patient->e, bot))
             {
-                ZheUseReport(bot, z, down->e, "teammate down", 0);
-                z.useReleaseUntil = now + 0.3f;
+                z.useReleaseUntil = now + 0.25f;
                 z.useDownAt = 0;
+                if (++z.useRetries % 4 == 0)
+                    ZheUseReport(bot, z, patient->e, down ? "teammate down" : "teammate hurt", 0);
             }
         }
         else
-            z.doing = "going to help a teammate up";
-        return;
-    }
-    z.helping = nullptr;
-    // hurt and safe: heal (+use on nothing: looking at the floor, away from the generators)
-    if ((state == 1 || state == 2) && calm)
-    {
-        z.doing = "healing";
-        const ZheGen* nearGen = nullptr;
-        for (auto& g : g_zhe.gens)
-            if (g.active && Len(g.pos - me) < 160.0f)
-                nearGen = &g;
-        act = true;
-        lookAt = nearGen ? me + (me - nearGen->pos) : me + V3{ cosf(z.yaw / RAD), sinf(z.yaw / RAD), 0 } * 64.0f;
-        lookPitch = 80.0f;
-        b |= IN_USE;
+            z.doing = down ? "going to pick a teammate up" : "going to heal a teammate";
         return;
     }
     // item boxes: walked into to open (a gun, a grenade, a toolbox): close ones always, farther ones while it has no
