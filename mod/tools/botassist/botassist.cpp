@@ -2976,6 +2976,7 @@ static AddBotFn g_AddBot;
 // the room). Bots are added only for the room's AI players: per team, as many as the room has. team: 0 T, 1 CT,
 // 2 any; returns the team to add (0/1) or -1 to refuse.
 static const int MODE_ZOMBIE_GIANT = 30; // Zombie Giant: see HookZombieGiant
+static const int MODE_ZHE = 51;          // Manhunt: see DriveZheBot
 static void MarkZgPlayers();
 static int g_consoleBotAdd = 0; // inside "bot_add" / "bot_add_t" / "bot_add_ct" typed in the console
 
@@ -2999,15 +3000,18 @@ static int RoomBotQuota(int team, const char* which)
         if (!m.fakePlayer)
             want[m.team == 1 ? 1 : 2]++;
     LeaveCriticalSection(&g_matchLock);
-    if (CoopMode() || GameMode() == MODE_ZOMBIE_GIANT)
+    // Manhunt starts when everyone in the room is in (humans on CT, the zombie is drawn from them); the game asks
+    // for its bots as terrorists to balance the teams
+    bool oneTeam = GameMode() == MODE_ZOMBIE_GIANT || GameMode() == MODE_ZHE;
+    if (CoopMode() || oneTeam)
     {
-        want[2] += want[1]; // co-op, Zombie Giant (the giant comes from the CT players): everyone on CT
+        want[2] += want[1]; // co-op, Zombie Giant (the giant comes from the CT players), Manhunt: everyone on CT
         want[1] = 0;
     }
     if (CoopMode() && team == 0)
         team = 2; // Zombie Disaster Zone asks for its bots as terrorists: they join CT like the others
-    if (GameMode() == MODE_ZOMBIE_GIANT)
-        team = 1; // its soldier bots (asked for as T or CT) are the room's AI players
+    if (oneTeam)
+        team = 1; // Zombie Giant's soldier bots, Manhunt's players (asked for as T or CT): the room's AI players
     // team index 0 (T) -> 1, 1 (CT) -> 2
     int t = team == 0 ? 1 : team == 1 ? 2 : (want[2] - g_matchAdded[2] >= want[1] - g_matchAdded[1] ? 2 : 1);
     if (g_matchAdded[t] >= want[t])
@@ -5075,12 +5079,12 @@ static void FixCrossbowCls(DWORD delta)
 // Facts (mp.dll, preferred base): CBasePlayer module by id 0x1087f310 (thiscall player, id; 9 = CZHEHumanModule,
 // state at +0x18: 0 healthy, 1 / 2 hurt, 3 down (dies after 180 s unless picked up), 5 escaped);
 // CZHEGenerator +0x1bc state (0..3 progress, 4 repaired, 5 overheating: stop, 6 blown), +0x190 how many repair it,
-// +0x1c4 gauge; CBaseEntity +0x50 touch function (the exit zones get ExitTouch 0x108ea1e0 when they open).
-static const int MODE_ZHE = 51;
+// +0x1c4 gauge. The exit zones (esc_exitzone) always let humans out: the map's doors (func_door exit_door1..4) block
+// them until the rules fire ms_exit_active (multisource, subtotal 5), which opens two exits at random.
 static const DWORD MP_PLAYER_MODULE = 0x1087f310;
 static const int ZHE_IS_ZOMBIE = 0x2166, ZHE_HUMAN_MODULE = 9, ZHE_HUMAN_STATE = 0x18;
 static const int ZHE_GEN_STATE = 0x1bc, ZHE_GEN_USERS = 0x190, ZHE_GEN_GAUGE = 0x1c4;
-static const int ENT_TOUCH = 0x50, EV_EFFECTS = 0x128, EF_NODRAW = 0x80;
+static const int EV_EFFECTS = 0x128, EF_NODRAW = 0x80, EV_TARGETNAME = 0x1fc;
 static const int ZHE_DOWN = 3, ZHE_ESCAPED = 5, ZHE_ZOMBIE = 100;
 typedef void*(__thiscall* PlayerModuleFn)(void* player, int id);
 
@@ -5176,6 +5180,7 @@ static void ZheScan(float now)
     g_zhe.exits.clear();
     g_zhe.players.clear();
     bool spots = g_zhe.spots.empty();
+    std::vector<V3> openDoors, doors;
     ForEntitiesNear({ 0, 0, 0 }, 32000.0f, [&](void* e) {
         unsigned char* v = Vars(e);
         const char* cls = ClassName(e);
@@ -5195,17 +5200,34 @@ static void ZheScan(float now)
         }
         else if (!strcmp(cls, "esc_exitzone"))
         {
-            unsigned char* p = (unsigned char*)PrivateOf(e);
             V3 c = Center(e);
             c.z = Vec((float*)(v + EV_ABSMIN)).z + 36.0f;
-            ZheExit x{ e, c, p && *(void**)(p + ENT_TOUCH) != nullptr };
-            g_zhe.exits.push_back(x);
+            g_zhe.exits.push_back({ e, c, false });
             if (spots)
                 g_zhe.spots.push_back(c);
+        }
+        else if (!strcmp(cls, "func_door") && !strncmp(Str(F<int>(v, EV_TARGETNAME)), "exit_door", 9))
+        {
+            // a brush door's origin is its offset from where the map placed it: moved = open
+            doors.push_back(Center(e));
+            if (Len(Origin(e)) > 8.0f)
+                openDoors.push_back(Center(e));
         }
         else if ((F<int>(v, EV_FLAGS) & FL_CLIENT) && Alive(e))
             g_zhe.players.push_back({ e, Origin(e), ZheState(e) });
     });
+    // each exit zone belongs to its nearest door
+    for (auto& x : g_zhe.exits)
+    {
+        float best = 1e9f;
+        bool open = false;
+        for (auto& d : doors)
+            if (Len(d - x.pos) < best)
+                best = Len(d - x.pos);
+        for (auto& d : openDoors)
+            open |= Len(d - x.pos) <= best + 1.0f;
+        x.open = open;
+    }
     int active = 0, repaired = 0;
     for (auto& g : g_zhe.gens)
     {
@@ -5215,7 +5237,9 @@ static void ZheScan(float now)
     bool open = false;
     for (auto& x : g_zhe.exits)
         open |= x.open;
-    if (!g_zhe.reported && !g_zhe.gens.empty())
+    if (!active)
+        g_zhe.reported = false; // between rounds every spot is hidden
+    else if (!g_zhe.reported)
     {
         g_zhe.reported = true;
         Log("Manhunt: %d generator spots (%d in use), %d exits, %d players", (int)g_zhe.gens.size(), active,
