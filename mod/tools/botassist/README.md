@@ -493,3 +493,27 @@ Facts: player module by id 0x1087f310 (thiscall player, id; 9 = CZHEHumanModule,
 5 overheating, 6 blown), +0x190 players repairing, +0x1c4 gauge; entvars +0x1fc targetname.
 Log lines: "Manhunt: ..." in botassist.log, each bot's task every 10 s in botassist_debug.log.
 `resource/ZombieHorrorEscape/ZHE_RuleBonus_Dedi.csv` (score bonuses, a dedicated-server file) is missing offline.
+
+## Zombie 4: Darkness (mode 29, ZB4)
+
+Rules: CSOGameRulesZombie4Reboot (vtable 0x11968564). Day and night alternate (rules +0x6e8, 1 = night, copied to
+each player's +0x2eec).
+
+- A zombie killed at night falls groggy (player +0x2eef, 0x11465b00 from CBasePlayer::Killed; it takes no damage) and
+  gets up 5 s later (rules death think, vfunc 0x118). Killed by day it dies and respawns 7 s later (rules vfunc 0x1d4)
+  through CBasePlayer::PlayerDeathThink 0x114c3cb0 and respawn 0x113fa200 (cdecl pev, copy corpse).
+- It dies for good only when the lethal hit, by day and not a grenade, comes from a human with Concentrated Fire on
+  (attacker +0x2ef8): the rules' damage hook (vfunc 0x1b8, 0x11462340) sets the victim's +0x2ee8 = 1 and the "can
+  respawn" check 0x114bdf00 then says no.
+- botassist watches the dead zombies (`Z4Watch`, every 0.5 s from StartFrame). One still down 9 s (groggy) / 11 s
+  (dead) after dying, and not killed for good, gets the game's death think twice and then respawn (only while the
+  round runs: CSO match +0x27c / +0x27d). botassist.log: "ZB4: zombie ... down", "still down ... ->", "is up again".
+- Human skills are client commands handled by the rules' ClientCommand (vfunc 0x24, 0x11461460): `zb4 AdrShot`
+  (key 6, Concentrated Fire: adrenaline +0x2f10 >= 30 of 100, burns it until it's gone) and `zb4 Kick` (key 5: a
+  trace along the view knocks a zombie back; on a groggy zombie it takes some of its max health and gives
+  adrenaline). The zombies' W+W sprint is 0x114616b0 (+0x2eee).
+- Human bots (`Z4BotSkills`, every 0.25 s): Concentrated Fire on the nearest zombie in sight by day when it's hurt
+  (half health or 1500 or less) or the gauge is nearly full and it's close; at night only to save themselves (full
+  gauge, zombie within 350 u). They kick a zombie in their face (half the time) or a groggy one at their feet, with
+  the view turned to it for the command and given back. Logged as "ZB4: bot ... Concentrated Fire" (botassist.log)
+  and "ZB4 bot ...: kicks" (botassist_debug.log).
