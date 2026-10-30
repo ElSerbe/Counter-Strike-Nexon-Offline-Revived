@@ -5062,6 +5062,620 @@ static void FixCrossbowCls(DWORD delta)
     Log("classic crossbow: %s", ok ? "fires crossbow_bolt (its own bolt class doesn't exist)" : "NOT patched (unexpected code)");
 }
 
+// ---------------------------------------------------------------- Manhunt (mode 51, ZHE) with room bots
+// One random player is the zombie (CSOGameRulesZHE 0x107a6290 shuffles every living client, bots included, and marks
+// CBasePlayer +0x2167; the zombie then has +0x2166). The humans repair the map's generators (esc_generator,
+// CZHEGenerator: one of the 3 spots of each of the 7 groups is used) and run to an exit (esc_exitzone, its touch
+// function is set once enough generators work). The stock bot AI knows none of it, so botassist drives every bot:
+// - humans repair (hold +use looking at a generator; let go while it overheats, state 5, or it blows: state 6),
+//   run from the zombie when it comes, pick up a teammate who is down (hold +use looking at them), heal themselves
+//   when hurt and safe (+use looking at the floor), and run to an open exit;
+// - the zombie hunts the humans it can see or hear, else the generators being repaired, and hits a generator that
+//   has progress when nobody is around. Humans who are down are left alone (the mode's own rule).
+// Facts (mp.dll, preferred base): CBasePlayer module by id 0x1087f310 (thiscall player, id; 9 = CZHEHumanModule,
+// state at +0x18: 0 healthy, 1 / 2 hurt, 3 down (dies after 180 s unless picked up), 5 escaped);
+// CZHEGenerator +0x1bc state (0..3 progress, 4 repaired, 5 overheating: stop, 6 blown), +0x190 how many repair it,
+// +0x1c4 gauge; CBaseEntity +0x50 touch function (the exit zones get ExitTouch 0x108ea1e0 when they open).
+static const int MODE_ZHE = 51;
+static const DWORD MP_PLAYER_MODULE = 0x1087f310;
+static const int ZHE_IS_ZOMBIE = 0x2166, ZHE_HUMAN_MODULE = 9, ZHE_HUMAN_STATE = 0x18;
+static const int ZHE_GEN_STATE = 0x1bc, ZHE_GEN_USERS = 0x190, ZHE_GEN_GAUGE = 0x1c4;
+static const int ENT_TOUCH = 0x50, EV_EFFECTS = 0x128, EF_NODRAW = 0x80;
+static const int ZHE_DOWN = 3, ZHE_ESCAPED = 5, ZHE_ZOMBIE = 100;
+typedef void*(__thiscall* PlayerModuleFn)(void* player, int id);
+
+struct ZheGen
+{
+    void* e;
+    V3 pos;
+    int state, users;
+    float gauge;
+    bool active;
+};
+struct ZheExit
+{
+    void* e;
+    V3 pos;
+    bool open;
+};
+struct ZhePlayer
+{
+    void* e;
+    V3 pos;
+    int state; // ZheState
+};
+static struct
+{
+    int level = -1;
+    float nextScan = 0;
+    std::vector<ZheGen> gens;
+    std::vector<ZheExit> exits;
+    std::vector<ZhePlayer> players;
+    std::vector<V3> spots; // every generator spot and exit: places to run to
+    bool reported = false;
+    bool anyOpen = false;
+    int repaired = -1;
+} g_zhe;
+
+struct ZheBot
+{
+    float lastThink = 0, yaw = 0, pitch = 0;
+    bool init = false;
+    void* gen = nullptr;            // generator it repairs
+    float lastGauge = -1, gaugeCheck = 0, closerUntil = 0;
+    float fleeUntil = 0;
+    V3 fleeGoal{};
+    float zombieSeenAt = -100;
+    V3 zombiePos{};
+    void* target = nullptr;         // zombie: the human it hunts
+    float nextTarget = 0, nextAttack = 0;
+    void* hitGen = nullptr;         // zombie: generator it smashes
+    float hitUntil = 0, hitDoneUntil = 0;
+    V3 stuckFrom{};
+    float stuckCheck = 0, detourUntil = 0, detourYaw = 0;
+    int stuckCount = 0;
+    float nextReport = 0;
+    const char* doing = "";
+    int lastState = -2;
+};
+static std::unordered_map<void*, ZheBot> g_zheBots;
+
+// ZheState: CZHEHumanModule state, ZHE_ZOMBIE for the zombie, -1 unknown (no module yet)
+static int ZheState(void* edict)
+{
+    __try
+    {
+        unsigned char* pl = (unsigned char*)PrivateOf(edict);
+        if (!pl)
+            return -1;
+        if (pl[ZHE_IS_ZOMBIE])
+            return ZHE_ZOMBIE;
+        unsigned char* mod = (unsigned char*)((PlayerModuleFn)(MP_PLAYER_MODULE + g_mpDelta))(pl, ZHE_HUMAN_MODULE);
+        return mod ? *(int*)(mod + ZHE_HUMAN_STATE) : -1;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        return -1;
+    }
+}
+
+static bool ZheStanding(int state) { return state >= 0 && state < ZHE_DOWN; }
+
+static void ZheScan(float now)
+{
+    if (g_zhe.level != g_nav.level)
+    {
+        g_zhe = {};
+        g_zhe.level = g_nav.level;
+        g_zheBots.clear();
+    }
+    if (now < g_zhe.nextScan && now > g_zhe.nextScan - 2.0f)
+        return;
+    g_zhe.nextScan = now + 0.3f;
+    g_zhe.gens.clear();
+    g_zhe.exits.clear();
+    g_zhe.players.clear();
+    bool spots = g_zhe.spots.empty();
+    ForEntitiesNear({ 0, 0, 0 }, 32000.0f, [&](void* e) {
+        unsigned char* v = Vars(e);
+        const char* cls = ClassName(e);
+        if (!cls)
+            return;
+        if (!strcmp(cls, "esc_generator"))
+        {
+            unsigned char* p = (unsigned char*)PrivateOf(e);
+            if (!p)
+                return;
+            // the spots not used this round stay hidden (EF_NODRAW from the generator's spawn)
+            ZheGen g{ e, Origin(e), *(int*)(p + ZHE_GEN_STATE), *(int*)(p + ZHE_GEN_USERS), *(float*)(p + ZHE_GEN_GAUGE),
+                      !(F<int>(v, EV_EFFECTS) & EF_NODRAW) };
+            g_zhe.gens.push_back(g);
+            if (spots)
+                g_zhe.spots.push_back(g.pos);
+        }
+        else if (!strcmp(cls, "esc_exitzone"))
+        {
+            unsigned char* p = (unsigned char*)PrivateOf(e);
+            V3 c = Center(e);
+            c.z = Vec((float*)(v + EV_ABSMIN)).z + 36.0f;
+            ZheExit x{ e, c, p && *(void**)(p + ENT_TOUCH) != nullptr };
+            g_zhe.exits.push_back(x);
+            if (spots)
+                g_zhe.spots.push_back(c);
+        }
+        else if ((F<int>(v, EV_FLAGS) & FL_CLIENT) && Alive(e))
+            g_zhe.players.push_back({ e, Origin(e), ZheState(e) });
+    });
+    int active = 0, repaired = 0;
+    for (auto& g : g_zhe.gens)
+    {
+        active += g.active;
+        repaired += g.active && g.state == 4;
+    }
+    bool open = false;
+    for (auto& x : g_zhe.exits)
+        open |= x.open;
+    if (!g_zhe.reported && !g_zhe.gens.empty())
+    {
+        g_zhe.reported = true;
+        Log("Manhunt: %d generator spots (%d in use), %d exits, %d players", (int)g_zhe.gens.size(), active,
+            (int)g_zhe.exits.size(), (int)g_zhe.players.size());
+        for (auto& g : g_zhe.gens)
+            DLog("Manhunt generator at %.0f %.0f %.0f: state %d, gauge %.1f, users %d, effects 0x%x, solid %d", g.pos.x,
+                 g.pos.y, g.pos.z, g.state, g.gauge, g.users, F<int>(Vars(g.e), EV_EFFECTS), F<int>(Vars(g.e), EV_SOLID));
+        for (auto& p : g_zhe.players)
+            Log("Manhunt: '%s' is %s", String(F<int>(Vars(p.e), EV_NETNAME)),
+                p.state == ZHE_ZOMBIE ? "the zombie" : p.state < 0 ? "not in the game yet" : "a human");
+    }
+    if (repaired != g_zhe.repaired)
+    {
+        if (g_zhe.repaired >= 0)
+            Log("Manhunt: %d of %d generators repaired", repaired, active);
+        g_zhe.repaired = repaired;
+    }
+    if (open != g_zhe.anyOpen)
+    {
+        g_zhe.anyOpen = open;
+        Log("Manhunt: the exits are %s", open ? "open" : "closed");
+    }
+}
+
+static const ZhePlayer* ZheZombieNear(V3 me)
+{
+    const ZhePlayer* best = nullptr;
+    for (auto& p : g_zhe.players)
+        if (p.state == ZHE_ZOMBIE && (!best || Len(p.pos - me) < Len(best->pos - me)))
+            best = &p;
+    return best;
+}
+
+// somewhere to run to: far from the zombie, not past it, not too far from here
+static V3 ZheFleeGoal(V3 me, V3 zombie)
+{
+    V3 best = me + (me - zombie) * 2.0f;
+    float bestScore = -1e30f;
+    V3 away = me - zombie;
+    float al = Len2D(away) > 1 ? Len2D(away) : 1;
+    for (V3 s : g_zhe.spots)
+    {
+        V3 d = s - me;
+        float dl = Len2D(d);
+        if (dl < 300.0f)
+            continue;
+        float dot = (d.x * away.x + d.y * away.y) / (dl * al);
+        if (dot < -0.2f)
+            continue; // the way there goes past the zombie
+        float score = Len2D(s - zombie) - 0.5f * dl + dot * 300.0f;
+        if (score > bestScore)
+        {
+            bestScore = score;
+            best = s;
+        }
+    }
+    return best;
+}
+
+// the generator to repair: close, not near the zombie, a teammate there is a plus (repairs go faster together)
+static void* ZhePickGen(void* bot, V3 me, V3 zombie, bool zombieKnown)
+{
+    void* best = nullptr;
+    float bestScore = 1e30f;
+    for (auto& g : g_zhe.gens)
+    {
+        if (!g.active || g.state == 4)
+            continue;
+        float score = Len(g.pos - me);
+        int mates = 0;
+        for (auto& b : g_zheBots)
+            if (b.first != bot && b.second.gen == g.e)
+                mates++;
+        score += mates * 500.0f - g.users * 200.0f - g.gauge * 2.0f;
+        if (zombieKnown && Len2D(zombie - g.pos) < 700.0f)
+            score += 2000.0f;
+        if (score < bestScore)
+        {
+            bestScore = score;
+            best = g.e;
+        }
+    }
+    return best;
+}
+
+static const ZheGen* ZheGenOf(void* e)
+{
+    for (auto& g : g_zhe.gens)
+        if (g.e == e)
+            return &g;
+    return nullptr;
+}
+
+// a human bot: what to do, where to go and look
+static void ZheHumanThink(void* bot, ZheBot& z, int state, V3 me, V3 eye, float now, V3& goal, bool& hasGoal, float& arrive,
+                          bool& act, V3& lookAt, float& lookPitch, unsigned short& b)
+{
+    const ZhePlayer* zom = ZheZombieNear(me);
+    if (zom)
+    {
+        float zd = Len(zom->pos - me);
+        if (zd < 350.0f || (zd < 1100.0f && CanSee(bot, eye, zom->e)))
+        {
+            z.zombieSeenAt = now;
+            z.zombiePos = zom->pos;
+        }
+    }
+    bool threat = now - z.zombieSeenAt < 4.0f && Len(z.zombiePos - me) < 900.0f;
+    bool calm = now - z.zombieSeenAt > 6.0f || Len(z.zombiePos - me) > 1400.0f;
+
+    // run from the zombie (also when down: crawl away)
+    if (threat)
+    {
+        if (now >= z.fleeUntil || Len2D(z.fleeGoal - me) < 150.0f)
+        {
+            z.fleeGoal = ZheFleeGoal(me, z.zombiePos);
+            z.fleeUntil = now + 3.0f;
+        }
+        goal = z.fleeGoal;
+        hasGoal = true;
+        arrive = 60;
+        z.doing = "running from the zombie";
+        z.gen = nullptr;
+        return;
+    }
+    if (state == ZHE_DOWN)
+    {
+        // down: crawl to the closest teammate standing, who can pick it up
+        const ZhePlayer* mate = nullptr;
+        for (auto& p : g_zhe.players)
+            if (p.e != bot && ZheStanding(p.state) && (!mate || Len(p.pos - me) < Len(mate->pos - me)))
+                mate = &p;
+        if (mate && Len(mate->pos - me) > 90.0f)
+        {
+            goal = mate->pos;
+            hasGoal = true;
+            arrive = 80;
+        }
+        z.doing = "down, waiting for help";
+        return;
+    }
+    // the exits are open: out
+    const ZheExit* exit = nullptr;
+    for (auto& x : g_zhe.exits)
+        if (x.open && (!exit || Len(x.pos - me) < Len(exit->pos - me)))
+            exit = &x;
+    if (exit)
+    {
+        goal = exit->pos;
+        hasGoal = true;
+        arrive = 8;
+        z.doing = "escaping";
+        return;
+    }
+    // a teammate down: pick them up (unless the zombie waits there)
+    const ZhePlayer* down = nullptr;
+    for (auto& p : g_zhe.players)
+        if (p.e != bot && p.state == ZHE_DOWN && Len(p.pos - me) < 3500.0f &&
+            !(now - z.zombieSeenAt < 8.0f && Len(z.zombiePos - p.pos) < 500.0f) &&
+            (!down || Len(p.pos - me) < Len(down->pos - me)))
+            down = &p;
+    if (down)
+    {
+        z.gen = nullptr;
+        z.doing = "helping a teammate up";
+        if (Len2D(down->pos - me) > 60.0f)
+        {
+            goal = down->pos;
+            hasGoal = true;
+            arrive = 50;
+        }
+        else
+        {
+            act = true;
+            lookAt = down->pos + V3{ 0, 0, -10 };
+            b |= IN_USE;
+        }
+        return;
+    }
+    // hurt and safe: heal (+use on nothing: looking at the floor, away from the generators)
+    if ((state == 1 || state == 2) && calm)
+    {
+        z.doing = "healing";
+        const ZheGen* nearGen = nullptr;
+        for (auto& g : g_zhe.gens)
+            if (g.active && Len(g.pos - me) < 160.0f)
+                nearGen = &g;
+        act = true;
+        lookAt = nearGen ? me + (me - nearGen->pos) : me + V3{ cosf(z.yaw / RAD), sinf(z.yaw / RAD), 0 } * 64.0f;
+        lookPitch = 80.0f;
+        b |= IN_USE;
+        return;
+    }
+    // repair
+    const ZheGen* g = z.gen ? ZheGenOf(z.gen) : nullptr;
+    if (!g || !g->active || g->state == 4)
+    {
+        z.gen = ZhePickGen(bot, me, z.zombiePos, now - z.zombieSeenAt < 15.0f);
+        g = z.gen ? ZheGenOf(z.gen) : nullptr;
+        z.lastGauge = -1;
+    }
+    if (!g)
+    {
+        // nothing left to repair and the exits still shut: stay near the others
+        z.doing = "waiting for the exits";
+        const ZhePlayer* mate = nullptr;
+        for (auto& p : g_zhe.players)
+            if (p.e != bot && ZheStanding(p.state) && (!mate || Len(p.pos - me) < Len(mate->pos - me)))
+                mate = &p;
+        if (mate && Len(mate->pos - me) > 250.0f)
+        {
+            goal = mate->pos;
+            hasGoal = true;
+            arrive = 150;
+        }
+        return;
+    }
+    float d = Len2D(g->pos - me);
+    if (d > 78.0f || now < z.closerUntil)
+    {
+        goal = g->pos;
+        hasGoal = true;
+        arrive = now < z.closerUntil ? 20 : 60;
+        z.doing = "going to a generator";
+        return;
+    }
+    act = true;
+    lookAt = g->pos + V3{ 0, 0, 36 };
+    if (g->state == 5 || g->state == 6)
+    {
+        z.doing = "waiting: the generator overheats";
+        z.lastGauge = -1;
+        return; // hands off
+    }
+    b |= IN_USE;
+    z.doing = "repairing";
+    // no progress while holding +use: not close enough (or not facing it), step in
+    if (z.lastGauge < 0 || g->gauge > z.lastGauge + 0.01f)
+    {
+        z.lastGauge = g->gauge;
+        z.gaugeCheck = now + 3.0f;
+    }
+    else if (now >= z.gaugeCheck)
+    {
+        z.closerUntil = now + 0.6f;
+        z.gaugeCheck = now + 3.0f;
+    }
+}
+
+// the zombie: hunt, else go where the humans repair
+static void ZheZombieThink(void* bot, ZheBot& z, V3 me, V3 eye, float now, V3& goal, bool& hasGoal, float& arrive, bool& act,
+                           V3& lookAt, float& lookPitch, unsigned short& b)
+{
+    if (now >= z.nextTarget || (z.target && !Alive(z.target)))
+    {
+        z.nextTarget = now + 0.4f;
+        void* best = nullptr;
+        float bestD = 1e30f;
+        for (auto& p : g_zhe.players)
+        {
+            if (!ZheStanding(p.state))
+                continue; // the zombie, humans who are down, who escaped
+            float d = Len(p.pos - me);
+            bool known = d < 500.0f || (d < 1600.0f && CanSee(bot, eye, p.e)) || (p.e == z.target && d < 2000.0f);
+            if (known && d < bestD)
+            {
+                bestD = d;
+                best = p.e;
+            }
+        }
+        z.target = best;
+    }
+    if (z.target)
+    {
+        V3 tp = Origin(z.target);
+        float d = Len(tp - me);
+        goal = tp;
+        hasGoal = true;
+        arrive = 20;
+        z.doing = "hunting";
+        z.hitGen = nullptr;
+        if (d < 90.0f)
+        {
+            act = d < 70.0f;
+            lookAt = Center(z.target);
+            if (now >= z.nextAttack)
+            {
+                b |= IN_ATTACK;
+                z.nextAttack = now + 0.5f;
+            }
+        }
+        return;
+    }
+    // nobody in sight: the generators being repaired (the zombie knows where they are), else the most repaired one
+    const ZheGen* g = z.hitGen ? ZheGenOf(z.hitGen) : nullptr;
+    if (!g || g->state == 4 || (now > z.hitUntil && z.hitUntil > 0))
+    {
+        if (g && now > z.hitUntil && z.hitUntil > 0)
+            z.hitDoneUntil = now + 20.0f; // done with this one for a while
+        const ZheGen* best = nullptr;
+        float bestScore = 1e30f;
+        for (auto& c : g_zhe.gens)
+        {
+            if (!c.active || c.state == 4 || (c.e == z.hitGen && now < z.hitDoneUntil))
+                continue;
+            float score = Len(c.pos - me) - c.users * 3000.0f - c.gauge * 20.0f;
+            if (score < bestScore)
+            {
+                bestScore = score;
+                best = &c;
+            }
+        }
+        if (best != g)
+        {
+            z.hitGen = best ? best->e : nullptr;
+            z.hitUntil = 0;
+        }
+        g = best;
+    }
+    if (!g)
+    {
+        z.doing = "patrolling";
+        return;
+    }
+    float d = Len2D(g->pos - me);
+    if (d > 85.0f)
+    {
+        goal = g->pos;
+        hasGoal = true;
+        arrive = 70;
+        z.doing = g->users ? "going to a generator being repaired" : "patrolling the generators";
+        return;
+    }
+    // at the generator, nobody around: smash it for a few seconds if it has progress
+    if (z.hitUntil == 0)
+        z.hitUntil = now + (g->gauge > 0 ? 5.0f : 1.0f);
+    act = true;
+    lookAt = g->pos + V3{ 0, 0, 30 };
+    z.doing = "smashing a generator";
+    if (g->gauge > 0 && now >= z.nextAttack)
+    {
+        b |= IN_ATTACK;
+        z.nextAttack = now + 0.5f;
+    }
+}
+
+// a room bot in Manhunt: botassist plays it (true: aim, movement and buttons replaced)
+static bool DriveZheBot(void* bot, float& yaw, float& pitch, float& fwd, float& side, unsigned short& buttons)
+{
+    if (GameMode() != MODE_ZHE || !Alive(bot) || g_edictToPrivate < 0)
+        return false;
+    float now = Now();
+    ZheScan(now);
+    int state = ZheState(bot);
+    if (state < 0 || state == ZHE_ESCAPED)
+        return false;
+    ZheBot& z = g_zheBots[bot];
+    BotState& st = StateFor(bot);
+    if (!z.init || now < z.lastThink - 1.0f || now - z.lastThink > 2.0f)
+    {
+        z = ZheBot();
+        z.init = true;
+        z.yaw = F<float>(Vars(bot), EV_VANGLE + 4);
+        z.stuckFrom = Origin(bot);
+        z.stuckCheck = now + 1.0f;
+        st.path.clear();
+    }
+    float dt = now - z.lastThink;
+    dt = dt <= 0 || dt > 0.25f ? 0.02f : dt;
+    z.lastThink = now;
+    if (state != z.lastState)
+    {
+        static int reports = 0;
+        if (reports++ < 60)
+            Log("Manhunt: bot '%s' is now %s", String(F<int>(Vars(bot), EV_NETNAME)),
+                state == ZHE_ZOMBIE ? "the zombie" : state == 0 ? "healthy" : state == ZHE_DOWN ? "down" : "hurt");
+        z.lastState = state;
+    }
+    V3 me = Origin(bot), eye = Eye(bot);
+    V3 goal{}, lookAt{};
+    bool hasGoal = false, act = false;
+    float arrive = 40, lookPitch = 0;
+    unsigned short b = 0;
+    if (state == ZHE_ZOMBIE)
+        ZheZombieThink(bot, z, me, eye, now, goal, hasGoal, arrive, act, lookAt, lookPitch, b);
+    else
+        ZheHumanThink(bot, z, state, me, eye, now, goal, hasGoal, arrive, act, lookAt, lookPitch, b);
+
+    float moveYaw = z.yaw;
+    bool move = false;
+    V3 wp;
+    if (hasGoal && NextWaypoint(bot, st, me, goal, arrive, wp))
+    {
+        moveYaw = YawOf(wp - me);
+        move = true;
+    }
+    if (move && now < z.detourUntil)
+        moveYaw = z.detourYaw;
+    float lookYaw = move ? moveYaw : z.yaw;
+    float wantPitch = 0;
+    if (act)
+    {
+        V3 d = lookAt - eye;
+        lookYaw = YawOf(d);
+        wantPitch = lookPitch != 0 ? lookPitch : PitchOf(d);
+    }
+    z.yaw = Approach(z.yaw, lookYaw, 400.0f * dt);
+    float k = dt * 8.0f > 1.0f ? 1.0f : dt * 8.0f;
+    z.pitch += (wantPitch - z.pitch) * k;
+    float f = 0, s = 0;
+    if (move)
+    {
+        float rel = AngleDiff(moveYaw, z.yaw) / RAD;
+        f = cosf(rel) * 400.0f;
+        s = -sinf(rel) * 400.0f;
+    }
+    // stuck: a jump, then a way round
+    if (now >= z.stuckCheck)
+    {
+        if (move && Len2D(me - z.stuckFrom) < 24.0f)
+            z.stuckCount++;
+        else
+            z.stuckCount = 0;
+        if (z.stuckCount == 2)
+            b |= IN_JUMP;
+        else if (z.stuckCount >= 3)
+        {
+            z.detourYaw = z.yaw + (Rnd() < 0.5f ? 100.0f : -100.0f);
+            z.detourUntil = now + 1.2f;
+            st.nextRepath = 0;
+            z.stuckCount = 0;
+        }
+        z.stuckFrom = me;
+        z.stuckCheck = now + 1.0f;
+    }
+    if (f > 50.0f)
+        b |= IN_FORWARD;
+    else if (f < -50.0f)
+        b |= IN_BACK;
+    if (s > 50.0f)
+        b |= IN_MOVERIGHT;
+    else if (s < -50.0f)
+        b |= IN_MOVELEFT;
+    yaw = AngleDiff(z.yaw, 0.0f);
+    pitch = z.pitch < -89.0f ? -89.0f : z.pitch > 89.0f ? 89.0f : z.pitch;
+    fwd = f;
+    side = s;
+    buttons = (unsigned short)((buttons & IN_DUCK) | b);
+    if (now >= z.nextReport)
+    {
+        z.nextReport = now + 10.0f;
+        const ZheGen* g = z.gen ? ZheGenOf(z.gen) : z.hitGen ? ZheGenOf(z.hitGen) : nullptr;
+        DLog("Manhunt bot '%s' (%s, state %d) at %.0f %.0f %.0f: %s; goal %.0f u away; generator state %d gauge %.1f "
+             "users %d",
+             String(F<int>(Vars(bot), EV_NETNAME)), state == ZHE_ZOMBIE ? "zombie" : "human", state, me.x, me.y, me.z,
+             z.doing, hasGoal ? Len(goal - me) : 0.0f, g ? g->state : -1, g ? g->gauge : 0.0f, g ? g->users : 0);
+    }
+    return true;
+}
+
 // ---------------------------------------------------------------- table overrides
 // The games' data tables (Zombie Scenario's maps/ZBS_*_<map>, resource/...) are CSV files encrypted with TEA (.cso).
 // mp.dll asks for them through 0x1146cb10(table, name, encrypted); all of them end in hw.dll's .cso loader 0x027583e0
@@ -6394,6 +7008,28 @@ static void HookedRunPlayerMove(void* fakeclient, const float* angles, float fwd
                     if (DriveZgBot(fakeclient, y, p, f, sd, bt))
                     {
                         aim[0] = p < -89.0f ? -89.0f : p > 89.0f ? 89.0f : p;
+                        aim[1] = y;
+                        fwd = f;
+                        side = sd;
+                        buttons = bt;
+                        st.driven = true;
+                        float* va = (float*)(v + EV_VANGLE); // fixangle: see below
+                        float* ang = (float*)(v + EV_ANGLES);
+                        va[0] = aim[0];
+                        va[1] = aim[1];
+                        va[2] = 0;
+                        ang[0] = aim[0] / -3.0f;
+                        ang[1] = aim[1];
+                        ang[2] = 0;
+                    }
+                }
+                if (!scenario && GameMode() == MODE_ZHE)
+                {
+                    float y = aim[1], p = aim[0], f = fwd, sd = side;
+                    unsigned short bt = buttons;
+                    if (DriveZheBot(fakeclient, y, p, f, sd, bt))
+                    {
+                        aim[0] = p;
                         aim[1] = y;
                         fwd = f;
                         side = sd;

@@ -425,3 +425,20 @@ The room panel redraws itself (and the tooltip) after a settings change only whe
 high). A new rift level (lowMid ZSDIFFICULTY, bit 45) left the tooltip on the room's first level: botassist points
 that load (0x105bcd2b) at its own mask with bit 45 added. Rift levels unlock one by one on the server (Data/ZSRift.json
 `UnlockByClearing`): the highest one unlocked is the best clear + 1, sent in Packet_ZSRift type 0.
+
+## Manhunt (mode 51, ZHE) with room bots
+One random player is the zombie (CSOGameRulesZHE 0x107a6290 shuffles every living client, bots included); the others
+repair generators (`esc_generator`, CZHEGenerator: one of the 3 spots of each of the 7 groups is used, the others stay
+EF_NODRAW) and leave through an exit (`esc_exitzone`, its touch function is set once enough generators work). The stock
+bot AI knows none of it, so botassist plays every bot there (`DriveZheBot`):
+- humans repair the closest generator nobody else takes (hold +use facing it; let go while it overheats, state 5, or
+  it blows, state 6), run from the zombie when it is seen or close, pick up teammates who are down (+use facing
+  them), heal themselves when hurt and safe (+use looking at the floor), and run to an open exit;
+- the zombie hunts the standing humans it sees or hears, else goes to the generators being repaired (the zombie knows
+  where they are) and hits one that has progress when nobody is around; humans who are down are left alone.
+
+Facts: player module by id 0x1087f310 (thiscall player, id; 9 = CZHEHumanModule, state +0x18: 0 healthy, 1 / 2 hurt,
+3 down, 5 escaped); CBasePlayer +0x2166 = the zombie; CZHEGenerator +0x1bc state (0..3 progress, 4 repaired,
+5 overheating, 6 blown), +0x190 players repairing, +0x1c4 gauge; CBaseEntity +0x50 touch, +0x54 use, +0x4c think.
+Log lines: "Manhunt: ..." in botassist.log, each bot's task every 10 s in botassist_debug.log.
+`resource/ZombieHorrorEscape/ZHE_RuleBonus_Dedi.csv` (score bonuses, a dedicated-server file) is missing offline.
