@@ -25,6 +25,14 @@ to `Bin/botassist.log`. Settings: `Bin/botassist.ini`.
 
 Build (VS 2019 Build Tools, x86): `cl /nologo /O2 /EHsc /MT /LD botassist.cpp /link /out:botassist.asi user32.lib`
 
+Source layout: `botassist.cpp` holds what every mode shares (settings, entities, navigation, scenario companions,
+room AI players, buying, teams, console, hooks, the create-room UI). Each mode with its own bot behaviour lives in
+`modes/`, included by botassist.cpp where it was (one translation unit, so a mode file uses the shared helpers
+defined before it): `zombie_giant.inl` (mode 30), `manhunt.inl` (51), `zombie_disaster_zone.inl` (59),
+`zombie4_darkness.inl` (29). A mode file only runs in its mode (each entry point checks `GameMode()`); a change
+for one mode goes in its file, so the other modes' AI stays as it was. The shared code calls into them only from
+the hooks (`HookedRunPlayerMove` per bot, `HookedStartFrame` per frame) and a few mode checks in buying and teams.
+
 ## mp.dll facts (CSO build of 2026, preferred base 0x10000000)
 
 - `g_engfuncs` copy: 0x121d3a58 (GiveFnptrsToDll copies 0xd5 dwords; CSO's table has extra functions, so indices
