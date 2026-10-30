@@ -447,12 +447,28 @@ there (`DriveZheBot`):
   aims with an error (it can miss); after losing sight it goes where they were (30 % of the time a wrong guess
   nearby), looks around, and gives up after 3 to 6 s. botassist.log tells when it spots, hears and gives up.
 
+Weapons: everyone starts with bare hands (botassist doesn't hand out the room's weapons in this mode). The map's
+item boxes (`customwb`, resource/ZHE/zheweaponbox_1..4.json: guns such as the MAC-10, M14 EBR, Glock, Deagle, XM1014,
+M60, cannon; the zhebox tools; smoke, flash, sticky bomb) open when walked into (CCustomWeaponBox::CustomWBTouch
+0x108e9bb0). Calm humans open the close ones, and farther ones while they lack a gun with ammunition or a grenade.
+With the zombie in sight and close they shoot it with a gun that has ammunition while running from it (reloading when
+the clip is empty), throw a grenade at it now and then (200 to 750 u), and throw a gun away once it is empty (there
+is no ammunition to be had). The items are read from CBasePlayer m_rgpPlayerItems (offset found at run time, logged
+in botassist_debug.log with what each bot carries).
+
+Radio: the stock AI's chatter is off (bot_chatter off, its radio commands dropped); the bots say "Enemy spotted"
+when they see the zombie, "Taking fire" when hurt, "Need backup" when down, "Affirmative" when they go to pick
+someone up, "Sector clear" when their generator is done and "Go go go" when the exits open (one message every
+2.5 s at most).
+
 Using things the way the game checks it: CBasePlayer::PlayerUse (0x114c4ea0) picks, among the usable entities whose
 box is within 64 u of the player's origin, the one the view (v_angle) points at best from the eyes, so the bots aim at
 the middle of the box. While +use is held, the generator (0x108e9380) and the human module (0x10803140, also hurt
 teammates) keep a helper only with no attack button and when 0x11516f90 passes: the target's vfunc 0x128 position
 seen from the player's, normalised in 3D, then only x/y against pev->angles, within the cone *(float*)[0x11e49458]
-degrees. Too close to something lower (a teammate down) fails it, so the bots step back. When +use doesn't take,
+degrees (90 on zhe_heorgen). Too close to something lower (a teammate down) fails it, so the bots step back.
+The generator only takes the press while aimed, so +use goes down once the view is on the box; a bot missing from
+the generator's repairers (+0x18c, player indexes) after 0.8 s lets go and presses again. When +use doesn't take,
 botassist_debug.log gets the numbers once ("+use on the ... does nothing").
 
 Facts: player module by id 0x1087f310 (thiscall player, id; 9 = CZHEHumanModule, state +0x18: 0 healthy, 1 / 2 hurt,
