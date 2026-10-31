@@ -54,6 +54,75 @@ static bool Z4Respawn(void* e)
     }
 }
 
+// Tougher zombies: health +30 %, armor x2. The rules' MakeZombie (vfunc 0x28c, 0x11461f40, thiscall rules, player,
+// infector, class) sets them: a first zombie gets the match's zombie health (CSO match +0x218: players / first zombies
+// x 1000) and 1000 armor; an infected human gets half its infector's health (at least 2000) and armor (at least 500),
+// x the class's night factor at night. The result goes to the player's base health +0x2e8c (what a respawn, the end
+// of the groggy state and the night bonus start from), pev health 0x178 / max health 0x1dc and armor 0x1e8. A first
+// zombie is scaled; an infected one already inherits its (scaled) infector's half, so only the floors are scaled
+// (2000 -> 2600 health, 500 -> 1000 armor), or the bonus would compound down the chain of infections.
+static const float Z4_HEALTH_SCALE = 1.3f, Z4_ARMOR_SCALE = 2.0f;
+static const DWORD MP_Z4_MAKE_ZOMBIE = 0x11461f40;
+typedef void(__fastcall* Z4MakeZombieFn)(void* rules, void* edx, void* player, void* infector, int cls);
+static Z4MakeZombieFn g_Z4MakeZombie;
+
+static void __fastcall HookedZ4MakeZombie(void* rules, void* edx, void* player, void* infector, int cls)
+{
+    float infHealth = 0, infArmor = 0;
+    __try
+    {
+        if (infector)
+        {
+            unsigned char* iv = *(unsigned char**)((unsigned char*)infector + 8);
+            infHealth = *(float*)(iv + 0x178);
+            infArmor = *(float*)(iv + 0x1e8);
+        }
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        infector = nullptr;
+    }
+    g_Z4MakeZombie(rules, edx, player, infector, cls);
+    __try
+    {
+        unsigned char* p = (unsigned char*)player;
+        unsigned char* v = *(unsigned char**)(p + 8);
+        float health = *(float*)(p + 0x2e8c), armor = *(float*)(v + 0x1e8);
+        bool scaleHealth = !infector || infHealth * 0.5f < 2000.0f;
+        bool scaleArmor = !infector || infArmor * 0.5f < 500.0f;
+        if (scaleHealth)
+        {
+            *(float*)(p + 0x2e8c) = health * Z4_HEALTH_SCALE;
+            *(float*)(v + 0x178) = *(float*)(v + 0x178) * Z4_HEALTH_SCALE;
+            *(float*)(v + 0x1dc) = *(float*)(p + 0x2e8c);
+        }
+        if (scaleArmor)
+            *(float*)(v + 0x1e8) = armor * Z4_ARMOR_SCALE;
+        static int reports = 0;
+        if (reports++ < 40)
+            Log("ZB4: '%s' turns zombie (%s): health %.0f -> %.0f, armor %.0f -> %.0f", String(*(int*)(v + EV_NETNAME)),
+                infector ? "infected" : "first zombie", health, *(float*)(p + 0x2e8c), armor, *(float*)(v + 0x1e8));
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+    }
+}
+
+static void HookZ4MakeZombie()
+{
+    static bool tried = false;
+    if (tried)
+        return;
+    tried = true;
+    void** slot = (void**)(MP_Z4_VTABLE + g_mpDelta + 0x28c);
+    if (Readable(slot, 4) && *slot == (void*)(MP_Z4_MAKE_ZOMBIE + g_mpDelta))
+    {
+        g_Z4MakeZombie = (Z4MakeZombieFn)*slot;
+        PatchSlot(slot, (void*)HookedZ4MakeZombie);
+    }
+    Log("ZB4: %s", g_Z4MakeZombie ? "zombies get +30 % health and x2 armor" : "zombie health NOT hooked (unexpected code)");
+}
+
 // Every dead zombie that wasn't killed for good should be up again within seconds (groggy 5 s, dead 7 s): one still
 // down well after that goes through the game's own death think, then its respawn, and the log tells its state.
 struct Z4Dead
@@ -71,6 +140,7 @@ static void Z4Watch()
         g_z4Dead.clear();
         return;
     }
+    HookZ4MakeZombie();
     float now = Now();
     if (now >= next - 10.0f && now < next)
         return;

@@ -522,6 +522,12 @@ each player's +0x2eec).
 - botassist watches the dead zombies (`Z4Watch`, every 0.5 s from StartFrame). One still down 9 s (groggy) / 11 s
   (dead) after dying, and not killed for good, gets the game's death think twice and then respawn (only while the
   round runs: CSO match +0x27c / +0x27d). botassist.log: "ZB4: zombie ... down", "still down ... ->", "is up again".
+- Zombies are tougher than stock: health +30 %, armor x2. The rules' MakeZombie (vfunc 0x28c, 0x11461f40, thiscall
+  rules, player, infector, class) gives a first zombie the match's zombie health (CSO match +0x218) and 1000 armor,
+  an infected human half its infector's health (at least 2000) and armor (at least 500), x the class night factor.
+  botassist wraps it: a first zombie's base health (player +0x2e8c: respawns, groggy and night start from it),
+  health, max health and armor are scaled; an infected one inherits half of its scaled infector, so only the floors
+  are scaled (2600 health, 1000 armor). botassist.log: "ZB4: ... turns zombie".
 - Human skills are client commands handled by the rules' ClientCommand (vfunc 0x24, 0x11461460): `zb4 AdrShot`
   (key 6, Concentrated Fire: adrenaline +0x2f10 >= 30 of 100, burns it until it's gone) and `zb4 Kick` (key 5: a
   trace along the view knocks a zombie back; on a groggy zombie it takes some of its max health and gives
