@@ -647,6 +647,94 @@ static V3 Portal(int ai, int d, int bi)
 
 static float NavWetCost(int area); // Zombie Giant: areas under water cost more
 
+// ---- places that kill: the map's trigger_hurt brushes and drops too high to survive
+// botassist's own paths (A* below: companions, Manhunt, Zombie Giant, human bots backing off from zombies) treated a
+// jump off a balcony like a walk, so bots took the drop instead of the stairs, and some dropped into pits whose floor
+// is a trigger_hurt (7 bots in one Mutation round). The hurt brushes (solid, entvars +0x11c != SOLID_NOT; damage at
+// +0x210) are listed again every 5 s (doors and buttons can turn them on and off); nav areas inside one are left out
+// of every path, a drop between areas costs extra beyond a step and drops above HURT_DROP_MAX are never taken.
+static const int EV_SOLID = 0x11c, EV_DMG = 0x210;
+static const float SAFE_DROP = 64.0f, HURT_DROP_MAX = 400.0f, DROP_COST = 4.0f;
+struct HurtZone
+{
+    V3 lo, hi;
+};
+static std::vector<HurtZone> g_hurtZones;
+static std::vector<char> g_navHurt; // per nav area: inside a hurt zone
+static int g_hurtLevel = -1;
+static float g_hurtNext = 0;
+
+static bool InHurtZone(V3 p, float pad = 16.0f)
+{
+    for (auto& h : g_hurtZones)
+        if (p.x > h.lo.x - pad && p.x < h.hi.x + pad && p.y > h.lo.y - pad && p.y < h.hi.y + pad &&
+            p.z > h.lo.z - 72.0f && p.z < h.hi.z + pad)
+            return true;
+    return false;
+}
+
+static void UpdateHurtZones()
+{
+    float now = Now();
+    if (g_hurtLevel == g_nav.level && now < g_hurtNext && now > g_hurtNext - 10.0f)
+        return;
+    bool newLevel = g_hurtLevel != g_nav.level;
+    g_hurtLevel = g_nav.level;
+    g_hurtNext = now + 5.0f;
+    std::vector<HurtZone> zones;
+    float minDmg = 1e9f, maxDmg = 0;
+    ForEntitiesNear(V3{ 0, 0, 0 }, 1e6f, [&](void* e) {
+        if (strcmp(ClassName(e), "trigger_hurt"))
+            return;
+        unsigned char* v = Vars(e);
+        float dmg = F<float>(v, EV_DMG);
+        if (!F<int>(v, EV_SOLID) || dmg <= 0)
+            return;
+        zones.push_back({ Vec((float*)(v + EV_ABSMIN)), Vec((float*)(v + EV_ABSMAX)) });
+        minDmg = min(minDmg, dmg);
+        maxDmg = max(maxDmg, dmg);
+    });
+    bool changed = zones.size() != g_hurtZones.size() || newLevel || g_navHurt.size() != g_nav.areas.size();
+    g_hurtZones.swap(zones);
+    if (!changed)
+        return;
+    g_navHurt.assign(g_nav.areas.size(), 0);
+    int inside = 0;
+    for (size_t i = 0; i < g_nav.areas.size(); i++)
+    {
+        const NavArea& a = g_nav.areas[i];
+        if (InHurtZone(a.center, 0.0f))
+            g_navHurt[i] = 1, inside++;
+    }
+    Log("hurt zones (%s): %d trigger_hurt (damage %.0f..%.0f), %d of %d nav areas left out of paths",
+        g_nav.map.c_str(), (int)g_hurtZones.size(), g_hurtZones.empty() ? 0.0f : minDmg, maxDmg, inside,
+        (int)g_nav.areas.size());
+}
+
+static bool NavAreaHurts(int i) { return i >= 0 && i < (int)g_navHurt.size() && g_navHurt[i]; }
+
+// walking toward yaw from pos (feet-ish origin): would the bot drop more than maxDrop or into a hurt zone within
+// `ahead` units? The ground is probed at a few points along the way.
+static bool DropAhead(void* bot, V3 pos, float yaw, float ahead, float maxDrop)
+{
+    TraceResult tr;
+    V3 dir{ cosf(yaw / RAD), sinf(yaw / RAD), 0 };
+    V3 feet = pos - V3{ 0, 0, 36 };
+    for (float d = 24.0f; d <= ahead; d += 24.0f)
+    {
+        V3 at = pos + dir * d;
+        if (!Trace(pos, at, bot, 1, tr))
+            return false; // a wall first: no drop that way
+        V3 down = at - V3{ 0, 0, 36 + maxDrop };
+        if (Trace(at, down, bot, 1, tr))
+            return true; // no floor within maxDrop
+        V3 floor{ tr.vecEndPos[0], tr.vecEndPos[1], tr.vecEndPos[2] };
+        if (InHurtZone(floor + V3{ 0, 0, 8 }, 0.0f) || floor.z < feet.z - maxDrop)
+            return true;
+    }
+    return false;
+}
+
 // A* over areas; returns the waypoints from the bot's area to the goal
 static bool FindPath(V3 from, V3 to, std::vector<V3>& out)
 {
@@ -681,9 +769,15 @@ static bool FindPath(V3 from, V3 to, std::vector<V3>& out)
         for (int d = 0; d < 4; d++)
             for (int nb : g_nav.areas[cur].adj[d])
             {
-                if (closed[nb])
+                if (closed[nb] || (NavAreaHurts(nb) && nb != goal))
                     continue;
-                float c = cost[cur] + Len(g_nav.areas[nb].center - g_nav.areas[cur].center) + NavWetCost(nb);
+                // dropping down: the height between the two floors at their shared edge
+                V3 edge = Portal(cur, d, nb);
+                float drop = AreaZ(g_nav.areas[cur], edge.x, edge.y) - edge.z;
+                if (drop > HURT_DROP_MAX)
+                    continue;
+                float c = cost[cur] + Len(g_nav.areas[nb].center - g_nav.areas[cur].center) + NavWetCost(nb) +
+                          (drop > SAFE_DROP ? (drop - SAFE_DROP) * DROP_COST : 0.0f);
                 if (c < cost[nb])
                 {
                     cost[nb] = c;
@@ -4463,6 +4557,7 @@ static void HookedRunPlayerMove(void* fakeclient, const float* angles, float fwd
             unsigned char* v = Vars(fakeclient);
             UpdateCvars(fakeclient);
             LoadNav();
+            UpdateHurtZones();
             UpdateMatchBots();
             UpdateZgPlayers();
             if (F<int>(v, EV_FLAGS) & FL_FAKECLIENT)

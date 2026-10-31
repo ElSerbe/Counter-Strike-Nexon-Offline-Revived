@@ -8,11 +8,16 @@
 // replaced) and backs off: toward a nav area away from the zombies, scored by how far it leads from them, picked
 // again every 1.5 to 2.5 s or once reached; a jump now and then with one on its heels. No zombie close: the stock
 // AI moves it again.
+// It must not kill itself running: the retreat spot is never in a hurt zone, the way there is a nav path (shared
+// FindPath: no hurt areas, no deadly drops, drops cost extra so stairs win), and before each step the ground ahead is
+// probed (DropAhead): no hurt zone below and no drop deeper than the path allows (FLEE_FREE_DROP without a path). A
+// way that fails is turned away from; with no safe way the bot stands and fights. Jumps only on safe ground.
+static const float FLEE_FREE_DROP = 120.0f;
 struct ZfBot
 {
     V3 goal{};
-    bool has = false;
-    float goalUntil = 0, nextJump = 0, nextLog = 0;
+    bool has = false, onPath = false;
+    float goalUntil = 0, nextJump = 0, nextLog = 0, nextDropLog = 0;
 };
 static std::map<void*, ZfBot> g_zf;
 
@@ -30,7 +35,10 @@ static bool ZfRetreatSpot(V3 me, V3 dir, const std::vector<V3>& zombies, V3& out
     float best = -1e9f;
     for (int k = 0; k < 60; k++)
     {
-        const NavArea& a = g_nav.areas[rand() % g_nav.areas.size()];
+        int ai = rand() % (int)g_nav.areas.size();
+        const NavArea& a = g_nav.areas[ai];
+        if (NavAreaHurts(ai) || InHurtZone(a.center))
+            continue;
         V3 to = a.center - me;
         float d = Len2D(to);
         if (d < 250.0f || d > 900.0f || fabsf(to.z) > 120.0f)
@@ -101,17 +109,57 @@ static bool ZombieFlee(void* bot, BotState& st, float viewYaw, float& fwd, float
     if (stale)
     {
         z.has = true;
-        if (!ZfRetreatSpot(me, dir, zombies, z.goal))
+        z.onPath = ZfRetreatSpot(me, dir, zombies, z.goal);
+        if (!z.onPath)
             z.goal = me + dir * 300.0f;
         z.goalUntil = now + 1.5f + Rnd();
     }
+    // the way: a nav path to a retreat spot (vetted by FindPath), else straight away from the zombies
     V3 wp;
-    if (!NextWaypoint(bot, st, me, z.goal, 40.0f, wp))
+    // (NextWaypoint walks straight at the goal when FindPath finds no way: a one-point path to another area)
+    bool pathed = z.onPath && NextWaypoint(bot, st, me, z.goal, 40.0f, wp) && Len(st.pathGoal - z.goal) < 1.0f &&
+                  (st.path.size() > 1 || AreaAt(me) == AreaAt(z.goal));
+    if (!pathed)
+    {
         wp = me + dir * 100.0f;
-    float moveYaw = ClearYaw(bot, me, YawOf(wp - me), 40.0f);
-    if (wp.z > me.z + 24.0f && Len2D(wp - me) < 120.0f)
+        if (z.onPath)
+            z.goalUntil = min(z.goalUntil, now + 0.3f); // no path there (a drop, a hurt zone): another spot soon
+    }
+    float maxDrop = pathed ? HURT_DROP_MAX : FLEE_FREE_DROP;
+    float wantYaw = ClearYaw(bot, me, YawOf(wp - me), 40.0f), moveYaw = wantYaw;
+    bool safe = !DropAhead(bot, me, moveYaw, 72.0f, maxDrop);
+    if (!safe)
+    {
+        static const float turns[] = { 30, -30, 60, -60, 90, -90, 120, -120, 150, -150 };
+        for (float t : turns)
+        {
+            float y = wantYaw + t;
+            V3 to = me - V3{ 0, 0, 18 } + V3{ cosf(y / RAD) * 40.0f, sinf(y / RAD) * 40.0f, 0 };
+            TraceResult tr;
+            if (Trace(me - V3{ 0, 0, 18 }, to, bot, 1, tr) && !DropAhead(bot, me, y, 72.0f, FLEE_FREE_DROP))
+            {
+                moveYaw = y;
+                safe = true;
+                break;
+            }
+        }
+        z.goalUntil = min(z.goalUntil, now + 0.5f);
+        if (now >= z.nextDropLog)
+        {
+            z.nextDropLog = now + 5.0f;
+            DLog("zombie flee: bot '%s' stops at a drop / hurt zone (%s)", String(F<int>(Vars(bot), EV_NETNAME)),
+                 safe ? "turns away" : "no safe way, stands");
+        }
+        if (!safe)
+        {
+            fwd = side = 0;
+            return true;
+        }
+    }
+    bool jumpSafe = !DropAhead(bot, me, moveYaw, 120.0f, FLEE_FREE_DROP);
+    if (jumpSafe && wp.z > me.z + 24.0f && Len2D(wp - me) < 120.0f)
         buttons |= IN_JUMP;
-    if (nearest < 160.0f && now >= z.nextJump)
+    if (jumpSafe && nearest < 160.0f && now >= z.nextJump)
     {
         z.nextJump = now + 1.0f + Rnd();
         if (Rnd() < 0.4f)
@@ -128,7 +176,8 @@ static bool ZombieFlee(void* bot, BotState& st, float viewYaw, float& fwd, float
         st.lastProgress = now;
         st.nextRepath = 0;
         z.goalUntil = 0;
-        buttons |= IN_JUMP;
+        if (jumpSafe)
+            buttons |= IN_JUMP;
     }
     float rel = (moveYaw - viewYaw) / RAD;
     fwd = cosf(rel) * 250.0f;

@@ -549,6 +549,21 @@ zombie within 200 u even unseen) keeps the stock AI's aim and fire but moves awa
 2.5 s, once reached, when the zombies come round, or when stuck; a jump now and then with one within 160 u.
 `ZombieFlee=0` turns it off. botassist_debug.log: "zombie flee: bot ... backs off".
 
+Backing off used to kill bots: the path took the drop instead of the stairs, a bot with no path ran straight off a
+ledge, and several fell into pits whose floor is a `trigger_hurt` (7 in one Mutation round). Now the retreat spot is
+never in a hurt zone, the bot only follows a real nav path to it (else it moves at most a short way straight off,
+with drops up to 120 u), and before each step the ground 72 u ahead is probed (`DropAhead`: no floor within the
+allowed drop, or a hurt zone below): it turns away, or stands and fights if no way is safe. Jumps only on safe ground.
+botassist_debug.log: "zombie flee: bot ... stops at a drop / hurt zone".
+
+## Deadly places in botassist's paths (shared)
+
+`UpdateHurtZones` lists the map's solid `trigger_hurt` brushes with damage (entvars solid +0x11c, dmg +0x210, from
+mp.dll's entvars field table) every 5 s, and marks the nav areas whose centre lies in one. The shared A* (`FindPath`:
+companions, Manhunt, Zombie Giant, zombie flee) leaves those areas out (unless one is the goal), never takes a drop
+above 400 u (about half a player's health) and charges 4 per unit of drop beyond 64 u, so stairs or a ramp win over
+a jump off a balcony. botassist.log: "hurt zones (<map>): N trigger_hurt ..., M of K nav areas left out of paths".
+
 ## Classic crossbow crash (every mode)
 
 The classic crossbow (item 8977) fires "crossbowcls_bolt", a class this mp.dll doesn't have: CBaseEntity::Create

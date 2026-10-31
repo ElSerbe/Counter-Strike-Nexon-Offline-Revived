@@ -133,7 +133,6 @@ static const int PLAYER_LAST_MOVEMENT = 0xccc;
 // real speed; in this mode the bots and fake players never got it (speed 0..1 while walking). pev->maxspeed is at
 // +0x240 (entvars maxspeed, CSO layout); engine function 107 is pfnSetClientMaxspeed(edict, speed).
 static const int EV_MAXSPEED = 0x240, ENG_SETCLIENTMAXSPEED = 107;
-static const int EV_SOLID = 0x11c; // entvars solid (CSO layout: the standard one + 0x10 up to here)
 typedef void (*SetClientMaxspeedFn)(void* edict, float speed);
 static SetClientMaxspeedFn g_SetClientMaxspeed;
 static float g_zgYourMaxspeed = 0; // yours: once you can move, the freeze is over // idle kick (mp_autokick, 0x114c6b7b) after the rules' idle time
@@ -1633,6 +1632,7 @@ static void ZgFrame()
     if (cfg.enabled && g_edictToVars >= 0 && g_pGlobals && *g_pGlobals && (GameMode(), ZgActive()))
     {
         LoadNav();
+        UpdateHurtZones();
         UpdateMatchBots();
         UpdateZgPlayers();
     }
