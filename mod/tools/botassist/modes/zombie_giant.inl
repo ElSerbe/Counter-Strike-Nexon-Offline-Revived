@@ -1572,14 +1572,13 @@ static void InstallZgDebug(DWORD delta)
 // many reliable messages at once, and a fake client's reliable channel (never sent) overflowed: hw.dll drops
 // overflowed clients ("Reliable channel overflowed", rva 0x786a06). Reliable messages to fake players go unreliable
 // (MSG_ONE -> MSG_ONE_UNRELIABLE): the unreliable buffer just discards what doesn't fit.
-// The fake players are driven from the end of mp.dll's StartFrame (DLL function 0x113f8a80) too, so they play
-// when the room has no bots left (every room AI player is a fake player here).
-static const DWORD MP_GIANT_SORT_PUSH = 0x1086208a, MP_GIANT_ORDER = 0x1085f810, MP_STARTFRAME = 0x113f8a80;
+// The fake players are driven from the shared frame hook (HookedStartFrame -> ZgFrame) too, so they play when the
+// room has no bots left (every room AI player is a fake player here).
+static const DWORD MP_GIANT_SORT_PUSH = 0x1086208a, MP_GIANT_ORDER = 0x1085f810;
 static const int MSG_ONE = 1, MSG_ONE_UNRELIABLE = 8;
 static std::unordered_map<void*, float> g_zgGiantKeys;
 static float g_zgKeysAt = -100;
 static MessageBeginFn g_MessageBeginOrig;
-static void (*g_StartFrameTramp)();
 
 static float ZgGiantKey(unsigned char* pl)
 {
@@ -1628,32 +1627,14 @@ static void HookedMessageBegin(int dest, int type, const float* origin, void* ed
     g_MessageBeginOrig(dest, type, origin, ed);
 }
 
-static void ConsoleFrame();
-static void ZSRiftWatch();
-static void Z4Watch();
-static void CommandFile();
-
-static void HookedStartFrame()
+// every server frame (from the shared frame hook): the fake players play
+static void ZgFrame()
 {
-    g_StartFrameTramp();
-    __try
+    if (cfg.enabled && g_edictToVars >= 0 && g_pGlobals && *g_pGlobals && (GameMode(), ZgActive()))
     {
-        ConsoleFrame();
-        CommandFile();
-        ZSRiftWatch();
-        Z4Watch();
-        if (cfg.enabled && g_edictToVars >= 0 && g_pGlobals && *g_pGlobals && (GameMode(), ZgActive()))
-        {
-            LoadNav();
-            UpdateMatchBots();
-            UpdateZgPlayers();
-        }
-    }
-    __except (EXCEPTION_EXECUTE_HANDLER)
-    {
-        static int faults = 0;
-        if (faults++ < 5)
-            Log("exception 0x%08lX in the frame hook (ignored)", GetExceptionCode());
+        LoadNav();
+        UpdateMatchBots();
+        UpdateZgPlayers();
     }
 }
 
@@ -1678,12 +1659,8 @@ static void InstallZgPlayers(DWORD delta)
         table[ENG_MESSAGEBEGIN] = (void*)HookedMessageBegin;
         VirtualProtect(&table[ENG_MESSAGEBEGIN], 4, old, &old);
     }
-    unsigned char* sf = (unsigned char*)(MP_STARTFRAME + delta);
-    static const unsigned char sfCode[] = { 0x8b, 0x0d };
-    if (!memcmp(sf, sfCode, 2))
-        g_StartFrameTramp = (void (*)())DetourCdecl(sf, 6, (void*)HookedStartFrame);
-    Log("Zombie Giant: giant drawn at random %s, fake players' reliable messages unreliable, frame hook %s",
-        order ? "on" : "NOT hooked (unexpected code)", g_StartFrameTramp ? "on" : "NOT hooked");
+    Log("Zombie Giant: giant drawn at random %s, fake players' reliable messages unreliable",
+        order ? "on" : "NOT hooked (unexpected code)");
 }
 
 // ---------------------------------------------------------------- Zombie Giant: fake players stay in the game

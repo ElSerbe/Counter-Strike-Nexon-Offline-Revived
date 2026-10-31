@@ -29,7 +29,7 @@ Source layout: `botassist.cpp` holds what every mode shares (settings, entities,
 room AI players, buying, teams, console, hooks, the create-room UI). Each mode with its own bot behaviour lives in
 `modes/`, included by botassist.cpp where it was (one translation unit, so a mode file uses the shared helpers
 defined before it): `zombie_giant.inl` (mode 30), `manhunt.inl` (51), `zombie_disaster_zone.inl` (59),
-`zombie4_darkness.inl` (29), `zombie_humans.inl` (human bots in every PvP zombie mode). A mode file only runs in its mode (each entry point checks `GameMode()`); a change
+`zombie4_darkness.inl` (29), `zombie2_mutation.inl` (9), `zombie_humans.inl` (human bots in every PvP zombie mode). A mode file only runs in its mode (each entry point checks `GameMode()`); a change
 for one mode goes in its file, so the other modes' AI stays as it was. The shared code calls into them only from
 the hooks (`HookedRunPlayerMove` per bot, `HookedStartFrame` per frame) and a few mode checks in buying and teams.
 
@@ -564,3 +564,17 @@ Two zombie-class skill thinks look up a per-level, per-round row in a game table
 use it without checking: FUN_10948aa0 (classes 14 and 15) and FUN_10948f90 (class 1). Offline the row can be missing,
 and picking such a class in Zombie 2: Mutation crashed the game (mp+0xa28d63, null + 0x4c). botassist detours both
 (thiscall obj, player) and skips them while the row is missing ("zombie class N skill ... skipped" in botassist.log).
+
+## Zombie 2: Mutation (mode 9) with room bots
+
+`modes/zombie2_mutation.inl` (rules CSOGameRulesZombi2, ClientCommand vtable slot 0x2c = 0x1144dcc0):
+- Zombie bots stayed dead: as in Zombie 4, nothing runs a dead bot's CBasePlayer::PlayerDeathThink once it is
+  "respawnable" (dead flag 3). `ZB2Watch` (frame hook, every 0.25 s) runs it for a bot zombie respawnable for a
+  second or still dead 10 s after dying; the game decides the rest. botassist.log: "ZB2: zombie ... still down".
+- A new zombie bot sends `selzmb random` (rules vfunc 0x454 -> 0x4e0, once per zombie life: player +0x2e39).
+- `useitem zb_skill0` (zombie's G skill) with a human in sight within 700 u, `useitem hm_skill0` (human's first
+  skill) with a zombie within 350 u, every 4 to 8 s half of the time (0x1144f710 checks cooldowns and costs).
+
+The frame hook (StartFrame 0x113f8a80 detour, `HookedStartFrame`) is shared code in botassist.cpp: it runs the
+console, the command file and each mode's watcher (ZSRiftWatch, Z4Watch, ZB2Watch, ZgFrame), each of which returns
+at once outside its mode.

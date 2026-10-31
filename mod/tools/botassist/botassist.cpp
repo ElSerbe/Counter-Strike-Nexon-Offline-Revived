@@ -3701,6 +3701,8 @@ static void GuardZbSkillThinks(DWORD delta)
                                                                        : "NOT guarded (unexpected code)");
 }
 
+static void InstallFrameHook(DWORD delta);
+
 static void HookBotManager(DWORD delta)
 {
     GuardZbSkillThinks(delta);
@@ -3714,6 +3716,7 @@ static void HookBotManager(DWORD delta)
     HookZombieGiant(delta);
     InstallZgDebug(delta);
     InstallZgPlayers(delta);
+    InstallFrameHook(delta);
     InstallZgDropGuard();
     DetourChooseAppearance(delta);
     for (DWORD vt : MP_ZBBOTMGR_VTABLES)
@@ -4105,6 +4108,47 @@ static void CommandFile()
 
 #include "modes/zombie_humans.inl"
 
+#include "modes/zombie2_mutation.inl"
+
+// ---------------------------------------------------------------- the frame hook (every mode)
+// The end of mp.dll's StartFrame (DLL function 0x113f8a80) runs botassist's per-frame work: the console, the command
+// file, and each mode's watcher (each returns at once outside its mode).
+static const DWORD MP_STARTFRAME = 0x113f8a80;
+static void (*g_StartFrameTramp)();
+static void ConsoleFrame();
+static void CommandFile();
+
+static void HookedStartFrame()
+{
+    g_StartFrameTramp();
+    __try
+    {
+        ConsoleFrame();
+        CommandFile();
+        ZSRiftWatch();
+        Z4Watch();
+        ZB2Watch();
+        ZgFrame();
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        static int faults = 0;
+        if (faults++ < 5)
+            Log("exception 0x%08lX in the frame hook (ignored)", GetExceptionCode());
+    }
+}
+
+static void InstallFrameHook(DWORD delta)
+{
+    if (g_StartFrameTramp)
+        return;
+    unsigned char* sf = (unsigned char*)(MP_STARTFRAME + delta);
+    static const unsigned char sfCode[] = { 0x8b, 0x0d };
+    if (!memcmp(sf, sfCode, 2))
+        g_StartFrameTramp = (void (*)())DetourCdecl(sf, 6, (void*)HookedStartFrame);
+    Log("frame hook: %s", g_StartFrameTramp ? "on" : "NOT hooked (unexpected code)");
+}
+
 // ---------------------------------------------------------------- orders in the other modes
 // follow / cover me: back to a formation spot near the commander when it got farther than that; hold: stay on
 // the spot (it can still turn and shoot); go / take point: the game's AI again. Movement is given relative to
@@ -4469,6 +4513,8 @@ static void HookedRunPlayerMove(void* fakeclient, const float* angles, float fwd
                 }
                 if (!scenario && GameMode() == MODE_Z4)
                     Z4BotSkills(fakeclient);
+                if (!scenario && GameMode() == MODE_ZB2)
+                    ZB2BotThink(fakeclient);
                 if (monsters)
                 {
                     Command cmd{ aim[1], aim[0], fwd, side, buttons };
