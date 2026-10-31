@@ -1870,17 +1870,3 @@ static void InstallZgDropGuard()
         g_DropClientTramp = (DropClientFn)DetourCdecl(fn, sizeof(code), (void*)HookedDropClient);
     Log("Zombie Giant: engine drops %s", g_DropClientTramp ? "logged, fake players kept" : "NOT hooked (unexpected code)");
 }
-
-// The classic crossbow (item 8977, CCrossBowCls) crashed the game on every shot: its bolt class
-// ("crossbowcls_bolt", vfunc 0x344 0x10c43cc0) isn't in this mp.dll, so CBaseEntity::Create returns null and its
-// attack (0x1100de40, CCrossbow's) writes through it (mp+0xc49926). It fires CCrossbow's "crossbow_bolt"
-// (0x1100ead0) instead.
-static const DWORD MP_CROSSBOWCLS_VTABLE = 0x1183991c, MP_CROSSBOWCLS_BOLT = 0x10c43cc0, MP_CROSSBOW_BOLT = 0x1100ead0;
-static void FixCrossbowCls(DWORD delta)
-{
-    void** slot = (void**)(MP_CROSSBOWCLS_VTABLE + delta + 0x344);
-    bool ok = Readable(slot, 4) && *slot == (void*)(MP_CROSSBOWCLS_BOLT + delta);
-    if (ok)
-        PatchSlot(slot, (void*)(MP_CROSSBOW_BOLT + delta));
-    Log("classic crossbow: %s", ok ? "fires crossbow_bolt (its own bolt class doesn't exist)" : "NOT patched (unexpected code)");
-}

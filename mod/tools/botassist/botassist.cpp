@@ -137,6 +137,8 @@ static struct
     int apiPort = 30080;            // CSNZ_Server's web API (the room's AI players: GET /api/matchbots)           // in follow mode, never farther than this from you (fighting or not)              // bots spread out around you instead of all following to the same place
     int debug = 1;             // 1: botassist_debug.log (what bots look at / shoot, entities around you); 2: also laser beams
     bool buyAnyWeapon = true;  // bots buy random weapons from the whole game (botassist_weapons.txt)
+    bool zombieFlee = true;    // PvP zombie modes: human bots back off from zombies close by (modes/zombie_humans.inl)
+    float zombieFleeDistance = 450.0f;
     std::vector<int> primaries, pistols, melees;
     int skill = -1;            // 0..7, -1: the room's bot difficulty
     std::string voices = "radio"; // normal (their voice chatter), radio (radio commands, shown as text), off
@@ -218,6 +220,8 @@ static void LoadSettings()
     for (char* tok = strtok(buf, ", "); tok; tok = strtok(NULL, ", "))
         cfg.coopModes.push_back(atoi(tok));
     cfg.buyAnyWeapon = GetPrivateProfileIntA("BotAssist", "BuyAnyWeapon", 1, ini) != 0;
+    cfg.zombieFlee = GetPrivateProfileIntA("BotAssist", "ZombieFlee", 1, ini) != 0;
+    cfg.zombieFleeDistance = (float)GetPrivateProfileIntA("BotAssist", "ZombieFleeDistance", 450, ini);
     cfg.skill = GetPrivateProfileIntA("BotAssist", "Skill", -1, ini);
     GetPrivateProfileStringA("BotAssist", "Voices", "radio", buf, sizeof(buf), ini);
     cfg.voices = buf;
@@ -1892,9 +1896,10 @@ static void DropBehind(void* bot)
 // Zombie 4: Darkness) kept it, and the bought one fell to the ground (the buy handler doesn't make room). Before
 // buying, the bot throws away what its slot holds with the game's own DropPrimary / DropSecondary (0x113f1750 /
 // 0x113f1790, cdecl player: DropPlayerItem 0x114b4e60 by the class name of that slot's item), whatever is in its
-// hand: "slot1" + cl_drop missed whenever the switch hadn't happened yet. Thrown behind it, and its weaponbox can't
-// be picked up (touch +0x50 cleared), or the bot and the ones around it grabbed it again.
+// hand: "slot1" + cl_drop missed whenever the switch hadn't happened yet. Its weaponbox is removed at once (FL_KILLME),
+// or the bot and the ones around it grabbed it again; boxes nobody can pick up piled up (31 bots, each life).
 static const DWORD MP_DROP_PRIMARY = 0x113f1750, MP_DROP_SECONDARY = 0x113f1790;
+static const int FL_KILLME_ = 1 << 30;
 static bool Readable(const void* p, size_t n);
 
 // CSNZ's player and item pointers are 8-byte handles {control block, pointer}, valid when the control block's +4 is
@@ -1992,7 +1997,10 @@ static void FreeSlot(void* bot, int slot)
         const char* c = ClassName(e);
         unsigned char* p = (unsigned char*)PrivateOf(e);
         if (c && p && !strcmp(c, "weaponbox") && std::find(before.begin(), before.end(), e) == before.end())
-            *(void**)(p + 0x50) = nullptr; // CWeaponBox touch
+        {
+            *(void**)(p + 0x50) = nullptr;           // CWeaponBox touch: not picked up before the engine frees it
+            F<int>(Vars(e), EV_FLAGS) |= FL_KILLME_; // removed by the engine at the end of this frame
+        }
     });
     std::string left = SlotClass(bot, slot);
     static int reports = 0;
@@ -3563,6 +3571,30 @@ static void FixRiftTooltip(HMODULE gameUi)
     Log("GameUI room panel: redrawn after a new rift level too (difficulty tooltip)");
 }
 
+// The classic crossbow (item 8977, CCrossBowCls) crashed the game on every shot: its bolt class
+// ("crossbowcls_bolt", vfunc 0x344 0x10c43cc0) isn't in this mp.dll, so CBaseEntity::Create returns null and its
+// attack (0x10c495a0, from CCrossbow's 0x1100de40) writes through it (mp+0xc49926). Two vtables have that slot:
+// CCrossBowCls (0x1183991c, the "weapon_crossbowcls" entity) and CSimpleWpn<CCrossBowCls> (0x118391fc, what the
+// item factory 0x10c43c20 makes when the weapon is bought by item id, as the bots' room loadouts do); both fire
+// CCrossbow's "crossbow_bolt" (0x1100ead0) instead. Every mode.
+static const DWORD MP_CROSSBOWCLS_VTABLES[] = { 0x1183991c, 0x118391fc };
+static const DWORD MP_CROSSBOWCLS_BOLT = 0x10c43cc0, MP_CROSSBOW_BOLT = 0x1100ead0;
+static void FixCrossbowCls(DWORD delta)
+{
+    int patched = 0;
+    for (DWORD vt : MP_CROSSBOWCLS_VTABLES)
+    {
+        void** slot = (void**)(vt + delta + 0x344);
+        if (Readable(slot, 4) && *slot == (void*)(MP_CROSSBOWCLS_BOLT + delta))
+        {
+            PatchSlot(slot, (void*)(MP_CROSSBOW_BOLT + delta));
+            patched++;
+        }
+    }
+    Log("classic crossbow: %s (%d of 2 vtables)", patched == 2 ? "fires crossbow_bolt (its own bolt class doesn't exist)"
+                                                              : "NOT fully patched (unexpected code)", patched);
+}
+
 static void HookBotManager(DWORD delta)
 {
     FixCrossbowCls(delta);
@@ -3964,6 +3996,8 @@ static void CommandFile()
 
 #include "modes/zombie4_darkness.inl"
 
+#include "modes/zombie_humans.inl"
+
 // ---------------------------------------------------------------- orders in the other modes
 // follow / cover me: back to a formation spot near the commander when it got farther than that; hold: stay on
 // the spot (it can still turn and shoot); go / take point: the game's AI again. Movement is given relative to
@@ -4268,6 +4302,14 @@ static void HookedRunPlayerMove(void* fakeclient, const float* angles, float fwd
                     float f = fwd, sd = side;
                     unsigned short bt = buttons;
                     if (OrderedMove(fakeclient, st, aim[1], f, sd, bt))
+                    {
+                        fwd = f;
+                        side = sd;
+                        buttons = bt;
+                    }
+                    // zombies close: backing off comes before orders
+                    f = fwd, sd = side, bt = buttons;
+                    if (ZombieFlee(fakeclient, st, aim[1], f, sd, bt))
                     {
                         fwd = f;
                         side = sd;

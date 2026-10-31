@@ -29,7 +29,7 @@ Source layout: `botassist.cpp` holds what every mode shares (settings, entities,
 room AI players, buying, teams, console, hooks, the create-room UI). Each mode with its own bot behaviour lives in
 `modes/`, included by botassist.cpp where it was (one translation unit, so a mode file uses the shared helpers
 defined before it): `zombie_giant.inl` (mode 30), `manhunt.inl` (51), `zombie_disaster_zone.inl` (59),
-`zombie4_darkness.inl` (29). A mode file only runs in its mode (each entry point checks `GameMode()`); a change
+`zombie4_darkness.inl` (29), `zombie_humans.inl` (human bots in every PvP zombie mode). A mode file only runs in its mode (each entry point checks `GameMode()`); a change
 for one mode goes in its file, so the other modes' AI stays as it was. The shared code calls into them only from
 the hooks (`HookedRunPlayerMove` per bot, `HookedStartFrame` per frame) and a few mode checks in buying and teams.
 
@@ -209,6 +209,7 @@ automatic ones join CT. No more kicks in co-op modes.
   buys (`awp`, `deagle`, or a CSNZ weapon by resource name, e.g. `balrog7`) are dropped for a room AI player with
   its own weapons, random BuyAnyWeapon ones included: right after botassist's purchase they threw the room's weapon
   to the ground ("wanted to buy ... dropped" in botassist.log). Zombies (player +0x2166) buy nothing.
+  The weapons thrown that way are removed at once (FL_KILLME): 31 bots each life piled up boxes nobody could take.
 - Create-room mode grid (GameUI CModeSelectDialogV2 and its _Select / _Check, vtables 0x108d287c / 0x108d2c74 /
   0x108d3074): tiles are made in code (0x102e5cc0), one per mode of the list hw.dll builds from the server's
   GameModeList.csv; 0x102e6610 leaves out modes with mode_fun_order > 0 (GameUI 0x104341a0), which go to "Other
@@ -530,3 +531,20 @@ each player's +0x2eec).
   gauge, zombie within 350 u). They kick a zombie in their face (half the time) or a groggy one at their feet, with
   the view turned to it for the command and given back. Logged as "ZB4: bot ... Concentrated Fire" (botassist.log)
   and "ZB4 bot ...: kicks" (botassist_debug.log).
+
+## Human bots back off from zombies (PvP zombie modes)
+
+`modes/zombie_humans.inl`, every mode where zombies are players (not co-op/monster modes, Zombie Giant or Manhunt):
+a human bot (player +0x2166 clear) with a zombie in sight within `ZombieFleeDistance` (botassist.ini, 450; any
+zombie within 200 u even unseen) keeps the stock AI's aim and fire but moves away from them, to a nav area 250 to
+900 u off in the direction away from the zombies (scored by how far it leads from them), picked again every 1.5 to
+2.5 s, once reached, when the zombies come round, or when stuck; a jump now and then with one within 160 u.
+`ZombieFlee=0` turns it off. botassist_debug.log: "zombie flee: bot ... backs off".
+
+## Classic crossbow crash (every mode)
+
+The classic crossbow (item 8977) fires "crossbowcls_bolt", a class this mp.dll doesn't have: CBaseEntity::Create
+returns null and the attack (0x10c495a0) writes through it (crash at mp+0xc49926, from the bot's ItemPostFrame).
+Two vtables carry that bolt name in slot 0x344: CCrossBowCls (0x1183991c, the weapon_crossbowcls entity) and
+CSimpleWpn<CCrossBowCls> (0x118391fc, what the item factory 0x10c43c20 makes when it's bought by item id, as the
+bots' room loadouts do). botassist points both to CCrossbow's "crossbow_bolt" (0x1100ead0) at startup.
