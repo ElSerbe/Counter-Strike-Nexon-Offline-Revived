@@ -202,8 +202,8 @@ static void Z4BotSkills(void* bot)
         {
             FakeCommand(bot, "zb4", "AdrShot");
             z.nextAdr = now + 4.0f;
-            Log("ZB4: bot '%s' %s Concentrated Fire (adrenaline %.0f, %s): zombie '%s' %.0f u away, health %.0f/%.0f",
-                String(F<int>(Vars(bot), EV_NETNAME)), p[Z4_ADRSHOT] ? "fires" : "tries", adr, night ? "night" : "day",
+            Log("ZB4: bot '%s' uses Concentrated Fire (adrenaline %.0f, %s): zombie '%s' %.0f u away, health %.0f/%.0f",
+                String(F<int>(Vars(bot), EV_NETNAME)), adr, night ? "night" : "day",
                 String(F<int>(v, EV_NETNAME)), bestD, hp, maxHp);
         }
         else
