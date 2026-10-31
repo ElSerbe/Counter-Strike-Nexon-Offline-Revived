@@ -2040,6 +2040,14 @@ static void UpdateBuying(void* bot, BotState& st)
     st.wasAlive = alive;
     if (!alive || !g_ClientCommandTrampoline)
         return;
+    // a zombie (player +0x2166, every zombie mode) carries no guns: nothing to buy
+    unsigned char* me = (unsigned char*)PrivateOf(bot);
+    if (me && me[0x2166])
+    {
+        st.buyAt = 0;
+        st.checkBuyAt = 0;
+        return;
+    }
     if (GameMode() == MODE_ZHE)
         return; // Manhunt: everyone starts with bare hands, weapons come from the map's boxes (customwb)
     MatchBot* rb = RoomBotOf(bot, st);
@@ -2647,6 +2655,19 @@ static int BuyAliasSlot(const char* cmd)
     return 0;
 }
 
+// a buy command the stock AI sends: a Counter-Strike alias, or a CSNZ weapon by its resource name (models/p_<name>.mdl
+// in botassist_weapons.txt: category 1 pistol -> slot 2, 2-5 -> slot 1)
+static int StockBuySlot(const char* cmd)
+{
+    if (int slot = BuyAliasSlot(cmd))
+        return slot;
+    std::string model = "models/p_" + std::string(cmd) + ".mdl";
+    for (auto& ch : model)
+        ch = (char)tolower(ch);
+    auto cat = cfg.weaponCategory.find(model);
+    return cat == cfg.weaponCategory.end() ? 0 : cat->second == 1 ? 2 : cat->second >= 2 && cat->second <= 5 ? 1 : 0;
+}
+
 // the character a bot joins as: its room AI player's (if of its team); a room AI player on Random gets one of its
 // filter's characters of its team, or any character of its team when the filter has none; other bots get a random
 // one in co-op modes, else 0. Returns the class number the game takes (InGameID).
@@ -2718,16 +2739,20 @@ static bool OnBotCommand(void* bot)
     // fits (ZheRadio, sent past this hook)
     if (GameMode() == MODE_ZHE && (!_strnicmp(args[0], "radio", 5) || !_stricmp(args[0], "menuselect")))
         return true;
-    if (int slot = BuyAliasSlot(args[0]))
+    if (int slot = StockBuySlot(args[0]))
     {
-        // a room AI player with weapons of its own (chosen, a filter or None) doesn't buy the game's ones
+        // a room AI player with weapons of its own (chosen, a filter, None, or random ones with BuyAnyWeapon) doesn't
+        // buy the game's ones: the stock AI buys its AWP and Deagle (or a CSNZ weapon by name) right after
+        // botassist's purchase, and the game's buy throws away what the slot held, the room's weapon
         MatchBot* rb = RoomBotOf(bot, StateFor(bot));
-        bool own = rb && (slot == 1 ? rb->primary != 0 || !rb->allowPrimary.empty()
-                                    : rb->secondary != 0 || !rb->allowSecondary.empty());
+        bool own = rb && (slot == 1 ? rb->primary != 0 || !rb->allowPrimary.empty() ||
+                                          (cfg.buyAnyWeapon && !cfg.primaries.empty())
+                                    : rb->secondary != 0 || !rb->allowSecondary.empty() ||
+                                          (cfg.buyAnyWeapon && !cfg.pistols.empty()));
         if (own)
         {
             static int reports = 0;
-            if (reports++ < 20)
+            if (reports++ < 40)
                 Log("bot '%s' wanted to buy '%s': not its room loadout, dropped", rb->name.c_str(), args[0]);
             return true;
         }

@@ -204,6 +204,11 @@ automatic ones join CT. No more kicks in co-op modes.
   picked up; checked every 0.6 s.
 - New rounds respawn bots with the game's default weapons without a dead frame or a health change: a jump of
   300+ units between two frames (to a spawn point) also counts as a new life, so the room loadout is bought again.
+- Before buying the room loadout the bot empties the slot with the game's DropPrimary / DropSecondary (0x113f1750 /
+  0x113f1790, cdecl player), whatever is in its hand; the thrown weapon's weaponbox can't be picked up. Its stock AI
+  buys (`awp`, `deagle`, or a CSNZ weapon by resource name, e.g. `balrog7`) are dropped for a room AI player with
+  its own weapons, random BuyAnyWeapon ones included: right after botassist's purchase they threw the room's weapon
+  to the ground ("wanted to buy ... dropped" in botassist.log). Zombies (player +0x2166) buy nothing.
 - Create-room mode grid (GameUI CModeSelectDialogV2 and its _Select / _Check, vtables 0x108d287c / 0x108d2c74 /
   0x108d3074): tiles are made in code (0x102e5cc0), one per mode of the list hw.dll builds from the server's
   GameModeList.csv; 0x102e6610 leaves out modes with mode_fun_order > 0 (GameUI 0x104341a0), which go to "Other
