@@ -1896,10 +1896,11 @@ static void DropBehind(void* bot)
 // Zombie 4: Darkness) kept it, and the bought one fell to the ground (the buy handler doesn't make room). Before
 // buying, the bot throws away what its slot holds with the game's own DropPrimary / DropSecondary (0x113f1750 /
 // 0x113f1790, cdecl player: DropPlayerItem 0x114b4e60 by the class name of that slot's item), whatever is in its
-// hand: "slot1" + cl_drop missed whenever the switch hadn't happened yet. Its weaponbox is removed at once (FL_KILLME),
-// or the bot and the ones around it grabbed it again; boxes nobody can pick up piled up (31 bots, each life).
+// hand: "slot1" + cl_drop missed whenever the switch hadn't happened yet. Its weaponbox can't be picked up (touch
+// +0x50 cleared), or the bot and the ones around it grabbed it again, and goes away in a moment through its own think
+// (+0x4c, CWeaponBox::Kill, which DropPlayerItem schedules for much later): Kill removes the weapon inside too. Freeing
+// the box with FL_KILLME instead left that weapon behind and some (CLockOnGun) were destroyed twice: a crash.
 static const DWORD MP_DROP_PRIMARY = 0x113f1750, MP_DROP_SECONDARY = 0x113f1790;
-static const int FL_KILLME_ = 1 << 30;
 static bool Readable(const void* p, size_t n);
 
 // CSNZ's player and item pointers are 8-byte handles {control block, pointer}, valid when the control block's +4 is
@@ -1998,8 +1999,12 @@ static void FreeSlot(void* bot, int slot)
         unsigned char* p = (unsigned char*)PrivateOf(e);
         if (c && p && !strcmp(c, "weaponbox") && std::find(before.begin(), before.end(), e) == before.end())
         {
-            *(void**)(p + 0x50) = nullptr;           // CWeaponBox touch: not picked up before the engine frees it
-            F<int>(Vars(e), EV_FLAGS) |= FL_KILLME_; // removed by the engine at the end of this frame
+            *(void**)(p + 0x50) = nullptr; // CWeaponBox touch
+            if (*(void**)(p + 0x4c))       // its think (Kill) runs in a moment
+                F<float>(Vars(e), 0x114) = Now() + 0.5f;
+            static int reports = 0;
+            if (reports++ < 3)
+                Log("thrown weaponbox: think 0x%08lx, removed in 0.5 s", *(DWORD*)(p + 0x4c) ? *(DWORD*)(p + 0x4c) - g_mpDelta : 0);
         }
     });
     std::string left = SlotClass(bot, slot);
@@ -3337,6 +3342,27 @@ static void DetourChooseAppearance(DWORD delta)
     Log("bot characters hooked: new bots join as their room AI player's character");
 }
 
+// redirects a function's first len bytes (whole instructions, no relative jumps) to hook; returns a trampoline that
+// runs them and goes on with the rest (the original)
+static void* DetourCdecl(unsigned char* fn, int len, void* hook)
+{
+    unsigned char* tramp = (unsigned char*)VirtualAlloc(NULL, 32, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+    if (!tramp)
+        return nullptr;
+    memcpy(tramp, fn, len);
+    tramp[len] = 0xe9;
+    *(int*)(tramp + len + 1) = (int)((fn + len) - (tramp + len + 5));
+    DWORD old;
+    VirtualProtect(fn, len, PAGE_EXECUTE_READWRITE, &old);
+    fn[0] = 0xe9;
+    *(int*)(fn + 1) = (int)((unsigned char*)hook - (fn + 5));
+    for (int i = 5; i < len; i++)
+        fn[i] = 0x90;
+    VirtualProtect(fn, len, old, &old);
+    FlushInstructionCache(GetCurrentProcess(), fn, len);
+    return tramp;
+}
+
 #include "modes/zombie_giant.inl"
 
 #include "modes/manhunt.inl"
@@ -3595,8 +3621,89 @@ static void FixCrossbowCls(DWORD delta)
                                                               : "NOT fully patched (unexpected code)", patched);
 }
 
+// Zombie class skills that read a per-round row (zombie modes such as Zombie 2: Mutation): FUN_10948aa0 (thiscall
+// obj, player: classes 14 and 15) and FUN_10948f90 (thiscall obj, player: class 1) look up a row in a game table
+// through the engine's data manager ([0x121d3cfc]() -> vfunc 0x1c8 -> vfunc 8 (table CSO match +0x4f0, the player's
+// level 0x114b9ed0, round CSO +0x4cc + 1)) and use it without checking: offline the row can be missing (null), and
+// picking such a class crashed the game (mp+0xa28d63, from the player's think). They are skipped while it's missing.
+static const DWORD MP_ZB_SKILL_THINK_A = 0x10948aa0, MP_ZB_SKILL_THINK_B = 0x10948f90, MP_PLAYER_LEVEL = 0x114b9ed0,
+                   MP_DATA_MANAGER = 0x121d3cfc;
+typedef void(__fastcall* ZbSkillThinkFn)(void* obj, void* edx, void* player);
+static ZbSkillThinkFn g_ZbSkillThinkA, g_ZbSkillThinkB;
+
+// the row those skills read, null when the table has none (or on any fault)
+static void* ZbSkillRow(void* player)
+{
+    __try
+    {
+        typedef void*(__cdecl * GetMgrFn)();
+        typedef void*(__thiscall * SubFn)(void*);
+        typedef void*(__thiscall * RowFn)(void*, int, int, int);
+        typedef int(__thiscall * LevelFn)(void*);
+        unsigned char* cso = *(unsigned char**)(MP_CSO_RULES + g_mpDelta);
+        GetMgrFn getMgr = *(GetMgrFn*)(MP_DATA_MANAGER + g_mpDelta);
+        if (!cso || !getMgr)
+            return nullptr;
+        void* mgr = getMgr();
+        void* sub = mgr ? ((SubFn)(*(void***)mgr)[0x1c8 / 4])(mgr) : nullptr;
+        if (!sub)
+            return nullptr;
+        int level = ((LevelFn)(MP_PLAYER_LEVEL + g_mpDelta))(player);
+        return ((RowFn)(*(void***)sub)[8 / 4])(sub, *(int*)(cso + 0x4f0), level, *(int*)(cso + 0x4cc) + 1);
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        return nullptr;
+    }
+}
+
+static bool ZbSkillRowMissing(void* player, int cls, const char* which)
+{
+    unsigned char* p = (unsigned char*)player;
+    if (!p || !p[0x2166] || ZbSkillRow(player))
+        return false;
+    static int reports = 0;
+    if (reports++ < 10)
+        Log("zombie class %d skill (%s): the game table has no row for this level / round: skipped instead of crashing",
+            cls, which);
+    return true;
+}
+
+static void __fastcall HookedZbSkillThinkA(void* obj, void* edx, void* player)
+{
+    unsigned char* p = (unsigned char*)player;
+    int cls = p ? (signed char)p[0x218e] : -1;
+    if ((cls == 14 || cls == 15) && ZbSkillRowMissing(player, cls, "0x10948aa0"))
+        return;
+    g_ZbSkillThinkA(obj, edx, player);
+}
+
+static void __fastcall HookedZbSkillThinkB(void* obj, void* edx, void* player)
+{
+    unsigned char* p = (unsigned char*)player;
+    int cls = p ? (signed char)p[0x218e] : -1;
+    if (cls == 1 && ZbSkillRowMissing(player, cls, "0x10948f90"))
+        return;
+    g_ZbSkillThinkB(obj, edx, player);
+}
+
+static void GuardZbSkillThinks(DWORD delta)
+{
+    unsigned char* a = (unsigned char*)(MP_ZB_SKILL_THINK_A + delta);
+    unsigned char* b = (unsigned char*)(MP_ZB_SKILL_THINK_B + delta);
+    static const unsigned char codeA[] = { 0x55, 0x8b, 0xec, 0x83, 0xe4, 0xc0 };       // push ebp; mov ebp,esp; and esp,-40
+    static const unsigned char codeB[] = { 0x55, 0x8b, 0xec, 0x83, 0xec, 0x0c };       // push ebp; mov ebp,esp; sub esp,0c
+    if (Readable(a, sizeof(codeA)) && !memcmp(a, codeA, sizeof(codeA)))
+        g_ZbSkillThinkA = (ZbSkillThinkFn)DetourCdecl(a, sizeof(codeA), (void*)HookedZbSkillThinkA);
+    if (Readable(b, sizeof(codeB)) && !memcmp(b, codeB, sizeof(codeB)))
+        g_ZbSkillThinkB = (ZbSkillThinkFn)DetourCdecl(b, sizeof(codeB), (void*)HookedZbSkillThinkB);
+    Log("zombie class skills: %s", g_ZbSkillThinkA && g_ZbSkillThinkB ? "a missing table row no longer crashes"
+                                                                       : "NOT guarded (unexpected code)");
+}
+
 static void HookBotManager(DWORD delta)
 {
+    GuardZbSkillThinks(delta);
     FixCrossbowCls(delta);
     InstallTableOverrides();
     InstallFileOverrides();

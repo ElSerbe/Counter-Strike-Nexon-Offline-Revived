@@ -209,7 +209,9 @@ automatic ones join CT. No more kicks in co-op modes.
   buys (`awp`, `deagle`, or a CSNZ weapon by resource name, e.g. `balrog7`) are dropped for a room AI player with
   its own weapons, random BuyAnyWeapon ones included: right after botassist's purchase they threw the room's weapon
   to the ground ("wanted to buy ... dropped" in botassist.log). Zombies (player +0x2166) buy nothing.
-  The weapons thrown that way are removed at once (FL_KILLME): 31 bots each life piled up boxes nobody could take.
+  The weaponbox thrown that way can't be picked up and its own think (+0x4c, CWeaponBox::Kill, which also removes the
+  weapon inside) is brought forward to 0.5 s: 31 bots each life piled up boxes nobody could take. Freeing it with
+  FL_KILLME left the weapon inside behind and a CLockOnGun got destroyed twice (crash in OnFreeEntPrivateData).
 - Create-room mode grid (GameUI CModeSelectDialogV2 and its _Select / _Check, vtables 0x108d287c / 0x108d2c74 /
   0x108d3074): tiles are made in code (0x102e5cc0), one per mode of the list hw.dll builds from the server's
   GameModeList.csv; 0x102e6610 leaves out modes with mode_fun_order > 0 (GameUI 0x104341a0), which go to "Other
@@ -554,3 +556,11 @@ returns null and the attack (0x10c495a0) writes through it (crash at mp+0xc49926
 Two vtables carry that bolt name in slot 0x344: CCrossBowCls (0x1183991c, the weapon_crossbowcls entity) and
 CSimpleWpn<CCrossBowCls> (0x118391fc, what the item factory 0x10c43c20 makes when it's bought by item id, as the
 bots' room loadouts do). botassist points both to CCrossbow's "crossbow_bolt" (0x1100ead0) at startup.
+
+## Zombie class skills without their table row (crash fix, every zombie mode)
+
+Two zombie-class skill thinks look up a per-level, per-round row in a game table through the engine's data manager
+(`[0x121d3cfc]()` -> vfunc 0x1c8 -> vfunc 8 (CSO match +0x4f0, the player's level 0x114b9ed0, round +0x4cc + 1)) and
+use it without checking: FUN_10948aa0 (classes 14 and 15) and FUN_10948f90 (class 1). Offline the row can be missing,
+and picking such a class in Zombie 2: Mutation crashed the game (mp+0xa28d63, null + 0x4c). botassist detours both
+(thiscall obj, player) and skips them while the row is missing ("zombie class N skill ... skipped" in botassist.log).

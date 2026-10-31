@@ -1538,25 +1538,6 @@ static void ZgWatchClient(void* e, unsigned char* pl, float now, bool census)
              Len2D(Vec((float*)(v + EV_VELOCITY))), F<int>(v, 0x1a4), Origin(e).x, Origin(e).y, Origin(e).z);
 }
 
-static void* DetourCdecl(unsigned char* fn, int len, void* hook)
-{
-    unsigned char* tramp = (unsigned char*)VirtualAlloc(NULL, 32, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
-    if (!tramp)
-        return nullptr;
-    memcpy(tramp, fn, len);
-    tramp[len] = 0xe9;
-    *(int*)(tramp + len + 1) = (int)((fn + len) - (tramp + len + 5));
-    DWORD old;
-    VirtualProtect(fn, len, PAGE_EXECUTE_READWRITE, &old);
-    fn[0] = 0xe9;
-    *(int*)(fn + 1) = (int)((unsigned char*)hook - (fn + 5));
-    for (int i = 5; i < len; i++)
-        fn[i] = 0x90;
-    VirtualProtect(fn, len, old, &old);
-    FlushInstructionCache(GetCurrentProcess(), fn, len);
-    return tramp;
-}
-
 static void InstallZgDebug(DWORD delta)
 {
     ModuleRange("hw.dll", g_hwLo, g_hwHi);
