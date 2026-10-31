@@ -1,0 +1,4 @@
+Mode,Round,EvolveType,Cooltime,FlyVel,KillTime,Damage,Size,StartOffset
+14,0,0,15,1200,2,50,1,20
+14,0,1,15,1200,2,50,1,20
+14,0,2,15,1200,2,50,1,20

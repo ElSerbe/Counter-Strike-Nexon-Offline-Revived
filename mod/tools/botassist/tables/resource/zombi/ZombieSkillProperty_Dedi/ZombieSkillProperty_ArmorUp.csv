@@ -1,0 +1,4 @@
+Mode,Round,EvolveType,Cooltime,ArmorPoint,Radius,RadiusArmorPoint
+14,0,0,30,500,300,200
+14,0,1,30,800,300,300
+14,0,2,30,1000,300,400

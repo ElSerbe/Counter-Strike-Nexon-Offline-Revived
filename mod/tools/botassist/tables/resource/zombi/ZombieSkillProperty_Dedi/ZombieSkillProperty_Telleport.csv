@@ -1,0 +1,4 @@
+Mode,Round,EvolveType,Cooltime,ThrowVelocity,Damage,DamageRadius,DamageHeight,DamageTick
+14,0,0,20,800,0,0,0,1
+14,0,1,20,800,0,0,0,1
+14,0,2,20,800,0,0,0,1

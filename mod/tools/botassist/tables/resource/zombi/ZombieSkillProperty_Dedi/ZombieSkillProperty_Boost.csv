@@ -1,0 +1,4 @@
+Mode,Round,EvolveType,SpeedThreshold,GaugeMax,GaugeTick,GaugeForUseMin,GaugeInterval,GaugeTimeCharge,SpeedMin,SpeedMax,SpeedMaxBonus,Damage,DamageRadius,DamageHeight,DamageTick,DamageReduceRate,VelModKnockbackReduceRate,Endtime
+14,0,0,250,100,1,30,0.1,5,250,400,50,0,0,0,1,0,0,5
+14,0,1,250,100,1,30,0.1,5,250,400,50,0,0,0,1,0,0,5
+14,0,2,250,100,1,30,0.1,5,250,400,50,0,0,0,1,0,0,5

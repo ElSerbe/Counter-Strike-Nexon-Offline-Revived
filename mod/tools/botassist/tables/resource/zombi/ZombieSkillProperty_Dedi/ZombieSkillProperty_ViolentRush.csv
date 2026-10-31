@@ -1,0 +1,4 @@
+Mode,Round,EvolveType,Cooltime,Duration,RushSpeed,RushDamage,KnockBackMeter,KnockBackDamage,KnockBackPushPower,KnockBackUpPower,AirborneMeter,AirbornePower,FixMeter,StopAngle,CorrectRate,HoldAngle,HoldMeter,DamageReduceRate,VelModKnockbackReduceRate
+14,0,0,20,2,600,50,100,20,500,200,100,300,50,60,0.5,45,50,0,0
+14,0,1,20,2,600,50,100,20,500,200,100,300,50,60,0.5,45,50,0,0
+14,0,2,20,2,600,50,100,20,500,200,100,300,50,60,0.5,45,50,0,0

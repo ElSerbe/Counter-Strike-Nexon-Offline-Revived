@@ -1,0 +1,4 @@
+Mode,Round,EvolveType,Cooltime,HealthPoint,Radius,RadiusHealthPoint
+14,0,0,15,1000,300,500
+14,0,1,15,1500,300,700
+14,0,2,15,2000,300,1000

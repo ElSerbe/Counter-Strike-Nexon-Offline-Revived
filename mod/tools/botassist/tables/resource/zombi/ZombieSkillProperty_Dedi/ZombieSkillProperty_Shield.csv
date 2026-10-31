@@ -1,0 +1,4 @@
+Mode,Round,EvolveType,Cooltime,Duration,Amount1,DamageReduceRate1,VelModKnockbackReduceRate1,Amount2,DamageReduceRate2,VelModKnockbackReduceRate2,Amount3,DamageReduceRate3,VelModKnockbackReduceRate3,MaxSpeed
+14,0,0,15,6,500,0.3,0.3,500,0.3,0.3,500,0.3,0.3,260
+14,0,1,15,6,500,0.3,0.3,500,0.3,0.3,500,0.3,0.3,260
+14,0,2,15,6,500,0.3,0.3,500,0.3,0.3,500,0.3,0.3,260

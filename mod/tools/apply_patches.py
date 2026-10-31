@@ -33,6 +33,11 @@ EXTRA_FILES = [
     (MOD / "tools" / "botassist" / "tables" / "maps" / "ZBS_ENC_zsrift_splinter_dedi.json",
      "botassist_tables/maps/ZBS_ENC_zsrift_splinter_dedi.json", True),
 ]
+# the zombie class skills' values (gen_zombie_skills.py), dedicated-server files the game lacks
+EXTRA_FILES += [
+    (f, "botassist_tables/resource/zombi/ZombieSkillProperty_Dedi/" + f.name, True)
+    for f in sorted((MOD / "tools" / "botassist" / "tables" / "resource" / "zombi" / "ZombieSkillProperty_Dedi").glob("*.csv"))
+]
 
 # (file, va, expected original bytes, patched bytes, note)
 def _rel32(src_next: int, dst: int) -> bytes:

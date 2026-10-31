@@ -1,0 +1,4 @@
+Mode,Round,EvolveType,Cooltime,UseDelay,MaxDistMeter,PullRadius,Damage,PullPowerXY,PullPowerZ,EndDelay,DamageReduceRate,VelModKnockbackReduceRate,BuffEndTime
+14,0,0,15,0.5,300,200,50,400,200,0.5,0,0,3
+14,0,1,15,0.5,300,200,50,400,200,0.5,0,0,3
+14,0,2,15,0.5,300,200,50,400,200,0.5,0,0,3

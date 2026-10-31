@@ -1,0 +1,4 @@
+Mode,Round,EvolveType,Cooltime,Lifetime,HP,StompRange,StompSlow,Damage,ArmorHealAmount,ArmorHealTick,ArmorHealRadius,TickSlow,DamageReduceRate,VelModKnockbackReduceRate,KnockbackPower
+14,0,0,15,15,1000,200,0.6,0,100,1,200,0.8,0,0,300
+14,0,1,15,15,1500,200,0.6,0,100,1,200,0.8,0,0,300
+14,0,2,15,15,2000,200,0.6,0,100,1,200,0.8,0,0,300

@@ -1,0 +1,4 @@
+Mode,Round,EvolveType,Cooltime,Endtime,Damage,DamageRadius,DamageHeight,DamageTick,VelModKnockbackReduceRate,MoveSpeedBonus,Heal
+14,0,0,30,5,0,0,0,1,0,0.1,1000
+14,0,1,30,5,0,0,0,1,0,0.1,1000
+14,0,2,30,5,0,0,0,1,0,0.1,1000

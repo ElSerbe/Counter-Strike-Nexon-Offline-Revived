@@ -1,0 +1,4 @@
+Mode,Round,EvolveType,Cooltime,ShootSpeed,ExplodeRadius,ExplodeDamage,SlowRadius,SlowSpeed,SlowGravity,SlowDuration,DamageReduceRate,VelModKnockbackReduceRate,BuffEndTime
+14,0,0,15,900,200,20,200,0.5,1,3,0,0,3
+14,0,1,15,900,200,20,200,0.5,1,3,0,0,3
+14,0,2,15,900,200,20,200,0.5,1,3,0,0,3

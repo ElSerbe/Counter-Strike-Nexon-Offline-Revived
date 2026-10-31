@@ -1,0 +1,4 @@
+Mode,Round,EvolveType,Cooltime,Endtime,Damage,Radius,KickPowerRatio,DamageRatioConst,DamageReduceRate,VelModReduceRate,KnockbackReduceRate
+14,0,0,20,1,100,250,1,1,0,0,0
+14,0,1,20,1,100,250,1,1,0,0,0
+14,0,2,20,1,100,250,1,1,0,0,0

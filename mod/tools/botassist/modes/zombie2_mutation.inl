@@ -9,8 +9,13 @@
 // The rules' ClientCommand (Zombi2 vtable slot 0x2c, 0x1144dcc0) takes "selzmb <class>" (vfunc 0x454: "random" picks
 // one, vfunc 0x4e0; once per zombie life, player +0x2e39 set) and "useitem zb_skill<0..3>" / "useitem hm_skill<0..3>"
 // (0x1144f710: the zombie's G skill, the human's skills; cooldowns and costs are checked there). Bots:
-//   - a new zombie bot picks a random class a moment after turning;
-//   - a zombie bot with a human in sight within 700 u uses its skill now and then;
+//   - a new zombie bot picks a random class a moment after turning. "random" (vfunc 0x4e0, 0x1144f3c0) draws among the
+//     classes the player owns (player +0x2171 + class, 27 flags): a new player owns only 0, 12, 13 and 18..21 and the
+//     draw leaves out 12, 13, 18..20 and 22..26, so bots were always Regular or class 21. Bots get every flag first
+//     (the draw still applies the mode's own rules: FUN_1144cb30 and vfunc 0x4cc), once the zombie skill table has
+//     rows (LoadZombieSkillTable: without it some classes' skills crashed the game);
+//   - a zombie bot with a human in sight within 700 u uses its skill now and then (G; sometimes its second one, which
+//     only some classes have, at some evolution levels);
 //   - a human bot with a zombie within 350 u uses its first skill (sprint where the mode has it) now and then.
 static const int MODE_ZB2 = 9;
 
@@ -112,6 +117,8 @@ static void ZB2BotThink(void* bot)
         z.picked = true;
         if (!p[0x2e39])
         {
+            if (g_zbSkillRows)
+                memset(p + 0x2171, 1, 27);
             FakeCommand(bot, "selzmb", "random");
             static int reports = 0;
             if (reports++ < 40)
@@ -138,6 +145,9 @@ static void ZB2BotThink(void* bot)
     z.nextSkill = now + 4.0f + Rnd() * 4.0f;
     if (Rnd() < 0.5f)
         return;
-    FakeCommand(bot, "useitem", zombie ? "zb_skill0" : "hm_skill0");
-    DLog("ZB2 bot '%s': %s skill (enemy %.0f u away)", name, zombie ? "zombie" : "human", best);
+    const char* skill = zombie ? (Rnd() < 0.25f ? "zb_skill1" : "zb_skill0") : "hm_skill0";
+    FakeCommand(bot, "useitem", skill);
+    static int reports = 0;
+    if (reports++ < 60)
+        Log("ZB2: bot '%s' (class %d) uses %s (enemy %.0f u away)", name, (signed char)p[0x218e], skill, best);
 }

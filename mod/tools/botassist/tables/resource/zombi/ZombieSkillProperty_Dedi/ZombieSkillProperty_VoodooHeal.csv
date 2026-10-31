@@ -1,0 +1,4 @@
+Mode,Round,EvolveType,Cooltime,Endtime,Distance,Amount,Tick,DamageReduceRate,VelModKnockbackReduceRate,MoveSpeedBonus,AmountSelf,DamageReduceRateSelf,VelModKnockbackReduceRateSelf,MoveSpeedBonusSelf,HealRate,RecoverArmor
+14,0,0,15,5,300,500,1,0,0,0,500,0,0,0,1,0
+14,0,1,15,5,300,500,1,0,0,0,500,0,0,0,1,0
+14,0,2,15,5,300,500,1,0,0,0,500,0,0,0,1,0

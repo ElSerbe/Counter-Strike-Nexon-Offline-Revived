@@ -1,0 +1,4 @@
+Mode,Round,EvolveType,Cooltime,Lifetime,PullPower,Speed,Radius,Damage,DamageTick,DamageTouch,DamageReduceRate,VelModKnockbackReduceRate,Scale_X,Scale_Y,Scale_Z
+14,0,0,15,4,350,600,40,0,1,0,0,0,1,1,1
+14,0,1,15,4,350,600,40,0,1,0,0,0,1,1,1
+14,0,2,15,4,350,600,40,0,1,0,0,0,1,1,1

@@ -1,0 +1,4 @@
+Mode,Round,EvolveType,Cooltime,Endtime,Radius,DamageReduceRate,NumSmoke,HumanSight,Damage,DamageTick,VelModKnockbackReduceRate,DamageReduceRateHuman,DamageReduceRateBuff,VelModKnockbackReduceRateBuff
+14,0,0,15,10,200,0,1,100,0,1,0,0,0,0
+14,0,1,15,10,200,0,1,100,0,1,0,0,0,0
+14,0,2,15,10,200,0,1,100,0,1,0,0,0,0

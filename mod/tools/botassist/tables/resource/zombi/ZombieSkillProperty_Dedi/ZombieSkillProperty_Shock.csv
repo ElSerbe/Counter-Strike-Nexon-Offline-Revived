@@ -1,0 +1,4 @@
+Mode,Round,EvolveType,Cooltime,FlyVel,KillTime,Radius,ShockTime,Damage,Speed,SpeedEndtime,DamageReduceRate,VelModKnockbackReduceRate,Endtime,Size,TailCnt,TailLockOnDist,TailLockOnAngle
+14,0,0,15,1200,2,50,2,0,1,0,0,0,2,1,0,0,0
+14,0,1,15,1200,2,50,2,0,1,0,0,0,2,1,0,0,0
+14,0,2,15,1200,2,50,2,0,1,0,0,0,2,1,0,0,0

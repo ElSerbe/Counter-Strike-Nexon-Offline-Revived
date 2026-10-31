@@ -557,13 +557,25 @@ Two vtables carry that bolt name in slot 0x344: CCrossBowCls (0x1183991c, the we
 CSimpleWpn<CCrossBowCls> (0x118391fc, what the item factory 0x10c43c20 makes when it's bought by item id, as the
 bots' room loadouts do). botassist points both to CCrossbow's "crossbow_bolt" (0x1100ead0) at startup.
 
-## Zombie class skills without their table row (crash fix, every zombie mode)
+## Zombie class skills: the skill table (every zombie mode)
 
-Two zombie-class skill thinks look up a per-level, per-round row in a game table through the engine's data manager
-(`[0x121d3cfc]()` -> vfunc 0x1c8 -> vfunc 8 (CSO match +0x4f0, the player's level 0x114b9ed0, round +0x4cc + 1)) and
-use it without checking: FUN_10948aa0 (classes 14 and 15) and FUN_10948f90 (class 1). Offline the row can be missing,
-and picking such a class in Zombie 2: Mutation crashed the game (mp+0xa28d63, null + 0x4c). botassist detours both
-(thiscall obj, player) and skips them while the row is missing ("zombie class N skill ... skipped" in botassist.log).
+Zombie skills read their values from hw.dll's ZombieSkillTable (the engine's data manager `[0x121d3cfc]()` =
+SharedDataMgr 0x3f25310, vfunc 0x1c8 -> +0x1778, vtable 0x2c21ac4; vfunc 8 looks a row up by mode, evolution level
+0x114b9ed0 and round, with fallbacks down to mode 14 / level 0 / round 0). Its loader (vfunc 1, 0x26af410) reads 32
+files `resource/zombi/ZombieSkillProperty_Dedi/ZombieSkillProperty_<skill>.csv`, only on a dedicated server, and the
+files were never shipped: offline the table was empty. So `useitem zb_skill0` did nothing (no zombie, player or bot,
+could use its skill), and the skill thinks that read their row every frame without checking crashed the game when
+such a class was picked (FUN_10948aa0 classes 14/15 at mp+0xa28d63, FUN_10947710 the Flying zombie at mp+0x94791a).
+
+`LoadZombieSkillTable` (at startup, after the file overrides) runs the loader past its dedicated-server check
+(0x26af420), and the files come from `botassist_tables` (`gen_zombie_skills.py` writes them to
+`tables/resource/zombi/ZombieSkillProperty_Dedi`; apply_patches.py copies them). Each file needs every column the
+game reads (a missing one throws); the generator's docstring lists which class uses which skill. Nexon's values are
+unknown: the generator follows the wiki where it can and uses moderate values elsewhere. botassist.log: "zombie skill
+table: N rows" (96 expected: 32 skills x 3 evolution levels).
+
+The earlier guard stays as a fallback: FUN_10948aa0 and FUN_10948f90 are detoured (thiscall obj, player) and skipped
+while their row is missing ("zombie class N skill ... skipped" in botassist.log).
 
 ## Zombie 2: Mutation (mode 9) with room bots
 
@@ -571,9 +583,14 @@ and picking such a class in Zombie 2: Mutation crashed the game (mp+0xa28d63, nu
 - Zombie bots stayed dead: as in Zombie 4, nothing runs a dead bot's CBasePlayer::PlayerDeathThink once it is
   "respawnable" (dead flag 3). `ZB2Watch` (frame hook, every 0.25 s) runs it for a bot zombie respawnable for a
   second or still dead 10 s after dying; the game decides the rest. botassist.log: "ZB2: zombie ... still down".
-- A new zombie bot sends `selzmb random` (rules vfunc 0x454 -> 0x4e0, once per zombie life: player +0x2e39).
-- `useitem zb_skill0` (zombie's G skill) with a human in sight within 700 u, `useitem hm_skill0` (human's first
-  skill) with a zombie within 350 u, every 4 to 8 s half of the time (0x1144f710 checks cooldowns and costs).
+- A new zombie bot sends `selzmb random` (rules vfunc 0x454 -> 0x4e0 = 0x1144f3c0, once per zombie life: player
+  +0x2e39). The draw only takes classes the player owns (player +0x2171 + class): a new player owns 0, 12, 13 and
+  18..21, and the draw leaves out 12, 13, 18..20 and 22..26, so bots were always Regular or class 21. Bots get all 27
+  flags first (once the skill table has rows); the mode's own class rules still apply.
+- `useitem zb_skill0` (zombie's G skill; a quarter of the time `zb_skill1`, the second skill some classes have) with
+  a human in sight within 700 u, `useitem hm_skill0` (human's first skill) with a zombie within 350 u, every 4 to 8 s
+  half of the time (0x1144f710 -> 0x11450190 checks the class, cooldowns and costs). botassist.log: "ZB2: bot ...
+  uses".
 
 The frame hook (StartFrame 0x113f8a80 detour, `HookedStartFrame`) is shared code in botassist.cpp: it runs the
 console, the command file and each mode's watcher (ZSRiftWatch, Z4Watch, ZB2Watch, ZgFrame), each of which returns

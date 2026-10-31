@@ -1,0 +1,4 @@
+Mode,Round,EvolveType,Cooltime,WingHP,FlyingPower,FlyingPower2,JumpEnd,FlyGravity,FlySpeed,DiveSpeed,DiveLimit,DiveIgnoreKnockback
+14,0,0,15,1000,300,200,3,0.5,300,800,2,1
+14,0,1,15,1000,300,200,3,0.5,300,800,2,1
+14,0,2,15,1000,300,200,3,0.5,300,800,2,1

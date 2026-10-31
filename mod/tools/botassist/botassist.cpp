@@ -3496,6 +3496,54 @@ static void InstallFileOverrides()
     Log("file overrides: %s", g_ReadPlain ? "botassist_tables\\<file> replaces the game's plain data files" : "NOT hooked (unexpected code)");
 }
 
+// The zombie class skills' values (every zombie mode): hw.dll's ZombieSkillTable (SharedDataMgr at 0x3f25310, +0x1778,
+// vtable 0x2c21ac4: a std::map keyed by mode, evolution level and round) is filled by its vfunc 1 (0x26af410) from 32
+// files resource/zombi/ZombieSkillProperty_Dedi/ZombieSkillProperty_<skill>.csv, but only on a dedicated server
+// (byte 0x3f26248). Offline it stayed empty: "useitem zb_skill0" found no row and did nothing (no zombie could use its
+// skill) and the skills that read their row every frame without checking crashed the game (Stamper, Banshee, Flying
+// zombie: mp+0xa28d63, mp+0x94791a). botassist runs the loader past that check (0x26af420) once the file overrides
+// are on; the files come from botassist_tables (gen_zombie_skills.py). A missing column throws a C++ exception.
+static const DWORD HW_SHAREDDATA = 0x3f25310, HW_ZBSKILL_TABLE_VT = 0x2c21ac4, HW_ZBSKILL_LOAD = 0x26af420;
+static unsigned g_zbSkillRows;
+
+static void LoadZombieSkillTable()
+{
+    static bool tried = false;
+    if (tried || !g_hwLo || !g_ReadPlain)
+        return;
+    unsigned char* mgr = nullptr;
+    unsigned char* table = nullptr;
+    unsigned char* load = (unsigned char*)(g_hwLo + HW_ZBSKILL_LOAD - HW_BASE);
+    static const unsigned char code[] = { 0x53, 0x56, 0x8b, 0xd9, 0x8b, 0x73, 0x04 }; // push ebx; push esi; mov ebx,ecx..
+    __try
+    {
+        mgr = *(unsigned char**)(g_hwLo + HW_SHAREDDATA - HW_BASE);
+        if (mgr)
+            table = mgr + 0x1778;
+        if (!table || *(DWORD*)table != g_hwLo + HW_ZBSKILL_TABLE_VT - HW_BASE || memcmp(load, code, sizeof(code)))
+        {
+            Log("zombie skill table: %s", mgr ? "NOT loaded (unexpected code)" : "not created yet");
+            tried = mgr != nullptr;
+            return;
+        }
+        tried = true;
+        g_zbSkillRows = *(unsigned*)(table + 8);
+        if (!g_zbSkillRows)
+        {
+            ((void(__thiscall*)(void*))load)(table);
+            g_zbSkillRows = *(unsigned*)(table + 8);
+        }
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        Log("zombie skill table: exception 0x%08lX while loading (a file with a missing column?)", GetExceptionCode());
+        g_zbSkillRows = table ? *(unsigned*)(table + 8) : 0;
+        return;
+    }
+    Log("zombie skill table: %u rows%s", g_zbSkillRows,
+        g_zbSkillRows ? "" : " - zombie skills won't work (botassist_tables\\resource\\zombi\\ZombieSkillProperty_Dedi missing?)");
+}
+
 // How many random events a Zombie Disaster Zone round gets (0x10769630): rift level / a tweakable value (a vector of
 // floats at 0x11e438f8, 32 from mp.dll's static init 0x1004f7f0, no callback), at most 10, the remainder a chance of
 // one more. 32 was made for rift levels up to 100; ZSRiftEventDivisor replaces it.
@@ -3626,6 +3674,7 @@ static void FixCrossbowCls(DWORD delta)
 // through the engine's data manager ([0x121d3cfc]() -> vfunc 0x1c8 -> vfunc 8 (table CSO match +0x4f0, the player's
 // level 0x114b9ed0, round CSO +0x4cc + 1)) and use it without checking: offline the row can be missing (null), and
 // picking such a class crashed the game (mp+0xa28d63, from the player's think). They are skipped while it's missing.
+// The cause was the empty table itself (LoadZombieSkillTable fills it now); this stays as a fallback.
 static const DWORD MP_ZB_SKILL_THINK_A = 0x10948aa0, MP_ZB_SKILL_THINK_B = 0x10948f90, MP_PLAYER_LEVEL = 0x114b9ed0,
                    MP_DATA_MANAGER = 0x121d3cfc;
 typedef void(__fastcall* ZbSkillThinkFn)(void* obj, void* edx, void* player);
@@ -3709,6 +3758,7 @@ static void HookBotManager(DWORD delta)
     FixCrossbowCls(delta);
     InstallTableOverrides();
     InstallFileOverrides();
+    LoadZombieSkillTable();
     SetZsrEventDivisor(delta);
     InstallZsrMonsterRates();
     SetZsrExponent((double*)(MP_ZSRIFT_EXPONENT + delta), "mp.dll");
