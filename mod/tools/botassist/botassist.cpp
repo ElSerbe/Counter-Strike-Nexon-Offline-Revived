@@ -2149,6 +2149,7 @@ static void ZsrBotMoney(void* bot)
 
 static const int MODE_ZHE = 51; // Manhunt: see DriveZheBot
 static const int MODE_ZCON = 56; // Zombie Conquest: see modes/zombie_conquest.inl
+static const int MODE_ZWAR = 32; // Zombie War: see modes/zombie_war.inl
 
 static void UpdateBuying(void* bot, BotState& st)
 {
@@ -3263,10 +3264,10 @@ static int RoomBotQuota(int team, const char* which)
     if (g_matchFetch != 2 || !g_matchKnown)
         return team; // server not reachable: the game decides
     MarkZgPlayers();
-    // Zombie Conquest merges the lobby's teams: the room lists its AI players on the host's side, while the game asks
-    // for bots on both sides to balance them (T are the zombies). The list only says how many: each bot joins the side
-    // asked for (RoomBotOf takes any free AI player), the emptier one when the game doesn't say.
-    if (GameMode() == MODE_ZCON)
+    // Zombie Conquest and Zombie War merge the lobby's teams: the room lists its AI players on the host's side, while the
+    // game asks for bots on both sides to balance them (T are the zombies). The list only says how many: each bot joins
+    // the side asked for (RoomBotOf takes any free AI player), the emptier one when the game doesn't say.
+    if (GameMode() == MODE_ZCON || GameMode() == MODE_ZWAR)
     {
         int total = 0;
         EnterCriticalSection(&g_matchLock);
@@ -4306,6 +4307,8 @@ static void CommandFile()
 
 #include "modes/zombie_conquest.inl"
 
+#include "modes/zombie_war.inl"
+
 // ---------------------------------------------------------------- the frame hook (every mode)
 // The end of mp.dll's StartFrame (DLL function 0x113f8a80) runs botassist's per-frame work: the console, the command
 // file, and each mode's watcher (each returns at once outside its mode).
@@ -4650,6 +4653,17 @@ static void HookedRunPlayerMove(void* fakeclient, const float* angles, float fwd
                     st.nextScan = Now() + 1.0f;
                     monsters = st.threat != nullptr;
                 }
+                if (!scenario && ZombieCloakAim(fakeclient, aim, buttons))
+                {
+                    float* va = (float*)(v + EV_VANGLE); // fixangle: see below
+                    float* ang = (float*)(v + EV_ANGLES);
+                    va[0] = aim[0];
+                    va[1] = aim[1];
+                    va[2] = 0;
+                    ang[0] = aim[0] / -3.0f;
+                    ang[1] = aim[1];
+                    ang[2] = 0;
+                }
                 if (!scenario)
                 {
                     float f = fwd, sd = side;
@@ -4717,13 +4731,17 @@ static void HookedRunPlayerMove(void* fakeclient, const float* angles, float fwd
                     Z4BotSkills(fakeclient);
                 if (!scenario && GameMode() == MODE_ZB2)
                     ZB2BotThink(fakeclient);
-                if (!scenario && GameMode() == MODE_ZCON)
+                if (!scenario && (GameMode() == MODE_ZCON || GameMode() == MODE_ZWAR))
                 {
-                    ZConBotThink(fakeclient, st);
+                    if (GameMode() == MODE_ZCON)
+                        ZConBotThink(fakeclient, st);
+                    else
+                        ZB2BotThink(fakeclient);
                     float y = aim[1], f = fwd, sd = side;
                     unsigned short bt = buttons;
                     bool setView = false;
-                    if (ZConMove(fakeclient, st, y, setView, f, sd, bt))
+                    if (GameMode() == MODE_ZCON ? ZConMove(fakeclient, st, y, setView, f, sd, bt)
+                                                : ZWarMove(fakeclient, st, y, setView, f, sd, bt))
                     {
                         fwd = f;
                         side = sd;

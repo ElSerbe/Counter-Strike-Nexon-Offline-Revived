@@ -23,7 +23,8 @@
 //     resort. botassist.log: "ZCon: ... still down".
 //   - ZConBotThink: a human bot chooses a weapon set of the current base each life (the room's weapons can't be bought
 //     here, shared UpdateBuying skips this mode); a zombie bot draws its class; both use skills and awakening.
-//   - ZConMove: replaces only the bots' movement (the stock AI keeps aiming and shooting), see there.
+//   - ZConMove: replaces only the bots' movement (the stock AI keeps aiming and shooting), see there. Modes without bases
+//     use it too with an objective of their own (ZConMoveAt, see modes/zombie_war.inl).
 //   - ApplyRoomSkill (shared): room AI players without a skill of their own play at ZCON_SKILL here: humans have a moment
 //     to stop a zombie in a small area.
 //
@@ -33,8 +34,10 @@
 static const DWORD MP_ZCON_RULES_VT = 0x117919e0, MP_ZCON_PREBUY = 0x107af350, MP_ZCON_HMABIL = 0x1080ea30;
 static const int ZCON_MODULE = 0x12, ZCON_SKILL = 6;
 static const float ZCON_CHASE = 1100.0f, ZCON_HEAR = 400.0f, ZCON_CHASE_PATH = 1500.0f, ZCON_FREE_DROP = 120.0f;
-static const float ZCON_FLEE = 420.0f, ZCON_FLEE_INSIDE = 300.0f, ZCON_DEFEND_RING = 300.0f;
+static const float ZCON_FLEE = 420.0f, ZCON_FLEE_INSIDE = 300.0f, ZCON_DEFEND_RING = 180.0f;
 static const float ZCON_ROUTE_COST = 300.0f, ZCON_BLOCK_COST = 3000.0f;
+static const float ZCON_RALLY_ZOMBIE = 700.0f, ZCON_RALLY_HUMAN = 500.0f, ZCON_RALLY_NEAR = 280.0f, ZCON_RALLY_ARRIVE = 170.0f;
+static const float ZCON_RALLY_CHASE = 500.0f, ZCON_WAIT_ZOMBIE = 8.0f, ZCON_WAIT_HUMAN = 5.0f, ZCON_WAIT_MAX = 25.0f;
 
 struct ZConBase
 {
@@ -157,10 +160,11 @@ struct ZConBot
     // ZConMove
     V3 spot{};
     float spotUntil = 0, yaw = 0, lastSeen = 0, fleeUntil = 0, noChaseUntil = 0, nerve = 0;
-    float routeUntil = 0, dodgeUntil = 0, dodgeYaw = 0, jumpAt = 0, stuckAt = 0, nextStuckLog = 0;
-    int spotBase = -1, stuck = 0, passSide = 0;
-    bool yawSet = false;
-    std::vector<float> route, blocked; // nav area costs of its own way (ZConNewRoute) and of ways found blocked
+    float dodgeUntil = 0, dodgeYaw = 0, jumpAt = 0, stuckAt = 0, nextStuckLog = 0, waitSince = 0, lastMoveAt = 0;
+    V3 lastMovePos{};
+    int spotBase = -1, stuck = 0, passSide = 0, squad = 0, routeVer = -1, team = -1;
+    bool yawSet = false, attacking = false;
+    std::vector<float> route, blocked; // nav area costs of its squad's way (ZConSquadRally) and of ways found blocked
 };
 static std::map<void*, ZConBot> g_zconBots;
 
@@ -220,8 +224,6 @@ static void ZConBotThink(void* bot, BotState& st)
         z.buyTries = 0;
         z.nextSkill = now + 5.0f;
         z.nextSpecial = now + 10.0f;
-        z.spotUntil = z.routeUntil = z.fleeUntil = z.noChaseUntil = 0;
-        z.stuck = 0;
     }
     const char* name = String(F<int>(Vars(bot), EV_NETNAME));
     if (zombie && !z.picked && now - z.zombieSince > 1.0f)
@@ -332,14 +334,14 @@ static bool ZConNavSpot(const ZConBase& base, float pad, bool outside, V3& out)
     return true;
 }
 
-// where to go next around the base. Humans: inside it; once it's captured and two others are inside, half the time
-// around it. Zombies: around it, and now and then to where the closest human is.
+// where to go next around the base. Humans: inside it, close to the others; once it's captured and two others are inside,
+// sometimes just around it. Zombies: around it, and more often than not to where the closest human is.
 static void ZConPickSpot(void* bot, ZConBot& z, const ZConBase& base, bool zombie, bool nearBase)
 {
     float now = Now();
     bool ok = false;
     V3 me = Origin(bot);
-    if (zombie && nearBase && Rnd() < 0.35f)
+    if (zombie && nearBase && Rnd() < 0.6f)
     {
         float best = 1e9f;
         ForEntitiesNear(me, 1e6f, [&](void* e) {
@@ -355,7 +357,7 @@ static void ZConPickSpot(void* bot, ZConBot& z, const ZConBase& base, bool zombi
             }
         });
     }
-    else if (!zombie && base.state == 2 && Rnd() < 0.5f)
+    else if (!zombie && base.state == 2 && Rnd() < 0.3f)
     {
         int inside = 0;
         ForEntitiesNear(base.pos, Len(base.half) + 50.0f, [&](void* e) {
@@ -368,8 +370,39 @@ static void ZConPickSpot(void* bot, ZConBot& z, const ZConBase& base, bool zombi
         if (inside >= 2)
             ok = ZConNavSpot(base, ZCON_DEFEND_RING, true, z.spot);
     }
-    if (!ok)
-        ok = ZConNavSpot(base, zombie ? 150.0f : 0.0f, false, z.spot);
+    if (!ok && zombie)
+        ok = ZConNavSpot(base, 150.0f, false, z.spot);
+    else if (!ok)
+    {
+        // humans hold together: of a few spots, the one closest to the humans around
+        V3 sum{ 0, 0, 0 };
+        int mates = 0;
+        ForEntitiesNear(base.pos, Len(base.half) + 300.0f, [&](void* e) {
+            unsigned char* q = (unsigned char*)PrivateOf(e);
+            if (e != bot && (F<int>(Vars(e), EV_FLAGS) & FL_CLIENT) && Alive(e) && q && Readable(q, 0x2170) && !q[0x2166])
+            {
+                sum = sum + Origin(e);
+                mates++;
+            }
+        });
+        V3 best{};
+        float bestDist = 1e9f;
+        for (int i = 0; i < (mates ? 3 : 1); i++)
+        {
+            V3 c;
+            if (!ZConNavSpot(base, 0.0f, false, c))
+                break;
+            float d = mates ? Len(c - sum * (1.0f / mates)) : 0.0f;
+            if (d < bestDist)
+            {
+                bestDist = d;
+                best = c;
+                ok = true;
+            }
+        }
+        if (ok)
+            z.spot = best;
+    }
     if (!ok)
     {
         z.spot = base.pos;
@@ -379,28 +412,150 @@ static void ZConPickSpot(void* bot, ZConBot& z, const ZConBase& base, bool zombi
     z.spotUntil = now + (nearBase ? 2.0f + Rnd() * 3.0f : 12.0f);
 }
 
-// its own way there: the shortest one, with a stretch of it (somewhere in its middle half) made dearer so that A* goes
-// round when the map has another way not much longer. Every bot draws its own stretch, some none. Lasts 30 s or a life.
-static void ZConNewRoute(void* bot, ZConBot& z, BotState& st, V3 me, V3 goal, float chance)
+// Bots attack together: one that went alone died alone, and each with its own way made it worse. Every side has squads
+// (humans one, zombies two from 6 bots on) with one way and one rally point on it, some way short of the objective. A bot
+// goes to the rally point first (a new life too) and the ones there leave together when most of those waiting have come
+// or the wait ends. The way is the shortest one, or with a stretch in its middle half made dearer so that A* goes round
+// when the map has another way not much longer: the second squad always tries, so the zombies come from two sides.
+// New way and rally point about every 30 s, with nobody on the way.
+struct ZConSquad
 {
-    z.route.assign(g_nav.areas.size(), 0.0f);
-    z.blocked.clear();
-    z.routeUntil = Now() + 30.0f;
+    V3 rally{};
+    bool has = false;
+    int base = -1, routeVer = 0;
+    float until = 0, firstAt = 0;
+    std::vector<float> route;
+};
+static ZConSquad g_zconSquads[2][2]; // [zombie][squad]
+
+// rallyDist 0: no rally point, the squad goes straight to the objective
+static void ZConSquadRally(ZConSquad& s, const ZConBase& base, V3 from, float rallyDist, float chance)
+{
+    s.route.assign(g_nav.areas.size(), 0.0f);
+    s.routeVer++;
+    s.has = true;
+    s.base = base.level;
+    s.until = Now() + 30.0f;
+    s.firstAt = 0;
+    s.rally = from;
     std::vector<V3> path;
-    if (Rnd() >= chance || !FindPath(me, goal, path) || path.size() < 4)
+    if (!FindPath(from, base.pos, path))
         return;
-    V3 at = path[path.size() / 4 + rand() % (path.size() / 2)];
-    float radius = 200.0f + Rnd() * 300.0f;
-    for (size_t i = 0; i < g_nav.areas.size(); i++)
+    if (path.size() >= 4 && Rnd() < chance)
     {
-        V3 c = g_nav.areas[i].center;
-        if (Len(c - at) < radius && Len(c - goal) > 350.0f && Len(c - me) > 200.0f)
-            z.route[i] = ZCON_ROUTE_COST;
+        V3 at = path[path.size() / 4 + rand() % (path.size() / 2)];
+        float radius = 200.0f + Rnd() * 300.0f;
+        for (size_t i = 0; i < g_nav.areas.size(); i++)
+        {
+            V3 c = g_nav.areas[i].center;
+            if (Len(c - at) < radius && Len(c - base.pos) > 350.0f && Len(c - from) > 200.0f)
+                s.route[i] = ZCON_ROUTE_COST;
+        }
+        g_navRouteCost = &s.route;
+        std::vector<V3> round;
+        if (FindPath(from, base.pos, round))
+            path = round;
+        g_navRouteCost = nullptr;
     }
-    st.nextRepath = 0;
-    static int reports = 0;
-    if (reports++ < 20)
-        Log("ZCon: bot '%s' goes round (%.0f %.0f %.0f) on its way to the base", String(F<int>(Vars(bot), EV_NETNAME)), at.x, at.y, at.z);
+    float left = rallyDist;
+    for (size_t i = path.size(); i-- > 1 && left > 0;)
+    {
+        left -= Len(path[i] - path[i - 1]);
+        s.rally = path[i - 1];
+    }
+    if (rallyDist <= 0 || left > 0)
+        s.rally = left > 0 && rallyDist > 0 ? from : base.pos; // too near for a rally point: from where they are
+}
+
+static void ZConSquadThink(const ZConBase& base, float rallyHuman, float rallyZombie)
+{
+    static float next = 0;
+    float now = Now();
+    if (now >= next - 10.0f && now < next)
+        return;
+    next = now + 0.25f;
+    struct Member
+    {
+        ZConBot* z;
+        V3 at;
+    };
+    std::vector<Member> sides[2];
+    ForEntitiesNear(V3{ 0, 0, 0 }, 1e6f, [&](void* e) {
+        unsigned char* q = (unsigned char*)PrivateOf(e);
+        if ((F<int>(Vars(e), EV_FLAGS) & (FL_CLIENT | FL_FAKECLIENT)) == (FL_CLIENT | FL_FAKECLIENT) && Alive(e) && q &&
+            Readable(q, 0x2170))
+            sides[q[0x2166] ? 1 : 0].push_back(Member{ &g_zconBots[e], Origin(e) });
+    });
+    for (int side = 0; side < 2; side++)
+    {
+        int squads = side == 1 && sides[side].size() >= 6 ? 2 : 1;
+        for (int n = 0; n < squads; n++)
+        {
+            ZConSquad& s = g_zconSquads[side][n];
+            std::vector<Member> members;
+            for (size_t i = 0; i < sides[side].size(); i++)
+                if ((int)i % squads == n)
+                {
+                    sides[side][i].z->squad = n;
+                    members.push_back(sides[side][i]);
+                }
+            if (members.empty())
+            {
+                s.has = false;
+                continue;
+            }
+            float rallyDist = side ? rallyZombie : rallyHuman;
+            bool newBase = s.has && s.base != base.level;
+            int waiting = 0;
+            for (auto& m : members)
+            {
+                if (newBase)
+                    m.z->attacking = false; // together again to the next base
+                if (m.z->waitSince == 0)
+                    m.z->waitSince = now;
+                if (!m.z->attacking && (rallyDist <= 0 || now - m.z->waitSince > ZCON_WAIT_MAX))
+                    m.z->attacking = true;
+                if (!m.z->attacking)
+                    waiting++;
+            }
+            if (!s.has || newBase || (waiting == (int)members.size() && now >= s.until))
+            {
+                V3 from = members[0].at;
+                for (auto& m : members)
+                    if (Len(m.at - base.pos) > Len(from - base.pos))
+                        from = m.at;
+                ZConSquadRally(s, base, from, rallyDist, side ? (n ? 1.0f : 0.4f) : 0.3f);
+                static int reports = 0;
+                if (reports++ < 30)
+                    Log("ZCon: %s squad %d (%d bots) gathers at (%.0f %.0f %.0f)", side ? "zombie" : "human", n,
+                        (int)members.size(), s.rally.x, s.rally.y, s.rally.z);
+            }
+            if (!waiting)
+                continue;
+            int there = 0;
+            for (auto& m : members)
+                if (!m.z->attacking && Len(m.at - s.rally) < ZCON_RALLY_NEAR)
+                    there++;
+            if (!there)
+            {
+                s.firstAt = 0;
+                continue;
+            }
+            if (s.firstAt == 0)
+                s.firstAt = now;
+            int need = waiting == (int)members.size() && members.size() == 1 ? 1 : max(2, (waiting * 3 + 4) / 5);
+            if (there < need && now - s.firstAt < (side ? ZCON_WAIT_ZOMBIE : ZCON_WAIT_HUMAN))
+                continue;
+            for (auto& m : members)
+                if (!m.z->attacking && Len(m.at - s.rally) < ZCON_RALLY_NEAR)
+                    m.z->attacking = true;
+            static int reports = 0;
+            if (reports++ < 40)
+                Log("ZCon: %s squad %d attacks: %d together, %d still on their way, after %.1f s", side ? "zombie" : "human",
+                    n, there, waiting - there, now - s.firstAt);
+            s.firstAt = 0;
+        }
+    }
 }
 
 // a way found blocked at `wp`: dear for this bot until its next route
@@ -420,27 +575,62 @@ static void ZConBlockWay(ZConBot& z, V3 wp)
 
 // The bots' movement, always by the nav mesh (the stock AI goes straight at a human it sees: it stayed against rails and
 // glass with one across a gap, and the others behind it):
-//   Humans: to the active base and around in it; once captured some stay inside and others walk around it. A zombie close
-//   comes first: they back off shooting (ZombieFleeMove: nearer inside the base, or they could never capture), out of the
-//   base if need be, and come back.
-//   Zombies: at a human in sight or heard, if there's a way not too long; else to the base and around it, each by its own
-//   way (ZConNewRoute).
+//   Both sides go in squads, by way of a rally point (ZConSquadThink).
+//   Humans: to the active base and around in it, close to each other; once captured some stay inside and others walk around
+//   it. A zombie close comes first: they back off shooting (ZombieFleeMove: nearer inside the base, or they could never
+//   capture), out of the base if need be, and come back.
+//   Zombies: at a human in sight or heard, if there's a way not too long (on the way to the rally point only one really
+//   close); else to the base and around it.
 //   Stuck: a jump and a step aside, a step back, then that way counts as blocked for this bot and it takes another.
 // Returns true when it set the movement; viewYaw is turned along the way when no enemy is near (the stock AI has nothing
 // to aim at then).
-static bool ZConMove(void* bot, BotState& st, float& viewYaw, bool& setView, float& fwd, float& side, unsigned short& buttons)
+static bool ZConMoveAt(void* bot, BotState& st, const ZConBase& base, float rallyHuman, float rallyZombie, float& viewYaw,
+                       bool& setView, float& fwd, float& side, unsigned short& buttons)
 {
     setView = false;
     if (st.ordered && st.order != ORDER_INDEPENDENT)
         return false;
     unsigned char* p = (unsigned char*)PrivateOf(bot);
-    ZConBase base;
-    if (!p || !Readable(p, 0x2170) || !g_nav.ok || !ZConActiveBase(base))
+    if (!p || !Readable(p, 0x2170) || !g_nav.ok)
         return false;
     ZConBot& z = g_zconBots[bot];
     float now = Now();
     bool zombie = p[0x2166] != 0;
     V3 me = Origin(bot), eye = Eye(bot);
+    // a new life or another side: at the rally point again, with nothing learned of the old ways. Told by the bot's absence
+    // or a jump to a spawn point (st.newLife also fires on a heal, and zombies heal)
+    bool respawned = now - z.lastMoveAt > 0.5f || Len(me - z.lastMovePos) > 300.0f;
+    z.lastMoveAt = now;
+    z.lastMovePos = me;
+    if (respawned || (int)zombie != z.team)
+    {
+        z.team = zombie;
+        z.attacking = false;
+        z.waitSince = now;
+        z.spotUntil = z.fleeUntil = z.noChaseUntil = 0;
+        z.stuck = 0;
+        z.routeVer = -1;
+        z.blocked.clear();
+    }
+    // the freeze at the start of a round: nobody can move, so nobody is stuck (counted as stuck, the ways out of the spawn
+    // ended up marked as blocked)
+    if (F<float>(Vars(bot), EV_MAXSPEED) <= 1.0f)
+    {
+        st.lastPos = me;
+        st.lastProgress = now;
+        return false;
+    }
+    ZConSquadThink(base, rallyHuman, rallyZombie);
+    ZConSquad& squad = g_zconSquads[zombie ? 1 : 0][z.squad];
+    if (z.routeVer != squad.routeVer || z.route.size() != g_nav.areas.size())
+    {
+        z.routeVer = squad.routeVer;
+        z.route = squad.route;
+        z.route.resize(g_nav.areas.size(), 0.0f);
+        for (size_t i = 0; i < z.blocked.size() && i < z.route.size(); i++)
+            z.route[i] += z.blocked[i];
+        st.nextRepath = 0;
+    }
     if (!z.passSide)
     {
         z.passSide = rand() % 2 ? 1 : -1;
@@ -449,6 +639,8 @@ static bool ZConMove(void* bot, BotState& st, float& viewYaw, bool& setView, flo
     V3 toBase = base.pos - me;
     bool inside = fabsf(toBase.x) <= base.half.x && fabsf(toBase.y) <= base.half.y && fabsf(toBase.z) <= base.half.z;
     bool nearBase = Len2D(toBase) < Len2D(base.half) + 150.0f && fabsf(toBase.z) < base.half.z + 60.0f;
+    if (nearBase)
+        z.attacking = true;
     // the closest enemy: in sight (or, for a zombie, heard)
     float nearest = 1e9f, seenAt = 1e9f;
     void* target = nullptr;
@@ -482,7 +674,7 @@ static bool ZConMove(void* bot, BotState& st, float& viewYaw, bool& setView, flo
     }
     V3 wp, goal = z.spot;
     bool pathed = false, there = false, chasing = false;
-    if (zombie && target && now >= z.noChaseUntil)
+    if (zombie && target && now >= z.noChaseUntil && (z.attacking || nearest < ZCON_RALLY_CHASE))
     {
         goal = Origin(target);
         if (nearest < 160.0f && fabsf(goal.z - me.z) < 48.0f && CanSee(bot, eye, target))
@@ -521,23 +713,21 @@ static bool ZConMove(void* bot, BotState& st, float& viewYaw, bool& setView, flo
     }
     if (!chasing)
     {
-        if (z.spotBase != base.level || now >= z.spotUntil)
-        {
+        if (z.attacking && (z.spotBase != base.level || now >= z.spotUntil))
             ZConPickSpot(bot, z, base, zombie, nearBase);
-            if (now >= z.routeUntil || z.route.size() != g_nav.areas.size())
-                ZConNewRoute(bot, z, st, me, z.spot, zombie ? 0.75f : 0.5f);
-        }
-        goal = z.spot;
+        goal = z.attacking ? z.spot : squad.rally;
         g_navRouteCost = &z.route;
         // (humans stop well inside the box: it only counts them there)
-        there = !NextWaypoint(bot, st, me, goal, zombie ? 48.0f : 20.0f, wp);
+        there = !NextWaypoint(bot, st, me, goal, !z.attacking ? ZCON_RALLY_ARRIVE : zombie ? 48.0f : 20.0f, wp);
         g_navRouteCost = nullptr;
         // NextWaypoint walks straight at the goal when FindPath finds no way: a one-point path to another area
         pathed = there || st.path.size() > 1 || AreaAt(me) == AreaAt(goal);
     }
     if (there)
     {
-        // on the spot until the next one
+        // on the spot until the next one (an objective that moves: right away if it's gone)
+        if (z.attacking && !nearBase)
+            z.spotUntil = 0;
         fwd = side = 0;
         z.yawSet = false;
         st.lastProgress = now;
@@ -632,4 +822,12 @@ static bool ZConMove(void* bot, BotState& st, float& viewYaw, bool& setView, flo
     fwd = cosf(rel) * 400.0f;
     side = -sinf(rel) * 400.0f;
     return true;
+}
+
+static bool ZConMove(void* bot, BotState& st, float& viewYaw, bool& setView, float& fwd, float& side, unsigned short& buttons)
+{
+    ZConBase base;
+    setView = false;
+    return ZConActiveBase(base) &&
+           ZConMoveAt(bot, st, base, ZCON_RALLY_HUMAN, ZCON_RALLY_ZOMBIE, viewYaw, setView, fwd, side, buttons);
 }

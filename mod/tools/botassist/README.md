@@ -556,6 +556,12 @@ with drops up to 120 u), and before each step the ground 72 u ahead is probed (`
 allowed drop, or a hurt zone below): it turns away, or stands and fights if no way is safe. Jumps only on safe ground.
 botassist_debug.log: "zombie flee: bot ... stops at a drop / hurt zone".
 
+Cloaked zombies: the stock AI stops attacking an enemy whose cloaking module (3) is active (FUN_112f34a0, 0x10880320) and
+doesn't see one with alpha under 1 (`CCSBot::IsVisible`, 0x11311ff0), so a cloaked zombie bit bots untouched.
+`ZombieCloakAim` (these modes plus Conquest and Zombie War): a cloaked zombie in sight within 300 u, with no visible one
+closer, is aimed at and shot by botassist after 0.25 s. Backing off needs nothing new: it goes by line of sight.
+botassist.log: "zombie flee: bot ... shoots at the cloaked zombie".
+
 ## Zombie Conquest (mode 56) with room bots
 
 `modes/zombie_conquest.inl` (rules CSOGameRulesZombiConquest, vtable 0x117919e0; bases, safe areas and weapon sets come
@@ -580,20 +586,41 @@ assault...). T are zombies, CT humans, and they swap every round.
   left starts a capture over, or takes a captured base back to free after a while. It scores while a human is inside.
 - `ZConMove` replaces only the movement (the stock AI keeps aiming and shooting), always along the nav mesh. The stock AI
   goes straight at a human it sees, so zombies stayed against rails and glass with one across a gap.
-  - Humans go to the active base and move around in it. Once it's captured and two others are inside, half of their
-    spots are around it (up to 300 u out). A zombie close comes first: they back off shooting (`ZombieFleeMove`; within
+  - Both sides go in squads (`ZConSquadThink`; humans one, zombies two from 6 bots on): one way and one rally point on it,
+    700 u short of the base for zombies and 500 u for humans. A bot goes there first, a new life too; those there leave
+    together once 60% of those waiting have come, or after 8 s (zombies) or 5 s (humans). 25 s waiting at most. A new base
+    gathers everyone again. botassist.log: "ZCon: ... squad n gathers at", "squad n attacks: k together".
+  - Humans go to the active base and move around in it, close to each other. Once it's captured and two others are inside,
+    30% of their spots are around it (up to 180 u out). A zombie close comes first: they back off shooting (`ZombieFleeMove`; within
     300 u inside the base, 420 u outside, each bot a bit different), out of the base if need be, and come back.
-  - Zombies go at a human in sight or within 400 u if the way there is under 1500 u (or 2.5 times the distance); else to
-    the base and around it, and now and then to the closest human.
-  - Each bot has its own way (`ZConNewRoute`): a stretch of the shortest path costs more in the A* (`g_navRouteCost`,
-    shared, null elsewhere). Checked offline on six of the maps' nav meshes (chapel, skyscraper, hacienda, farero,
+  - Zombies go at a human in sight or within 400 u if the way there is under 1500 u (or 2.5 times the distance), and on
+    the way to the rally point only at one within 500 u; else to the base and around it, 60% of the time to the closest
+    human.
+  - Each squad has its own way (`ZConSquadRally`, renewed about every 30 s): often the shortest, or with a stretch of it
+    costing more in the A* (`g_navRouteCost`, shared, null elsewhere): the second zombie squad always tries, the first
+    40% of the time, the humans 30%. The same rule was checked offline, per bot, on six of the maps' nav meshes (chapel, skyscraper, hacienda, farero,
     wintershelter, assault): a median of 4 different routes in 12 draws per trip (only 1 on some trips), typically 14%
     longer, 2.1 times at most.
   - Stuck: a jump and a step aside, a step back, then that way counts as blocked for this bot. A team mate right ahead
-    is passed on one side. botassist.log: "ZCon: ... stuck at", "ZCon: bot ... goes round".
+    is passed on one side. Not during the freeze at the start of a round (maxspeed 1): counted as stuck, the ways out of
+    the spawn ended up marked as blocked. botassist.log: "ZCon: ... stuck at".
   - `WalkYaw` and `LedgeAhead` (shared, also used by the zombie flee in every PvP zombie mode): `ClearYaw`'s line at knee
     height also hits stairs going up and turned the bot aside; a wall now has to block at head height, and a real ledge
     gets a jump (with the legs up).
+
+## Zombie War (mode 32) with room bots
+
+`modes/zombie_war.inl` (rules CSOGameRulesZombi3ExRenewal, vtable 0x117aaecc, derived from Zombie 2's). T are zombies, CT
+humans, in even teams, and a bitten human dies. A round ends when a side has nobody alive, or by time; the sides swap at half
+time; zombies wait for a countdown at the start and get stronger in the last 30 s.
+- No zombies: as in Conquest the room lists every AI player on the host's side and `RoomBotQuota` refused the T bots, so
+  the round ended and restarted over and over. Same fix: each bot joins the side the game asks for.
+- `ZB2Watch` and `ZB2BotThink` (the same rules as Mutation): dead zombie bots go through the game's death think, zombie bots
+  draw a class, both sides use skills.
+- `ZWarMove`: Conquest's movement (`ZConMoveAt`) with an objective that moves. Humans hold together around a nav area near
+  them, a new one 400 to 900 u off every 35 to 55 s. Zombies gather at their squads' rally points and fall on where the
+  humans are. Human bots buy the room's weapons as usual and the room's skill applies. botassist.log: "ZWar: n humans and
+  m zombies alive".
 
 ## Deadly places in botassist's paths (shared)
 

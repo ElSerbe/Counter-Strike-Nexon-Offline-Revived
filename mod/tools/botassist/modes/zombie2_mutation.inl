@@ -29,7 +29,8 @@ static std::map<void*, ZB2Dead> g_zb2Dead;
 static void ZB2Watch()
 {
     static float next = 0;
-    if (!g_mpDelta || !g_pGlobals || !*g_pGlobals || g_edictToVars < 0 || GameMode() != MODE_ZB2)
+    // (Zombie War's rules derive from this mode's)
+    if (!g_mpDelta || !g_pGlobals || !*g_pGlobals || g_edictToVars < 0 || (GameMode() != MODE_ZB2 && GameMode() != MODE_ZWAR))
     {
         g_zb2Dead.clear();
         return;

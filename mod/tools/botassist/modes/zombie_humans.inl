@@ -13,19 +13,28 @@
 // FindPath: no hurt areas, no deadly drops, drops cost extra so stairs win), and before each step the ground ahead is
 // probed (DropAhead): no hurt zone below and no drop deeper than the path allows (FLEE_FREE_DROP without a path). A
 // way that fails is turned away from; with no safe way the bot stands and fights. Jumps only on safe ground.
+//
+// Cloaked zombies: the stock AI drops any enemy whose cloaking module (3) is active (FUN_112f34a0, 0x10880320), and doesn't
+// even see one with alpha under 1 (CCSBot::IsVisible, 0x11311ff0), so a cloaked zombie bit them untouched. ZombieCloakAim:
+// one in sight within CLOAK_SHOOT_RANGE gets aimed at and shot by botassist, after a moment to notice it (not with a visible
+// zombie closer: the stock AI has that one). Backing off needs nothing: ZombieFleeMove counts every zombie by line of sight.
 static const float FLEE_FREE_DROP = 120.0f;
+static const float CLOAK_SHOOT_RANGE = 300.0f, CLOAK_NOTICE = 0.25f, CLOAK_TURN = 14.0f, CLOAK_FIRE_CONE = 10.0f;
+static const int EV_RENDERMODE = 0x160, EV_RENDERAMT = 0x164, RENDER_TRANS_ALPHA = 4, MODULE_CLOAKING = 3;
+static const DWORD MP_CLOAK_ACTIVE = 0x10880320;
 struct ZfBot
 {
     V3 goal{};
     bool has = false, onPath = false;
-    float goalUntil = 0, nextJump = 0, nextLog = 0, nextDropLog = 0;
+    float goalUntil = 0, nextJump = 0, nextLog = 0, nextDropLog = 0, cloakSince = 0, cloakLast = 0;
+    int cloakShots = 0;
 };
 static std::map<void*, ZfBot> g_zf;
 
 static bool ZombieFleeMode()
 {
     int m = GameMode();
-    return cfg.zombieFlee && !CoopMode() && m != MODE_ZOMBIE_GIANT && m != MODE_ZHE && m != MODE_ZCON;
+    return cfg.zombieFlee && !CoopMode() && m != MODE_ZOMBIE_GIANT && m != MODE_ZHE && m != MODE_ZCON && m != MODE_ZWAR;
 }
 
 // a nav area 250 to 900 u away in the direction away from the zombies (dir: unit, 2D), farthest from them
@@ -194,4 +203,64 @@ static bool ZombieFleeMove(void* bot, BotState& st, float viewYaw, float range, 
 static bool ZombieFlee(void* bot, BotState& st, float viewYaw, float& fwd, float& side, unsigned short& buttons)
 {
     return ZombieFleeMode() && ZombieFleeMove(bot, st, viewYaw, cfg.zombieFleeDistance, fwd, side, buttons);
+}
+
+static bool ZombieCloaked(void* e, unsigned char* q)
+{
+    unsigned char* v = Vars(e);
+    if (F<int>(v, EV_RENDERMODE) == RENDER_TRANS_ALPHA && F<float>(v, EV_RENDERAMT) < 200.0f)
+        return true;
+    void* mod = ((PlayerModuleFn)(MP_PLAYER_MODULE + g_mpDelta))(q, MODULE_CLOAKING);
+    return mod && (((int(__fastcall*)(void*))(MP_CLOAK_ACTIVE + g_mpDelta))(mod) & 0xff) != 0;
+}
+
+// true: aim was set and the bot shoots (the caller writes it where the bot looks)
+static bool ZombieCloakAim(void* bot, float* aim, unsigned short& buttons)
+{
+    int m = GameMode();
+    if (!ZombieFleeMode() && !(cfg.zombieFlee && (m == MODE_ZCON || m == MODE_ZWAR)))
+        return false;
+    unsigned char* p = (unsigned char*)PrivateOf(bot);
+    if (!p || !Readable(p, 0x2170) || p[0x2166])
+        return false;
+    V3 me = Origin(bot), eye = Eye(bot);
+    float nearest = 1e9f, nearestCloaked = 1e9f;
+    void* cloaked = nullptr;
+    ForEntitiesNear(me, CLOAK_SHOOT_RANGE, [&](void* e) {
+        if (e == bot || !(F<int>(Vars(e), EV_FLAGS) & FL_CLIENT) || !Alive(e))
+            return;
+        unsigned char* q = (unsigned char*)PrivateOf(e);
+        if (!q || !Readable(q, 0x2170) || !q[0x2166] || !CanSee(bot, eye, e))
+            return;
+        float d = Len(Origin(e) - me);
+        nearest = min(nearest, d);
+        if (d < nearestCloaked && ZombieCloaked(e, q))
+        {
+            nearestCloaked = d;
+            cloaked = e;
+        }
+    });
+    ZfBot& z = g_zf[bot];
+    float now = Now();
+    if (!cloaked || nearest < nearestCloaked)
+        return false;
+    if (now - z.cloakLast > 0.5f)
+        z.cloakSince = now; // a new one: a moment to notice it
+    z.cloakLast = now;
+    if (now - z.cloakSince < CLOAK_NOTICE)
+        return false;
+    V3 to = Center(cloaked) - eye;
+    float yaw = YawOf(to), pitch = PitchOf(to);
+    float dy = AngleDiff(yaw, aim[1]), dp = pitch - aim[0];
+    aim[1] += dy > CLOAK_TURN ? CLOAK_TURN : dy < -CLOAK_TURN ? -CLOAK_TURN : dy;
+    aim[0] += dp > CLOAK_TURN ? CLOAK_TURN : dp < -CLOAK_TURN ? -CLOAK_TURN : dp;
+    if (fabsf(dy) < CLOAK_FIRE_CONE && fabsf(dp) < CLOAK_FIRE_CONE)
+    {
+        buttons |= IN_ATTACK;
+        static int reports = 0;
+        if (z.cloakShots++ == 0 && reports++ < 30)
+            Log("zombie flee: bot '%s' shoots at the cloaked zombie '%s', %.0f u away", String(F<int>(Vars(bot), EV_NETNAME)),
+                String(F<int>(Vars(cloaked), EV_NETNAME)), nearestCloaked);
+    }
+    return true;
 }
