@@ -2156,6 +2156,8 @@ static const int MODE_ZWAR = 32; // Zombie War: see modes/zombie_war.inl
 static const int MODE_GDM = 22; // Gun Deathmatch: see modes/gun_deathmatch.inl
 static const int MODE_SS = 57; // Super Soldier: see modes/super_soldier.inl
 static const int MODE_PTN = 50; // Partner: see modes/partner.inl
+static const int MODE_BEAST = 27; // Beast: see modes/beast.inl
+static bool BeastIsBeast(void* bot);
 
 static void UpdateBuying(void* bot, BotState& st)
 {
@@ -2201,6 +2203,8 @@ static void UpdateBuying(void* bot, BotState& st)
         return; // Gun Deathmatch: the rules give each level's weapon. Super Soldier: its bots buy by Expert
     if (PtnIsPartner(bot))
         return; // Partner: a partner's weapons go by its player's money (ZBBot_BT_BuyWeapon_Partner)
+    if (BeastIsBeast(bot))
+        return; // Beast: only claws
     MatchBot* rb = RoomBotOf(bot, st);
     bool scenario = CoopMode();
     // room AI players buy their own loadout in every mode: chosen weapons, else random ones from their filter, else
@@ -2899,6 +2903,8 @@ static bool OnBotCommand(void* bot)
         // internal-buy flag set, and only those stay)
         if (GameMode() == MODE_SS)
             return false;
+        if (BeastIsBeast(bot))
+            return true;
         if (GameMode() == MODE_GDM)
         {
             unsigned char* me = (unsigned char*)PrivateOf(bot);
@@ -3294,7 +3300,8 @@ static int RoomBotQuota(int team, const char* which)
     // game asks for bots on both sides to balance them (T are the zombies). The list only says how many: each bot joins
     // the side asked for (RoomBotOf takes any free AI player), the emptier one when the game doesn't say.
     // (Partner: PtnWatch asks for each side itself)
-    if (GameMode() == MODE_ZCON || GameMode() == MODE_ZWAR || GameMode() == MODE_SS || GameMode() == MODE_PTN)
+    if (GameMode() == MODE_ZCON || GameMode() == MODE_ZWAR || GameMode() == MODE_SS || GameMode() == MODE_PTN ||
+        GameMode() == MODE_BEAST)
     {
         int total = 0;
         EnterCriticalSection(&g_matchLock);
@@ -3305,8 +3312,9 @@ static int RoomBotQuota(int team, const char* which)
         if (g_matchAdded[1] + g_matchAdded[2] >= total)
             return -1;
         // (Super Soldier keeps asking for CT while the list lasts: there the sides are simply kept even)
-        int t = GameMode() != MODE_SS && team == 0 ? 1 : GameMode() != MODE_SS && team == 1 ? 2
-                                                     : g_matchAdded[1] <= g_matchAdded[2]     ? 1 : 2;
+        // (Beast too: its bot manager asks for each side, and the room's list has them all on one)
+        bool even = GameMode() == MODE_SS || GameMode() == MODE_BEAST;
+        int t = !even && team == 0 ? 1 : !even && team == 1 ? 2 : g_matchAdded[1] <= g_matchAdded[2] ? 1 : 2;
         g_matchAdded[t]++;
         Log("the game adds a bot (%s): %s, %d T and %d CT of %d", which, t == 1 ? "T (zombies)" : "CT (humans)",
             g_matchAdded[1], g_matchAdded[2], total);
@@ -4344,6 +4352,8 @@ static void CommandFile()
 
 #include "modes/partner.inl"
 
+#include "modes/beast.inl"
+
 // ---------------------------------------------------------------- the frame hook (every mode)
 // The end of mp.dll's StartFrame (DLL function 0x113f8a80) runs botassist's per-frame work: the console, the command
 // file, and each mode's watcher (each returns at once outside its mode).
@@ -4367,6 +4377,7 @@ static void HookedStartFrame()
         GdmWatch();
         SSWatch();
         PtnWatch();
+        BeastWatch();
         ZgFrame();
     }
     __except (EXCEPTION_EXECUTE_HANDLER)
@@ -4663,7 +4674,9 @@ static void HookedRunPlayerMove(void* fakeclient, const float* angles, float fwd
             {
                 BotState& bs = StateFor(fakeclient);
                 PtnBotThink(fakeclient);
-                if (!PtnIsPartner(fakeclient)) // Partner: a partner keeps the character it was chosen for
+                BeastBotThink(fakeclient);
+                // (Partner: a partner keeps the character it was chosen for. Beast: a beast keeps its model)
+                if (!PtnIsPartner(fakeclient) && !BeastIsBeast(fakeclient))
                 {
                     ApplyRoomCharacter(fakeclient, bs);
                     ApplyTeamCharacter(fakeclient, bs);
@@ -4753,6 +4766,28 @@ static void HookedRunPlayerMove(void* fakeclient, const float* angles, float fwd
                     float y = aim[1], p = aim[0], f = fwd, sd = side;
                     unsigned short bt = buttons;
                     if (DriveZheBot(fakeclient, y, p, f, sd, bt))
+                    {
+                        aim[0] = p;
+                        aim[1] = y;
+                        fwd = f;
+                        side = sd;
+                        buttons = bt;
+                        st.driven = true;
+                        float* va = (float*)(v + EV_VANGLE); // fixangle: see below
+                        float* ang = (float*)(v + EV_ANGLES);
+                        va[0] = aim[0];
+                        va[1] = aim[1];
+                        va[2] = 0;
+                        ang[0] = aim[0] / -3.0f;
+                        ang[1] = aim[1];
+                        ang[2] = 0;
+                    }
+                }
+                if (!scenario && GameMode() == MODE_BEAST)
+                {
+                    float y = aim[1], p = aim[0], f = fwd, sd = side;
+                    unsigned short bt = buttons;
+                    if (DriveBeast(fakeclient, st, y, p, f, sd, bt))
                     {
                         aim[0] = p;
                         aim[1] = y;

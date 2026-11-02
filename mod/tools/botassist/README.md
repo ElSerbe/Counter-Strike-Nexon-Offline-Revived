@@ -682,6 +682,19 @@ own orders (Z menu). The game does all of that (`resource/partner/partner_bot_bt
 - Pre-round: the game's default config has mp_freezetime 0; `PtnWatch` sets 6 s, and mp_buytime 0.75 if shorter.
 - botassist.log: "Partner: n T and m CT alive, p players, q partners, bomb state s", "the game adds a player's partner".
 
+## Beast (mode 27) with room bots
+
+`modes/beast.inl` (rules CSOGameRulesSnowman, vtable 0x117a35d4; "Snowman" in the game's files). Teams, 3 s respawn; ampoules at each
+respawn and from bodies; 3 of them and E make a beast. On sm_blizzard a team wins by destroying the other's core, open for 20 s
+once its controller falls; DM_port and zm_requiem are team deathmatch. The game has no AI for it (stock CCSBots):
+- `RoomBotQuota` evens the sides, since the room lists its AI players on one and T bots were refused.
+- `BeastBotThink` transforms bots like a player's E (rules vfunc 0x1f0): low health, a beast near, or after 6-20 s with 3 ampoules.
+- `BeastIsBeast` keeps beasts out of the room's weapons and character (`UpdateBuying`, `OnBotCommand`, the bot hook).
+- `DriveBeast`: humans fetch ampoules close by; roles by player index (2 of 5 attack the enemy controller, 2 hunt, 1 defends its own
+  controller; with the barrier down all but the defenders go for the core). Objectives get shot within 700 u or punched up close.
+  Beasts run at enemies, punch, stomp (attack2) and roll (double W through the buttons). Routes and unsticking are Gun Deathmatch's
+  (`GdmPickVia`, `GdmWalk`). botassist.log: "Beast: n T and m CT alive..., core and controller health", "turns into a beast", "stuck at".
+
 ## The room's AI difficulty text
 
 The room's panels show the room's difficulty (`#CSO_Bot_Difficulty_<n>`), not what the AI players page set. `RoomBotLevelText`
