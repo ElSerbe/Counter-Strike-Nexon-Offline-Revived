@@ -166,7 +166,9 @@ automatic ones join CT. No more kicks in co-op modes.
 - Filters also hold characters (CT and T tabs; "Counter-Strike classic" = 40-43 and 49-52), sent as
   allowCharacter. A room AI player whose character is Random joins as one of the filter's characters of its team,
   or as any character of its team (botassist_characters.txt) when the filter has none or there is no filter.
-- The top bar's skill list sets the skill of the bots it adds (room skill or 0..7).
+- The top bar's skill list sets the skill of the bots it adds: random by default (each new bot draws 0..7, by an update
+  after adding it), room skill or 0..7. In Zombie Conquest (`MODE_SKILL_MODES`) the default is no draw: skill -1, which
+  botassist plays at skill 6 there.
 
 - A new match can load the same map again, so per-match state (room AI players, bot quota, barricades, monster
   detection) is keyed on a level counter: `gpGlobals->time` starting again (checked by LoadNav and every 500 ms by

@@ -25,10 +25,14 @@
   let saveTimer = null;
   let newTeam = 2;
   let newPreset = 0;
-  let newSkill = -1;        // -1: the room's AI difficulty
+  const RANDOM_SKILL = -2;  // only in the top bar: every new bot draws its own skill
+  // modes where a bot without a skill plays at a level of the mode (botassist's ApplyRoomSkill): no draw there
+  const MODE_SKILL_MODES = [56];
+  let newSkill = RANDOM_SKILL; // -1: the room's AI difficulty
   try {
     newPreset = +(localStorage.getItem("bots.newPreset") || 0);
-    newSkill = +(localStorage.getItem("bots.newSkill") || -1);
+    const savedSkill = localStorage.getItem("bots.newSkillChoice");
+    if (savedSkill !== null) newSkill = +savedSkill;
   } catch (e) { /* no storage */ }
 
   function range(a, b) { const r = []; for (let i = a; i <= b; i++) r.push(i); return r; }
@@ -115,8 +119,9 @@
     $("newpreset").innerHTML = opts;
     $("newpreset").value = String(newPreset);
     if (!$("newskill").options.length)
-      $("newskill").innerHTML = `<option value="-1">Room skill</option>` + SKILLS.map((s, i) => `<option value="${i}">${s}</option>`).join("");
-    $("newskill").value = String(newSkill >= 0 && newSkill < SKILLS.length ? newSkill : -1);
+      $("newskill").innerHTML = `<option value="${RANDOM_SKILL}"></option><option value="-1">Room skill</option>` + SKILLS.map((s, i) => `<option value="${i}">${s}</option>`).join("");
+    $("newskill").options[0].textContent = MODE_SKILL_MODES.includes(room.mode) ? "High (this mode)" : "Random skill";
+    $("newskill").value = String(newSkill === -1 || (newSkill >= 0 && newSkill < SKILLS.length) ? newSkill : RANDOM_SKILL);
   }
 
   function renderList() {
@@ -132,7 +137,7 @@
       row.innerHTML = `
         <div class="level">${b.level}</div>
         <div class="who"><div class="nm"><span class="tag">[BOT]</span>${esc(b.name)}</div>
-          <div class="sub"><span class="team-${team.toLowerCase()}">${isCoop() ? "Ally" : team}</span> &middot; ${b.skill >= 0 ? SKILLS[b.skill] : "Room skill"}</div></div>
+          <div class="sub"><span class="team-${team.toLowerCase()}">${isCoop() ? "Ally" : team}</span> &middot; ${b.skill >= 0 ? SKILLS[b.skill] : MODE_SKILL_MODES.includes(room.mode) ? "High (this mode)" : "Room skill"}</div></div>
         ${wpn}
         <div class="acts">
           <button class="icon-btn" data-act="up" title="Move up" ${i === 0 ? "disabled" : ""}>&#9650;</button>
@@ -173,7 +178,7 @@
     $("preset").innerHTML = `<option value="0">Any weapon</option>` + presets.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
     $("preset").value = String(presets.some(p => p.id === b.preset) ? b.preset : 0);
     $("skill").value = b.skill;
-    $("skilltext").textContent = b.skill >= 0 ? SKILLS[b.skill] : "room's AI difficulty";
+    $("skilltext").textContent = b.skill >= 0 ? SKILLS[b.skill] : MODE_SKILL_MODES.includes(room.mode) ? "high in this mode" : "room's AI difficulty";
     document.querySelectorAll(".slot-pick").forEach(btn => {
       btn.querySelector(".pick").innerHTML = slotHtml(b, btn.dataset.slot, false);
     });
@@ -386,6 +391,23 @@
     }
   }
 
+  // adds bots; with a random skill each new one then draws its own (the server gives them all the same)
+  async function addBots(body) {
+    const before = new Set(room.bots.map(b => b.id));
+    const draw = newSkill === RANDOM_SKILL && !MODE_SKILL_MODES.includes(room.mode);
+    await send(Object.assign(body, { team: isCoop() ? 2 : newTeam, preset: newPreset, skill: newSkill === RANDOM_SKILL ? -1 : newSkill }));
+    if (!draw) return;
+    try {
+      for (const b of room.bots.filter(x => !before.has(x.id)))
+        room = await api({ action: "update", id: b.id, skill: Math.floor(Math.random() * SKILLS.length) });
+      lastJson = JSON.stringify(room);
+    } catch (e) {
+      toast(e.message, true);
+    }
+    renderList();
+    renderEditor();
+  }
+
   // shuffles the AI players between CT and T, half on each team (an odd one goes to either at random); a chosen
   // character of the other team goes back to random, like a team change in the editor
   let scrambling = false;
@@ -462,11 +484,10 @@
   });
   $("newskill").addEventListener("change", () => {
     newSkill = +$("newskill").value;
-    try { localStorage.setItem("bots.newSkill", String(newSkill)); } catch (e) { /* no storage */ }
+    try { localStorage.setItem("bots.newSkillChoice", String(newSkill)); } catch (e) { /* no storage */ }
   });
-  const newBot = () => ({ team: isCoop() ? 2 : newTeam, preset: newPreset, skill: newSkill });
-  $("add").addEventListener("click", () => send(Object.assign({ action: "add", count: Math.max(1, +$("count").value || 1) }, newBot())));
-  $("fill").addEventListener("click", () => send(Object.assign({ action: "fill" }, newBot())));
+  $("add").addEventListener("click", () => addBots({ action: "add", count: Math.max(1, +$("count").value || 1) }));
+  $("fill").addEventListener("click", () => addBots({ action: "fill" }));
   $("scramble").addEventListener("click", scramble);
 
   // the selected bot
