@@ -2120,6 +2120,7 @@ static void ZsrBotMoney(void* bot)
 }
 
 static const int MODE_ZHE = 51; // Manhunt: see DriveZheBot
+static const int MODE_ZCON = 56; // Zombie Conquest: see modes/zombie_conquest.inl
 
 static void UpdateBuying(void* bot, BotState& st)
 {
@@ -2157,6 +2158,8 @@ static void UpdateBuying(void* bot, BotState& st)
     }
     if (GameMode() == MODE_ZHE)
         return; // Manhunt: everyone starts with bare hands, weapons come from the map's boxes (customwb)
+    if (GameMode() == MODE_ZCON)
+        return; // Zombie Conquest: only the mode's weapon sets can be bought (ZConBotThink)
     MatchBot* rb = RoomBotOf(bot, st);
     bool scenario = CoopMode();
     // room AI players buy their own loadout in every mode: chosen weapons, else random ones from their filter, else
@@ -3232,6 +3235,25 @@ static int RoomBotQuota(int team, const char* which)
     if (g_matchFetch != 2 || !g_matchKnown)
         return team; // server not reachable: the game decides
     MarkZgPlayers();
+    // Zombie Conquest merges the lobby's teams: the room lists its AI players on the host's side, while the game asks
+    // for bots on both sides to balance them (T are the zombies). The list only says how many: each bot joins the side
+    // asked for (RoomBotOf takes any free AI player), the emptier one when the game doesn't say.
+    if (GameMode() == MODE_ZCON)
+    {
+        int total = 0;
+        EnterCriticalSection(&g_matchLock);
+        for (auto& m : g_matchBots)
+            if (!m.fakePlayer)
+                total++;
+        LeaveCriticalSection(&g_matchLock);
+        if (g_matchAdded[1] + g_matchAdded[2] >= total)
+            return -1;
+        int t = team == 0 ? 1 : team == 1 ? 2 : g_matchAdded[1] <= g_matchAdded[2] ? 1 : 2;
+        g_matchAdded[t]++;
+        Log("the game adds a bot (%s): %s, %d T and %d CT of %d", which, t == 1 ? "T (zombies)" : "CT (humans)",
+            g_matchAdded[1], g_matchAdded[2], total);
+        return t == 1 ? 0 : 1;
+    }
     int want[3] = { 0, 0, 0 };
     EnterCriticalSection(&g_matchLock);
     for (auto& m : g_matchBots)
@@ -4254,6 +4276,8 @@ static void CommandFile()
 
 #include "modes/zombie2_mutation.inl"
 
+#include "modes/zombie_conquest.inl"
+
 // ---------------------------------------------------------------- the frame hook (every mode)
 // The end of mp.dll's StartFrame (DLL function 0x113f8a80) runs botassist's per-frame work: the console, the command
 // file, and each mode's watcher (each returns at once outside its mode).
@@ -4272,6 +4296,7 @@ static void HookedStartFrame()
         ZSRiftWatch();
         Z4Watch();
         ZB2Watch();
+        ZConWatch();
         ZgFrame();
     }
     __except (EXCEPTION_EXECUTE_HANDLER)
@@ -4660,6 +4685,25 @@ static void HookedRunPlayerMove(void* fakeclient, const float* angles, float fwd
                     Z4BotSkills(fakeclient);
                 if (!scenario && GameMode() == MODE_ZB2)
                     ZB2BotThink(fakeclient);
+                if (!scenario && GameMode() == MODE_ZCON)
+                {
+                    ZConBotThink(fakeclient, st);
+                    float y = aim[1], f = fwd, sd = side;
+                    unsigned short bt = buttons;
+                    bool setView = false;
+                    if (ZConMove(fakeclient, st, y, setView, f, sd, bt))
+                    {
+                        fwd = f;
+                        side = sd;
+                        buttons = bt;
+                        if (setView)
+                        {
+                            aim[1] = y;
+                            float* ang = (float*)(v + EV_ANGLES);
+                            ang[1] = aim[1];
+                        }
+                    }
+                }
                 if (monsters)
                 {
                     Command cmd{ aim[1], aim[0], fwd, side, buttons };

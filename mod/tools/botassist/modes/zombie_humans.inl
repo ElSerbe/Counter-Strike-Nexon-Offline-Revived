@@ -1,7 +1,7 @@
 // botassist: human bots against zombie players (the PvP zombie modes: Original, Mutation, Hero, Zombie 4: Darkness,
 // Zombie Escape...). Included by botassist.cpp at this point (one translation unit: it uses the shared helpers
 // defined before it). Only runs where zombies are players: not in the co-op/monster modes, Zombie Giant or Manhunt
-// (they drive their bots themselves), and only for a bot that isn't a zombie (player +0x2166) with one close.
+// (they drive their bots themselves), Zombie Conquest (humans hold its bases), and only for a bot that isn't a zombie (player +0x2166) with one close.
 //
 // The stock AI stands its ground and shoots until the zombie bites. With a zombie in sight within ZombieFleeDistance
 // (botassist.ini, or any within 200 u even unseen) the bot keeps the stock AI's aim and fire (only its movement is
@@ -24,7 +24,7 @@ static std::map<void*, ZfBot> g_zf;
 static bool ZombieFleeMode()
 {
     int m = GameMode();
-    return cfg.zombieFlee && !CoopMode() && m != MODE_ZOMBIE_GIANT && m != MODE_ZHE;
+    return cfg.zombieFlee && !CoopMode() && m != MODE_ZOMBIE_GIANT && m != MODE_ZHE && m != MODE_ZCON; // Conquest: they hold the base
 }
 
 // a nav area 250 to 900 u away in the direction away from the zombies (dir: unit, 2D), farthest from them

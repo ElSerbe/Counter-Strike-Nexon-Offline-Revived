@@ -29,7 +29,7 @@ Source layout: `botassist.cpp` holds what every mode shares (settings, entities,
 room AI players, buying, teams, console, hooks, the create-room UI). Each mode with its own bot behaviour lives in
 `modes/`, included by botassist.cpp where it was (one translation unit, so a mode file uses the shared helpers
 defined before it): `zombie_giant.inl` (mode 30), `manhunt.inl` (51), `zombie_disaster_zone.inl` (59),
-`zombie4_darkness.inl` (29), `zombie2_mutation.inl` (9), `zombie_humans.inl` (human bots in every PvP zombie mode). A mode file only runs in its mode (each entry point checks `GameMode()`); a change
+`zombie4_darkness.inl` (29), `zombie2_mutation.inl` (9), `zombie_conquest.inl` (56), `zombie_humans.inl` (human bots in every PvP zombie mode). A mode file only runs in its mode (each entry point checks `GameMode()`); a change
 for one mode goes in its file, so the other modes' AI stays as it was. The shared code calls into them only from
 the hooks (`HookedRunPlayerMove` per bot, `HookedStartFrame` per frame) and a few mode checks in buying and teams.
 
@@ -555,6 +555,29 @@ never in a hurt zone, the bot only follows a real nav path to it (else it moves 
 with drops up to 120 u), and before each step the ground 72 u ahead is probed (`DropAhead`: no floor within the
 allowed drop, or a hurt zone below): it turns away, or stands and fights if no way is safe. Jumps only on safe ground.
 botassist_debug.log: "zombie flee: bot ... stops at a drop / hurt zone".
+
+## Zombie Conquest (mode 56) with room bots
+
+`modes/zombie_conquest.inl` (rules CSOGameRulesZombiConquest, vtable 0x117919e0; bases, safe areas and weapon sets come
+from the game's `resource/ZombiConquest/ConquestInfo.json`, 11 maps: chapel, skyscraper, hacienda, farero, wintershelter,
+assault...). T are zombies, CT humans, and they swap every round.
+- No zombies: the lobby's teams are merged in this mode, so the room lists every AI player on the host's side, and
+  `RoomBotQuota` refused the game's requests for T bots. In this mode the list only says how many bots: each one joins
+  the side the game asks for. botassist.log: "the game adds a bot (...): T (zombies), n T and m CT of k".
+- No respawn: as in Zombie 4 and Mutation nothing runs a dead bot's PlayerDeathThink once it is respawnable. `ZConWatch`
+  (frame hook) runs it for humans and zombies; the game keeps its own wait; after 30 s a forced respawn.
+  botassist.log: "ZCon: ... still down".
+- Human bots' weapons: only the chosen set can be bought (rules vfunc 0x36c), so the room's weapons are skipped (shared
+  `UpdateBuying` returns in this mode) and each life a bot takes a random set of the current base: handlers 0x107af350
+  (set) and 0x1080ea30 (ability, from the second base) called directly, because those two commands read their argument
+  straight from the engine, not from a bot's fake command; then `item_<id>` for each weapon. botassist.log: "ZCon: human
+  bot ... takes weapon set".
+- Zombie bots draw a class (`selzmb random`: only those the base allows); both sides use skills (`useitem`) and awakening
+  (`ZBCon_UseSpecial` with the gauge, module +0x18, at 100).
+- `ZConMove` replaces only the movement (the stock AI keeps aiming and shooting): humans walk to the active base and stay
+  inside it, zombies too unless a human is in sight within 900 u (then the stock AI chases). Bots look where they walk
+  with no enemy around. Ground ahead checked as in the zombie flee (`DropAhead`). Radio orders come first. Human bots
+  don't back off from zombies here (`ZombieFleeMode`).
 
 ## Deadly places in botassist's paths (shared)
 
