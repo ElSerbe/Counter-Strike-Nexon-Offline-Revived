@@ -617,12 +617,20 @@ humans, in even teams, and a bitten human dies. A round ends when a side has nob
 time; zombies wait for a countdown at the start and get stronger in the last 30 s.
 - No zombies: as in Conquest the room lists every AI player on the host's side and `RoomBotQuota` refused the T bots, so
   the round ended and restarted over and over. Same fix: each bot joins the side the game asks for.
+- The ban/pick menu before each round (`BanPickSystem::Supervisor`, pointer at 0x11e5fb90): humans pick the weapon they
+  play and zombies ban one, in turns, with 11 s for each player and then a draw. A bot never answers, so it took 11 s per bot.
+  `ZWarWatch` ends a bot's turn at once, so the game draws for it, and shortens the pause before a bot's turn to 0.3 s.
+  botassist.log: "ZWar: bot ... ends its turn". The chat's "selection time ... is over" for each bot comes with the draw.
+- Human bots' weapons: a player's client buys the pick when the menu closes (`item_<id>`, ammo, grenade, armor); a bot has no
+  client. `ZWarBuyPick` does the same for human bots, and shared `UpdateBuying` skips this mode, so the room's weapons
+  and filters don't apply here. botassist.log: "ZWar: human bot ... buys its pick".
+- Zombie bots stay still for the humans' preparation (20 s from the round's start). Nobody counts as stuck during the menu:
+  `ZConMoveAt` also stops for FL_FROZEN (shared with Conquest).
 - `ZB2Watch` and `ZB2BotThink` (the same rules as Mutation): dead zombie bots go through the game's death think, zombie bots
   draw a class, both sides use skills.
 - `ZWarMove`: Conquest's movement (`ZConMoveAt`) with an objective that moves. Humans hold together around a nav area near
   them, a new one 400 to 900 u off every 35 to 55 s. Zombies gather at their squads' rally points and fall on where the
-  humans are. Human bots buy the room's weapons as usual and the room's skill applies. botassist.log: "ZWar: n humans and
-  m zombies alive".
+  humans are. The room's skill applies. botassist.log: "ZWar: n humans and m zombies alive".
 
 ## Deadly places in botassist's paths (shared)
 

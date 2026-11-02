@@ -49,7 +49,7 @@ static const int EV_WEAPONMODEL = 0xd0, EV_CLASSNAME = 0x0, EV_ORIGIN = 0x8, EV_
     EV_ABSMAX = 0xe0, EV_HEALTH = 0x178, EV_TAKEDAMAGE = 0x190, EV_DEADFLAG = 0x194, EV_VIEW_OFS = 0x198,
     EV_FLAGS = 0x1c8, EV_TEAM = 0x1d8, EV_ARMORVALUE = 0x1e8, EV_NETNAME = 0x200, EV_CONTAINING_ENTITY = 0x238;
 static const int GV_TIME = 0x0, GV_MAPNAME = 0xc, GV_STRINGBASE = 0x98;
-static const int FL_CLIENT = 0x8, FL_INWATER = 0x10, FL_MONSTER = 0x20, FL_FAKECLIENT = 0x2000;
+static const int FL_CLIENT = 0x8, FL_INWATER = 0x10, FL_MONSTER = 0x20, FL_FROZEN = 0x1000, FL_FAKECLIENT = 0x2000;
 static const int IN_ATTACK = 1, IN_JUMP = 2, IN_DUCK = 4, IN_RELOAD = 0x2000;
 static const float RAD = 57.29578f;
 
@@ -2189,6 +2189,8 @@ static void UpdateBuying(void* bot, BotState& st)
         return; // Manhunt: everyone starts with bare hands, weapons come from the map's boxes (customwb)
     if (GameMode() == MODE_ZCON)
         return; // Zombie Conquest: only the mode's weapon sets can be bought (ZConBotThink)
+    if (GameMode() == MODE_ZWAR)
+        return; // Zombie War: humans play the weapon picked before the round (ZWarBuyPick)
     MatchBot* rb = RoomBotOf(bot, st);
     bool scenario = CoopMode();
     // room AI players buy their own loadout in every mode: chosen weapons, else random ones from their filter, else
@@ -4328,6 +4330,7 @@ static void HookedStartFrame()
         Z4Watch();
         ZB2Watch();
         ZConWatch();
+        ZWarWatch();
         ZgFrame();
     }
     __except (EXCEPTION_EXECUTE_HANDLER)
@@ -4736,7 +4739,10 @@ static void HookedRunPlayerMove(void* fakeclient, const float* angles, float fwd
                     if (GameMode() == MODE_ZCON)
                         ZConBotThink(fakeclient, st);
                     else
+                    {
                         ZB2BotThink(fakeclient);
+                        ZWarBuyPick(fakeclient);
+                    }
                     float y = aim[1], f = fwd, sd = side;
                     unsigned short bt = buttons;
                     bool setView = false;

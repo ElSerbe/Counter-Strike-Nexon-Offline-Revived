@@ -614,7 +614,7 @@ static bool ZConMoveAt(void* bot, BotState& st, const ZConBase& base, float rall
     }
     // the freeze at the start of a round: nobody can move, so nobody is stuck (counted as stuck, the ways out of the spawn
     // ended up marked as blocked)
-    if (F<float>(Vars(bot), EV_MAXSPEED) <= 1.0f)
+    if (F<float>(Vars(bot), EV_MAXSPEED) <= 1.0f || (F<int>(Vars(bot), EV_FLAGS) & FL_FROZEN))
     {
         st.lastPos = me;
         st.lastProgress = now;
