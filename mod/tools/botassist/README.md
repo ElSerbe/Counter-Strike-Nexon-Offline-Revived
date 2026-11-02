@@ -587,7 +587,8 @@ assault...). T are zombies, CT humans, and they swap every round.
     the base and around it, and now and then to the closest human.
   - Each bot has its own way (`ZConNewRoute`): a stretch of the shortest path costs more in the A* (`g_navRouteCost`,
     shared, null elsewhere). Checked offline on six of the maps' nav meshes (chapel, skyscraper, hacienda, farero,
-    wintershelter, assault): 3 to 4 different routes per trip, typically 14% longer, 2.1 times at most.
+    wintershelter, assault): a median of 4 different routes in 12 draws per trip (only 1 on some trips), typically 14%
+    longer, 2.1 times at most.
   - Stuck: a jump and a step aside, a step back, then that way counts as blocked for this bot. A team mate right ahead
     is passed on one side. botassist.log: "ZCon: ... stuck at", "ZCon: bot ... goes round".
   - `WalkYaw` and `LedgeAhead` (shared, also used by the zombie flee in every PvP zombie mode): `ClearYaw`'s line at knee
