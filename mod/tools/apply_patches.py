@@ -499,6 +499,16 @@ PATCHES += [
 ]
 
 
+# Partner (mode 50): the score list only counts and shows players whose first info field isn't 0, to hide the partners of the
+# official game's players. Nobody here has that field, so the list was empty. Now it skips that check in the three places:
+# everybody is listed, partners too, like the other modes.
+PATCHES += [
+    ("client.dll", 0x029FFA42, bytes.fromhex("750d"), bytes.fromhex("eb0d"), "Partner: score list rows show everybody"),
+    ("client.dll", 0x02A01007, bytes.fromhex("7506"), bytes.fromhex("eb06"), "Partner: score list team totals count everybody"),
+    ("client.dll", 0x02A0311A, bytes.fromhex("7506"), bytes.fromhex("eb06"), "Partner: score list team counts count everybody"),
+]
+
+
 def file_offset(path: Path, va: int) -> int:
     pe = pefile.PE(str(path), fast_load=True)
     return pe.get_offset_from_rva(va - pe.OPTIONAL_HEADER.ImageBase)

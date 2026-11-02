@@ -9,6 +9,8 @@
 // skill, reaction, teamwork, aggression, accuracyMin/Max, health, speed). resource/partner/partner_bot_bt.xml plays it, a
 // branch per "command" (1 cover, 2 plant/defuse, 3 hold, 4 move to destinationX/Y/Z, 5 follow, 6 help), each fighting first.
 //
+// A room AI player plays like a player here: it has its partner too (PtnWatch: the same 0x10744560), named after both.
+//
 // What blocked it with room bots, and what botassist does:
 //   - PtnCreatingPartner: the partner comes through AddBot, and RoomBotQuota refused it as a bot beyond the room's list (or
 //     gave it a room AI player's place). rules +0x4f8 holds the owner's index while it is created: those pass. PtnIsPartner
@@ -17,7 +19,12 @@
 //     players were never added and the round never started. They are added here once a player has a team, keeping two client
 //     slots per player (player and partner). A list with one side empty is split so both sides have someone.
 //   - PtnBotThink: a room bot runs the same tree, with nobody to give it orders, so it gets them here: the C4 carrier goes to
-//     plant, the closest bot picks up a dropped C4 or defuses, the others go to the bomb sites, hold a while and hunt.
+//     plant, the closest bot picks up a dropped C4 or defuses, CTs split between the bomb sites and hold them, Ts attack one and
+//     hunt. It also talks on the radio (PtnSay, the game's own messages and sounds).
+//   - PtnMove: the tree's path following has no unsticking and the bots spawn packed, so many stayed stuck. Room bots and partners
+//     walk with GdmWalk while they have somewhere to go; with an enemy in sight, or at the end of the way (planting, defusing), it's
+//     the tree's again.
+//   - Pre-round: the game's default config has mp_freezetime 0, so no freeze time. PtnWatch sets it, and a buy time if too short.
 //   - Owner: the rules' PlayerKilled (0x107430b0) returns before the base code when a bot's ownerIndex isn't a valid player (no
 //     death notice, no score). A room bot is its own owner, which also gives it the kills.
 //   - Skill: the blackboard's values come from the bot's room skill.
@@ -25,12 +32,16 @@
 //     ("ptn_spawn", 0x107458e0): room bots draw a place.
 //   - Orders: "radio1..3" are the partner's here, so botassist's own order menu stays closed (see OnPlayerCommand).
 static const DWORD MP_PTN_RULES_VT = 0x11781bfc, MP_ZBBOT_MANAGER = 0x12183000, MP_ZBBOT_MANAGER_VT = 0x11991964;
-static const DWORD MP_PTN_SPAWN = 0x107458e0, MP_BOT_PATH_CLEAR = 0x1156e3c0;
+static const DWORD MP_PTN_SPAWN = 0x107458e0, MP_BOT_PATH_CLEAR = 0x1156e3c0, MP_PTN_CREATE = 0x10744560, MP_PLAYER_RADIO = 0x114c7700;
 static const int PTN_TABLE = 0x284, PTN_TABLE_STEP = 0xc, PTN_CREATING = 0x4f8, PTN_ONE_TARGET = 0x4f0, PTN_TARGET_POS = 0x4fc;
 static const int PTN_TARGETS_FIRST = 0x4a4, PTN_TARGETS_LAST = 0x4a8, PLAYER_BB = 0x374c, PLAYER_PATH = 0x3750, PLAYER_C4_SLOT = 0x1008;
 static const int ZB_BOMB_PLANTED = 0x18, ZB_BOMB_DROPPED = 0x19, ZB_BOMB_DEFUSING = 0x1c;
-static const int PTN_CMD_PLANT = 2, PTN_CMD_HOLD = 3, PTN_CMD_MOVE = 4;
+static const int PTN_CMD_COVER = 1, PTN_CMD_PLANT = 2, PTN_CMD_HOLD = 3, PTN_CMD_MOVE = 4, PTN_CMD_FOLLOW = 5, PTN_CMD_HELP = 6;
 static const float PTN_THINK = 1.0f, PTN_ARRIVED = 150.0f, PTN_GUARD_RANGE = 500.0f, PTN_SITE_RANGE = 450.0f, PTN_DEST_TIME = 30.0f;
+static const float PTN_FIGHT_RANGE = 1000.0f, PTN_END_OF_WAY = 110.0f, PTN_FREEZE = 6.0f, PTN_BUY_MINUTES = 0.75f, PTN_PARTNER_WINDOW = 20.0f;
+static const float PTN_SAY_BOT = 9.0f, PTN_SAY_ANY = 2.5f;
+// resource/partner/partner_bot_class.json, in its order: 0-3 CT, 4-7 T
+static const char* const PTN_CLASS_NAMES[] = { "Dorothy", "Ji Yoon", "Fernando", "Sonya", "Yuri", "Michaela", "Flora", "Elizabeth" };
 
 static unsigned char* PtnRules()
 {
@@ -203,12 +214,29 @@ static bool PtnNearestEnemy(void* bot, int team, V3& out)
 
 struct PtnBot
 {
-    float round = -1, next = 0, holdUntil = 0, plantTry = 0, destAt = 0;
-    int cmd = 0, spot = 0;
+    float round = -1, next = 0, holdUntil = 0, plantTry = 0, destAt = 0, saidAt = 0;
+    int cmd = 0, spot = 0, enemy = 0;
     V3 dest = { 0, 0, 0 };
-    bool hasDest = false;
+    bool hasDest = false, saidHere = false, saidPlant = false, saidBomb = false, saidHurt = false;
 };
 static std::map<void*, PtnBot> g_ptnBots;
+static std::map<void*, GdmBot> g_ptnWalk;
+
+// on the team's radio, not too often: the game's messages, with their sound
+static void PtnSay(unsigned char* p, PtnBot& z, float now, const char* sound, const char* text, int chance = 100)
+{
+    static float anyAt = 0;
+    if (now - z.saidAt < PTN_SAY_BOT || (now >= anyAt && now - anyAt < PTN_SAY_ANY) || rand() % 100 >= chance)
+        return;
+    z.saidAt = anyAt = now;
+    typedef void(__fastcall * RadioFn)(void* player, void* edx, const char* sound, const char* text, int pitch, int icon);
+    ((RadioFn)(MP_PLAYER_RADIO + g_mpDelta))(p, nullptr, sound, text, 100, 1);
+}
+
+static void* PtnEntity(int index)
+{
+    return index > 0 ? ((EntityOfIndexFn)((void**)(MP_ENGFUNCS + g_mpDelta))[ENG_PENTITYOFENTINDEX])(index) : nullptr;
+}
 
 static void PtnOrder(unsigned char* p, void* board, PtnBot& z, int cmd, V3 dest)
 {
@@ -245,15 +273,25 @@ static void PtnRoam(void* bot, unsigned char* p, void* board, PtnBot& z, int tea
         PtnOrder(p, board, z, PTN_CMD_MOVE, z.dest);
         return;
     }
-    if (z.cmd == PTN_CMD_MOVE && z.hasDest)
-        z.holdUntil = now + (team == 2 ? 6.0f + Rnd() * 8.0f : 1.0f + Rnd() * 3.0f); // arrived: defenders stay longer
+    if (z.cmd == PTN_CMD_MOVE && z.hasDest && Len(z.dest - me) <= PTN_ARRIVED)
+    {
+        z.holdUntil = now + (team == 2 ? 10.0f + Rnd() * 15.0f : 1.0f + Rnd() * 3.0f); // arrived: defenders stay longer
+        if (team == 2 && !z.saidHere)
+        {
+            z.saidHere = true;
+            PtnSay(p, z, now, "%!MRAD_INPOS", "#In_position", 50);
+        }
+    }
     if (now < z.holdUntil)
     {
         PtnOrder(p, board, z, PTN_CMD_HOLD, z.dest);
         return;
     }
+    // CTs defend: most of the time the site that falls to them (half of them each), so both are covered. Ts go for the
+    // site of this round, some of them hunting or by the other site
     V3 enemy;
-    bool hunt = rand() % 100 < (team == 2 ? 40 : 55);
+    bool first = !z.saidHere && !z.hasDest;
+    bool hunt = !first && rand() % 100 < (team == 2 ? 15 : 40);
     if (hunt && PtnNearestEnemy(bot, team, enemy))
     {
         PtnOrder(p, board, z, PTN_CMD_MOVE, PtnNavPoint(enemy, 200.0f));
@@ -262,7 +300,9 @@ static void PtnRoam(void* bot, unsigned char* p, void* board, PtnBot& z, int tea
     V3 goal = me;
     if (!g_ptn.sites.empty())
     {
-        size_t site = team == 1 && rand() % 100 < 70 ? (size_t)g_ptn.attack : (size_t)rand() % g_ptn.sites.size();
+        size_t count = g_ptn.sites.size();
+        size_t site = team == 2 ? (size_t)g_IndexOfEdict(bot) % count
+                                : rand() % 100 < 75 ? (size_t)g_ptn.attack % count : (size_t)rand() % count;
         goal = g_ptn.sites[site].center;
     }
     PtnOrder(p, board, z, PTN_CMD_MOVE, PtnNavPoint(goal, PTN_SITE_RANGE));
@@ -306,6 +346,22 @@ static void PtnBotThink(void* bot)
     if ((team != 1 && team != 2) || !cso[0x27c])
         return;
     PtnReadSites(rules, round);
+    // the radio: who it fights, and whether that one fell
+    int fights = BbInt(board, "enemyIndex", 0);
+    if (fights != z.enemy && z.round == round)
+    {
+        void* was = PtnEntity(z.enemy);
+        if (z.enemy && was && !Alive(was))
+            PtnSay(p, z, now, "%!MRAD_ENEMYDOWN", "#Enemy_down", 70);
+        else if (fights)
+            PtnSay(p, z, now, "%!MRAD_ENEMYSPOT", "#Enemy_spotted", 70);
+        z.enemy = fights;
+    }
+    if (!z.saidHurt && F<float>(Vars(bot), EV_HEALTH) < 40.0f && fights)
+    {
+        z.saidHurt = true;
+        PtnSay(p, z, now, "%!MRAD_BACKUP", "#Need_backup");
+    }
     if (z.round != round)
     {
         z = PtnBot();
@@ -324,8 +380,18 @@ static void PtnBotThink(void* bot)
     void* game = PtnGameBoard();
     int bomb = game ? BbInt(game, "bombState", 0) : 0;
     V3 me = Origin(bot);
+    if (now > round + *(int*)(cso + 0x250) && now < round + *(int*)(cso + 0x250) + 5.0f)
+        PtnSay(p, z, now, team == 1 ? "%!MRAD_GO" : "%!MRAD_GETINPOS", team == 1 ? "#Go_go_go" : "#Get_in_position_and_wait", 25);
     if (bomb == ZB_BOMB_PLANTED || bomb == ZB_BOMB_DEFUSING)
     {
+        if (!z.saidBomb)
+        {
+            z.saidBomb = true;
+            if (team == 1)
+                PtnSay(p, z, now, "%!MRAD_POSITION", "#Hold_this_position", 40);
+            else
+                PtnSay(p, z, now, "%!MRAD_BACKUP", "#Need_backup", 40);
+        }
         V3 planted = { BbFloat(game, "plantedBombPosX"), BbFloat(game, "plantedBombPosY"), BbFloat(game, "plantedBombPosZ") };
         // a CT defuses, the closest one; the others keep the place (the tree sets the destination to the bomb)
         if (team == 2 && (BbInt(game, "bombDefuser", 0) == g_IndexOfEdict(bot) ||
@@ -348,6 +414,11 @@ static void PtnBotThink(void* bot)
         {
             const PtnSite& site = g_ptn.sites[g_ptn.attack % g_ptn.sites.size()];
             V3 spot = site.spots[z.spot % site.spots.size()];
+            if (!z.saidPlant && Len(spot - me) < 500.0f)
+            {
+                z.saidPlant = true;
+                PtnSay(p, z, now, "%!MRAD_COVERME", "#Cover_me");
+            }
             // there and not planting: the tree plants inside a bomb zone within 64 units of the destination
             if (Len(spot - me) < 80.0f)
             {
@@ -379,6 +450,130 @@ static void PtnBotThink(void* bot)
     PtnRoam(bot, p, board, z, team, now);
 }
 
+// In the hook's movement: walks a room bot or a partner where its orders say, unless the tree should do it
+static bool PtnMove(void* bot, BotState& st, float& viewYaw, bool& setView, float& fwd, float& side, unsigned short& buttons)
+{
+    setView = false;
+    unsigned char* p = PtnRules() ? (unsigned char*)PrivateOf(bot) : nullptr;
+    void* board = p ? PtnBotBoard(p) : nullptr;
+    if (!board || !g_nav.ok)
+        return false;
+    GdmBot& z = g_ptnWalk[bot];
+    float now = Now();
+    V3 me = Origin(bot), eye = Eye(bot), goal = me;
+    if (F<float>(Vars(bot), EV_MAXSPEED) <= 1.0f || (F<int>(Vars(bot), EV_FLAGS) & FL_FROZEN))
+    {
+        st.lastPos = me;
+        st.lastProgress = now;
+        return false;
+    }
+    int team = *(int*)(p + 0x6c), cmd = BbInt(board, "command", 0);
+    void* enemy = PtnEntity(BbInt(board, "enemyIndex", 0));
+    if (enemy && (F<int>(Vars(enemy), EV_FLAGS) & FL_CLIENT) && Alive(enemy))
+    {
+        goal = Origin(enemy);
+        if (CanSee(bot, eye, enemy))
+        {
+            z.lastSeen = now;
+            if (Len(goal - me) < PTN_FIGHT_RANGE)
+                return false; // the tree stands and shoots
+        }
+    }
+    else if (cmd == PTN_CMD_COVER || cmd == PTN_CMD_FOLLOW || cmd == PTN_CMD_HELP)
+    {
+        void* owner = PtnEntity(BbInt(board, "ownerIndex", 0));
+        if (!owner || owner == bot || !Alive(owner))
+            return false;
+        goal = Origin(owner);
+        if (Len(goal - me) < (cmd == PTN_CMD_FOLLOW ? 200.0f : 120.0f))
+            return false;
+    }
+    else if (cmd == PTN_CMD_PLANT || cmd == PTN_CMD_MOVE)
+    {
+        goal = V3{ BbFloat(board, "destinationX"), BbFloat(board, "destinationY"), BbFloat(board, "destinationZ") };
+        void* game = PtnGameBoard();
+        // a T ordered to plant goes for a dropped C4 first; the tree picks it up
+        if (cmd == PTN_CMD_PLANT && team == 1 && game && BbInt(game, "bombState", 0) == ZB_BOMB_DROPPED)
+        {
+            void* c4 = PtnEntity(BbInt(game, "bombEntIndex", 0));
+            if (c4)
+                goal = Origin(c4);
+        }
+        if (Len(goal - me) < PTN_END_OF_WAY)
+            return false;
+    }
+    else
+        return false;
+    V3 wp;
+    if (!NextWaypoint(bot, st, me, goal, 32.0f, wp))
+        wp = goal;
+    float wayYaw = YawOf(wp - me), maxDrop = ZCON_FREE_DROP;
+    if (me.z - 36.0f - wp.z + 32.0f > maxDrop)
+        maxDrop = min(me.z - 36.0f - wp.z + 32.0f, HURT_DROP_MAX);
+    bool walked = GdmWalk(bot, st, z, me, now, wayYaw, wayYaw, maxDrop, viewYaw, setView, fwd, side, buttons);
+    if (z.stuckNow)
+    {
+        static int reports = 0;
+        if (z.stuck >= 3 && reports++ < 40)
+            Log("Partner: '%s' stuck at %.0f %.0f %.0f going to %.0f %.0f %.0f (order %d)", String(F<int>(Vars(bot), EV_NETNAME)), me.x,
+                me.y, me.z, goal.x, goal.y, goal.z, cmd);
+        // a room bot that can't get there is sent elsewhere
+        if (z.stuck >= 4 && cmd == PTN_CMD_MOVE && !PtnIsPartner(bot))
+        {
+            PtnBot& order = g_ptnBots[bot];
+            order.hasDest = false;
+            order.cmd = 0;
+        }
+    }
+    return walked;
+}
+
+// The table of partners: names, a room bot's partner, and a partner falls with its bot as with a player (0x107430b0)
+static void PtnPartners(unsigned char* rules, unsigned char* cso, float now, int clients)
+{
+    typedef void(__fastcall * CreateFn)(void* rules, void* edx, void* owner);
+    typedef void(__fastcall * KilledFn)(void* partner, void* edx, void* attacker, int gib);
+    bool created = false;
+    for (int i = 1; i < 34; i++)
+    {
+        void* owner = PtnEntity(i);
+        if (!owner || !(F<int>(Vars(owner), EV_FLAGS) & FL_CLIENT) || PtnIsPartner(owner))
+            continue;
+        unsigned char* row = rules + PTN_TABLE + i * PTN_TABLE_STEP;
+        unsigned char* partner = *(unsigned char**)row;
+        bool ownerBot = (F<int>(Vars(owner), EV_FLAGS) & FL_FAKECLIENT) != 0;
+        int team = TeamOf(owner);
+        if (!partner)
+        {
+            // one at a time, while the round is young, and never taking the slot of a player's partner
+            if (!ownerBot || created || (team != 1 && team != 2) || !Alive(owner) || !cso[0x27c] || clients >= *(int*)((DWORD)*g_pGlobals + GV_MAXCLIENTS) ||
+                now > *(float*)(cso + 0x248) + *(int*)(cso + 0x250) + PTN_PARTNER_WINDOW)
+                continue;
+            created = true;
+            *(int*)(row + 4) = (team == 2 ? 0 : 4) + rand() % 4;
+            ((CreateFn)(MP_PTN_CREATE + g_mpDelta))(rules, nullptr, PrivateOf(owner));
+            continue;
+        }
+        unsigned char* pev = *(unsigned char**)(partner + 8);
+        void* edict = pev ? *(void**)(pev + EV_CONTAINING_ENTITY) : nullptr;
+        if (!edict)
+            continue;
+        if (ownerBot && !Alive(owner) && Alive(edict))
+            ((KilledFn)(*(void***)partner)[0x54 / 4])(partner, nullptr, pev, 0);
+        // named after its class and its player, so the score list tells whose it is
+        int cls = *(int*)(row + 4);
+        const char* ownerName = String(F<int>(Vars(owner), EV_NETNAME));
+        const char* name = String(F<int>(Vars(edict), EV_NETNAME));
+        if (cls >= 0 && cls < 8 && ownerName && *ownerName)
+        {
+            char want[32];
+            snprintf(want, sizeof(want), "%s (%s)", PTN_CLASS_NAMES[cls], ownerName);
+            if (!name || strcmp(name, want))
+                Rename(edict, want);
+        }
+    }
+}
+
 // the mode never asks for bots: the room's AI players are added here
 static void PtnWatch()
 {
@@ -389,10 +584,26 @@ static void PtnWatch()
     float now = Now();
     if (now >= next - 5.0f && now < next)
         return;
-    next = now + 0.5f;
-    int humans[3] = { 0, 0, 0 }, alive[3] = { 0, 0, 0 }, partners = 0;
+    next = now + 0.25f;
+    if (g_CVarGetFloat("mp_freezetime") < 1.0f)
+    {
+        char value[16];
+        snprintf(value, sizeof(value), "%.0f", PTN_FREEZE);
+        g_CVarSetString("mp_freezetime", value);
+        Log("Partner: mp_freezetime %s", value);
+    }
+    if (g_CVarGetFloat("mp_buytime") < PTN_BUY_MINUTES)
+    {
+        char value[16];
+        snprintf(value, sizeof(value), "%.2f", PTN_BUY_MINUTES);
+        g_CVarSetString("mp_buytime", value);
+        Log("Partner: mp_buytime %s", value);
+    }
+    int humans[3] = { 0, 0, 0 }, alive[3] = { 0, 0, 0 }, partners = 0, clients = 0;
     ForEntitiesNear(V3{ 0, 0, 0 }, 1e6f, [&](void* e) {
         int flags = F<int>(Vars(e), EV_FLAGS);
+        if (flags & FL_CLIENT)
+            clients++;
         int team = (flags & FL_CLIENT) ? TeamOf(e) : 0;
         if (team != 1 && team != 2)
             return;
@@ -427,8 +638,14 @@ static void PtnWatch()
     LeaveCriticalSection(&g_matchLock);
     int added = g_matchAdded[1] + g_matchAdded[2], total = want[1] + want[2];
     int room = *(int*)((DWORD)*g_pGlobals + GV_MAXCLIENTS) - (humans[1] + humans[2]) * 2;
+    unsigned char* cso = *(unsigned char**)(MP_CSO_RULES + g_mpDelta);
     if (added >= total)
+    {
+        // everybody is in: the bots' partners (the room keeps a slot for each player's)
+        if (cso && Readable(cso, 0x280))
+            PtnPartners(rules, cso, now, clients + humans[1] + humans[2]);
         return;
+    }
     if (added >= room)
     {
         static int reports = 0;

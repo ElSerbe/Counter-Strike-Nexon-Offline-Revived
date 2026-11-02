@@ -4775,7 +4775,7 @@ static void HookedRunPlayerMove(void* fakeclient, const float* angles, float fwd
                 if (!scenario && GameMode() == MODE_ZB2)
                     ZB2BotThink(fakeclient);
                 if (!scenario && (GameMode() == MODE_ZCON || GameMode() == MODE_ZWAR || GameMode() == MODE_GDM ||
-                                  GameMode() == MODE_SS))
+                                  GameMode() == MODE_SS || GameMode() == MODE_PTN))
                 {
                     if (GameMode() == MODE_ZCON)
                         ZConBotThink(fakeclient, st);
@@ -4789,6 +4789,7 @@ static void HookedRunPlayerMove(void* fakeclient, const float* angles, float fwd
                     bool setView = false;
                     if (GameMode() == MODE_ZCON   ? ZConMove(fakeclient, st, y, setView, f, sd, bt)
                         : GameMode() == MODE_ZWAR ? ZWarMove(fakeclient, st, y, setView, f, sd, bt)
+                        : GameMode() == MODE_PTN  ? PtnMove(fakeclient, st, y, setView, f, sd, bt)
                                                   : GdmMove(fakeclient, st, y, setView, f, sd, bt))
                     {
                         fwd = f;

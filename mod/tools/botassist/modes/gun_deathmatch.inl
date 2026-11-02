@@ -98,7 +98,7 @@ struct GdmBot
     float retargetAt = 0, strafeAt = 0, jumpAt = 0, dodgeUntil = 0, dodgeYaw = 0, yaw = 0, lastSeen = 0;
     float aliveAt = 0, viaAt = 0, viaUntil = 0;
     int strafe = 1, stuck = 0, level = -1, team = 0;
-    bool yawSet = false, hasVia = false;
+    bool yawSet = false, hasVia = false, stuckNow = false;
     V3 via = { 0, 0, 0 };
 };
 static std::map<void*, GdmBot> g_gdmBots;
@@ -168,6 +168,64 @@ static void GdmPickVia(void* bot, GdmBot& z, V3 me, V3 target)
     if (z.hasVia && !FindPath(me, z.via, path))
         z.hasVia = false;
     z.viaUntil = Now() + GDM_VIA_TIME;
+}
+
+// One step towards a direction, without falling, unsticking itself (a jump and a step aside, then back). z.stuckNow: it just
+// counted as stuck, z.stuck times in a row. Also used by Partner.
+static bool GdmWalk(void* bot, BotState& st, GdmBot& z, V3 me, float now, float wantYaw, float wayYaw, float maxDrop, float& viewYaw,
+                    bool& setView, float& fwd, float& side, unsigned short& buttons)
+{
+    z.stuckNow = false;
+    wantYaw = WalkYaw(bot, me, wantYaw, 40.0f);
+    if (now < z.dodgeUntil)
+        wantYaw = WalkYaw(bot, me, z.dodgeYaw, 40.0f);
+    float moveYaw = wantYaw;
+    if (!ZConSafeYaw(bot, me, wantYaw, maxDrop, moveYaw))
+    {
+        fwd = side = 0;
+        z.yawSet = false;
+        return true;
+    }
+    bool jumpSafe = !DropAhead(bot, me, moveYaw, 120.0f, ZCON_FREE_DROP);
+    bool jump = jumpSafe && LedgeAhead(bot, me, moveYaw);
+    if (Len2D(me - st.lastPos) > 24.0f)
+    {
+        st.lastPos = me;
+        st.lastProgress = now;
+        z.stuck = 0;
+    }
+    else if (now - st.lastProgress > 0.8f)
+    {
+        st.lastProgress = now;
+        st.nextRepath = 0;
+        z.stuck++;
+        z.stuckNow = true;
+        z.strafe = -z.strafe;
+        z.dodgeYaw = z.stuck % 2 ? wayYaw + 90.0f * z.strafe : wayYaw + 180.0f;
+        z.dodgeUntil = now + 0.5f;
+        jump = jumpSafe;
+    }
+    if (jump && now - z.jumpAt > 0.7f)
+    {
+        z.jumpAt = now;
+        buttons |= IN_JUMP;
+    }
+    if (now - z.jumpAt > 0.1f && now - z.jumpAt < 0.5f)
+        buttons |= IN_DUCK;
+    // nobody in sight for a moment: it looks where it walks
+    if (now - z.lastSeen > 1.5f)
+    {
+        z.yaw = z.yawSet ? Approach(z.yaw, moveYaw, 9.0f) : viewYaw;
+        z.yawSet = true;
+        viewYaw = z.yaw;
+        setView = true;
+    }
+    else
+        z.yawSet = false;
+    float rel = (moveYaw - viewYaw) / RAD;
+    fwd = cosf(rel) * 400.0f;
+    side = -sinf(rel) * 400.0f;
+    return true;
 }
 
 static bool GdmMove(void* bot, BotState& st, float& viewYaw, bool& setView, float& fwd, float& side, unsigned short& buttons)
@@ -256,59 +314,12 @@ static bool GdmMove(void* bot, BotState& st, float& viewYaw, bool& setView, floa
         if (me.z - 36.0f - wp.z + 32.0f > maxDrop)
             maxDrop = min(me.z - 36.0f - wp.z + 32.0f, HURT_DROP_MAX);
     }
-    wantYaw = WalkYaw(bot, me, wantYaw, 40.0f);
-    if (now < z.dodgeUntil)
-        wantYaw = WalkYaw(bot, me, z.dodgeYaw, 40.0f);
-    float moveYaw = wantYaw;
-    if (!ZConSafeYaw(bot, me, wantYaw, maxDrop, moveYaw))
+    bool walked = GdmWalk(bot, st, z, me, now, wantYaw, wayYaw, maxDrop, viewYaw, setView, fwd, side, buttons);
+    if (z.stuckNow && z.stuck >= 4)
     {
-        fwd = side = 0;
-        z.yawSet = false;
-        return true;
+        // stuck after a few tries: another target
+        z.target = nullptr;
+        z.hasVia = false;
     }
-    bool jumpSafe = !DropAhead(bot, me, moveYaw, 120.0f, ZCON_FREE_DROP);
-    bool jump = jumpSafe && LedgeAhead(bot, me, moveYaw);
-    if (Len2D(me - st.lastPos) > 24.0f)
-    {
-        st.lastPos = me;
-        st.lastProgress = now;
-        z.stuck = 0;
-    }
-    else if (now - st.lastProgress > 0.8f)
-    {
-        // stuck: a jump and a step aside, then back; after a few tries another target
-        st.lastProgress = now;
-        st.nextRepath = 0;
-        z.stuck++;
-        z.strafe = -z.strafe;
-        z.dodgeYaw = z.stuck % 2 ? wayYaw + 90.0f * z.strafe : wayYaw + 180.0f;
-        z.dodgeUntil = now + 0.5f;
-        jump = jumpSafe;
-        if (z.stuck >= 4)
-        {
-            z.target = nullptr;
-            z.hasVia = false;
-        }
-    }
-    if (jump && now - z.jumpAt > 0.7f)
-    {
-        z.jumpAt = now;
-        buttons |= IN_JUMP;
-    }
-    if (now - z.jumpAt > 0.1f && now - z.jumpAt < 0.5f)
-        buttons |= IN_DUCK;
-    // nobody in sight for a moment: it looks where it walks
-    if (now - z.lastSeen > 1.5f)
-    {
-        z.yaw = z.yawSet ? Approach(z.yaw, moveYaw, 9.0f) : viewYaw;
-        z.yawSet = true;
-        viewYaw = z.yaw;
-        setView = true;
-    }
-    else
-        z.yawSet = false;
-    float rel = (moveYaw - viewYaw) / RAD;
-    fwd = cosf(rel) * 400.0f;
-    side = -sinf(rel) * 400.0f;
-    return true;
+    return walked;
 }

@@ -671,6 +671,15 @@ own orders (Z menu). The game does all of that (`resource/partner/partner_bot_bt
   up the C4 or defuses, the others go to the sites, hold and hunt. Each bot is its own owner: the rules' PlayerKilled skips the base
   code when `ownerIndex` isn't a valid player (no death notice, no score). Their abilities come from their room skill.
 - botassist's own radio menu stays closed in this mode: radio1..3 are the partner's orders.
+- Room bots have partners too (`PtnPartners`, the game's 0x10744560, class drawn by team), named "Class (Owner)"; a bot's partner
+  falls with it, as a player's does. Human partners get that name as well.
+- `PtnMove`: the tree's path following has no unsticking and bots spawn packed, so room bots and partners walk with `GdmWalk`
+  (extracted from `GdmMove`) unless an enemy is in sight within 1000 u or they reached the end of the way (planting, defusing).
+- CTs split between the bomb sites and hold them; Ts go for the round's site, some hunting.
+- Radio: `PtnSay` calls the game's own radio (0x114c7700, message and sound), at most once in 9 s a bot and 2.5 s overall.
+- Score list: client.dll hid in this mode every player whose first info field is 0 (meant for partners), which is everybody
+  offline, so the list was empty. `apply_patches.py` removes the check in its three places (0x029FFA42, 0x02A01007, 0x02A0311A).
+- Pre-round: the game's default config has mp_freezetime 0; `PtnWatch` sets 6 s, and mp_buytime 0.75 if shorter.
 - botassist.log: "Partner: n T and m CT alive, p players, q partners, bomb state s", "the game adds a player's partner".
 
 ## The room's AI difficulty text
