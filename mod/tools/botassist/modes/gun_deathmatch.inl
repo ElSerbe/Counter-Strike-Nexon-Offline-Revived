@@ -19,8 +19,12 @@
 //     purchases are dropped.
 //   - GdmMove: bots hunt instead of holding a spot (the stock AI keeps aiming and shooting): by the nav mesh to the closest
 //     enemy, in sight first; with one close they circle it.
+//   - Routes: going for the closest enemy made one big group. Enemies somebody already goes for count as farther, and on the way
+//     most bots go through a place of their own first (GdmPickVia: away from teammates and from where they're heading, not too
+//     far off), hunting straight only for a while after it or once an enemy is in sight and near. Super Soldier moves the same.
 static const DWORD MP_GDM_RULES_VT = 0x11961354;
 static const float GDM_REDRAW = 2.0f, GDM_RETARGET = 1.0f, GDM_CLOSE = 320.0f, GDM_TOO_CLOSE = 140.0f, GDM_STRAFE = 0.9f;
+static const float GDM_ENGAGE = 900.0f, GDM_VIA_REACHED = 180.0f, GDM_VIA_TIME = 20.0f, GDM_SHARED_TARGET = 500.0f;
 static const int GDM_TIERS[] = { 4, 6, 4, 4, 4, 6, 4, 4, 3, 3, 2, 5, 6, 3, 1, 3, 1 }; // level 1.., the game's kinds; 18: Glock 18
 
 static std::map<int, std::vector<int>> g_gdmPool; // tier -> weapon ids
@@ -92,14 +96,20 @@ struct GdmBot
 {
     void* target = nullptr;
     float retargetAt = 0, strafeAt = 0, jumpAt = 0, dodgeUntil = 0, dodgeYaw = 0, yaw = 0, lastSeen = 0;
-    int strafe = 1, stuck = 0, level = -1;
-    bool yawSet = false;
+    float aliveAt = 0, viaAt = 0, viaUntil = 0;
+    int strafe = 1, stuck = 0, level = -1, team = 0;
+    bool yawSet = false, hasVia = false;
+    V3 via = { 0, 0, 0 };
 };
 static std::map<void*, GdmBot> g_gdmBots;
 
 static void GdmPickTarget(void* bot, GdmBot& z, V3 me, V3 eye, int team)
 {
     float bestSeen = 1e9f, best = 1e9f;
+    std::map<void*, int> hunted; // who the team already goes for
+    for (auto& kv : g_gdmBots)
+        if (kv.first != bot && kv.second.team == team && kv.second.target)
+            hunted[kv.second.target]++;
     void* seen = nullptr;
     void* any = nullptr;
     ForEntitiesNear(me, 1e6f, [&](void* e) {
@@ -109,9 +119,11 @@ static void GdmPickTarget(void* bot, GdmBot& z, V3 me, V3 eye, int team)
         if (!q || !Readable(q, 0x2170) || *(int*)(q + 0x6c) == team || (*(int*)(q + 0x6c) != 1 && *(int*)(q + 0x6c) != 2))
             return;
         float d = Len(Origin(e) - me);
-        if (d < best)
+        auto others = hunted.find(e);
+        float shared = others == hunted.end() ? d : d + GDM_SHARED_TARGET * others->second;
+        if (shared < best)
         {
-            best = d;
+            best = shared;
             any = e;
         }
         if (d < bestSeen && CanSee(bot, eye, e))
@@ -121,6 +133,41 @@ static void GdmPickTarget(void* bot, GdmBot& z, V3 me, V3 eye, int team)
         }
     });
     z.target = seen ? seen : any;
+}
+
+// a place of its own to go through on the way to its target: far from its teammates and the places they go through
+static void GdmPickVia(void* bot, GdmBot& z, V3 me, V3 target)
+{
+    std::vector<V3> others;
+    ForEntitiesNear(me, 1e6f, [&](void* e) {
+        if (e != bot && (F<int>(Vars(e), EV_FLAGS) & FL_CLIENT) && Alive(e) && TeamOf(e) == z.team)
+            others.push_back(Origin(e));
+    });
+    for (auto& kv : g_gdmBots)
+        if (kv.first != bot && kv.second.team == z.team && kv.second.hasVia)
+            others.push_back(kv.second.via);
+    float bestScore = -1e9f;
+    for (int tries = 0; tries < 16 && !g_nav.areas.empty(); tries++)
+    {
+        V3 c = g_nav.areas[rand() % g_nav.areas.size()].center;
+        float there = Len(c - me);
+        if (there < GDM_VIA_REACHED * 2.0f)
+            continue;
+        float apart = 1500.0f;
+        for (auto& o : others)
+            apart = min(apart, Len(c - o));
+        float score = apart - 0.25f * (there + Len(c - target));
+        if (score > bestScore)
+        {
+            bestScore = score;
+            z.via = c + V3{ 0, 0, 36 };
+            z.hasVia = true;
+        }
+    }
+    std::vector<V3> path;
+    if (z.hasVia && !FindPath(me, z.via, path))
+        z.hasVia = false;
+    z.viaUntil = Now() + GDM_VIA_TIME;
 }
 
 static bool GdmMove(void* bot, BotState& st, float& viewYaw, bool& setView, float& fwd, float& side, unsigned short& buttons)
@@ -135,7 +182,15 @@ static bool GdmMove(void* bot, BotState& st, float& viewYaw, bool& setView, floa
     float now = Now();
     V3 me = Origin(bot), eye = Eye(bot);
     int level = *(int*)(p + 0x2f8c);
-    if (level != z.level)
+    z.team = *(int*)(p + 0x6c);
+    if (now - z.aliveAt > 1.0f)
+    {
+        // a new life: a route of its own, or for one bot in three straight at them for a moment
+        z.hasVia = false;
+        z.viaAt = now + (rand() % 3 ? 0.0f : 6.0f);
+    }
+    z.aliveAt = now;
+    if (GameMode() == MODE_GDM && level != z.level)
     {
         z.level = level;
         static int reports = 0;
@@ -181,9 +236,22 @@ static bool GdmMove(void* bot, BotState& st, float& viewYaw, bool& setView, floa
     }
     else
     {
+        V3 goal = at;
+        if (!(seen && d < GDM_ENGAGE))
+        {
+            if (!z.hasVia && now >= z.viaAt)
+                GdmPickVia(bot, z, me, at);
+            if (z.hasVia && (Len2D(z.via - me) < GDM_VIA_REACHED || now >= z.viaUntil))
+            {
+                z.hasVia = false;
+                z.viaAt = now + 3.0f + Rnd() * 7.0f;
+            }
+            if (z.hasVia)
+                goal = z.via;
+        }
         V3 wp;
-        if (!NextWaypoint(bot, st, me, at, 32.0f, wp))
-            wp = at;
+        if (!NextWaypoint(bot, st, me, goal, 32.0f, wp))
+            wp = goal;
         wayYaw = wantYaw = YawOf(wp - me);
         if (me.z - 36.0f - wp.z + 32.0f > maxDrop)
             maxDrop = min(me.z - 36.0f - wp.z + 32.0f, HURT_DROP_MAX);
@@ -217,7 +285,10 @@ static bool GdmMove(void* bot, BotState& st, float& viewYaw, bool& setView, floa
         z.dodgeUntil = now + 0.5f;
         jump = jumpSafe;
         if (z.stuck >= 4)
+        {
             z.target = nullptr;
+            z.hasVia = false;
+        }
     }
     if (jump && now - z.jumpAt > 0.7f)
     {

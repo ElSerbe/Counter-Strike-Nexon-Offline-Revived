@@ -1418,9 +1418,12 @@ static int TeamOf(void* e);
 static bool CoopMode();
 
 // the room AI player this bot plays (assigned when its team is known), or null
+static bool PtnIsPartner(void* bot); // Partner: see modes/partner.inl
+static bool PtnCreatingPartner();
+
 static MatchBot* RoomBotOf(void* bot, BotState& st)
 {
-    if (g_matchFetch != 2)
+    if (g_matchFetch != 2 || PtnIsPartner(bot))
         return nullptr;
     EnterCriticalSection(&g_matchLock);
     MatchBot* m = nullptr;
@@ -2152,6 +2155,7 @@ static const int MODE_ZCON = 56; // Zombie Conquest: see modes/zombie_conquest.i
 static const int MODE_ZWAR = 32; // Zombie War: see modes/zombie_war.inl
 static const int MODE_GDM = 22; // Gun Deathmatch: see modes/gun_deathmatch.inl
 static const int MODE_SS = 57; // Super Soldier: see modes/super_soldier.inl
+static const int MODE_PTN = 50; // Partner: see modes/partner.inl
 
 static void UpdateBuying(void* bot, BotState& st)
 {
@@ -2195,6 +2199,8 @@ static void UpdateBuying(void* bot, BotState& st)
         return; // Zombie War: humans play the weapon picked before the round (ZWarBuyPick)
     if (GameMode() == MODE_GDM || GameMode() == MODE_SS)
         return; // Gun Deathmatch: the rules give each level's weapon. Super Soldier: its bots buy by Expert
+    if (PtnIsPartner(bot))
+        return; // Partner: a partner's weapons go by its player's money (ZBBot_BT_BuyWeapon_Partner)
     MatchBot* rb = RoomBotOf(bot, st);
     bool scenario = CoopMode();
     // room AI players buy their own loadout in every mode: chosen weapons, else random ones from their filter, else
@@ -3274,6 +3280,11 @@ static int RoomBotQuota(int team, const char* which)
         Log("console bot_add (%s, team %d): added past the room's AI players", which, team);
         return team;
     }
+    if (PtnCreatingPartner())
+    {
+        Log("the game adds a player's partner (%s, team %d)", which, team);
+        return team;
+    }
     LoadNav();
     UpdateMatchBots();
     if (g_matchFetch != 2 || !g_matchKnown)
@@ -3282,7 +3293,8 @@ static int RoomBotQuota(int team, const char* which)
     // Zombie Conquest and Zombie War merge the lobby's teams: the room lists its AI players on the host's side, while the
     // game asks for bots on both sides to balance them (T are the zombies). The list only says how many: each bot joins
     // the side asked for (RoomBotOf takes any free AI player), the emptier one when the game doesn't say.
-    if (GameMode() == MODE_ZCON || GameMode() == MODE_ZWAR || GameMode() == MODE_SS)
+    // (Partner: PtnWatch asks for each side itself)
+    if (GameMode() == MODE_ZCON || GameMode() == MODE_ZWAR || GameMode() == MODE_SS || GameMode() == MODE_PTN)
     {
         int total = 0;
         EnterCriticalSection(&g_matchLock);
@@ -4330,6 +4342,8 @@ static void CommandFile()
 
 #include "modes/super_soldier.inl"
 
+#include "modes/partner.inl"
+
 // ---------------------------------------------------------------- the frame hook (every mode)
 // The end of mp.dll's StartFrame (DLL function 0x113f8a80) runs botassist's per-frame work: the console, the command
 // file, and each mode's watcher (each returns at once outside its mode).
@@ -4352,6 +4366,7 @@ static void HookedStartFrame()
         ZWarWatch();
         GdmWatch();
         SSWatch();
+        PtnWatch();
         ZgFrame();
     }
     __except (EXCEPTION_EXECUTE_HANDLER)
@@ -4647,9 +4662,13 @@ static void HookedRunPlayerMove(void* fakeclient, const float* angles, float fwd
             if (F<int>(v, EV_FLAGS) & FL_FAKECLIENT)
             {
                 BotState& bs = StateFor(fakeclient);
-                ApplyRoomCharacter(fakeclient, bs);
+                PtnBotThink(fakeclient);
+                if (!PtnIsPartner(fakeclient)) // Partner: a partner keeps the character it was chosen for
+                {
+                    ApplyRoomCharacter(fakeclient, bs);
+                    ApplyTeamCharacter(fakeclient, bs);
+                }
                 ApplyRoomSkill(fakeclient, bs);
-                ApplyTeamCharacter(fakeclient, bs);
                 if (cfg.sameTeam && CoopMode())
                     FixCoopTeam(fakeclient, bs);
                 UpdateBuying(fakeclient, bs);
@@ -4688,7 +4707,7 @@ static void HookedRunPlayerMove(void* fakeclient, const float* angles, float fwd
                     ang[1] = aim[1];
                     ang[2] = 0;
                 }
-                if (!scenario)
+                if (!scenario && !PtnIsPartner(fakeclient))
                 {
                     float f = fwd, sd = side;
                     unsigned short bt = buttons;
@@ -4755,7 +4774,8 @@ static void HookedRunPlayerMove(void* fakeclient, const float* angles, float fwd
                     Z4BotSkills(fakeclient);
                 if (!scenario && GameMode() == MODE_ZB2)
                     ZB2BotThink(fakeclient);
-                if (!scenario && (GameMode() == MODE_ZCON || GameMode() == MODE_ZWAR || GameMode() == MODE_GDM))
+                if (!scenario && (GameMode() == MODE_ZCON || GameMode() == MODE_ZWAR || GameMode() == MODE_GDM ||
+                                  GameMode() == MODE_SS))
                 {
                     if (GameMode() == MODE_ZCON)
                         ZConBotThink(fakeclient, st);
@@ -4899,7 +4919,8 @@ static void OnPlayerCommand(void* player)
     }
     if (c == "radio1" || c == "radio2" || c == "radio3")
     {
-        g_openMenu = c[5] - '0';
+        if (GameMode() != MODE_PTN) // there they are the partner's orders
+            g_openMenu = c[5] - '0';
         return;
     }
     // chat orders: "/follow", "/hold", "/cover", "/free" (also without the slash, in any case)
@@ -5554,9 +5575,53 @@ static const wchar_t* __fastcall LocFind3(void* self, void*, const char* token)
     return text ? text : ((LocFindFn)g_locFind[0])(self, nullptr, token);
 }
 
+// The room's panels show the room's AI difficulty (GameUI 0x10442bd0 and 0x10446080: "#CSO_Bot_Difficulty_<n>"), whatever skill
+// each AI player has on the AI players page. Asked from those two, the answer is the bots' own: their common skill, or
+// "Random" if they differ; only bots with the room's skill keep the room's text. The server sends the room's bot settings
+// when the list changes, which makes the panel ask again (the answer is kept 300 ms, it may ask several times).
+static const wchar_t* RoomBotLevelText(void* self, const char* token, void* from)
+{
+    static const char PREFIX[] = "CSO_Bot_Difficulty_";
+    if (*token == '#')
+        token++;
+    if (_strnicmp(token, PREFIX, sizeof(PREFIX) - 1) || !isdigit((unsigned char)token[sizeof(PREFIX) - 1]))
+        return nullptr;
+    HMODULE ui = GetModuleHandleA("GameUI.dll");
+    DWORD at = ui ? (DWORD)from - (DWORD)ui + 0x10000000 : 0;
+    if (!(at >= 0x10442bd0 && at < 0x10443100) && !(at >= 0x10446080 && at < 0x10446800))
+        return nullptr;
+    static DWORD askedAt = 0;
+    static int level = -1; // -1 the room's, -2 random, else the bots' common skill
+    DWORD tick = GetTickCount();
+    if (!askedAt || tick - askedAt > 300)
+    {
+        askedAt = tick;
+        std::string json = HttpGet(L"/api/roombots");
+        int common = -1, seen = 0;
+        bool differ = false;
+        for (size_t i = json.find("\"skill\":"); i != std::string::npos; i = json.find("\"skill\":", i + 1))
+        {
+            int skill = atoi(json.c_str() + i + 8);
+            differ |= seen && skill != common;
+            common = skill;
+            seen++;
+        }
+        level = !seen ? -1 : differ ? -2 : common >= 0 && common < 8 ? common : -1;
+    }
+    if (level == -1)
+        return nullptr;
+    if (level == -2)
+        return L"Random";
+    char own[40];
+    snprintf(own, sizeof(own), "#%s%d", PREFIX, level);
+    return ((LocFindFn)g_locFind[1])(self, nullptr, own);
+}
+
 static const wchar_t* __fastcall LocFind4(void* self, void*, const char* token)
 {
     const wchar_t* text = QuestText(token);
+    if (!text && token)
+        text = RoomBotLevelText(self, token, _ReturnAddress());
     return text ? text : ((LocFindFn)g_locFind[1])(self, nullptr, token);
 }
 

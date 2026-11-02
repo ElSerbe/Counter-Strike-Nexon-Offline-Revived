@@ -7,12 +7,14 @@
 // invincible for a moment. The game has its own AI for it: bots run the behavior trees of
 // resource/supersoldier/supersoldier_bot_bt.xml (buying by Expert from supersoldier_bot.json, skills, targets, movement).
 //
-// What botassist does: little, to leave that AI alone.
+// What botassist does: little, to leave that AI's weapons, skills and aim alone.
 //   - Teams: the match waits until both sides have players (rules vfunc 0x104, 0x10778350), and the room lists every AI
 //     player on the host's side, so the requests for T bots were refused. RoomBotQuota (shared, see there) balances them:
 //     here the game's request doesn't decide the side, it asks for CT until the room's list is used up.
 //   - Weapons: their BuyWeapon node buys by Expert. Room weapons are skipped here (UpdateBuying) and their purchases aren't
 //     dropped (OnBotCommand).
+//   - Movement: their Move node goes straight for a target, so everybody ended up in one group. GdmMove (Gun Deathmatch's: routes
+//     of their own, spreading over the map) moves them instead, called from the shared bot hook; with no target it leaves it to them.
 //   - SSWatch: botassist.log "SS: n T and m CT alive" and each bot's Expert, to read a test.
 static const int SS_MODULE = 0x17;
 

@@ -3724,10 +3724,10 @@ index 3054001..9c14f6b 100644
  	void SendUserLoadout(IUser* user);
 diff --git a/src/manager/warbondmanager.cpp b/src/manager/warbondmanager.cpp
 new file mode 100644
-index 0000000..1841ebf
+index 0000000..1810d99
 --- /dev/null
 +++ b/src/manager/warbondmanager.cpp
-@@ -0,0 +1,971 @@
+@@ -0,0 +1,974 @@
 +#include "warbondmanager.h"
 +#include "usermanager.h"
 +#include "userdatabase.h"
@@ -4108,6 +4108,9 @@ index 0000000..1841ebf
 +			status = 400;
 +			return { { "error", "Unknown action." } };
 +		}
++		// the room's panel asks botassist again what AI difficulty to show (it depends on these bots' skills)
++		for (auto u : room->GetUsers())
++			g_PacketManager.SendRoomUpdateSettings(u->GetExtendedSocket(), room->GetSettings(), 0, ROOM_LOWMID_BOT);
 +	}
 +	json bots = json::array();
 +	for (auto& b : room->GetBots())

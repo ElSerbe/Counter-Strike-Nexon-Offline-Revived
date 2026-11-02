@@ -646,15 +646,38 @@ from strong to weak: 18 levels, 60 kills to the Glock 18, then an HE grenade who
   `UpdateBuying` skips the mode and only the stock AI's own purchases are dropped. botassist.log: "GDM: bot ... reaches level".
 - `GdmMove`: bots hunt (the stock AI keeps aiming and shooting): by the nav mesh to the closest enemy, in sight first, and round
   it when close (320 u), with the same safety as Conquest (`ZConSafeYaw`, `WalkYaw`, `LedgeAhead`).
+- Routes: enemies a teammate goes for count as 500 u farther each, and most bots go through a place of their own on the way
+  (`GdmPickVia`: far from teammates and from where they go, not too far off), so they don't become one group.
 
 ## Super Soldier (mode 57) with room bots
 
 `modes/super_soldier.inl` (rules CSOGameRulesSuperSoldier, vtable 0x11789d2c). Team deathmatch with Experts, skills and S.V.P.
 boxes. The game has its own AI for it (`resource/supersoldier/supersoldier_bot_bt.xml`, `supersoldier_bot.json`: buying by
-Expert, skills, targets, movement), so botassist leaves it alone.
+Expert, skills, targets), so botassist leaves that alone; movement is `GdmMove` (routes of their own), since their Move node took
+everybody to the same target in one group.
 - The match waits for players on both sides (0x10778350) and the room lists every AI player on the host's side, so T bots were
   refused. `RoomBotQuota` keeps the sides even here, whatever side the game asks for.
 - `UpdateBuying` skips the mode and the AI's purchases aren't dropped. botassist.log: "SS: n T and m CT alive; Experts: ...".
+
+## Partner (mode 50) with room bots
+
+`modes/partner.inl` (rules CSOGameRulesPartner, vtable 0x11781bfc). Bomb defuse where each player has an AI partner with its
+own orders (Z menu). The game does all of that (`resource/partner/partner_bot_bt.xml`, one branch per order); what blocked it:
+- Partners come through AddBot and `RoomBotQuota` refused them. Rules +0x4f8 holds the owner while one is created
+  (`PtnCreatingPartner`), and `PtnIsPartner` keeps them out of `RoomBotOf`, buying and bot orders.
+- The mode's bot module never asks for bots, so the room's AI players never came and the round never started. `PtnWatch` adds them
+  once a player has a team, keeping 2 client slots per player. A list with one side empty is split between the sides.
+- `PtnBotThink` gives room bots the orders a player would (they run the same tree): the carrier plants, the closest one picks
+  up the C4 or defuses, the others go to the sites, hold and hunt. Each bot is its own owner: the rules' PlayerKilled skips the base
+  code when `ownerIndex` isn't a valid player (no death notice, no score). Their abilities come from their room skill.
+- botassist's own radio menu stays closed in this mode: radio1..3 are the partner's orders.
+- botassist.log: "Partner: n T and m CT alive, p players, q partners, bomb state s", "the game adds a player's partner".
+
+## The room's AI difficulty text
+
+The room's panels show the room's difficulty (`#CSO_Bot_Difficulty_<n>`), not what the AI players page set. `RoomBotLevelText`
+(on botassist's ILocalize hook, only for calls from GameUI 0x10442bd0 and 0x10446080) answers with the bots' common skill or
+"Random" if they differ. Bots that keep the room's skill keep the room's text. It reads `GET /api/roombots`.
 
 ## Deadly places in botassist's paths (shared)
 
