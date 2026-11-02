@@ -26,6 +26,7 @@ EXTRA_FILES = [
     (MOD / "tools" / "botassist" / "botassist.ini", "botassist.ini", False),  # keeps the player's settings
     (MOD / "tools" / "botassist" / "botassist_weapons.txt", "botassist_weapons.txt", False),
     (MOD / "tools" / "botassist" / "botassist_characters.txt", "botassist_characters.txt", False),
+    (MOD / "tools" / "botassist" / "botassist_gdm_weapons.txt", "botassist_gdm_weapons.txt", False),
     # data tables botassist loads instead of the game's (gen_zsrift_waves.py: Zombie Disaster Zone's zombie mix)
     (MOD / "tools" / "botassist" / "tables" / "maps" / "ZBS_WAVE_zsrift_splinter.csv",
      "botassist_tables/maps/ZBS_WAVE_zsrift_splinter.csv", True),

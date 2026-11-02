@@ -632,6 +632,30 @@ time; zombies wait for a countdown at the start and get stronger in the last 30 
   them, a new one 400 to 900 u off every 35 to 55 s. Zombies gather at their squads' rally points and fall on where the
   humans are. The room's skill applies. botassist.log: "ZWar: n humans and m zombies alive".
 
+## Gun Deathmatch (mode 22) with room bots
+
+`modes/gun_deathmatch.inl` (rules CSOGameRulesGunDeath, vtable 0x11961354). Two teams, respawns, a new weapon every few kills
+from strong to weak: 18 levels, 60 kills to the Glock 18, then an HE grenade whose kill wins. Levels from
+`resource/GDMWeaponList.cso` (`GDMWeaponListCash.cso` with Lucky Gunman), which name weapon ids (Item.csv column 5, not item ids).
+- More weapons: those tables name only 2 or 3 weapons a level. `GdmWatch` rewrites the server's rows (rules +0x2e0 and
+  +0x2ec, 0x24 bytes each: level, type, kills, 3 ids, 3 chances) every 2 s with 3 weapons of the level's kind (`GDM_TIERS`, the
+  game's order) from `botassist_gdm_weapons.txt` (`gen_gdm_weapons.py`), so any weapon can come at any level up. The last level
+  stays the Glock 18. Delete lines from that file to keep a weapon out.
+- Bots' weapons: the rules run the buy command as the player with the internal-buy flag (+0x18b4) set. botassist dropped
+  that for room AI players and bought the room's weapons (1443 purchases in one test), so bots didn't play the levels. Now
+  `UpdateBuying` skips the mode and only the stock AI's own purchases are dropped. botassist.log: "GDM: bot ... reaches level".
+- `GdmMove`: bots hunt (the stock AI keeps aiming and shooting): by the nav mesh to the closest enemy, in sight first, and round
+  it when close (320 u), with the same safety as Conquest (`ZConSafeYaw`, `WalkYaw`, `LedgeAhead`).
+
+## Super Soldier (mode 57) with room bots
+
+`modes/super_soldier.inl` (rules CSOGameRulesSuperSoldier, vtable 0x11789d2c). Team deathmatch with Experts, skills and S.V.P.
+boxes. The game has its own AI for it (`resource/supersoldier/supersoldier_bot_bt.xml`, `supersoldier_bot.json`: buying by
+Expert, skills, targets, movement), so botassist leaves it alone.
+- The match waits for players on both sides (0x10778350) and the room lists every AI player on the host's side, so T bots were
+  refused. `RoomBotQuota` keeps the sides even here, whatever side the game asks for.
+- `UpdateBuying` skips the mode and the AI's purchases aren't dropped. botassist.log: "SS: n T and m CT alive; Experts: ...".
+
 ## Deadly places in botassist's paths (shared)
 
 `UpdateHurtZones` lists the map's solid `trigger_hurt` brushes with damage (entvars solid +0x11c, dmg +0x210, from

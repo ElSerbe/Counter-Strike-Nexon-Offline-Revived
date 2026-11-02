@@ -2150,6 +2150,8 @@ static void ZsrBotMoney(void* bot)
 static const int MODE_ZHE = 51; // Manhunt: see DriveZheBot
 static const int MODE_ZCON = 56; // Zombie Conquest: see modes/zombie_conquest.inl
 static const int MODE_ZWAR = 32; // Zombie War: see modes/zombie_war.inl
+static const int MODE_GDM = 22; // Gun Deathmatch: see modes/gun_deathmatch.inl
+static const int MODE_SS = 57; // Super Soldier: see modes/super_soldier.inl
 
 static void UpdateBuying(void* bot, BotState& st)
 {
@@ -2191,6 +2193,8 @@ static void UpdateBuying(void* bot, BotState& st)
         return; // Zombie Conquest: only the mode's weapon sets can be bought (ZConBotThink)
     if (GameMode() == MODE_ZWAR)
         return; // Zombie War: humans play the weapon picked before the round (ZWarBuyPick)
+    if (GameMode() == MODE_GDM || GameMode() == MODE_SS)
+        return; // Gun Deathmatch: the rules give each level's weapon. Super Soldier: its bots buy by Expert
     MatchBot* rb = RoomBotOf(bot, st);
     bool scenario = CoopMode();
     // room AI players buy their own loadout in every mode: chosen weapons, else random ones from their filter, else
@@ -2885,6 +2889,15 @@ static bool OnBotCommand(void* bot)
         // a room AI player with weapons of its own (chosen, a filter, None, or random ones with BuyAnyWeapon) doesn't
         // buy the game's ones: the stock AI buys its AWP and Deagle (or a CSNZ weapon by name) right after
         // botassist's purchase, and the game's buy throws away what the slot held, the room's weapon
+        // (Super Soldier: the game's AI buys by Expert. Gun Deathmatch: the rules give each level's weapon with the
+        // internal-buy flag set, and only those stay)
+        if (GameMode() == MODE_SS)
+            return false;
+        if (GameMode() == MODE_GDM)
+        {
+            unsigned char* me = (unsigned char*)PrivateOf(bot);
+            return !(me && Readable(me, 0x18b8) && me[0x18b4]);
+        }
         MatchBot* rb = RoomBotOf(bot, StateFor(bot));
         bool own = rb && (slot == 1 ? rb->primary != 0 || !rb->allowPrimary.empty() ||
                                           (cfg.buyAnyWeapon && !cfg.primaries.empty())
@@ -3269,7 +3282,7 @@ static int RoomBotQuota(int team, const char* which)
     // Zombie Conquest and Zombie War merge the lobby's teams: the room lists its AI players on the host's side, while the
     // game asks for bots on both sides to balance them (T are the zombies). The list only says how many: each bot joins
     // the side asked for (RoomBotOf takes any free AI player), the emptier one when the game doesn't say.
-    if (GameMode() == MODE_ZCON || GameMode() == MODE_ZWAR)
+    if (GameMode() == MODE_ZCON || GameMode() == MODE_ZWAR || GameMode() == MODE_SS)
     {
         int total = 0;
         EnterCriticalSection(&g_matchLock);
@@ -3279,7 +3292,9 @@ static int RoomBotQuota(int team, const char* which)
         LeaveCriticalSection(&g_matchLock);
         if (g_matchAdded[1] + g_matchAdded[2] >= total)
             return -1;
-        int t = team == 0 ? 1 : team == 1 ? 2 : g_matchAdded[1] <= g_matchAdded[2] ? 1 : 2;
+        // (Super Soldier keeps asking for CT while the list lasts: there the sides are simply kept even)
+        int t = GameMode() != MODE_SS && team == 0 ? 1 : GameMode() != MODE_SS && team == 1 ? 2
+                                                     : g_matchAdded[1] <= g_matchAdded[2]     ? 1 : 2;
         g_matchAdded[t]++;
         Log("the game adds a bot (%s): %s, %d T and %d CT of %d", which, t == 1 ? "T (zombies)" : "CT (humans)",
             g_matchAdded[1], g_matchAdded[2], total);
@@ -4311,6 +4326,10 @@ static void CommandFile()
 
 #include "modes/zombie_war.inl"
 
+#include "modes/gun_deathmatch.inl"
+
+#include "modes/super_soldier.inl"
+
 // ---------------------------------------------------------------- the frame hook (every mode)
 // The end of mp.dll's StartFrame (DLL function 0x113f8a80) runs botassist's per-frame work: the console, the command
 // file, and each mode's watcher (each returns at once outside its mode).
@@ -4331,6 +4350,8 @@ static void HookedStartFrame()
         ZB2Watch();
         ZConWatch();
         ZWarWatch();
+        GdmWatch();
+        SSWatch();
         ZgFrame();
     }
     __except (EXCEPTION_EXECUTE_HANDLER)
@@ -4734,11 +4755,11 @@ static void HookedRunPlayerMove(void* fakeclient, const float* angles, float fwd
                     Z4BotSkills(fakeclient);
                 if (!scenario && GameMode() == MODE_ZB2)
                     ZB2BotThink(fakeclient);
-                if (!scenario && (GameMode() == MODE_ZCON || GameMode() == MODE_ZWAR))
+                if (!scenario && (GameMode() == MODE_ZCON || GameMode() == MODE_ZWAR || GameMode() == MODE_GDM))
                 {
                     if (GameMode() == MODE_ZCON)
                         ZConBotThink(fakeclient, st);
-                    else
+                    else if (GameMode() == MODE_ZWAR)
                     {
                         ZB2BotThink(fakeclient);
                         ZWarBuyPick(fakeclient);
@@ -4746,8 +4767,9 @@ static void HookedRunPlayerMove(void* fakeclient, const float* angles, float fwd
                     float y = aim[1], f = fwd, sd = side;
                     unsigned short bt = buttons;
                     bool setView = false;
-                    if (GameMode() == MODE_ZCON ? ZConMove(fakeclient, st, y, setView, f, sd, bt)
-                                                : ZWarMove(fakeclient, st, y, setView, f, sd, bt))
+                    if (GameMode() == MODE_ZCON   ? ZConMove(fakeclient, st, y, setView, f, sd, bt)
+                        : GameMode() == MODE_ZWAR ? ZWarMove(fakeclient, st, y, setView, f, sd, bt)
+                                                  : GdmMove(fakeclient, st, y, setView, f, sd, bt))
                     {
                         fwd = f;
                         side = sd;
