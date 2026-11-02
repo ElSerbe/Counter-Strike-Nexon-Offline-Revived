@@ -1,7 +1,8 @@
 // botassist: human bots against zombie players (the PvP zombie modes: Original, Mutation, Hero, Zombie 4: Darkness,
 // Zombie Escape...). Included by botassist.cpp at this point (one translation unit: it uses the shared helpers
 // defined before it). Only runs where zombies are players: not in the co-op/monster modes, Zombie Giant or Manhunt
-// (they drive their bots themselves), Zombie Conquest (humans hold its bases), and only for a bot that isn't a zombie (player +0x2166) with one close.
+// (they drive their bots themselves), Zombie Conquest (its ZConMove calls ZombieFleeMove itself, with its own range), and
+// only for a bot that isn't a zombie (player +0x2166) with one close.
 //
 // The stock AI stands its ground and shoots until the zombie bites. With a zombie in sight within ZombieFleeDistance
 // (botassist.ini, or any within 200 u even unseen) the bot keeps the stock AI's aim and fire (only its movement is
@@ -24,7 +25,7 @@ static std::map<void*, ZfBot> g_zf;
 static bool ZombieFleeMode()
 {
     int m = GameMode();
-    return cfg.zombieFlee && !CoopMode() && m != MODE_ZOMBIE_GIANT && m != MODE_ZHE && m != MODE_ZCON; // Conquest: they hold the base
+    return cfg.zombieFlee && !CoopMode() && m != MODE_ZOMBIE_GIANT && m != MODE_ZHE && m != MODE_ZCON;
 }
 
 // a nav area 250 to 900 u away in the direction away from the zombies (dir: unit, 2D), farthest from them
@@ -59,15 +60,12 @@ static bool ZfRetreatSpot(V3 me, V3 dir, const std::vector<V3>& zombies, V3& out
     return best > -1e9f;
 }
 
-static bool ZombieFlee(void* bot, BotState& st, float viewYaw, float& fwd, float& side, unsigned short& buttons)
+static bool ZombieFleeMove(void* bot, BotState& st, float viewYaw, float range, float& fwd, float& side, unsigned short& buttons)
 {
-    if (!ZombieFleeMode())
-        return false;
     unsigned char* p = (unsigned char*)PrivateOf(bot);
     if (!p || !Readable(p, 0x2170) || p[0x2166])
         return false;
     V3 me = Origin(bot), eye = Eye(bot);
-    float range = cfg.zombieFleeDistance;
     V3 push{ 0, 0, 0 };
     std::vector<V3> zombies;
     float nearest = 1e9f;
@@ -126,7 +124,7 @@ static bool ZombieFlee(void* bot, BotState& st, float viewYaw, float& fwd, float
             z.goalUntil = min(z.goalUntil, now + 0.3f); // no path there (a drop, a hurt zone): another spot soon
     }
     float maxDrop = pathed ? HURT_DROP_MAX : FLEE_FREE_DROP;
-    float wantYaw = ClearYaw(bot, me, YawOf(wp - me), 40.0f), moveYaw = wantYaw;
+    float wantYaw = WalkYaw(bot, me, YawOf(wp - me), 40.0f), moveYaw = wantYaw;
     bool safe = !DropAhead(bot, me, moveYaw, 72.0f, maxDrop);
     if (!safe)
     {
@@ -134,9 +132,10 @@ static bool ZombieFlee(void* bot, BotState& st, float viewYaw, float& fwd, float
         for (float t : turns)
         {
             float y = wantYaw + t;
-            V3 to = me - V3{ 0, 0, 18 } + V3{ cosf(y / RAD) * 40.0f, sinf(y / RAD) * 40.0f, 0 };
+            V3 head = me + V3{ 0, 0, 20 };
             TraceResult tr;
-            if (Trace(me - V3{ 0, 0, 18 }, to, bot, 1, tr) && !DropAhead(bot, me, y, 72.0f, FLEE_FREE_DROP))
+            if (Trace(head, head + V3{ cosf(y / RAD) * 40.0f, sinf(y / RAD) * 40.0f, 0 }, bot, 1, tr) &&
+                !DropAhead(bot, me, y, 72.0f, FLEE_FREE_DROP))
             {
                 moveYaw = y;
                 safe = true;
@@ -157,7 +156,7 @@ static bool ZombieFlee(void* bot, BotState& st, float viewYaw, float& fwd, float
         }
     }
     bool jumpSafe = !DropAhead(bot, me, moveYaw, 120.0f, FLEE_FREE_DROP);
-    if (jumpSafe && wp.z > me.z + 24.0f && Len2D(wp - me) < 120.0f)
+    if (jumpSafe && LedgeAhead(bot, me, moveYaw))
         buttons |= IN_JUMP;
     if (jumpSafe && nearest < 160.0f && now >= z.nextJump)
     {
@@ -190,4 +189,9 @@ static bool ZombieFlee(void* bot, BotState& st, float viewYaw, float& fwd, float
              (int)zombies.size(), z.goal.x, z.goal.y, Len2D(z.goal - me));
     }
     return true;
+}
+
+static bool ZombieFlee(void* bot, BotState& st, float viewYaw, float& fwd, float& side, unsigned short& buttons)
+{
+    return ZombieFleeMode() && ZombieFleeMove(bot, st, viewYaw, cfg.zombieFleeDistance, fwd, side, buttons);
 }

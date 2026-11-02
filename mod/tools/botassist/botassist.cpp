@@ -646,6 +646,8 @@ static V3 Portal(int ai, int d, int bi)
 }
 
 static float NavWetCost(int area); // Zombie Giant: areas under water cost more
+// extra cost per nav area of the path being found, null for none (Zombie Conquest: each bot's own way, see ZConNewRoute)
+static const std::vector<float>* g_navRouteCost = nullptr;
 
 // ---- places that kill: the map's trigger_hurt brushes and drops too high to survive
 // botassist's own paths (A* below: companions, Manhunt, Zombie Giant, human bots backing off from zombies) treated a
@@ -777,6 +779,7 @@ static bool FindPath(V3 from, V3 to, std::vector<V3>& out)
                 if (drop > HURT_DROP_MAX)
                     continue;
                 float c = cost[cur] + Len(g_nav.areas[nb].center - g_nav.areas[cur].center) + NavWetCost(nb) +
+                          (g_navRouteCost && nb < (int)g_navRouteCost->size() ? (*g_navRouteCost)[nb] : 0.0f) +
                           (drop > SAFE_DROP ? (drop - SAFE_DROP) * DROP_COST : 0.0f);
                 if (c < cost[nb])
                 {
@@ -1214,6 +1217,31 @@ static float ClearYaw(void* bot, V3 pos, float yaw, float dist)
             return y;
     }
     return yaw;
+}
+
+// ClearYaw for walking a nav path: a line at knee height also hits stairs and ramps going up (40 u ahead they have
+// risen above it), which sent the bot sideways instead of up them. A wall blocks a line at head height too.
+static float WalkYaw(void* bot, V3 pos, float yaw, float dist)
+{
+    TraceResult tr;
+    static const float tries[] = { 0, 30, -30, 60, -60, 90, -90, 120, -120 };
+    V3 head = pos + V3{ 0, 0, 20 };
+    for (float t : tries)
+    {
+        float y = yaw + t;
+        if (Trace(head, head + V3{ cosf(y / RAD) * dist, sinf(y / RAD) * dist, 0 }, bot, 1, tr))
+            return y;
+    }
+    return yaw;
+}
+
+// something to jump onto right ahead: blocked just above a step's height (stairs pass), free at head height
+static bool LedgeAhead(void* bot, V3 pos, float yaw)
+{
+    TraceResult tr;
+    V3 dir{ cosf(yaw / RAD), sinf(yaw / RAD), 0 };
+    V3 knee = pos - V3{ 0, 0, 14 }, head = pos + V3{ 0, 0, 20 };
+    return !Trace(knee, knee + dir * 24.0f, bot, 1, tr) && Trace(head, head + dir * 32.0f, bot, 1, tr);
 }
 
 // ---------------------------------------------------------------- the room's AI players
@@ -4443,28 +4471,32 @@ static bool SetRoomProfile(unsigned char* player, BotState& bs, int skill, float
 static void ApplyRoomSkill(void* bot, BotState& bs)
 {
     MatchBot* rb = RoomBotOf(bot, bs);
-    if (!rb || rb->skill < 0)
+    if (!rb)
+        return;
+    // Zombie Conquest: a room AI player without a skill of its own plays hard whatever the room's difficulty
+    int skill = rb->skill < 0 && GameMode() == MODE_ZCON ? ZCON_SKILL : rb->skill;
+    if (skill < 0)
         return;
     unsigned char* player = (unsigned char*)PrivateOf(bot);
     if (!player || IsBadReadPtr(player + PLAYER_BOT_PROFILE, 4))
         return;
     unsigned char* cur = *(unsigned char**)(player + PLAYER_BOT_PROFILE);
-    if (cur && cur == bs.ownProfile && bs.ownSkill == rb->skill)
+    if (cur && cur == bs.ownProfile && bs.ownSkill == skill)
         return;
     if (!bs.ownProfile)
         bs.ownProfile = new unsigned char[PROFILE_COPY];
     float was[3] = {};
-    if (!SetRoomProfile(player, bs, rb->skill, was))
+    if (!SetRoomProfile(player, bs, skill, was))
     {
         static int fails = 0;
         if (fails++ < 5)
             Log("bot '%s': no bot profile at +0x%x: room skill not applied", rb->name.c_str(), PLAYER_BOT_PROFILE);
-        bs.ownSkill = rb->skill; // don't try every frame
+        bs.ownSkill = skill; // don't try every frame
         return;
     }
-    bs.ownSkill = rb->skill;
+    bs.ownSkill = skill;
     Log("bot %d '%s': room skill %d (profile skill %.2f -> %.2f, reaction %.2f -> %.2f, attack delay %.2f -> %.2f)", bs.slot,
-        rb->name.c_str(), rb->skill, was[0], *(float*)(bs.ownProfile + 8), was[1], *(float*)(bs.ownProfile + 0x64), was[2],
+        rb->name.c_str(), skill, was[0], *(float*)(bs.ownProfile + 8), was[1], *(float*)(bs.ownProfile + 0x64), was[2],
         *(float*)(bs.ownProfile + 0x68));
 }
 

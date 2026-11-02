@@ -574,10 +574,25 @@ assault...). T are zombies, CT humans, and they swap every round.
   bot ... takes weapon set".
 - Zombie bots draw a class (`selzmb random`: only those the base allows); both sides use skills (`useitem`) and awakening
   (`ZBCon_UseSpecial` with the gauge, module +0x18, at 100).
-- `ZConMove` replaces only the movement (the stock AI keeps aiming and shooting): humans walk to the active base and stay
-  inside it, zombies too unless a human is in sight within 900 u (then the stock AI chases). Bots look where they walk
-  with no enemy around. Ground ahead checked as in the zombie flee (`DropAhead`). Radio orders come first. Human bots
-  don't back off from zombies here (`ZombieFleeMode`).
+- Bots play hard: a room AI player without a skill of its own gets skill 6 of 7 here (`ZCON_SKILL`, shared
+  `ApplyRoomSkill`), whatever the room's difficulty. botassist.log: "room skill 6".
+- How a base works (FUN_107aa6e0): humans inside and no zombie capture it; a zombie with them stops the clock; no human
+  left starts a capture over, or takes a captured base back to free after a while. It scores while a human is inside.
+- `ZConMove` replaces only the movement (the stock AI keeps aiming and shooting), always along the nav mesh. The stock AI
+  goes straight at a human it sees, so zombies stayed against rails and glass with one across a gap.
+  - Humans go to the active base and move around in it. Once it's captured and two others are inside, half of their
+    spots are around it (up to 300 u out). A zombie close comes first: they back off shooting (`ZombieFleeMove`; within
+    300 u inside the base, 420 u outside, each bot a bit different), out of the base if need be, and come back.
+  - Zombies go at a human in sight or within 400 u if the way there is under 1500 u (or 2.5 times the distance); else to
+    the base and around it, and now and then to the closest human.
+  - Each bot has its own way (`ZConNewRoute`): a stretch of the shortest path costs more in the A* (`g_navRouteCost`,
+    shared, null elsewhere). Checked offline on six of the maps' nav meshes (chapel, skyscraper, hacienda, farero,
+    wintershelter, assault): 3 to 4 different routes per trip, typically 14% longer, 2.1 times at most.
+  - Stuck: a jump and a step aside, a step back, then that way counts as blocked for this bot. A team mate right ahead
+    is passed on one side. botassist.log: "ZCon: ... stuck at", "ZCon: bot ... goes round".
+  - `WalkYaw` and `LedgeAhead` (shared, also used by the zombie flee in every PvP zombie mode): `ClearYaw`'s line at knee
+    height also hits stairs going up and turned the bot aside; a wall now has to block at head height, and a real ledge
+    gets a jump (with the legs up).
 
 ## Deadly places in botassist's paths (shared)
 
