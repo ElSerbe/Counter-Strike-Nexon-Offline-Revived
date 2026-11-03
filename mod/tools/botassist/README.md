@@ -709,6 +709,22 @@ once its controller falls; DM_port and zm_requiem are team deathmatch. The game 
   items at a visible enemy, shield, radar and invisibility when one shows up, teleport toward a far one, rocket jump and portal when idle.
 - `ItemHasSpecial` keeps a Power AT4CS or Ripper from being replaced by room weapons. botassist.log: "Item Battle: ... boxes ready", "uses item".
 
+## All Star (mode 40) with room bots
+
+`modes/all_star.inl` (rules CSOGameRulesAllStar, vtable 0x1179d918). Team deathmatch where each life is one of 20 characters.
+- `resource/allstar/AllStar_Status-Dedi.csv` and `AllStar_Skill-Dedi.csv` are only read on a dedicated server and never shipped: characters had
+  0 health and no model. `InstallAllStarTables` removes the check (0x1082bfb4, 0x1082bd0b) and `gen_all_star.py` writes the files (`tables/resource/allstar`);
+  hw.dll's plain .csv loader (0x27584f0) is detoured like the .cso one, so they come from `botassist_tables`.
+  Nexon's numbers are unknown: health and speed follow each role. Third person view is off: its camera numbers are unknown.
+- Characters are state of `AllStarPlayer`, which bots aren't, so room AI players join as fake players, Zombie Giant's way (`CreateZgPlayer`, now on the emptier
+  side here). `DriveAllStarPlayer`, run from `AsWatch` (no stock bot runs to call it): hunting with `GdmPickVia`/`GdmWalk`, melee characters run at the enemy,
+  others circle, aim by room skill, skills through 0x10664940. botassist.log: "All Star: n T and m CT alive...; characters", "spawns as character", "stuck at".
+
+## Create room: Random Map in fun modes
+
+The dialog takes the mode from the selected map tile (+0x14) or, if 0, from the mode tab (GameUI 0x10571030). The random tile has none, so a fun mode became the tab's
+mode (Zombie Mutant from Item Battle). `HookedSelectedMode` takes it from the list's other tiles. The server accepts any map id for mode 19, since the host draws the map.
+
 ## The room's AI difficulty text
 
 The room's panels show the room's difficulty (`#CSO_Bot_Difficulty_<n>`), not what the AI players page set. `RoomBotLevelText`

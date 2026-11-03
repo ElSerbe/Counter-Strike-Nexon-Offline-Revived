@@ -2160,6 +2160,8 @@ static const int MODE_BEAST = 27; // Beast: see modes/beast.inl
 static bool BeastIsBeast(void* bot);
 static const int MODE_ITEM = 19; // Item Battle: see modes/item_battle.inl
 static bool ItemHasSpecial(void* bot);
+static const int MODE_ALLSTAR = 40; // All Star: see modes/all_star.inl
+static void InstallAllStarTables(DWORD delta);
 static void InstallBeastBotClass(DWORD delta);
 
 static void UpdateBuying(void* bot, BotState& st)
@@ -2210,6 +2212,8 @@ static void UpdateBuying(void* bot, BotState& st)
         return; // Beast: only claws
     if (ItemHasSpecial(bot))
         return; // Item Battle: a Power AT4CS or Ripper from a box stays
+    if (GameMode() == MODE_ALLSTAR)
+        return; // All Star: each character has its own weapons
     MatchBot* rb = RoomBotOf(bot, st);
     bool scenario = CoopMode();
     // room AI players buy their own loadout in every mode: chosen weapons, else random ones from their filter, else
@@ -3587,7 +3591,7 @@ static bool ReadOverride(const char* name, std::string& text)
 static bool LoadTableOverride(void* table, const char* file)
 {
     size_t len = file ? strlen(file) : 0;
-    if (len < 5 || _stricmp(file + len - 4, ".cso"))
+    if (len < 5 || (_stricmp(file + len - 4, ".cso") && _stricmp(file + len - 4, ".csv")))
         return false;
     std::string raw, text;
     if (!ReadOverride((std::string(file, len - 4) + ".csv").c_str(), raw))
@@ -3613,12 +3617,27 @@ static bool __fastcall HookedLoadCso(void* table, void*, const char* file)
     return g_LoadCsoTramp(table, file);
 }
 
+// the same loader for plain .csv tables (All Star's AllStar_Status-Dedi.csv, which the game never shipped)
+static const DWORD HW_LOADCSV = 0x027584f0;
+static LoadCsoFn g_LoadCsvTramp;
+static bool __fastcall HookedLoadCsv(void* table, void*, const char* file)
+{
+    if (LoadTableOverride(table, file))
+        return ((DWORD*)table)[2] && ((DWORD*)table)[3];
+    return g_LoadCsvTramp(table, file);
+}
+
 static void InstallTableOverrides()
 {
     if (g_LoadCsoTramp)
         return; // hw.dll stays loaded across matches
     if (!g_hwLo)
         ModuleRange("hw.dll", g_hwLo, g_hwHi);
+    unsigned char* csv = (unsigned char*)(g_hwLo + HW_LOADCSV - HW_BASE);
+    static const unsigned char csvCode[] = { 0x55, 0x8b, 0xec, 0x53, 0x56, 0x8b, 0xf1 };
+    if (g_hwLo && Readable(csv, sizeof(csvCode)) && !memcmp(csv, csvCode, sizeof(csvCode)))
+        g_LoadCsvTramp = (LoadCsoFn)DetourCdecl(csv, sizeof(csvCode), (void*)HookedLoadCsv);
+    Log("table overrides for .csv: %s", g_LoadCsvTramp ? "on" : "NOT hooked (unexpected code)");
     unsigned char* fn = (unsigned char*)(g_hwLo + HW_LOADCSO - HW_BASE);
     unsigned char* parse = (unsigned char*)(g_hwLo + HW_PARSETABLE - HW_BASE);
     static const unsigned char code[] = { 0x55, 0x8b, 0xec, 0x51, 0x53, 0x8b, 0xd9 };
@@ -3810,9 +3829,56 @@ static void SetZsrExponent(double* c, const char* where)
 static const DWORD GAMEUI_REDRAW_MASK_LOAD = 0x105bcd2b, GAMEUI_REDRAW_MASK = 0x10aff218;
 static DWORD g_redrawMask[4];
 
+// Create room dialog: "Random Map" sent the wrong mode in Item Battle and the other fun modes. Which mode the dialog creates comes from the
+// selected map tile (GameUI 0x10571030, thiscall dialog, flag: tile +0x14) or, when that is 0, from the selected mode tab. Fun modes' maps
+// carry their mode in the tile, but the random tile has none, so the tab's mode came out (Zombie Mutant from Item Battle).
+// Now a tile without a mode takes it from the other tiles of the list when they have one.
+static const DWORD GAMEUI_SELECTED_MODE = 0x10571030;
+typedef int(__fastcall* SelectedModeFn)(unsigned char* dialog, void* edx, char flag);
+static SelectedModeFn g_SelectedModeTramp;
+
+static int __fastcall HookedSelectedMode(unsigned char* dialog, void* edx, char flag)
+{
+    __try
+    {
+        unsigned char* grid = *(unsigned char**)(dialog + 0x1b8);
+        unsigned char* first = *(unsigned char**)(grid + 0x164);
+        unsigned char* last = *(unsigned char**)(grid + 0x168);
+        unsigned selected = *(unsigned*)(grid + 0x170);
+        unsigned count = first && last > first ? (unsigned)(last - first) / 0x50 : 0;
+        if (selected < count && *(int*)(first + selected * 0x50 + 0x14) == 0)
+            for (unsigned i = 0; i < count; i++)
+            {
+                int mode = *(int*)(first + i * 0x50 + 0x14);
+                if (mode > 0)
+                    return mode;
+            }
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+    }
+    return g_SelectedModeTramp(dialog, edx, flag);
+}
+
+static void FixRandomMapMode(HMODULE gameUi)
+{
+    if (g_SelectedModeTramp)
+        return;
+    unsigned char* fn = (unsigned char*)(GAMEUI_SELECTED_MODE + ((DWORD)gameUi - 0x10000000));
+    static const unsigned char code[] = { 0x55, 0x8b, 0xec, 0x6a, 0xff };
+    if (!Readable(fn, sizeof(code)) || memcmp(fn, code, sizeof(code)))
+    {
+        Log("GameUI create room dialog has unexpected code: Random Map left as it is");
+        return;
+    }
+    g_SelectedModeTramp = (SelectedModeFn)DetourCdecl(fn, sizeof(code), (void*)HookedSelectedMode);
+    Log("GameUI create room dialog: Random Map keeps a fun mode %s", g_SelectedModeTramp ? "on" : "NOT hooked");
+}
+
 static void FixRiftTooltip(HMODULE gameUi)
 {
     DWORD delta = (DWORD)gameUi - 0x10000000; // GameUI.dll's preferred base
+    FixRandomMapMode(gameUi);
     SetZsrExponent((double*)(GAMEUI_ZSRIFT_EXPONENT + delta), "difficulty tooltip");
     unsigned char* p = (unsigned char*)(GAMEUI_REDRAW_MASK_LOAD + delta);
     DWORD* mask = (DWORD*)(GAMEUI_REDRAW_MASK + delta);
@@ -3955,6 +4021,7 @@ static void HookBotManager(DWORD delta)
     InstallZgPlayers(delta);
     InstallFrameHook(delta);
     InstallBeastBotClass(delta);
+    InstallAllStarTables(delta);
     InstallZgDropGuard();
     DetourChooseAppearance(delta);
     for (DWORD vt : MP_ZBBOTMGR_VTABLES)
@@ -4362,6 +4429,8 @@ static void CommandFile()
 
 #include "modes/item_battle.inl"
 
+#include "modes/all_star.inl"
+
 // ---------------------------------------------------------------- the frame hook (every mode)
 // The end of mp.dll's StartFrame (DLL function 0x113f8a80) runs botassist's per-frame work: the console, the command
 // file, and each mode's watcher (each returns at once outside its mode).
@@ -4387,6 +4456,7 @@ static void HookedStartFrame()
         PtnWatch();
         BeastWatch();
         ItemWatch();
+        AsWatch();
         ZgFrame();
     }
     __except (EXCEPTION_EXECUTE_HANDLER)

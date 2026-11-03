@@ -39,6 +39,11 @@ EXTRA_FILES += [
     (f, "botassist_tables/maps/" + f.name, True)
     for f in sorted((MOD / "tools" / "botassist" / "tables" / "maps").glob("FUN_ITEMBOX_*.csv"))
 ]
+# All Star's character numbers (gen_all_star.py), dedicated-server files the game lacks
+EXTRA_FILES += [
+    (f, "botassist_tables/resource/allstar/" + f.name, True)
+    for f in sorted((MOD / "tools" / "botassist" / "tables" / "resource" / "allstar").glob("*.csv"))
+]
 # the zombie class skills' values (gen_zombie_skills.py), dedicated-server files the game lacks
 EXTRA_FILES += [
     (f, "botassist_tables/resource/zombi/ZombieSkillProperty_Dedi/" + f.name, True)

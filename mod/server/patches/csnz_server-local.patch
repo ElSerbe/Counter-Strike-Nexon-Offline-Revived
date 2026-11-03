@@ -6427,7 +6427,7 @@ index 13a4ee8..c36e019 100644
  	std::vector<int> m_KickedUsers;
  	std::vector<int> m_FamilyBattleUsers;
 diff --git a/src/room/roomsettings.cpp b/src/room/roomsettings.cpp
-index 0ba9234..cc40032 100644
+index 0ba9234..5ddef11 100644
 --- a/src/room/roomsettings.cpp
 +++ b/src/room/roomsettings.cpp
 @@ -8,6 +8,7 @@
@@ -6494,8 +6494,8 @@ index 0ba9234..cc40032 100644
  	if (gameModeId == 38 || gameModeId == 39)
  		return mapId == 254;
  
-+	// offline build: Item Battle's maps are in their own column (gen_item_battle.py)
-+	if (gameModeId == 19 && g_pMapListTable->GetCell<int>("tdm_item", to_string(mapId)))
++	// offline build: Item Battle's maps are in their own column (gen_item_battle.py); its Random Map tile may carry any map's id
++	if (gameModeId == 19)
 +		return true;
 +
  	string gameModeName = GetGameModeNameByID(gameModeId);

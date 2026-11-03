@@ -125,6 +125,7 @@ static const DWORD MP_CREATE_PLAYER = 0x113ef1d0, MP_PUT_IN_SERVER = 0x113efbb0;
 static const DWORD MP_CHOOSETEAM = 0x113f2f00;
 typedef int (*ChooseTeamFn)(void* player, int team);
 static const DWORD MP_ZOMBIEBOSSPLAYER_VT = 0x11958834;
+static const DWORD MP_ALLSTARPLAYER_VT = 0x11958ab0; // All Star's fake players (modes/all_star.inl) use this file's machinery too
 static const int ENG_CREATEFAKECLIENT = 108, ENG_FREEENTPRIVATEDATA = 70;
 static const int ZG_GIANT_TYPE = 0x3710; // ZombieBossPlayer: 1, 2, 4, 6 giants; 0, 3, 5 humans
 static const int IN_ATTACK2 = 0x800, IN_USE = 0x20, IN_FORWARD = 0x8, IN_BACK = 0x10, IN_MOVELEFT = 0x200, IN_MOVERIGHT = 0x400;
@@ -182,13 +183,14 @@ static float Rnd() { return (float)rand() / RAND_MAX; }
 // the last room AI players of the list are played by fake players (once per match, before bots take them)
 static void MarkZgPlayers()
 {
-    if (cfg.zgPlayers == 0 || !g_CreateFakeClient || GameMode() != MODE_ZOMBIE_GIANT || g_matchFetch != 2 ||
+    bool allStar = GameMode() == MODE_ALLSTAR; // all of them there: only real players get characters
+    if ((cfg.zgPlayers == 0 && !allStar) || !g_CreateFakeClient || (GameMode() != MODE_ZOMBIE_GIANT && !allStar) || g_matchFetch != 2 ||
         !g_matchKnown || g_zgMarkLevel == g_nav.level)
         return;
     g_zgMarkLevel = g_nav.level;
     int n = 0;
     EnterCriticalSection(&g_matchLock);
-    for (int i = (int)g_matchBots.size() - 1; i >= 0 && (cfg.zgPlayers < 0 || n < cfg.zgPlayers); i--)
+    for (int i = (int)g_matchBots.size() - 1; i >= 0 && (allStar || cfg.zgPlayers < 0 || n < cfg.zgPlayers); i--)
         if (!g_matchBots[i].edict)
         {
             g_matchBots[i].fakePlayer = true;
@@ -242,7 +244,8 @@ static void CreateZgPlayer(ZgPlayer& z)
     g_FreeEntPrivateData(e);
     ((EdictFn)(MP_CREATE_PLAYER + g_mpDelta))(e);
     void* pl = PrivateOf(e);
-    if (!pl || *(DWORD*)pl != MP_ZOMBIEBOSSPLAYER_VT + g_mpDelta)
+    bool allStar = GameMode() == MODE_ALLSTAR;
+    if (!pl || *(DWORD*)pl != (allStar ? MP_ALLSTARPLAYER_VT : MP_ZOMBIEBOSSPLAYER_VT) + g_mpDelta)
     {
         Log("Zombie Giant: '%s' isn't a Zombie Giant player (vtable 0x%08lx): removed", z.name.c_str(),
             pl ? *(DWORD*)pl - g_mpDelta : 0);
@@ -258,13 +261,25 @@ static void CreateZgPlayer(ZgPlayer& z)
     ((EdictFn)(MP_PUT_IN_SERVER + g_mpDelta))(e);
     F<int>(Vars(e), EV_FLAGS) |= FL_FAKECLIENT;
     unsigned char* p = (unsigned char*)pl;
-    *(int*)(p + PLAYER_TEAM) = 2;
+    int side = 2;
+    if (allStar)
+    {
+        // All Star has two sides: the emptier one
+        int count[3] = { 0, 0, 0 };
+        ForEntitiesNear(V3{ 0, 0, 0 }, 1e6f, [&](void* o) {
+            int t = o != e && (F<int>(Vars(o), EV_FLAGS) & FL_CLIENT) ? TeamOf(o) : 0;
+            if (t == 1 || t == 2)
+                count[t]++;
+        });
+        side = count[1] <= count[2] ? 1 : 2;
+    }
+    *(int*)(p + PLAYER_TEAM) = side;
     *(int*)(p + 0xe10) = 1;
     *(int*)(p + 0xcc0) = 4;
-    int joined = ((ChooseTeamFn)(MP_CHOOSETEAM + g_mpDelta))(pl, 2);
-    int id = z.character > 0 && CharacterFits(z.character, 2) ? z.character
-             : !cfg.characters[2].empty()                      ? cfg.characters[2][rand() % cfg.characters[2].size()]
-                                                               : 0;
+    int joined = ((ChooseTeamFn)(MP_CHOOSETEAM + g_mpDelta))(pl, side);
+    int id = z.character > 0 && CharacterFits(z.character, side) ? z.character
+             : !cfg.characters[side].empty()                      ? cfg.characters[side][rand() % cfg.characters[side].size()]
+                                                                  : 0;
     int number = id ? CharacterClassNumber(id) : 0;
     char cls[16];
     snprintf(cls, sizeof(cls), "%d", number > 0 ? number : 1);
@@ -1316,6 +1331,8 @@ static bool DriveZgBot(void* bot, float& yaw, float& pitch, float& fwd, float& s
 }
 
 // once per frame, from the bots' RunPlayerMove
+static void DriveAllStarPlayer(ZgPlayer& z, float now, float dt); // modes/all_star.inl
+
 static void UpdateZgPlayers()
 {
     float now = Now();
@@ -1331,10 +1348,14 @@ static void UpdateZgPlayers()
         g_zgLevel = g_nav.level;
         g_zgStart = now;
     }
-    if (GameMode() != MODE_ZOMBIE_GIANT || g_edictToVars < 0)
+    bool allStar = GameMode() == MODE_ALLSTAR;
+    if ((GameMode() != MODE_ZOMBIE_GIANT && !allStar) || g_edictToVars < 0)
         return;
-    ZgScanWorld();
-    ZgUpdateTeam(now);
+    if (!allStar)
+    {
+        ZgScanWorld();
+        ZgUpdateTeam(now);
+    }
     if (!g_CreateFakeClient || !g_FreeEntPrivateData)
         return;
     MarkZgPlayers();
@@ -1360,7 +1381,12 @@ static void UpdateZgPlayers()
             }
     for (auto& z : g_zgPlayers)
         if (z.edict)
-            DriveZgPlayer(z, now, dt);
+        {
+            if (allStar)
+                DriveAllStarPlayer(z, now, dt);
+            else
+                DriveZgPlayer(z, now, dt);
+        }
 }
 
 // ---------------------------------------------------------------- Zombie Giant debugging (botassist.log)
