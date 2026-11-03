@@ -715,8 +715,11 @@ once its controller falls; DM_port and zm_requiem are team deathmatch. The game 
 - `resource/allstar/AllStar_Status-Dedi.csv` and `AllStar_Skill-Dedi.csv` are only read on a dedicated server and never shipped: characters had
   0 health and no model. `InstallAllStarTables` removes the check (0x1082bfb4, 0x1082bd0b) and `gen_all_star.py` writes the files (`tables/resource/allstar`);
   hw.dll's plain .csv loader (0x27584f0) is detoured like the .cso one, so they come from `botassist_tables`.
-  Nexon's numbers are unknown: health and speed follow each role. Third person view: on for all but the soldiers (1, 2, 3, 6) and light zombies (4, 5).
-  The camera is client.dll's MPToCL 0xbf: cam_idealyaw, cam_idealdist, pitch, offset; Beast mode's 0, 140, 30 is the reference.
+  Nexon's numbers are unknown: health and armor follow a video of the mode, and the attacks each role. Third person view: on for all but the soldiers
+  (1, 2, 3, 6) and light zombies (4, 5, whose arms the video shows). The camera is client.dll's MPToCL 0xbf: cam_idealyaw, cam_idealdist, pitch, offset.
+  The Skill table isn't multipliers: `SKILLS` in the generator says what each pawn does with its numbers (damage, radius, speed, seconds).
+  The rules' +0x2a8 (room option, vfunc 0x28c) makes characters go by team and kills (0x1082a7c0): patched off. Normally each player draws at 0x1082c760.
+  The kart, ball and chicken models stand 16-18 units too high on a standing hull (their lowest point is z -18..-20, the others' -33..-38).
 - Characters are state of `AllStarPlayer`, which bots aren't, so room AI players join as fake players, Zombie Giant's way (`CreateZgPlayer`, now on the emptier
   side here). `DriveAllStarPlayer`, run from `AsWatch` (no stock bot runs to call it): hunting with `GdmPickVia`/`GdmWalk`, melee characters run at the enemy,
   others circle, aim by room skill, skills through 0x10664940. botassist.log: "All Star: n T and m CT alive...; characters", "spawns as character", "stuck at".

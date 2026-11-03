@@ -9,6 +9,8 @@
 //   - The characters' numbers: AllStar_Status-Dedi.csv and AllStar_Skill-Dedi.csv are only read on a dedicated server (0x1082bf40, 0x1082bca0:
 //     the check at AS_DEDICATED_CHECKS) and never shipped, so on a listen server characters had 0 health and no model. InstallAllStarTables
 //     skips the check and gen_all_star.py writes the files, in botassist_tables.
+//   - One character per team: the rules read a room option (vfunc 0x28c) into +0x2a8, a variant where the kills on a team's table pick its
+//     character (0x1082a7c0) and nobody draws. The rooms here shouldn't use it: AS_LADDER_CHECK makes the constructor (0x108298a0) leave it off.
 //   - Bots: a character is state of AllStarPlayer (+0x3700 on, the class humans get). A CCSBot has other fields there, and the rules skip it
 //     everywhere (player vfunc 0x21c), so bots were plain soldiers. As in Zombie Giant, the room's AI players join as fake players:
 //     a fake client with a real player object (shared CreateZgPlayer, MarkZgPlayers, UpdateZgPlayers, and their engine guards), so the
@@ -16,9 +18,13 @@
 //     has its own. They hunt with Gun Deathmatch's routes (GdmPickTarget, GdmPickVia, GdmWalk), close-combat characters run at the enemy, the
 //     rest keep moving around it, and they use their skills when they see someone.
 static const DWORD MP_ALLSTAR_RULES_VT = 0x1179d918, MP_ALLSTAR_COMMAND = 0x10664940;
+static const DWORD AS_LADDER_CHECK = 0x10829958, MP_ALLSTAR_SET_NEXT = 0x106640d0, MP_ALLSTAR_APPLY_NEXT = 0x10663d00;
+static const int AS_RULES_LADDER = 0x2a8, AS_CHARACTER = 0x3700, AS_NEXT_CHARACTER = 0x3704, AS_CHARACTERS = 20, AS_RESET_MAXSPEED_VFUNC = 0x1ac;
+static const int AS_CHICKEN = 11, AS_SNOW = 18, AS_KART = 20;
 static const DWORD AS_DEDICATED_CHECKS[] = { 0x1082bfb4, 0x1082bd0b }; // jz past the table: 6 bytes each
 static const float AS_RETARGET = 1.0f, AS_ENGAGE = 900.0f, AS_MELEE_REACH = 130.0f, AS_GUN_RANGE = 1400.0f, AS_FIRE_TIME = 1.2f, AS_FIRE_PAUSE = 0.15f;
 static const float AS_SKILL_MIN = 3.0f, AS_SKILL_MORE = 5.0f, AS_SKILL_RANGE = 900.0f, AS_TURN = 14.0f, AS_FIRE_ANGLE = 12.0f, AS_RESPAWN_AFTER = 3.5f;
+static const float AS_SNOW_BLAST = 220.0f, AS_KART_TURBO_FROM = 450.0f, AS_NO_CHARACTER_FOR = 2.0f, AS_FROZEN_FOR = 12.0f;
 
 static void InstallAllStarTables(DWORD delta)
 {
@@ -44,13 +50,45 @@ static void InstallAllStarTables(DWORD delta)
     }
     if (done != 2)
         Log("All Star: unexpected code: character tables not loaded (%d of 2)", done);
+    unsigned char* jump = (unsigned char*)(AS_LADDER_CHECK + delta);
+    if (!Readable(jump, 2) || (jump[0] != 0x75 && jump[0] != 0xeb) || jump[1] != 0x02)
+    {
+        Log("All Star: unexpected code: characters may go by team");
+        return;
+    }
+    if (jump[0] == 0x75)
+    {
+        DWORD old;
+        VirtualProtect(jump, 1, PAGE_EXECUTE_READWRITE, &old);
+        jump[0] = 0xeb; // jnz -> jmp: to the xor that leaves it off
+        VirtualProtect(jump, 1, old, &old);
+        FlushInstructionCache(GetCurrentProcess(), jump, 2);
+    }
 }
+
+// a character of its own for the next life
+static void AsDrawNext(unsigned char* pl)
+{
+    typedef void(__fastcall * SetNextFn)(void* player, void* edx, int character);
+    ((SetNextFn)(MP_ALLSTAR_SET_NEXT + g_mpDelta))(pl, nullptr, 1 + (int)((rand() ^ GetTickCount()) % AS_CHARACTERS));
+}
+
+// it spawned before it had a character: gives it one now, as the game does when a player changes (0x1082b300)
+static void AsGiveCharacter(unsigned char* pl)
+{
+    if (!*(int*)(pl + AS_NEXT_CHARACTER))
+        AsDrawNext(pl);
+    typedef void(__fastcall * ApplyNextFn)(void* player);
+    ((ApplyNextFn)(MP_ALLSTAR_APPLY_NEXT + g_mpDelta))(pl);
+}
+
+typedef char(__fastcall* AsCommandFn)(void* player, void* edx, const char* command);
 
 static bool AsMelee(int character)
 {
     switch (character)
     {
-    case 4: case 5: case 7: case 8: case 10: case 11: case 12: case 16: case 17: case 18: case 19:
+    case 4: case 5: case 7: case 8: case 10: case 11: case 12: case 16: case 18: case 19:
         return true; // zombies, the Joker, monsters and the like
     }
     return false;
@@ -63,12 +101,28 @@ static void AsThink(void* e, ZgPlayer& z, BotState& st, unsigned char* pl, float
     V3 me = Origin(e), eye = Eye(e);
     int team = *(int*)(pl + PLAYER_TEAM);
     g.team = team;
+    static std::map<void*, float> frozenSince;
     if (F<float>(v, EV_MAXSPEED) <= 1.0f || (F<int>(v, EV_FLAGS) & FL_FROZEN))
     {
         st.lastPos = me;
         st.lastProgress = now;
+        // longer than a round's freeze time: nothing is going to free it
+        float& since = frozenSince[e];
+        if (!since || since > now)
+            since = now;
+        else if (now - since > AS_FROZEN_FOR)
+        {
+            static int reports = 0;
+            if (reports++ < 10)
+                Log("All Star: '%s' stayed frozen (max speed %.0f, flags 0x%x, character %d): freed", z.name.c_str(), F<float>(v, EV_MAXSPEED), F<int>(v, EV_FLAGS), *(int*)(pl + AS_CHARACTER));
+            F<int>(v, EV_FLAGS) &= ~FL_FROZEN;
+            typedef void(__fastcall * ResetMaxSpeedFn)(void* player);
+            (*(ResetMaxSpeedFn**)pl)[AS_RESET_MAXSPEED_VFUNC / 4](pl);
+            since = 0;
+        }
         return;
     }
+    frozenSince[e] = 0;
     if (now >= g.retargetAt || !g.target)
     {
         g.retargetAt = now + AS_RETARGET;
@@ -78,7 +132,7 @@ static void AsThink(void* e, ZgPlayer& z, BotState& st, unsigned char* pl, float
         g.target = nullptr;
     if (!g.target)
         return;
-    int character = *(int*)(pl + 0x3700);
+    int character = *(int*)(pl + AS_CHARACTER);
     bool melee = AsMelee(character);
     V3 at = Origin(g.target);
     float d = Len(at - me);
@@ -105,11 +159,13 @@ static void AsThink(void* e, ZgPlayer& z, BotState& st, unsigned char* pl, float
                     z.nextFire = now + AS_FIRE_PAUSE; // a short pause: semi-automatic guns fire again, empty ones reload
             }
         }
-        if (d < AS_SKILL_RANGE && now >= z.nextSkill)
+        // the Snowman's only skill kills it: when it takes someone along. The Chicken has one too; the kart's turbo is for closing in
+        bool skillNow = d < (character == AS_SNOW ? AS_SNOW_BLAST : AS_SKILL_RANGE) && now >= z.nextSkill;
+        if (skillNow)
         {
             z.nextSkill = now + AS_SKILL_MIN + Rnd() * AS_SKILL_MORE;
-            typedef char(__fastcall * AsCommandFn)(void* player, void* edx, const char* command);
-            ((AsCommandFn)(MP_ALLSTAR_COMMAND + g_mpDelta))(pl, nullptr, rand() % 2 ? "AllStarAttack1" : "AllStarAttack2");
+            bool second = character == AS_KART ? d > AS_KART_TURBO_FROM && rand() % 2 : character != AS_SNOW && character != AS_CHICKEN && rand() % 2;
+            ((AsCommandFn)(MP_ALLSTAR_COMMAND + g_mpDelta))(pl, nullptr, second ? "AllStarAttack2" : "AllStarAttack1");
         }
         if (melee)
             stay = d < 56.0f;
@@ -123,6 +179,11 @@ static void AsThink(void* e, ZgPlayer& z, BotState& st, unsigned char* pl, float
             float around = YawOf(at - me) + g.strafe * (d < GDM_TOO_CLOSE ? 120.0f : 70.0f);
             goal = me + V3{ cosf(around / RAD), sinf(around / RAD), 0 } * 120.0f;
         }
+    }
+    if (!seen && character == AS_KART && now >= z.nextSkill)
+    {
+        z.nextSkill = now + AS_SKILL_MIN + Rnd() * AS_SKILL_MORE;
+        ((AsCommandFn)(MP_ALLSTAR_COMMAND + g_mpDelta))(pl, nullptr, "AllStarAttack2");
     }
     if (!(seen && d < AS_ENGAGE))
     {
@@ -190,6 +251,7 @@ static void DriveAllStarPlayer(ZgPlayer& z, float now, float dt)
         z.wasAlive = false;
         if (now - z.deadSince > AS_RESPAWN_AFTER && now >= z.nextRespawn)
         {
+            AsDrawNext(pl);
             FakeCommand(e, "respawn");
             z.nextRespawn = now + 3.0f;
         }
@@ -204,7 +266,13 @@ static void DriveAllStarPlayer(ZgPlayer& z, float now, float dt)
             z.nextSkill = now + AS_SKILL_MIN + Rnd() * AS_SKILL_MORE;
             static int reports = 0;
             if (reports++ < 60)
-                Log("All Star: '%s' spawns as character %d (team %d, health %.0f)", z.name.c_str(), *(int*)(pl + 0x3700), *(int*)(pl + PLAYER_TEAM), F<float>(v, EV_HEALTH));
+                Log("All Star: '%s' spawns as character %d (team %d, health %.0f)", z.name.c_str(), *(int*)(pl + AS_CHARACTER), *(int*)(pl + PLAYER_TEAM), F<float>(v, EV_HEALTH));
+            z.busySince = now;
+        }
+        if (!*(int*)(pl + AS_CHARACTER) && now - z.busySince > AS_NO_CHARACTER_FOR)
+        {
+            AsGiveCharacter(pl);
+            z.busySince = now;
         }
         AsThink(e, z, StateFor(e), pl, now, fwd, side, buttons);
     }
@@ -233,6 +301,13 @@ static void AsWatch()
     UpdateMatchBots();
     UpdateZgPlayers();
     float now = Now();
+    static void* ladderChecked = nullptr;
+    if (ladderChecked != rules)
+    {
+        ladderChecked = rules;
+        Log("All Star: characters %s", rules[AS_RULES_LADDER] ? "by team (the check didn't apply): turned off" : "drawn for each player");
+        rules[AS_RULES_LADDER] = 0;
+    }
     if (now >= next - 60.0f && now < next)
         return;
     next = now + 15.0f;
@@ -252,9 +327,9 @@ static void AsWatch()
         else
             alive[team]++;
         unsigned char* q = (unsigned char*)PrivateOf(e);
-        char one[12];
-        snprintf(one, sizeof(one), "%d ", q && *(DWORD*)q == MP_ALLSTARPLAYER_VT + g_mpDelta ? *(int*)(q + 0x3700) : -1);
+        char one[24];
+        snprintf(one, sizeof(one), "%d/%.0f ", q && *(DWORD*)q == MP_ALLSTARPLAYER_VT + g_mpDelta ? *(int*)(q + AS_CHARACTER) : -1, F<float>(Vars(e), EV_MAXSPEED));
         characters += one;
     });
-    Log("All Star: %d T and %d CT alive, %d dead; characters: %s", alive[1], alive[2], dead, characters.c_str());
+    Log("All Star: %d T and %d CT alive, %d dead; character/max speed: %s", alive[1], alive[2], dead, characters.c_str());
 }
