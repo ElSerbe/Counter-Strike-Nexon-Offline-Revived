@@ -2158,6 +2158,7 @@ static const int MODE_SS = 57; // Super Soldier: see modes/super_soldier.inl
 static const int MODE_PTN = 50; // Partner: see modes/partner.inl
 static const int MODE_BEAST = 27; // Beast: see modes/beast.inl
 static bool BeastIsBeast(void* bot);
+static void InstallBeastBotClass(DWORD delta);
 
 static void UpdateBuying(void* bot, BotState& st)
 {
@@ -3949,6 +3950,7 @@ static void HookBotManager(DWORD delta)
     InstallZgDebug(delta);
     InstallZgPlayers(delta);
     InstallFrameHook(delta);
+    InstallBeastBotClass(delta);
     InstallZgDropGuard();
     DetourChooseAppearance(delta);
     for (DWORD vt : MP_ZBBOTMGR_VTABLES)

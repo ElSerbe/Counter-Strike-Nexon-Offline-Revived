@@ -9,6 +9,9 @@
 // ampoules. Rules +0x260/+0x264 are the T/CT controllers and +0x268/+0x26c the cores (their team at pev +0x1d8, health at +0x178).
 //
 // The game has no AI for any of this (bots here are stock CCSBots, the old bot manager), so:
+//   - Bot class: the mode's objects only take players of class 2 (Ampoule's touch 0x1084e8f0, the core's damage 0x1084d290) and a
+//     CCSBot's class (vfunc 0x30) is 15, so bots stood on the crystals without getting them and couldn't hurt a core. In this mode
+//     InstallBeastBotClass makes it 2, everywhere else it stays 15.
 //   - Teams: the room lists its AI players on one side and T bots were refused. RoomBotQuota (shared, as in Super Soldier) evens them.
 //   - BeastBotThink: a bot turns into a beast like a player's E does (rules vfunc 0x1f0, thiscall(player)), when its health is low, a
 //     beast is near, or after waiting a while with its 3 ampoules, as the wiki advises.
@@ -50,6 +53,29 @@ static bool BeastIsBeast(void* bot)
         return false;
     unsigned char* s = BeastPlayer(bot);
     return s && s[4] != 0;
+}
+
+// CCSBot's vtable, slot of vfunc 0x30: its class
+static const DWORD MP_CCSBOT_VT = 0x1193dcc8, MP_CCSBOT_CLASS = 0x107f8c40;
+static int __fastcall BeastBotClass(void*)
+{
+    return GameMode() == MODE_BEAST ? 2 : 15;
+}
+
+static void InstallBeastBotClass(DWORD delta)
+{
+    void** slot = (void**)(MP_CCSBOT_VT + delta) + 0x30 / 4;
+    if (!Readable(slot, 4) || *slot == (void*)BeastBotClass)
+        return;
+    if (*slot != (void*)(MP_CCSBOT_CLASS + delta))
+    {
+        Log("CCSBot vtable: unexpected class function, not hooked");
+        return;
+    }
+    DWORD old;
+    VirtualProtect(slot, 4, PAGE_READWRITE, &old);
+    *slot = (void*)BeastBotClass;
+    VirtualProtect(slot, 4, old, &old);
 }
 
 struct BeastBot

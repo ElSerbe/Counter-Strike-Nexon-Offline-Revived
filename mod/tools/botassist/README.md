@@ -688,6 +688,8 @@ own orders (Z menu). The game does all of that (`resource/partner/partner_bot_bt
 respawn and from bodies; 3 of them and E make a beast. On sm_blizzard a team wins by destroying the other's core, open for 20 s
 once its controller falls; DM_port and zm_requiem are team deathmatch. The game has no AI for it (stock CCSBots):
 - `RoomBotQuota` evens the sides, since the room lists its AI players on one and T bots were refused.
+- `InstallBeastBotClass`: crystals (ampoules) and cores only take players of class 2 and a CCSBot's is 15, so bots stood on the
+  crystals without getting them and couldn't hurt a core. CCSBot's vfunc 0x30 answers 2 in this mode only.
 - `BeastBotThink` transforms bots like a player's E (rules vfunc 0x1f0): low health, a beast near, or after 6-20 s with 3 ampoules.
 - `BeastIsBeast` keeps beasts out of the room's weapons and character (`UpdateBuying`, `OnBotCommand`, the bot hook).
 - `DriveBeast`: humans fetch ampoules close by; roles by player index (2 of 5 attack the enemy controller, 2 hunt, 1 defends its own
