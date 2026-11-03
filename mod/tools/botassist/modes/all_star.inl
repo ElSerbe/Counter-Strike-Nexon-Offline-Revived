@@ -11,6 +11,12 @@
 //     skips the check and gen_all_star.py writes the files, in botassist_tables.
 //   - One character per team: the rules read a room option (vfunc 0x28c) into +0x2a8, a variant where the kills on a team's table pick its
 //     character (0x1082a7c0) and nobody draws. The rooms here shouldn't use it: AS_LADDER_CHECK makes the constructor (0x108298a0) leave it off.
+//   - Fake players' speed: the rules give a character its speed and gravity only past 0x114bd6a0, which fake players fail, so they kept their
+//     weapon's: -1 with the zombies' knife, 0 with the bazooka. AsFixSpeed does it for them.
+//   - The kart, ball, chicken and little snowman stand 16-19 units off the ground: their models go down to z -18 or so, the others to -36. AsGround
+//     lowers the root bones of the loaded model, which the client shares on this listen server.
+//   - The light zombies' knife does no damage here (why isn't known): AsClaw hits with the pawns' melee function (0x10663300).
+//   - Spawn points run out with 32 players: AsUnstack moves a fake player off anyone it stands on.
 //   - Bots: a character is state of AllStarPlayer (+0x3700 on, the class humans get). A CCSBot has other fields there, and the rules skip it
 //     everywhere (player vfunc 0x21c), so bots were plain soldiers. As in Zombie Giant, the room's AI players join as fake players:
 //     a fake client with a real player object (shared CreateZgPlayer, MarkZgPlayers, UpdateZgPlayers, and their engine guards), so the
@@ -19,12 +25,19 @@
 //     rest keep moving around it, and they use their skills when they see someone.
 static const DWORD MP_ALLSTAR_RULES_VT = 0x1179d918, MP_ALLSTAR_COMMAND = 0x10664940;
 static const DWORD AS_LADDER_CHECK = 0x10829958, MP_ALLSTAR_SET_NEXT = 0x106640d0, MP_ALLSTAR_APPLY_NEXT = 0x10663d00;
+static const DWORD MP_ALLSTAR_PAWN_SPEED = 0x10663710, MP_ALLSTAR_STATUS_ROW = 0x10659290, MP_ALLSTAR_MELEE = 0x10663300, MP_UTIL_SETORIGIN = 0x11519ec0;
+static const DWORD MP_ENG_GET_MODEL_PTR = 0x121d3b94;
 static const int AS_RULES_LADDER = 0x2a8, AS_CHARACTER = 0x3700, AS_NEXT_CHARACTER = 0x3704, AS_CHARACTERS = 20, AS_RESET_MAXSPEED_VFUNC = 0x1ac;
-static const int AS_CHICKEN = 11, AS_SNOW = 18, AS_KART = 20;
+static const int AS_ZOMBIE3 = 4, AS_ZOMBIE4 = 5, AS_CHICKEN = 11, AS_BALL = 12, AS_SNOW = 18, AS_KART = 20;
+static const int AS_IN_ATTACK2 = 0x800, AS_EV_BUTTON = 0x1a4, AS_EV_GRAVITY = 0x12c, AS_ROW_GRAVITY = 0x3c, AS_PAWN = 0x3718, AS_PAWN_KART_VEHICLE = 0x20;
+static const int AS_EV_EDICT = 0x238, AS_MDL_NUMBONES = 140, AS_MDL_BONEINDEX = 144, AS_MDL_DONE_MARK = 71, AS_BONE_SIZE = 112, AS_BONE_PARENT = 32, AS_BONE_POS_Z = 72;
 static const DWORD AS_DEDICATED_CHECKS[] = { 0x1082bfb4, 0x1082bd0b }; // jz past the table: 6 bytes each
 static const float AS_RETARGET = 1.0f, AS_ENGAGE = 900.0f, AS_MELEE_REACH = 130.0f, AS_GUN_RANGE = 1400.0f, AS_FIRE_TIME = 1.2f, AS_FIRE_PAUSE = 0.15f;
 static const float AS_SKILL_MIN = 3.0f, AS_SKILL_MORE = 5.0f, AS_SKILL_RANGE = 900.0f, AS_TURN = 14.0f, AS_FIRE_ANGLE = 12.0f, AS_RESPAWN_AFTER = 3.5f;
-static const float AS_SNOW_BLAST = 220.0f, AS_KART_TURBO_FROM = 450.0f, AS_NO_CHARACTER_FOR = 2.0f, AS_FROZEN_FOR = 12.0f;
+static const float AS_SNOW_BLAST = 220.0f, AS_KART_TURBO_FROM = 450.0f, AS_NO_CHARACTER_FOR = 2.0f, AS_FROZEN_FOR = 12.0f, AS_BOT_RUN = 400.0f;
+static const float AS_FLEE_FROM = 900.0f, AS_FLEE_STEP = 300.0f, AS_HIDE_UNTIL = 800.0f, AS_CHICKEN_FLEE = 3.0f, AS_SECOND_HOLD = 0.3f, AS_PLAYERS_EVERY = 0.05f;
+static const float AS_CLAW_DAMAGE = 400.0f, AS_CLAW_RADIUS = 100.0f, AS_CLAW_REACH = 48.0f, AS_CLAW_EVERY = 0.6f, AS_MELEE_HURT_A = 20.0f, AS_MELEE_HURT_B = 100.0f, AS_MELEE_HURT_C = 200.0f;
+static const float AS_UNSTACK_EVERY = 0.5f, AS_UNSTACK_RANGE = 800.0f, AS_UNSTACK_LEVEL = 120.0f, AS_HULL_WIDE = 32.0f, AS_HULL_TALL = 72.0f, AS_STAND_ABOVE_NAV = 37.0f;
 
 static void InstallAllStarTables(DWORD delta)
 {
@@ -84,14 +97,144 @@ static void AsGiveCharacter(unsigned char* pl)
 
 typedef char(__fastcall* AsCommandFn)(void* player, void* edx, const char* command);
 
-static bool AsMelee(int character)
+// How each class fights, from its text in the class panel and what its pawn reads: the attack button in slot 4 (+0x10), the commands in slot 9 (+0x24)
+struct AsClass
+{
+    bool closeIn;     // runs at the enemy instead of moving around it
+    float reach;      // how far its attack button works
+    int button;       // 0: it has none
+    float secondFrom; // how far it uses the other mouse button, now and then (0: never)
+    float attack1Reach, attack2Reach, attack2From; // AllStarAttack1 and 2 (0: never)
+    float skillEvery; // seconds between uses (0: a random time)
+};
+static const AsClass AS_CLASSES[AS_CHARACTERS + 1] = {
+    { false, AS_GUN_RANGE, IN_ATTACK, 0, 0, 0, 0, 0 },         // no character yet: a soldier
+    { false, AS_GUN_RANGE, IN_ATTACK, 900, 0, 0, 0, 0 },       // 1 Hero: rifle, the right button fires a projectile
+    { true, 500, IN_ATTACK, 250, 0, 0, 0, 0 },                 // 2 Heroine: shotgun, the right button fires all its bullets
+    { false, AS_GUN_RANGE, IN_ATTACK, 0, 0, 0, 0, 0 },         // 3 Bazooka
+    { true, 90, IN_ATTACK, 0, 0, 0, 0, 0 },                    // 4 Light Zombie
+    { true, 90, IN_ATTACK, 600, 0, 0, 0, 0 },                  // 5 Light Zombie 2: the right button is a high jump
+    { false, AS_GUN_RANGE, IN_ATTACK, 0, 0, 0, 0, 0 },         // 6 Battle Rush: rifle
+    { true, 90, IN_ATTACK, 90, 0, 0, 0, 0 },                   // 7 Joker: quick and strong staff hits
+    { true, 170, IN_ATTACK, 0, 0, 900, 250, 0 },               // 8 Revenant: slash, fire at range
+    { false, AS_GUN_RANGE, AS_IN_ATTACK2, 0, 1000, 0, 0, 0 },  // 9 XT-300: machine gun on the right button, 3 rockets
+    { true, 170, IN_ATTACK, 0, 0, 400, 0, 0 },                 // 10 Snowbeast: arms, a stomp when close
+    { true, 0, 0, 0, 250, 0, 0, 0 },                           // 11 Chicken: lays a grenade and has to run
+    { false, 0, 0, 0, 0, 0, 0, 0 },                            // 12 Soccer ball: scores while it lives, so it hides
+    { false, 0, 0, 0, 900, 900, 0, 0 },                        // 13 Dr. Rex: tentacles
+    { true, 0, 0, 0, 0, 0, 0, 0 },                             // 14 Mosquito: drinks from whoever is near
+    { false, AS_GUN_RANGE, IN_ATTACK, 0, 0, 0, 0, 0 },         // 15 Drone: machine gun
+    { true, 200, IN_ATTACK, 400, 0, 0, 0, 0 },                 // 16 Light Zombie Boss: stomp, a kick on the right button
+    { false, 2500, IN_ATTACK, 0, 0, 0, 0, 0 },                 // 17 Hector: laser, a sniper
+    { true, 0, 0, 0, AS_SNOW_BLAST, 0, 0, 0 },                 // 18 Snowman: blows itself up next to someone
+    { true, 0, 0, 0, 170, 900, 250, 1.0f },                    // 19 Frozen Wrath: swings by repeating the command, throws the bat
+    { false, 0, 0, 0, AS_SKILL_RANGE, 1e6f, AS_KART_TURBO_FROM, 0 }, // 20 Kartrider: water bomb, turbo to close in
+};
+
+// The rules' way, for those it leaves out. A max speed of 1 is an attack or the freeze time holding it: left alone
+static void AsFixSpeed(unsigned char* v, unsigned char* pl, int character)
+{
+    if (!character)
+        return;
+    typedef float(__fastcall * PawnSpeedFn)(void* player);
+    float speed = ((PawnSpeedFn)(MP_ALLSTAR_PAWN_SPEED + g_mpDelta))(pl);
+    if (speed > 1.0f && F<float>(v, EV_MAXSPEED) != 1.0f)
+        F<float>(v, EV_MAXSPEED) = speed;
+    typedef unsigned char*(__cdecl * StatusRowFn)(int character, int team);
+    float gravity = *(float*)(((StatusRowFn)(MP_ALLSTAR_STATUS_ROW + g_mpDelta))(character, *(int*)(pl + PLAYER_TEAM)) + AS_ROW_GRAVITY);
+    if (F<float>(v, AS_EV_GRAVITY) == 1.0f && gravity > 0)
+        F<float>(v, AS_EV_GRAVITY) = gravity;
+}
+
+static float AsModelDrop(int character)
 {
     switch (character)
     {
-    case 4: case 5: case 7: case 8: case 10: case 11: case 12: case 16: case 18: case 19:
-        return true; // zombies, the Joker, monsters and the like
+    case AS_CHICKEN: return 17.0f;
+    case AS_BALL: return 16.0f;
+    case AS_SNOW: return 19.0f;
+    case AS_KART: return 18.0f;
     }
-    return false;
+    return 0;
+}
+
+static void AsGround(void* edict, float drop)
+{
+    typedef unsigned char*(__cdecl * ModelPtrFn)(void* edict);
+    ModelPtrFn modelPtr = *(ModelPtrFn*)(MP_ENG_GET_MODEL_PTR + g_mpDelta);
+    unsigned char* model = modelPtr && edict ? modelPtr(edict) : nullptr;
+    if (!model || !Readable(model, AS_MDL_BONEINDEX + 4) || memcmp(model, "IDST", 4) || model[AS_MDL_DONE_MARK])
+        return;
+    unsigned char* bones = model + *(int*)(model + AS_MDL_BONEINDEX);
+    int count = *(int*)(model + AS_MDL_NUMBONES);
+    if (!Readable(bones, count * AS_BONE_SIZE))
+        return;
+    for (int i = 0; i < count; i++)
+    {
+        unsigned char* bone = bones + i * AS_BONE_SIZE;
+        if (*(int*)(bone + AS_BONE_PARENT) == -1)
+            *(float*)(bone + AS_BONE_POS_Z) -= drop;
+    }
+    model[AS_MDL_DONE_MARK] = 1;
+    Log("All Star: model '%s' lowered %.0f units to the ground", (const char*)model + 8, drop);
+}
+
+static void AsGroundPlayer(void* e, unsigned char* pl, int character)
+{
+    float drop = AsModelDrop(character);
+    if (!drop)
+        return;
+    AsGround(e, drop);
+    if (character != AS_KART)
+        return;
+    unsigned char* pawn = *(unsigned char**)(pl + AS_PAWN);
+    unsigned char* vehicle = pawn && Readable(pawn, AS_PAWN_KART_VEHICLE + 4) ? *(unsigned char**)(pawn + AS_PAWN_KART_VEHICLE) : nullptr;
+    unsigned char* vars = vehicle && Readable(vehicle, 12) ? *(unsigned char**)(vehicle + 8) : nullptr;
+    if (vars && Readable(vars, AS_EV_EDICT + 4))
+        AsGround(*(void**)(vars + AS_EV_EDICT), drop);
+}
+
+static void AsClaw(unsigned char* pl)
+{
+    typedef void(__cdecl * MeleeFn)(void* player, float damage, float radius, float reach, float a, float b, float c);
+    ((MeleeFn)(MP_ALLSTAR_MELEE + g_mpDelta))(pl, AS_CLAW_DAMAGE, AS_CLAW_RADIUS, AS_CLAW_REACH, AS_MELEE_HURT_A, AS_MELEE_HURT_B, AS_MELEE_HURT_C);
+}
+
+static bool AsSomeoneAt(void* e, V3 at)
+{
+    bool found = false;
+    ForEntitiesNear(at, AS_HULL_TALL * 2.0f, [&](void* o) {
+        if (o == e || found || !(F<int>(Vars(o), EV_FLAGS) & FL_CLIENT) || !Alive(o))
+            return;
+        V3 d = Origin(o) - at;
+        found = fabsf(d.x) < AS_HULL_WIDE && fabsf(d.y) < AS_HULL_WIDE && fabsf(d.z) < AS_HULL_TALL;
+    });
+    return found;
+}
+
+// to the closest free place on the nav mesh
+static void AsUnstack(void* e, V3 me, ZgPlayer& z)
+{
+    float best = AS_UNSTACK_RANGE;
+    V3 spot = me;
+    for (auto& area : g_nav.areas)
+    {
+        V3 c = area.center + V3{ 0, 0, AS_STAND_ABOVE_NAV };
+        float d = Len(c - me);
+        if (d < AS_HULL_WIDE * 2.0f || d >= best || fabsf(c.z - me.z) > AS_UNSTACK_LEVEL || AsSomeoneAt(e, c))
+            continue;
+        best = d;
+        spot = c;
+    }
+    if (best >= AS_UNSTACK_RANGE)
+        return;
+    typedef void(__cdecl * SetOriginFn)(void* vars, float* origin);
+    float origin[3] = { spot.x, spot.y, spot.z };
+    ((SetOriginFn)(MP_UTIL_SETORIGIN + g_mpDelta))(Vars(e), origin);
+    F<float>(Vars(e), EV_VELOCITY) = F<float>(Vars(e), EV_VELOCITY + 4) = F<float>(Vars(e), EV_VELOCITY + 8) = 0;
+    static int reports = 0;
+    if (reports++ < 20)
+        Log("All Star: '%s' was standing on someone: moved %.0f units", z.name.c_str(), best);
 }
 
 static void AsThink(void* e, ZgPlayer& z, BotState& st, unsigned char* pl, float now, float& fwd, float& side, unsigned short& buttons)
@@ -133,7 +276,8 @@ static void AsThink(void* e, ZgPlayer& z, BotState& st, unsigned char* pl, float
     if (!g.target)
         return;
     int character = *(int*)(pl + AS_CHARACTER);
-    bool melee = AsMelee(character);
+    const AsClass& fights = AS_CLASSES[character >= 0 && character <= AS_CHARACTERS ? character : 0];
+    bool melee = fights.closeIn;
     V3 at = Origin(g.target);
     float d = Len(at - me);
     bool seen = CanSee(e, eye, g.target);
@@ -150,23 +294,31 @@ static void AsThink(void* e, ZgPlayer& z, BotState& st, unsigned char* pl, float
         z.yaw = Approach(z.yaw, YawOf(aim - eye) + (Rnd() - 0.5f) * error, AS_TURN);
         z.pitch += AngleDiff(PitchOf(aim - eye) + (Rnd() - 0.5f) * error, z.pitch) * 0.4f;
         bool facing = fabsf(AngleDiff(z.yaw, YawOf(aim - eye))) < AS_FIRE_ANGLE + error;
-        if (facing && d < (melee ? AS_MELEE_REACH : AS_GUN_RANGE))
+        if (facing && fights.button && d < fights.reach)
         {
             if (now >= z.nextFire)
             {
-                buttons |= IN_ATTACK;
+                buttons |= fights.button;
                 if (now >= z.nextFire + AS_FIRE_TIME)
                     z.nextFire = now + AS_FIRE_PAUSE; // a short pause: semi-automatic guns fire again, empty ones reload
             }
         }
-        // the Snowman's only skill kills it: when it takes someone along. The Chicken has one too; the kart's turbo is for closing in
-        bool skillNow = d < (character == AS_SNOW ? AS_SNOW_BLAST : AS_SKILL_RANGE) && now >= z.nextSkill;
-        if (skillNow)
+        bool first = d < fights.attack1Reach, second = d < fights.attack2Reach && d >= fights.attack2From, other = d < fights.secondFrom;
+        if (now >= z.nextSkill && (first || second || other))
         {
-            z.nextSkill = now + AS_SKILL_MIN + Rnd() * AS_SKILL_MORE;
-            bool second = character == AS_KART ? d > AS_KART_TURBO_FROM && rand() % 2 : character != AS_SNOW && character != AS_CHICKEN && rand() % 2;
-            ((AsCommandFn)(MP_ALLSTAR_COMMAND + g_mpDelta))(pl, nullptr, second ? "AllStarAttack2" : "AllStarAttack1");
+            z.nextSkill = now + (fights.skillEvery > 0 ? fights.skillEvery : AS_SKILL_MIN + Rnd() * AS_SKILL_MORE);
+            if (other)
+                z.aimUntil = now + AS_SECOND_HOLD;
+            if (first || second)
+            {
+                bool useSecond = first && second ? rand() % 2 != 0 : second;
+                ((AsCommandFn)(MP_ALLSTAR_COMMAND + g_mpDelta))(pl, nullptr, useSecond ? "AllStarAttack2" : "AllStarAttack1");
+                if (character == AS_CHICKEN)
+                    z.sprintUntil = now + AS_CHICKEN_FLEE;
+            }
         }
+        if (now < z.aimUntil)
+            buttons |= AS_IN_ATTACK2;
         if (melee)
             stay = d < 56.0f;
         else if (d < GDM_CLOSE)
@@ -180,12 +332,22 @@ static void AsThink(void* e, ZgPlayer& z, BotState& st, unsigned char* pl, float
             goal = me + V3{ cosf(around / RAD), sinf(around / RAD), 0 } * 120.0f;
         }
     }
+    // the ball hides and the chicken runs from its grenade
+    bool flee = (character == AS_BALL && seen && d < AS_FLEE_FROM) || (character == AS_CHICKEN && now < z.sprintUntil);
+    if (flee)
+    {
+        float away = YawOf(me - at);
+        goal = me + V3{ cosf(away / RAD), sinf(away / RAD), 0 } * AS_FLEE_STEP;
+        stay = false;
+    }
+    else if (character == AS_BALL && d > AS_HIDE_UNTIL)
+        stay = true;
     if (!seen && character == AS_KART && now >= z.nextSkill)
     {
         z.nextSkill = now + AS_SKILL_MIN + Rnd() * AS_SKILL_MORE;
         ((AsCommandFn)(MP_ALLSTAR_COMMAND + g_mpDelta))(pl, nullptr, "AllStarAttack2");
     }
-    if (!(seen && d < AS_ENGAGE))
+    if (!flee && !(seen && d < AS_ENGAGE))
     {
         if (!g.hasVia && now >= g.viaAt)
             GdmPickVia(e, g, me, at);
@@ -274,7 +436,21 @@ static void DriveAllStarPlayer(ZgPlayer& z, float now, float dt)
             AsGiveCharacter(pl);
             z.busySince = now;
         }
+        AsFixSpeed(v, pl, *(int*)(pl + AS_CHARACTER));
+        if (now >= z.nextUse)
+        {
+            z.nextUse = now + AS_UNSTACK_EVERY;
+            V3 at = Origin(e);
+            if (AsSomeoneAt(e, at))
+                AsUnstack(e, at, z);
+        }
         AsThink(e, z, StateFor(e), pl, now, fwd, side, buttons);
+        float speed = F<float>(v, EV_MAXSPEED); // the walking code asks for a fixed run: as fast as this character goes
+        if (speed > 1.0f)
+        {
+            fwd *= speed / AS_BOT_RUN;
+            side *= speed / AS_BOT_RUN;
+        }
     }
     float ang[3] = { z.pitch, AngleDiff(z.yaw, 0.0f), 0 };
     float* va = (float*)(v + EV_VANGLE);
@@ -289,6 +465,30 @@ static void DriveAllStarPlayer(ZgPlayer& z, float now, float dt)
     g_RunPlayerMove(e, ang, fwd, side, 0, buttons, 0, (unsigned char)(ms < 1 ? 1 : ms > 100 ? 100 : ms));
 }
 
+// What every player gets, the human too
+static void AsAllPlayers(float now)
+{
+    static float next = 0;
+    static std::map<void*, float> nextClaw;
+    if (now >= next - 1.0f && now < next)
+        return;
+    next = now + AS_PLAYERS_EVERY;
+    ForEntitiesNear(V3{ 0, 0, 0 }, 1e6f, [&](void* e) {
+        unsigned char* v = Vars(e);
+        unsigned char* pl = (F<int>(v, EV_FLAGS) & FL_CLIENT) && Alive(e) ? (unsigned char*)PrivateOf(e) : nullptr;
+        if (!pl || *(DWORD*)pl != MP_ALLSTARPLAYER_VT + g_mpDelta)
+            return;
+        int character = *(int*)(pl + AS_CHARACTER);
+        AsGroundPlayer(e, pl, character);
+        float& claw = nextClaw[e];
+        if ((character == AS_ZOMBIE3 || character == AS_ZOMBIE4) && (F<int>(v, AS_EV_BUTTON) & IN_ATTACK) && (now >= claw || claw - now > AS_CLAW_EVERY))
+        {
+            claw = now + AS_CLAW_EVERY;
+            AsClaw(pl);
+        }
+    });
+}
+
 // The fake players' frame: no stock bot runs in this mode, so nothing else would call UpdateZgPlayers
 static void AsWatch()
 {
@@ -301,6 +501,7 @@ static void AsWatch()
     UpdateMatchBots();
     UpdateZgPlayers();
     float now = Now();
+    AsAllPlayers(now);
     static void* ladderChecked = nullptr;
     if (ladderChecked != rules)
     {

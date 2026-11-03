@@ -719,9 +719,13 @@ once its controller falls; DM_port and zm_requiem are team deathmatch. The game 
   (1, 2, 3, 6) and light zombies (4, 5, whose arms the video shows). The camera is client.dll's MPToCL 0xbf: cam_idealyaw, cam_idealdist, pitch, offset.
   The Skill table isn't multipliers: `SKILLS` in the generator says what each pawn does with its numbers (damage, radius, speed, seconds).
   The rules' +0x2a8 (room option, vfunc 0x28c) makes characters go by team and kills (0x1082a7c0): patched off. Normally each player draws at 0x1082c760.
-  The kart, ball and chicken models stand 16-18 units too high on a standing hull (their lowest point is z -18..-20, the others' -33..-38).
+  The explosion radius of `BaseMissile` (Revenant's fire, XT-300's rockets) is in meters: x39.37 (0x10911f70). 250 there reached the whole map.
+  Hector has 2 skins, red and blue: column 20 is the skin. Fake players fail 0x114bd6a0, so the rules don't give them speed and gravity (they kept
+  -1 with the zombies' knife, 0 with the bazooka, and stood still): `AsFixSpeed`. `AsGround` lowers the loaded models that float (kart, ball,
+  chicken, snowman: lowest point z -18 against the others' -36), through GetModelPtr, whose data the client shares here. The light zombies' knife
+  does no damage, cause unknown: `AsClaw` hits with the pawns' melee function when they press attack. `AsUnstack`: spawn points run out with 32 players.
 - Characters are state of `AllStarPlayer`, which bots aren't, so room AI players join as fake players, Zombie Giant's way (`CreateZgPlayer`, now on the emptier
-  side here). `DriveAllStarPlayer`, run from `AsWatch` (no stock bot runs to call it): hunting with `GdmPickVia`/`GdmWalk`, melee characters run at the enemy,
+  side here). `DriveAllStarPlayer`, run from `AsWatch` (no stock bot runs to call it): hunting with `GdmPickVia`/`GdmWalk`, `AS_CLASSES` says how each class fights, melee characters run at the enemy,
   others circle, aim by room skill, skills through 0x10664940. botassist.log: "All Star: n T and m CT alive...; characters", "spawns as character", "stuck at".
 
 ## Create room: Random Map in fun modes
