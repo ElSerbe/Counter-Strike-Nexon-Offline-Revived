@@ -2158,6 +2158,8 @@ static const int MODE_SS = 57; // Super Soldier: see modes/super_soldier.inl
 static const int MODE_PTN = 50; // Partner: see modes/partner.inl
 static const int MODE_BEAST = 27; // Beast: see modes/beast.inl
 static bool BeastIsBeast(void* bot);
+static const int MODE_ITEM = 19; // Item Battle: see modes/item_battle.inl
+static bool ItemHasSpecial(void* bot);
 static void InstallBeastBotClass(DWORD delta);
 
 static void UpdateBuying(void* bot, BotState& st)
@@ -2206,6 +2208,8 @@ static void UpdateBuying(void* bot, BotState& st)
         return; // Partner: a partner's weapons go by its player's money (ZBBot_BT_BuyWeapon_Partner)
     if (BeastIsBeast(bot))
         return; // Beast: only claws
+    if (ItemHasSpecial(bot))
+        return; // Item Battle: a Power AT4CS or Ripper from a box stays
     MatchBot* rb = RoomBotOf(bot, st);
     bool scenario = CoopMode();
     // room AI players buy their own loadout in every mode: chosen weapons, else random ones from their filter, else
@@ -2904,7 +2908,7 @@ static bool OnBotCommand(void* bot)
         // internal-buy flag set, and only those stay)
         if (GameMode() == MODE_SS)
             return false;
-        if (BeastIsBeast(bot))
+        if (BeastIsBeast(bot) || ItemHasSpecial(bot))
             return true;
         if (GameMode() == MODE_GDM)
         {
@@ -3302,7 +3306,7 @@ static int RoomBotQuota(int team, const char* which)
     // the side asked for (RoomBotOf takes any free AI player), the emptier one when the game doesn't say.
     // (Partner: PtnWatch asks for each side itself)
     if (GameMode() == MODE_ZCON || GameMode() == MODE_ZWAR || GameMode() == MODE_SS || GameMode() == MODE_PTN ||
-        GameMode() == MODE_BEAST)
+        GameMode() == MODE_BEAST || GameMode() == MODE_ITEM)
     {
         int total = 0;
         EnterCriticalSection(&g_matchLock);
@@ -3313,8 +3317,8 @@ static int RoomBotQuota(int team, const char* which)
         if (g_matchAdded[1] + g_matchAdded[2] >= total)
             return -1;
         // (Super Soldier keeps asking for CT while the list lasts: there the sides are simply kept even)
-        // (Beast too: its bot manager asks for each side, and the room's list has them all on one)
-        bool even = GameMode() == MODE_SS || GameMode() == MODE_BEAST;
+        // (Beast and Item Battle too: their bot manager asks for each side, and the room's list has them all on one)
+        bool even = GameMode() == MODE_SS || GameMode() == MODE_BEAST || GameMode() == MODE_ITEM;
         int t = !even && team == 0 ? 1 : !even && team == 1 ? 2 : g_matchAdded[1] <= g_matchAdded[2] ? 1 : 2;
         g_matchAdded[t]++;
         Log("the game adds a bot (%s): %s, %d T and %d CT of %d", which, t == 1 ? "T (zombies)" : "CT (humans)",
@@ -4356,6 +4360,8 @@ static void CommandFile()
 
 #include "modes/beast.inl"
 
+#include "modes/item_battle.inl"
+
 // ---------------------------------------------------------------- the frame hook (every mode)
 // The end of mp.dll's StartFrame (DLL function 0x113f8a80) runs botassist's per-frame work: the console, the command
 // file, and each mode's watcher (each returns at once outside its mode).
@@ -4380,6 +4386,7 @@ static void HookedStartFrame()
         SSWatch();
         PtnWatch();
         BeastWatch();
+        ItemWatch();
         ZgFrame();
     }
     __except (EXCEPTION_EXECUTE_HANDLER)
@@ -4785,11 +4792,11 @@ static void HookedRunPlayerMove(void* fakeclient, const float* angles, float fwd
                         ang[2] = 0;
                     }
                 }
-                if (!scenario && GameMode() == MODE_BEAST)
+                if (!scenario && (GameMode() == MODE_BEAST || GameMode() == MODE_ITEM))
                 {
                     float y = aim[1], p = aim[0], f = fwd, sd = side;
                     unsigned short bt = buttons;
-                    if (DriveBeast(fakeclient, st, y, p, f, sd, bt))
+                    if (GameMode() == MODE_BEAST ? DriveBeast(fakeclient, st, y, p, f, sd, bt) : DriveItem(fakeclient, st, y, p, f, sd, bt))
                     {
                         aim[0] = p;
                         aim[1] = y;

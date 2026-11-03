@@ -697,6 +697,18 @@ once its controller falls; DM_port and zm_requiem are team deathmatch. The game 
   Beasts run at enemies, punch, stomp (attack2) and roll (double W through the buttons). Routes and unsticking are Gun Deathmatch's
   (`GdmPickVia`, `GdmWalk`). botassist.log: "Beast: n T and m CT alive..., core and controller health", "turns into a beast", "stuck at".
 
+## Item Battle (mode 19) with room bots
+
+`modes/item_battle.inl` (rules CSOGameRulesTDMItemRenew, vtable 0x117a54b4). Team deathmatch with item boxes; two item slots, used with E.
+- Maps: the list is MapList.csv's `tdm_item` column. A box table (`maps/FUN_ITEMBOX_<map>`) exists for only 6 maps, so `gen_item_battle.py`
+  writes one for the others in `tables/maps` (`botassist_tables` replaces the game's table): spots on the nav mesh's main part, spread
+  out, 36 units over the floor like the game's, 2 special boxes near the center. `gen_item_battle_maps.txt` lists the 70 maps; delete a
+  line and regenerate to leave one out. The server's `IsMapValid` takes that column for this mode.
+- The game has no AI for it (stock CCSBots). `RoomBotQuota` evens the sides. `DriveItem`: to the closest box with a slot free, shooting barricades
+  on the way, else hunting (Gun Deathmatch's `GdmPickVia`, `GdmWalk`). `ItemUse` presses E as a player does (rules vfuncs 0x238 and 0x23c): attack
+  items at a visible enemy, shield, radar and invisibility when one shows up, teleport toward a far one, rocket jump and portal when idle.
+- `ItemHasSpecial` keeps a Power AT4CS or Ripper from being replaced by room weapons. botassist.log: "Item Battle: ... boxes ready", "uses item".
+
 ## The room's AI difficulty text
 
 The room's panels show the room's difficulty (`#CSO_Bot_Difficulty_<n>`), not what the AI players page set. `RoomBotLevelText`

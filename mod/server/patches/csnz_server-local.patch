@@ -6427,7 +6427,7 @@ index 13a4ee8..c36e019 100644
  	std::vector<int> m_KickedUsers;
  	std::vector<int> m_FamilyBattleUsers;
 diff --git a/src/room/roomsettings.cpp b/src/room/roomsettings.cpp
-index 0ba9234..70e6280 100644
+index 0ba9234..cc40032 100644
 --- a/src/room/roomsettings.cpp
 +++ b/src/room/roomsettings.cpp
 @@ -8,6 +8,7 @@
@@ -6490,7 +6490,18 @@ index 0ba9234..70e6280 100644
  {
  	int botAdd = 0;
  
-@@ -1416,7 +1437,7 @@ void CRoomSettings::LoadDefaultSettings(int gameModeId, int mapId)
+@@ -1138,6 +1159,10 @@ bool CRoomSettings::IsMapValid(int gameModeId, int mapId)
+ 	if (gameModeId == 38 || gameModeId == 39)
+ 		return mapId == 254;
+ 
++	// offline build: Item Battle's maps are in their own column (gen_item_battle.py)
++	if (gameModeId == 19 && g_pMapListTable->GetCell<int>("tdm_item", to_string(mapId)))
++		return true;
++
+ 	string gameModeName = GetGameModeNameByID(gameModeId);
+ 
+ 	if (gameModeName.empty())
+@@ -1416,7 +1441,7 @@ void CRoomSettings::LoadDefaultSettings(int gameModeId, int mapId)
  	botDifficulty = 0;
  	friendlyBots = GetDefaultFriendlyBots(gameModeId);
  	enemyBots = GetDefaultEnemyBots(gameModeId);
@@ -6499,7 +6510,7 @@ index 0ba9234..70e6280 100644
  	botAdd = GetDefaultBotAdd(gameModeId);
  	kdRule = 0;
  	startingCash = GetDefaultStartingCash(gameModeId);
-@@ -1425,7 +1446,9 @@ void CRoomSettings::LoadDefaultSettings(int gameModeId, int mapId)
+@@ -1425,7 +1450,9 @@ void CRoomSettings::LoadDefaultSettings(int gameModeId, int mapId)
  	statusSymbol = 0;
  	mapPlaylistIndex = mapPlaylistSize ? 1 : 0;
  	enhanceRestrict = (gameModeId == 22 || gameModeId == 32) ? 1 : 0;
@@ -6510,7 +6521,7 @@ index 0ba9234..70e6280 100644
  	{
  		zsDifficulty = 0;
  		unk56 = 0;
-@@ -1530,7 +1553,7 @@ void CRoomSettings::LoadZbCompetitiveSettings(int gameModeId)
+@@ -1530,7 +1557,7 @@ void CRoomSettings::LoadZbCompetitiveSettings(int gameModeId)
  	botDifficulty = 0;
  	friendlyBots = GetDefaultFriendlyBots(gameModeId);
  	enemyBots = GetDefaultEnemyBots(gameModeId);
@@ -6519,7 +6530,7 @@ index 0ba9234..70e6280 100644
  	botAdd = GetDefaultBotAdd(gameModeId);
  
  	lowMidFlag |= ROOM_LOWMID_KDRULE;
-@@ -1766,12 +1789,10 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
+@@ -1766,12 +1793,10 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
  		lowFlag |= ROOM_LOW_ROUNDTIME;
  		roundTime = GetGameModeDefaultSetting(gameModeId, "mode_roundtime_id");
  
@@ -6536,7 +6547,7 @@ index 0ba9234..70e6280 100644
  
  		lowFlag |= ROOM_LOW_HOSTAGEKILLLIMIT;
  		hostageKillLimit = 0;
-@@ -1807,7 +1828,7 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
+@@ -1807,7 +1832,7 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
  		botDifficulty = 0;
  		friendlyBots = GetDefaultFriendlyBots(gameModeId);
  		enemyBots = GetDefaultEnemyBots(gameModeId);
@@ -6545,7 +6556,7 @@ index 0ba9234..70e6280 100644
  		botAdd = GetDefaultBotAdd(gameModeId);
  
  		lowMidFlag |= ROOM_LOWMID_KDRULE;
-@@ -1829,7 +1850,7 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
+@@ -1829,7 +1854,7 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
  			sd = 0;
  
  		lowMidFlag |= ROOM_LOWMID_ZSDIFFICULTY;
@@ -6554,7 +6565,7 @@ index 0ba9234..70e6280 100644
  		{
  			zsDifficulty = 0;
  			unk56 = 0;
-@@ -2026,7 +2047,7 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
+@@ -2026,7 +2051,7 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
  					Logger().Warn("User '%s' tried to update a room\'s settings with gameModeId that doesn't allow bots, gameModeId: %d\n", user->GetLogName(), gameModeId);
  					lowMidFlag &= ~ROOM_LOWMID_BOT;
  				}
@@ -6563,7 +6574,7 @@ index 0ba9234..70e6280 100644
  				{
  					if (botDifficulty > 7)
  						botDifficulty = 7;
-@@ -2034,31 +2055,22 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
+@@ -2034,31 +2059,22 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
  					if (friendlyBots > 15)
  						friendlyBots = 15;
  
@@ -6608,7 +6619,7 @@ index 0ba9234..70e6280 100644
  				}
  			}
  
-@@ -2094,11 +2106,13 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
+@@ -2094,11 +2110,13 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
  
  			if (lowMidFlag & ROOM_LOWMID_ZSDIFFICULTY)
  			{
@@ -6623,7 +6634,7 @@ index 0ba9234..70e6280 100644
  				else if (gameModeId == 15)
  				{
  					int mapMaxZsDifficulty = g_pMapListTable->GetCell<int>("ZSmaxDifficulty", to_string(mapId));
-@@ -2364,12 +2378,8 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
+@@ -2364,12 +2382,8 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
  			maxPlayers = g_pMapListTable->GetCell<int>("max_player", to_string(mapId));
  		}
  
@@ -6638,7 +6649,7 @@ index 0ba9234..70e6280 100644
  
  		lowMidFlag |= ROOM_LOWMID_BALLNUMBER;
  		ballNumber = GetMapSetting(mapId, "ball_default");
-@@ -2668,6 +2678,10 @@ bool CRoomSettings::CheckSettings(IUser* user)
+@@ -2668,6 +2682,10 @@ bool CRoomSettings::CheckSettings(IUser* user)
  			}
  		}
  

@@ -34,6 +34,11 @@ EXTRA_FILES = [
     (MOD / "tools" / "botassist" / "tables" / "maps" / "ZBS_ENC_zsrift_splinter_dedi.json",
      "botassist_tables/maps/ZBS_ENC_zsrift_splinter_dedi.json", True),
 ]
+# Item Battle's item boxes on the maps the game has no table for (gen_item_battle.py)
+EXTRA_FILES += [
+    (f, "botassist_tables/maps/" + f.name, True)
+    for f in sorted((MOD / "tools" / "botassist" / "tables" / "maps").glob("FUN_ITEMBOX_*.csv"))
+]
 # the zombie class skills' values (gen_zombie_skills.py), dedicated-server files the game lacks
 EXTRA_FILES += [
     (f, "botassist_tables/resource/zombi/ZombieSkillProperty_Dedi/" + f.name, True)
