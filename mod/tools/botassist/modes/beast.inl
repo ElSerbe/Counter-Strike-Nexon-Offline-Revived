@@ -86,7 +86,6 @@ struct BeastBot
     bool hasRoam = false;
 };
 static std::map<void*, BeastBot> g_beastBots;
-static std::map<void*, GdmBot> g_beastWalk;
 
 // An objective's edict, or null if it has none or is down
 static void* BeastEntity(unsigned char* rules, int offset, bool mustBeUp)
@@ -245,7 +244,7 @@ static bool DriveBeast(void* bot, BotState& st, float& yaw, float& pitch, float&
     unsigned char* p = rules ? (unsigned char*)PrivateOf(bot) : nullptr;
     if (!p || !Readable(p, 0x2170) || !g_nav.ok)
         return false;
-    GdmBot& z = g_beastWalk[bot];
+    GdmBot& z = g_gdmBots[bot]; // there: GdmPickTarget and GdmPickVia read it to spread the team out
     BeastBot& b = g_beastBots[bot];
     float now = Now();
     V3 me = Origin(bot), eye = Eye(bot);

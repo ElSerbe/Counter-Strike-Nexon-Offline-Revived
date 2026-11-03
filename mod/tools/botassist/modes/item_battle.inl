@@ -11,8 +11,11 @@
 //
 // The game has no AI for any of this (bots here are stock CCSBots, the old bot manager), so:
 //   - Teams: RoomBotQuota (shared, as in Super Soldier) evens the sides.
-//   - DriveItem moves them (GdmPickVia/GdmWalk, Gun Deathmatch's routes): to the closest box while a slot is free, breaking a barricade that
-//     covers one; hunting otherwise. The stock AI keeps aiming and shooting.
+//   - DriveItem moves them (GdmPickVia/GdmWalk, Gun Deathmatch's routes): hunting, like any player here. A bot with no item goes to the
+//     closest box first, one with an item only to one right next to it, and only 2 bots go for the same box. With no limit everybody went
+//     to the same box, piled up around it and nobody fought. A bot that doesn't get a box in time leaves it for a minute, and a box 3
+//     bots gave up on is left for all for 3 minutes (botassist.log: "box ... given up"). It breaks a barricade that covers one.
+//     The stock AI keeps aiming and shooting.
 //   - Items: like a player's E (rules vfunc 0x238, thiscall(player, button), and 0x23c when it's let go: the items with a target
 //     are aimed while it is held). Attack items at a visible enemy, the shield, radar and invisibility when one shows up, teleport to
 //     reach one far away, and rocket jump and portal when nothing is around, so the slot frees up.
@@ -22,6 +25,8 @@ static const int ITEM_SLOT = 0x2f26, ITEM_SLOT2 = 0x2f27, ITEM_BOX_FIRST = 0x19,
 static const int ITEM_WEAPON_SLOT = 0x1018, ITEM_WEAPON = 0x101c, ITEM_WEAPON_ID = 0xe4, ITEM_POWER_AT4 = 0x10e, ITEM_POWER_RIPPER = 0x10f, ITEM_EF_NODRAW = 0x80;
 static const float ITEM_BOX_RANGE = 1500.0f, ITEM_FIGHT_RANGE = 700.0f, ITEM_USE_RANGE = 1400.0f, ITEM_USE_EVERY = 2.0f, ITEM_AIM_TIME = 0.3f, ITEM_SHIELD_RANGE = 600.0f;
 static const float ITEM_IDLE_USE = 8.0f, ITEM_TELEPORT_FAR = 700.0f, ITEM_SELF_RANGE = 900.0f, ITEM_LOW_HEALTH = 50.0f;
+static const float ITEM_BOX_CLOSE = 400.0f, ITEM_BOX_PICK = 0.5f, ITEM_BOX_SPEED = 180.0f, ITEM_BOX_MARGIN = 4.0f, ITEM_BOX_SKIP = 60.0f, ITEM_BOX_BAD = 180.0f;
+static const int ITEM_BOX_BOTS = 2, ITEM_BOX_FAILS = 3;
 
 static unsigned char* ItemRules()
 {
@@ -58,11 +63,84 @@ static unsigned char* ItemState(void* edict)
 
 struct ItemBot
 {
-    float lastAlive = 0, useAt = 0, releaseAt = 0, fireAt = 0, quietSince = 0;
+    float lastAlive = 0, useAt = 0, releaseAt = 0, fireAt = 0, quietSince = 0, boxPickAt = 0, boxUntil = 0;
     bool holding = false;
+    void* box = nullptr;
+    void* shield = nullptr;
+    std::map<void*, float> skip; // boxes it gave up on, until when
 };
 static std::map<void*, ItemBot> g_itemBots;
-static std::map<void*, GdmBot> g_itemWalk;
+static std::map<void*, int> g_itemBoxFails;
+static std::map<void*, float> g_itemBoxBad; // boxes nobody should go for, until when
+
+// a box is ready when it shows
+static bool ItemBoxReady(void* e)
+{
+    const char* name = e ? ClassName(e) : nullptr;
+    return name && !strcmp(name, "fun_itembox") && !(F<int>(Vars(e), EV_EFFECTS) & ITEM_EF_NODRAW);
+}
+
+// Which box the bot goes for, twice a second
+static void ItemPickBox(void* bot, unsigned char* p, ItemBot& b, V3 me, float now)
+{
+    if (b.box && !ItemBoxReady(b.box))
+        b.box = nullptr; // somebody took it
+    b.shield = nullptr;
+    bool room = *(signed char*)(p + ITEM_SLOT2) == -1, empty = *(signed char*)(p + ITEM_SLOT) == -1;
+    float reach = !room ? 0.0f : empty ? ITEM_BOX_RANGE : ITEM_BOX_CLOSE;
+    float best = reach, bestShield = ITEM_SHIELD_RANGE;
+    void* box = nullptr;
+    std::map<void*, int> claims;
+    for (auto& kv : g_itemBots)
+        if (kv.first != bot && kv.second.box)
+            claims[kv.second.box]++;
+    ForEntitiesNear(me, ITEM_BOX_RANGE, [&](void* e) {
+        const char* name = ClassName(e);
+        if (!name || strncmp(name, "fun_itembox", 11) || (F<int>(Vars(e), EV_EFFECTS) & ITEM_EF_NODRAW))
+            return;
+        float there = Len(Origin(e) - me);
+        if (name[11] != 0)
+        {
+            if (there < bestShield)
+            {
+                bestShield = there;
+                b.shield = e;
+            }
+            return;
+        }
+        auto skipped = b.skip.find(e);
+        auto bad = g_itemBoxBad.find(e);
+        if (there < best && claims[e] < ITEM_BOX_BOTS && (skipped == b.skip.end() || now >= skipped->second) &&
+            (bad == g_itemBoxBad.end() || now >= bad->second))
+        {
+            best = there;
+            box = e;
+        }
+    });
+    if (!b.box && box)
+    {
+        b.box = box;
+        b.boxUntil = now + best / ITEM_BOX_SPEED + ITEM_BOX_MARGIN;
+    }
+}
+
+// the bot didn't get there: it leaves that box, and if others failed too, so does everybody
+static void ItemGiveUpBox(ItemBot& b, float now)
+{
+    if (!b.box)
+        return;
+    b.skip[b.box] = now + ITEM_BOX_SKIP;
+    if (++g_itemBoxFails[b.box] >= ITEM_BOX_FAILS)
+    {
+        g_itemBoxFails[b.box] = 0;
+        g_itemBoxBad[b.box] = now + ITEM_BOX_BAD;
+        V3 at = Origin(b.box);
+        static int reports = 0;
+        if (reports++ < 30)
+            Log("Item Battle: box at %.0f %.0f %.0f given up: bots don't get to it", at.x, at.y, at.z);
+    }
+    b.box = nullptr;
+}
 
 typedef void(__fastcall* ItemKeyFn)(void* rules, void* edx, void* player, int button);
 
@@ -125,7 +203,7 @@ static bool DriveItem(void* bot, BotState& st, float& yaw, float& pitch, float& 
     unsigned char* p = rules ? (unsigned char*)PrivateOf(bot) : nullptr;
     if (!p || !Readable(p, 0x2f30) || !g_nav.ok)
         return false;
-    GdmBot& z = g_itemWalk[bot];
+    GdmBot& z = g_gdmBots[bot]; // there: GdmPickTarget and GdmPickVia read it to spread the team out
     ItemBot& b = g_itemBots[bot];
     float now = Now();
     V3 me = Origin(bot), eye = Eye(bot);
@@ -143,6 +221,7 @@ static bool DriveItem(void* bot, BotState& st, float& yaw, float& pitch, float& 
         z.viaAt = now + (rand() % 3 ? 0.0f : 6.0f);
         b.holding = false;
         b.quietSince = now;
+        b.box = nullptr;
     }
     b.lastAlive = now;
     if (now >= z.retargetAt || !z.target)
@@ -184,30 +263,18 @@ static bool DriveItem(void* bot, BotState& st, float& yaw, float& pitch, float& 
     }
     else
     {
-        // nothing close to fight: the closest box, if it has room for an item; a barricade on the way gets shot
-        void* box = nullptr;
-        void* shield = nullptr;
-        float bestBox = ITEM_BOX_RANGE, bestShield = ITEM_SHIELD_RANGE;
-        bool room = *(signed char*)(p + ITEM_SLOT2) == -1;
-        ForEntitiesNear(me, ITEM_BOX_RANGE, [&](void* e) {
-            const char* name = ClassName(e);
-            if (!name || strncmp(name, "fun_itembox", 11) || (F<int>(Vars(e), EV_EFFECTS) & ITEM_EF_NODRAW))
-                return;
-            float there = Len(Origin(e) - me);
-            if (name[11] == 0 && room && there < bestBox)
-            {
-                bestBox = there;
-                box = e;
-            }
-            else if (name[11] != 0 && there < bestShield)
-            {
-                bestShield = there;
-                shield = e;
-            }
-        });
-        if (box)
+        // nothing close to fight: a box if it should get one (ItemPickBox), else hunting; a barricade on the way gets shot
+        if (now >= b.boxPickAt)
         {
-            goal = Origin(box);
+            b.boxPickAt = now + ITEM_BOX_PICK;
+            ItemPickBox(bot, p, b, me, now);
+        }
+        if (b.box && now >= b.boxUntil)
+            ItemGiveUpBox(b, now);
+        void* shield = b.shield;
+        if (b.box)
+        {
+            goal = Origin(b.box);
             go = true;
         }
         else if (z.target)
@@ -258,6 +325,8 @@ static bool DriveItem(void* bot, BotState& st, float& yaw, float& pitch, float& 
         yaw = view;
         pitch = 0;
     }
+    if (z.stuckNow && z.stuck >= 3)
+        ItemGiveUpBox(b, now);
     if (z.stuckNow && z.stuck >= 4)
     {
         z.hasVia = false;

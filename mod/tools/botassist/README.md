@@ -701,11 +701,11 @@ once its controller falls; DM_port and zm_requiem are team deathmatch. The game 
 
 `modes/item_battle.inl` (rules CSOGameRulesTDMItemRenew, vtable 0x117a54b4). Team deathmatch with item boxes; two item slots, used with E.
 - Maps: the list is MapList.csv's `tdm_item` column. A box table (`maps/FUN_ITEMBOX_<map>`) exists for only 6 maps, so `gen_item_battle.py`
-  writes one for the others in `tables/maps` (`botassist_tables` replaces the game's table): spots on the nav mesh's main part, spread
-  out, 36 units over the floor like the game's, 2 special boxes near the center. `gen_item_battle_maps.txt` lists the 70 maps; delete a
+  writes one for the others in `tables/maps` (`botassist_tables` replaces the game's table): open spots on the nav mesh's main part (96 units
+  wide, not dead ends, one level when possible), spread out, 36 units over the floor like the game's, 2 special boxes near the center. `gen_item_battle_maps.txt` lists the 70 maps; delete a
   line and regenerate to leave one out. The server's `IsMapValid` takes that column for this mode.
-- The game has no AI for it (stock CCSBots). `RoomBotQuota` evens the sides. `DriveItem`: to the closest box with a slot free, shooting barricades
-  on the way, else hunting (Gun Deathmatch's `GdmPickVia`, `GdmWalk`). `ItemUse` presses E as a player does (rules vfuncs 0x238 and 0x23c): attack
+- The game has no AI for it (stock CCSBots). `RoomBotQuota` evens the sides. `DriveItem`: a bot with no item goes to the closest box, one with an item only to one within 400 u,
+  2 bots a box at most, with a time limit (leaves it 60 s; 3 failures leave it for all, 180 s), shooting barricades on the way, else hunting (Gun Deathmatch's `GdmPickVia`, `GdmWalk`). `ItemUse` presses E as a player does (rules vfuncs 0x238 and 0x23c): attack
   items at a visible enemy, shield, radar and invisibility when one shows up, teleport toward a far one, rocket jump and portal when idle.
 - `ItemHasSpecial` keeps a Power AT4CS or Ripper from being replaced by room weapons. botassist.log: "Item Battle: ... boxes ready", "uses item".
 

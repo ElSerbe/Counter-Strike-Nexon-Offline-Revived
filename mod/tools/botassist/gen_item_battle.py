@@ -1,7 +1,8 @@
 """Item Battle (mode 19) on more maps: writes tables/maps/FUN_ITEMBOX_<map>.csv (where its item boxes are, the table the game only has
 for 6 maps) from each map's navigation mesh, and sets MapList.csv's tdm_item column (the mode's map list) on those maps.
 
-Boxes go on walkable areas of the map's main connected part, spread as far from each other as possible. Row: item id (0 a random item,
+Boxes go on open areas of the map's main connected part, spread as far from each other as possible: wide enough for players to pass each
+other, not dead ends (bots piled up in a 50 unit wide alley), and not over or under another area when the map has enough others. Row: item id (0 a random item,
 1 Power AT4CS, 2 Power Ripper, both behind a yellow barricade), seconds to come back, x, y, z. A map has 2 special boxes near its center.
 
 Usage: python gen_item_battle.py <game root> <work dir>"""
@@ -19,7 +20,7 @@ MAP_LIST = os.path.join(MOD, "server", "CSNZ_Server", "bin", "Data", "MapList.cs
 NARTOOL = os.path.join(MOD, "tools", "nartool", "nartool.exe")
 OUT = os.path.join(HERE, "tables", "maps")
 GAME_TABLES = {"cs_assault", "cs_estate", "cs_italy", "de_dust", "de_dust2", "fun_checkmate"}  # the game's own
-MIN_BOXES, MAX_BOXES, BOX_ABOVE_FLOOR, AREA_PER_BOX = 14, 40, 36.0, 400000.0
+MIN_BOXES, MAX_BOXES, BOX_ABOVE_FLOOR, AREA_PER_BOX, MIN_WIDTH, MIN_WAYS = 14, 40, 36.0, 400000.0, 96, 2
 
 
 def load_nav(path):
@@ -85,12 +86,26 @@ def main_part(areas):
 
 def place(name, areas, rng):
     part = main_part(areas)
+    def spots(width, ways, levels):
+        out = []
+        for a in part:
+            w, h = a["hi"][0] - a["lo"][0], a["hi"][1] - a["lo"][1]
+            if w < width or h < width or abs(a["hi"][2] - a["lo"][2]) >= 12 or len(set(a["adj"])) < ways:
+                continue
+            c = ((a["lo"][0] + a["hi"][0]) / 2, (a["lo"][1] + a["hi"][1]) / 2, a["z"])
+            if not levels and any(o is not a and o["lo"][0] <= c[0] <= o["hi"][0] and o["lo"][1] <= c[1] <= o["hi"][1]
+                                  and abs(o["z"] - c[2]) > 16 for o in part):
+                continue
+            out.append(c)
+        return out
+
+    # the strict rules first; a map without enough such places (small, or a mesh of tiny areas) relaxes them
     cand = []
-    for a in part:
-        w, h = a["hi"][0] - a["lo"][0], a["hi"][1] - a["lo"][1]
-        if w >= 40 and h >= 40 and abs(a["hi"][2] - a["lo"][2]) < 12:
-            cand.append(((a["lo"][0] + a["hi"][0]) / 2, (a["lo"][1] + a["hi"][1]) / 2, a["z"]))
-    if len(cand) < MIN_BOXES:
+    for width, ways, levels in ((MIN_WIDTH, MIN_WAYS, False), (MIN_WIDTH, MIN_WAYS, True), (64, MIN_WAYS, True), (40, 1, True)):
+        cand = spots(width, ways, levels)
+        if len(cand) >= MIN_BOXES:
+            break
+    else:
         return None
     total = sum((a["hi"][0] - a["lo"][0]) * (a["hi"][1] - a["lo"][1]) for a in part)
     count = max(MIN_BOXES, min(MAX_BOXES, int(total / AREA_PER_BOX)))
