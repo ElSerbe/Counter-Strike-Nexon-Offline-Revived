@@ -6,7 +6,8 @@ Nexon's values are unknown: health and speed follow each character's role on the
 
 Status columns, one row per character and team (id 1-20 as in resource/allstar/AllStar_CharInfo):
   0 id, 1 team, 2 model name, 3 health, 4 armor, 5 max speed, 6 gravity, 7 model path, 8 field of view,
-  9 third person view (0: its camera needs numbers nobody knows yet), 10-15 third person camera, 16-19 sent to the HUD, 20 pev +0x120,
+  9 third person view, 10 added to the view height, 11-15 third person camera (client.dll's MPToCL 0xbf: cam_idealyaw, cam_idealdist, camera pitch,
+  cam_thirdperson_offset, one more it doesn't read), 16-19 sent to the HUD, 20 pev +0x120,
   21-22 flags (+0x3709, +0x370a), 23 flag (+0x3708), 24 weight of the random draw at respawn.
 Skill columns: 0 id, 1 name, 2-16 fifteen numbers: upgrades that multiply a character's values (1: none); the Chicken reads its 2 as a time.
 
@@ -53,6 +54,12 @@ CHARACTERS = [
      ("allstarkartrider_upper_tr", "models/allstar/allstarkartridertr/allstarkartrider_upper_tr.mdl"),
      ("allstarkartrider_upper_ct", "models/allstar/allstarkartriderct/allstarkartrider_upper_ct.mdl")),
 ]
+# First person: the characters that are normal soldiers with base game weapons, and the 2 light zombies: with the flag off the game gives a
+# character a soldier's model except classes 4 and 5 (mp.dll 0x106641b7), so those two must have had it off. The rest are third person.
+FIRST_PERSON = {1, 2, 3, 4, 5, 6}
+# the camera's distance: Beast mode's is 140, pitch 30 (client.dll MPToCL 0x5c). Big ones further, small ones closer
+CAMERA_DISTANCE = {8: 200, 9: 240, 10: 180, 11: 100, 12: 100, 13: 200, 14: 120, 15: 140, 16: 180, 17: 240, 19: 200, 20: 160}
+CAMERA_DEFAULT, CAMERA_PITCH = 140, 30
 CHICKEN = 11
 CHICKEN_EGG_SECONDS = 5
 
@@ -63,7 +70,9 @@ def main():
         f.write(",".join("c%d" % i for i in range(25)) + "\r\n")
         for cid, _name, health, armor, speed, tr, ct in CHARACTERS:
             for team, (model, path) in ((1, tr), (2, ct)):
-                row = [cid, team, model, health, armor, speed, 1, path, 90, 0] + [0] * 6 + [0] * 4 + [0, 1, 0, 0, 1]
+                third = cid not in FIRST_PERSON
+                camera = [0, CAMERA_DISTANCE.get(cid, CAMERA_DEFAULT), CAMERA_PITCH, 0, 0] if third else [0] * 5
+                row = [cid, team, model, health, armor, speed, 1, path, 90, int(third), 0] + camera + [0] * 4 + [0, 1, 0, 0, 1]
                 f.write(",".join(str(v) for v in row) + "\r\n")
     with open(os.path.join(OUT, "AllStar_Skill-Dedi.csv"), "w", newline="") as f:
         f.write(",".join("c%d" % i for i in range(17)) + "\r\n")
