@@ -728,6 +728,14 @@ once its controller falls; DM_port and zm_requiem are team deathmatch. The game 
   side here). `DriveAllStarPlayer`, run from `AsWatch` (no stock bot runs to call it): hunting with `GdmPickVia`/`GdmWalk`, `AS_CLASSES` says how each class fights, melee characters run at the enemy,
   others circle, aim by room skill, skills through 0x10664940. botassist.log: "All Star: n T and m CT alive...; characters", "spawns as character", "stuck at".
 
+## Human Scenario (mode 17) with room bots
+
+`modes/human_scenario.inl` (rules CSOGameRulesHumanScen, vtable 0x11962378). It runs on the zombie scenario's code and is in `CoopModes`, so the companion AI
+plays it. Soldiers come from the maps' `zombiespawn` points as monsters. The aircraft of `hs_blaze` are `airbot_drone` and `airbot_osprey`, which the
+`Ignore` list leaves out (friendly in other modes), so bots didn't shoot them and weren't even driven until something else appeared. The shared code asks
+the mode's functions: `HsIsEnemyClass` (`IsIgnored`; the homing missile stays ignored), `HsScanRadius` (6000 here against `Radius`), `HsFlying` (`AimPoint`,
+no backing away), `HsClearShotAt` (firing). botassist.log: "Human Scenario: enemy <class> <model>, health..., bots shoot it".
+
 ## Create room: Random Map in fun modes
 
 The dialog takes the mode from the selected map tile (+0x14) or, if 0, from the mode tab (GameUI 0x10571030). The random tile has none, so a fun mode became the tab's

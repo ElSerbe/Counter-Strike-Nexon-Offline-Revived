@@ -347,8 +347,17 @@ static bool Alive(void* e)
     unsigned char* v = Vars(e);
     return F<float>(v, EV_HEALTH) > 0.0f && F<float>(v, EV_DEADFLAG) == 0.0f;
 }
+// Human Scenario: see modes/human_scenario.inl
+static bool HsIsEnemyClass(const char* classname);
+static float HsScanRadius();
+static bool HsFlying(void* e);
+static bool HsClearShotAt(void* target, const struct TraceResult& tr, float lineLength, float targetDist);
+static void HsWatch();
+
 static bool IsIgnored(const char* classname)
 {
+    if (HsIsEnemyClass(classname))
+        return false;
     for (auto& s : cfg.ignore)
         if (strstr(classname, s.c_str()))
             return true;
@@ -959,7 +968,7 @@ static void ScanMonsters(void* bot, BotState& st, V3 eye)
     void* best = nullptr;
     void* nearest = nullptr;
     float bestDist = 1e30f, nearestDist = 1e30f;
-    ForEntitiesNear(eye, cfg.radius, [&](void* e) {
+    ForEntitiesNear(eye, HsScanRadius(), [&](void* e) {
         if (e == bot || !IsLivingMonster(e) || IsIgnored(ClassName(e)))
             return;
         g_lastMonsterSeen = Now();
@@ -1171,7 +1180,7 @@ static V3 AimPoint(void* target)
     V3 lo = Vec((float*)(v + EV_ABSMIN)), hi = Vec((float*)(v + EV_ABSMAX));
     V3 p = (lo + hi) * 0.5f;
     float height = hi.z - lo.z;
-    if (height > TALL_TARGET)
+    if (height > TALL_TARGET && !HsFlying(target))
     {
         p.z = lo.z + TALL_AIM;
         static std::vector<std::string> seen;
@@ -1678,7 +1687,7 @@ static void Drive(void* bot, BotState& st, Command& cmd, float dt)
     if (danger)
     {
         float d = Len2D(Center(danger) - pos);
-        if (d < cfg.fleeDistance)
+        if (d < cfg.fleeDistance && !HsFlying(danger))
         {
             float away = YawOf(pos - Center(danger));
             // back off towards the leader's side rather than straight away from them
@@ -1703,7 +1712,7 @@ static void Drive(void* bot, BotState& st, Command& cmd, float dt)
             moving = true;
         }
     }
-    if (moving && !(danger && Len2D(Center(danger) - pos) < cfg.fleeDistance))
+    if (moving && !(danger && !HsFlying(danger) && Len2D(Center(danger) - pos) < cfg.fleeDistance))
         moveYaw = ClearYaw(bot, pos, moveYaw, 40.0f); // walk around obstacles
 
     // ---- stuck: jump and sidestep, then repath
@@ -1813,10 +1822,12 @@ static void Drive(void* bot, BotState& st, Command& cmd, float dt)
         // where the bot means to shoot: fire only when that line meets a monster first (never a wall or a
         // teammate); the spread and the uncompensated recoil still make some shots miss, like a player's
         TraceResult tr;
-        V3 shot = eye + Forward(st.pitch, st.yaw) * (Len(AimPoint(st.target) - eye) + 96.0f);
+        float aimDist = Len(AimPoint(st.target) - eye);
+        V3 shot = eye + Forward(st.pitch, st.yaw) * (aimDist + 96.0f);
         Trace(eye, shot, bot, 0, tr);
-        onTarget = tr.pHit && (tr.pHit == st.target ||
-                               (IsLivingMonster(tr.pHit) && !IsIgnored(ClassName(tr.pHit))));
+        onTarget = (tr.pHit && (tr.pHit == st.target ||
+                                (IsLivingMonster(tr.pHit) && !IsIgnored(ClassName(tr.pHit))))) ||
+                   HsClearShotAt(st.target, tr, aimDist + 96.0f, aimDist);
         st.shots++;
         st.hits += onTarget;
     }
@@ -4431,6 +4442,8 @@ static void CommandFile()
 
 #include "modes/all_star.inl"
 
+#include "modes/human_scenario.inl"
+
 // ---------------------------------------------------------------- the frame hook (every mode)
 // The end of mp.dll's StartFrame (DLL function 0x113f8a80) runs botassist's per-frame work: the console, the command
 // file, and each mode's watcher (each returns at once outside its mode).
@@ -4457,6 +4470,7 @@ static void HookedStartFrame()
         BeastWatch();
         ItemWatch();
         AsWatch();
+        HsWatch();
         ZgFrame();
     }
     __except (EXCEPTION_EXECUTE_HANDLER)
