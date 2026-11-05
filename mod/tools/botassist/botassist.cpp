@@ -40,7 +40,7 @@ static const DWORD MP_EXECUTECOMMAND_CALL = 0x113167f7; // "call [g_engfuncs + 0
 static const DWORD MP_CLIENTCOMMAND = 0x113ebc60;       // void ClientCommand(edict_t *)
 // CBot::ClientCommand (0x113166e0) runs a command as a bot: argv[0..3] here, flag set while ClientCommand runs
 static const DWORD MP_FAKECMD_ARGS = 0x12182f8c, MP_FAKECMD_FLAG = 0x12182f9c;
-static const int ENG_FINDENTITYINSPHERE = 17, ENG_TRACELINE = 33, ENG_CVARGETFLOAT = 62, ENG_CVARGETSTRING = 63,
+static const int ENG_FINDENTITYINSPHERE = 17, ENG_TRACELINE = 33, ENG_TRACEHULL = 36, ENG_CVARGETFLOAT = 62, ENG_CVARGETSTRING = 63,
     ENG_CVARSETSTRING = 65, ENG_SERVERCOMMAND = 42, ENG_MESSAGEBEGIN = 49, ENG_MESSAGEEND = 50, ENG_WRITEBYTE = 51,
     ENG_WRITESHORT = 53, ENG_WRITECOORD = 58, ENG_CMD_ARGV = 88, ENG_LOADFILE = 100, ENG_FREEFILE = 101, ENG_RUNPLAYERMOVE = 110;
 static const int PLAYER_TEAM = 0x6c; // CBasePlayer::m_iTeam (1 TR, 2 CT); CBaseEntity::pev is at +8
@@ -67,6 +67,7 @@ struct TraceResult
 
 typedef void* (*FindEntityInSphereFn)(void* start, const float* org, float radius);
 typedef void (*TraceLineFn)(const float* v1, const float* v2, int flags, void* skip, TraceResult* tr);
+typedef void (*TraceHullFn)(const float* v1, const float* v2, int flags, int hull, void* skip, TraceResult* tr);
 typedef const char* (*CmdArgvFn)(int arg);
 typedef unsigned char* (*LoadFileFn)(const char* name, int* length);
 typedef void (*FreeFileFn)(void* buffer);
@@ -89,6 +90,7 @@ static MessageEndFn g_MessageEnd;
 static WriteIntFn g_WriteByte, g_WriteShort;
 static WriteCoordFn g_WriteCoord;
 static TraceLineFn g_TraceLine;
+static TraceHullFn g_TraceHull;
 static CmdArgvFn g_CmdArgv;
 static LoadFileFn g_LoadFile;
 static FreeFileFn g_FreeFile;
@@ -352,6 +354,9 @@ static bool HsIsEnemyClass(const char* classname);
 static float HsScanRadius();
 static bool HsFlying(void* e);
 static bool HsClearShotAt(void* target, const struct TraceResult& tr, float lineLength, float targetDist);
+static bool HsIsMissile(void* e);
+static bool HsTooFar(void* e, float dist);
+static float HsAimLead(void* target);
 static void HsWatch();
 
 static bool IsIgnored(const char* classname)
@@ -425,9 +430,11 @@ static bool CanSee(void* bot, V3 eye, void* target)
 }
 
 // ---------------------------------------------------------------- navigation mesh (CS:CZ .nav, version 5)
+static const unsigned char NAV_CROUCH = 1;
 struct NavArea
 {
     unsigned id;
+    unsigned char attr = 0; // NAV_CROUCH...
     float lo[3], hi[3];
     float neZ, swZ;
     V3 center;
@@ -547,7 +554,7 @@ static void LoadNav()
     {
         NavArea a;
         a.id = r.get<unsigned>();
-        r.get<unsigned char>(); // attributes
+        a.attr = r.get<unsigned char>();
         for (int k = 0; k < 3; k++)
             a.lo[k] = r.get<float>();
         for (int k = 0; k < 3; k++)
@@ -610,10 +617,11 @@ static int AreaAt(V3 p)
         const NavArea& a = g_nav.areas[i];
         if (p.x >= a.lo[0] - 1 && p.x <= a.hi[0] + 1 && p.y >= a.lo[1] - 1 && p.y <= a.hi[1] + 1)
         {
-            float dz = p.z - AreaZ(a, p.x, p.y);
-            if (dz > -40.0f && dz < 120.0f && fabsf(dz) < bestScore)
+            // points come at floor level or at a player's origin (36 above it): the floor they belong to is the one around 18 below
+            float dz = p.z - AreaZ(a, p.x, p.y), score = fabsf(dz - 18.0f);
+            if (dz > -40.0f && dz < 120.0f && score < bestScore)
             {
-                bestScore = fabsf(dz);
+                bestScore = score;
                 best = (int)i;
             }
         }
@@ -622,7 +630,12 @@ static int AreaAt(V3 p)
         return best;
     for (size_t i = 0; i < g_nav.areas.size(); i++) // off the mesh: the closest area
     {
-        float d = Len(g_nav.areas[i].center - p);
+        // to its edge: next to a big area, its centre can be thousands of units away (hs_desertstorm has one of 2500 x 5150)
+        const NavArea& a = g_nav.areas[i];
+        float dx = p.x < a.lo[0] ? a.lo[0] - p.x : p.x > a.hi[0] ? p.x - a.hi[0] : 0.0f;
+        float dy = p.y < a.lo[1] ? a.lo[1] - p.y : p.y > a.hi[1] ? p.y - a.hi[1] : 0.0f;
+        float dz = p.z - a.center.z;
+        float d = sqrtf(dx * dx + dy * dy + dz * dz);
         if (d < bestScore)
         {
             bestScore = d;
@@ -657,6 +670,22 @@ static V3 Portal(int ai, int d, int bi)
 static float NavWetCost(int area); // Zombie Giant: areas under water cost more
 // extra cost per nav area of the path being found, null for none (Zombie Conquest: each bot's own way, see ZConNewRoute)
 static const std::vector<float>* g_navRouteCost = nullptr;
+// areas this bot couldn't get into a moment ago (see NavProgress): a path through them is the last choice, not forbidden
+struct NavAvoid
+{
+    int area;
+    float until;
+};
+static const float NAV_AVOID_COST = 1500.0f, NAV_AVOID_TIME = 12.0f;
+static const std::vector<NavAvoid>* g_navAvoid = nullptr;
+static float NavAvoidCost(int area, float now)
+{
+    if (g_navAvoid)
+        for (auto& a : *g_navAvoid)
+            if (a.area == area && now < a.until && a.until - now <= NAV_AVOID_TIME) // (a new map starts the clock again)
+                return NAV_AVOID_COST;
+    return 0.0f;
+}
 
 // ---- places that kill: the map's trigger_hurt brushes and drops too high to survive
 // botassist's own paths (A* below: companions, Manhunt, Zombie Giant, human bots backing off from zombies) treated a
@@ -746,8 +775,78 @@ static bool DropAhead(void* bot, V3 pos, float yaw, float ahead, float maxDrop)
     return false;
 }
 
-// A* over areas; returns the waypoints from the bot's area to the goal
-static bool FindPath(V3 from, V3 to, std::vector<V3>& out)
+// ---- does a player's body fit? A line has no width: it passes a corner the 32 units of a player catch on, it doesn't see the clip
+// brushes that only block players, and with "ignore monsters" it goes through every solid that isn't a brush (the engine skips all
+// but SOLID_BSP). The hull is the crouching player's (32 x 32 x 36, the same width), raised to the upper half of a standing body, so
+// steps and ramps pass under it and what's lower is for jumping (LedgeAhead). People and monsters move out of the way: they don't count.
+static const int HULL_DUCK = 3;
+static const float BODY_LIFT = 18.0f, BODY_LOOK = 32.0f, STAIRS_LIFT = 40.0f, STAIRS_RISE = 48.0f;
+
+static void HullLine(V3 from, V3 to, int noMonsters, void* skip, TraceResult& tr)
+{
+    float a[3] = { from.x, from.y, from.z }, b[3] = { to.x, to.y, to.z };
+    memset(&tr, 0, sizeof(tr));
+    g_TraceHull(a, b, noMonsters, HULL_DUCK, skip, &tr);
+}
+
+// how far along from -> to (player origins) the body gets, 0..1
+static float BodyFraction(void* bot, V3 from, V3 to, TraceResult& tr)
+{
+    if (!g_TraceHull)
+    {
+        Trace(from, to, bot, 1, tr);
+        return tr.flFraction;
+    }
+    V3 a = from + V3{ 0, 0, BODY_LIFT }, b = to + V3{ 0, 0, BODY_LIFT };
+    HullLine(a, b, 0, bot, tr);
+    bool inside = tr.fStartSolid || tr.fAllSolid;
+    if (inside || (tr.flFraction < 1.0f && tr.pHit && (F<int>(Vars(tr.pHit), EV_FLAGS) & (FL_CLIENT | FL_MONSTER))))
+        HullLine(a, b, 1, bot, tr);
+    if (tr.fStartSolid || tr.fAllSolid)
+        Trace(from, to, bot, 1, tr); // squeezed under something: all a hull can say is "stuck"
+    return tr.flFraction;
+}
+
+static bool BodyClear(void* bot, V3 from, V3 to)
+{
+    TraceResult tr;
+    return BodyFraction(bot, from, to, tr) >= 0.99f;
+}
+
+static V3 YawDir(float yaw) { return { cosf(yaw / RAD), sinf(yaw / RAD), 0 }; }
+
+// the body can step towards yaw. Stairs and ramps rise into a level hull (the front of the box is 48 units ahead at the end of the
+// look): above them it's free and the floor there is within reach, unlike a wall.
+static bool BodyStep(void* bot, V3 pos, float yaw, float look = BODY_LOOK)
+{
+    V3 to = pos + YawDir(yaw) * look;
+    if (BodyClear(bot, pos, to))
+        return true;
+    V3 up{ 0, 0, STAIRS_LIFT }, lift{ 0, 0, BODY_LIFT };
+    TraceResult tr;
+    if (g_TraceHull)
+    {
+        HullLine(pos + up + lift, to + up + lift, 1, bot, tr);
+        if (tr.fStartSolid || tr.fAllSolid)
+            return false; // a low ceiling: no room above to tell
+    }
+    if (!BodyClear(bot, pos + up, to + up))
+        return false;
+    if (Trace(to + up, to - V3{ 0, 0, 36 }, bot, 0, tr))
+        return true;
+    return tr.vecEndPos[2] - (pos.z - 36.0f) <= STAIRS_RISE;
+}
+
+// room for the body towards yaw, in units
+static float BodyRoom(void* bot, V3 pos, float yaw, float len)
+{
+    TraceResult tr;
+    return BodyFraction(bot, pos, pos + YawDir(yaw) * len, tr) * len;
+}
+
+// A* over areas; returns the waypoints from the bot's area to the goal. partial: when nothing connects to the goal, the way to the
+// area closest to it (not reached: false without it)
+static bool FindPath(V3 from, V3 to, std::vector<V3>& out, bool partial = false)
 {
     out.clear();
     int start = AreaAt(from), goal = AreaAt(to);
@@ -758,6 +857,7 @@ static bool FindPath(V3 from, V3 to, std::vector<V3>& out)
         out.push_back(to);
         return true;
     }
+    float pathNow = Now();
     size_t n = g_nav.areas.size();
     std::vector<float> cost(n, 1e30f);
     std::vector<int> parent(n, -1), parentDir(n, -1);
@@ -789,7 +889,7 @@ static bool FindPath(V3 from, V3 to, std::vector<V3>& out)
                     continue;
                 float c = cost[cur] + Len(g_nav.areas[nb].center - g_nav.areas[cur].center) + NavWetCost(nb) +
                           (g_navRouteCost && nb < (int)g_navRouteCost->size() ? (*g_navRouteCost)[nb] : 0.0f) +
-                          (drop > SAFE_DROP ? (drop - SAFE_DROP) * DROP_COST : 0.0f);
+                          (drop > SAFE_DROP ? (drop - SAFE_DROP) * DROP_COST : 0.0f) + NavAvoidCost(nb, pathNow);
                 if (c < cost[nb])
                 {
                     cost[nb] = c;
@@ -799,14 +899,29 @@ static bool FindPath(V3 from, V3 to, std::vector<V3>& out)
                 }
             }
     }
-    if (parent[goal] < 0)
-        return false;
+    bool reached = parent[goal] >= 0;
+    if (!reached)
+    {
+        if (!partial)
+            return false;
+        int closest = -1;
+        float closestDist = Len(g_nav.areas[start].center - to);
+        for (size_t i = 0; i < n; i++)
+            if (closed[i] && (int)i != start && Len(g_nav.areas[i].center - to) < closestDist)
+            {
+                closestDist = Len(g_nav.areas[i].center - to);
+                closest = (int)i;
+            }
+        if (closest < 0)
+            return false;
+        goal = closest;
+    }
     std::vector<int> chain;
     for (int a = goal; a != start && a >= 0; a = parent[a])
         chain.push_back(a);
     for (int i = (int)chain.size() - 1; i >= 0; i--)
         out.push_back(Portal(parent[chain[i]], parentDir[chain[i]], chain[i]));
-    out.push_back(to);
+    out.push_back(reached ? to : g_nav.areas[goal].center);
     return true;
 }
 
@@ -841,6 +956,18 @@ struct BotState
     float lastProgress = 0;
     float unstickUntil = 0;
     float unstickSide = 1;
+    // getting around (NavProgress, WalkYaw)
+    V3 navAnchor{};              // where it was when the clock started: leaving this circle is progress
+    float navAnchorAt = 0, navLastCall = -100;
+    int navStuck = 0;            // times in a row it stayed in the circle
+    std::vector<V3> navCrumbs;   // places it came through: the way back is known to work
+    std::vector<NavAvoid> navAvoid;
+    V3 navBackTo{};
+    float navBackUntil = 0;
+    float navNextCheck = 0;      // shortcuts and crouching are looked at a few times a second
+    float duckUntil = 0;         // crouching: a low area of the mesh
+    float steerSide = 1, steerUntil = 0; // keeps going around an obstacle by the same side
+    float jumpAt = -100;
     float strafeSide = 1, nextStrafe = 0;
     float lastFire = -100, nextReload = 0;
     bool firedSinceReload = false;
@@ -963,6 +1090,9 @@ static bool MonsterMap()
     return (now - g_lastMonsterSeen < 15.0f && now >= g_lastMonsterSeen) || g_monsterLevel == g_nav.level;
 }
 
+static void* HsMissileFirst(void* bot, V3 eye, void* best);
+static bool HsNoChase(void* threat, void* target, V3 eye);
+
 static void ScanMonsters(void* bot, BotState& st, V3 eye)
 {
     void* best = nullptr;
@@ -974,6 +1104,8 @@ static void ScanMonsters(void* bot, BotState& st, V3 eye)
         g_lastMonsterSeen = Now();
         g_monsterLevel = g_nav.level;
         float d = Len(Center(e) - eye);
+        if (HsTooFar(e, d))
+            return;
         if (d < nearestDist)
         {
             nearestDist = d;
@@ -1017,6 +1149,7 @@ static void ScanMonsters(void* bot, BotState& st, V3 eye)
             });
         best = obj;
     }
+    best = HsMissileFirst(bot, eye, best);
     st.target = best;
     st.threat = nearestDist < cfg.awareness ? nearest : (best && IsLivingMonster(best) ? best : nullptr);
     if (best)
@@ -1052,7 +1185,14 @@ static V3 FormationSpot(void* leader, int slot, float distance)
     TraceResult tr;
     if (!Trace(o, spot, nullptr, 1, tr))
         spot = { o.x + (tr.vecEndPos[0] - o.x) * 0.7f, o.y + (tr.vecEndPos[1] - o.y) * 0.7f, o.z };
-    return spot;
+    // nothing to stand on (the leader is by a ledge): the bot would take the long way to the floor below
+    for (float f : { 1.0f, 0.5f })
+    {
+        V3 s = o + (spot - o) * f;
+        if (!Trace(s, s - V3{ 0, 0, 100 }, nullptr, 1, tr))
+            return s;
+    }
+    return o;
 }
 
 // direction worth watching when nothing is around: the open one closest to the preferred yaw
@@ -1069,14 +1209,112 @@ static float OpenYaw(void* bot, V3 eye, float preferred)
     return preferred;
 }
 
+// a waypoint where a body stands: the points of a path are on the floor, the last one is whatever the caller asked for
+static V3 PathBody(const BotState& st, size_t i)
+{
+    V3 p = st.path[i];
+    p.z += i + 1 == st.path.size() ? 18.0f : 36.0f;
+    return p;
+}
+
+// floor all the way (no shortcut over a pit or through a hurt zone)
+static bool FloorAlong(void* bot, V3 from, V3 to)
+{
+    TraceResult tr;
+    V3 d = to - from;
+    float len = Len2D(d);
+    for (float s = 48.0f; s < len; s += 48.0f)
+    {
+        V3 at = from + d * (s / len);
+        if (Trace(at, at - V3{ 0, 0, 100 }, bot, 1, tr))
+            return false;
+        if (InHurtZone(V3{ tr.vecEndPos[0], tr.vecEndPos[1], tr.vecEndPos[2] + 8.0f }, 0.0f))
+            return false;
+    }
+    return true;
+}
+
+// Every mode that walks a path goes through here, so this is where a bot that isn't getting anywhere is noticed. Moving doesn't count
+// as getting anywhere: it has to leave a circle in time (a bot rubbing a corner or bouncing off it moves all the time). Then the area it
+// was going into costs a lot for a while, so the new path takes another way if there is one, and the second time it also walks back
+// to where it came from before trying again.
+static const float NAV_STUCK_TIME = 1.5f, NAV_STUCK_MOVE = 64.0f, NAV_CRUMB_STEP = 96.0f, NAV_BACK_TIME = 1.2f, NAV_BACK_MIN = 80.0f;
+static void NavProgress(void* bot, BotState& st, V3 pos, V3 goal, float now)
+{
+    if (!st.navCrumbs.empty() && Len(pos - st.navCrumbs.back()) > 400.0f)
+        st.navCrumbs.clear(); // respawned
+    if (st.navCrumbs.empty() || Len2D(pos - st.navCrumbs.back()) > NAV_CRUMB_STEP)
+    {
+        st.navCrumbs.push_back(pos);
+        if (st.navCrumbs.size() > 8)
+            st.navCrumbs.erase(st.navCrumbs.begin());
+    }
+    bool paused = now - st.navLastCall > 0.5f || now < st.navLastCall; // wasn't walking
+    st.navLastCall = now;
+    bool moved = Len2D(pos - st.navAnchor) > NAV_STUCK_MOVE;
+    if (paused || moved)
+    {
+        st.navAnchor = pos;
+        st.navAnchorAt = now;
+        if (moved)
+            st.navStuck = 0;
+        return;
+    }
+    if (now - st.navAnchorAt < NAV_STUCK_TIME)
+        return;
+    st.navAnchorAt = now;
+    st.navStuck++;
+    st.nextRepath = 0;
+    V3 wp = st.pathIndex < st.path.size() ? st.path[st.pathIndex] : goal;
+    int ahead = AreaAt(wp);
+    if (ahead >= 0 && ahead != AreaAt(pos))
+    {
+        for (size_t i = st.navAvoid.size(); i-- > 0;)
+            if (now >= st.navAvoid[i].until || st.navAvoid[i].until - now > NAV_AVOID_TIME || st.navAvoid[i].area == ahead)
+                st.navAvoid.erase(st.navAvoid.begin() + i);
+        if (st.navAvoid.size() >= 8)
+            st.navAvoid.erase(st.navAvoid.begin());
+        st.navAvoid.push_back({ ahead, now + NAV_AVOID_TIME });
+    }
+    if (st.navStuck >= 2)
+        for (size_t i = st.navCrumbs.size(); i-- > 0;)
+            if (Len2D(st.navCrumbs[i] - pos) >= NAV_BACK_MIN)
+            {
+                st.navBackTo = st.navCrumbs[i];
+                st.navBackUntil = now + NAV_BACK_TIME;
+                break;
+            }
+    // botassist.log: where and against what, the next thing to look at when a bot stays stuck
+    static int reports = 0, reportLevel = -1;
+    if (reportLevel != g_nav.level)
+        reportLevel = g_nav.level, reports = 0;
+    if (reports++ < 300)
+    {
+        TraceResult tr;
+        float got = BodyFraction(bot, pos, V3{ wp.x, wp.y, pos.z }, tr);
+        const char* model = tr.pHit ? String(F<int>(Vars(tr.pHit), 0xc8)) : nullptr;
+        Log("stuck: bot %d at (%.0f %.0f %.0f) going to (%.0f %.0f %.0f) by (%.0f %.0f %.0f), %d in a row: %s %s", st.slot, pos.x, pos.y, pos.z, goal.x, goal.y, goal.z, wp.x, wp.y, wp.z,
+            st.navStuck, got >= 0.99f || !tr.pHit ? "nothing in the way of its body" : ClassName(tr.pHit), got >= 0.99f || !model ? "" : model);
+    }
+}
+
 // keeps st.path towards goal, returns the point to walk to (or false when there)
-static bool NextWaypoint(void* bot, BotState& st, V3 pos, V3 goal, float arrive, V3& out)
+// partial: with no way to the goal, as close as it can get. Without it a one-point path means "no way": Conquest and the human bots
+// of the zombie modes read it like that to choose another goal, so only who follows a player asks for this.
+static bool NextWaypoint(void* bot, BotState& st, V3 pos, V3 goal, float arrive, V3& out, bool partial = false)
 {
     float now = Now();
     if (Len2D(goal - pos) < arrive && fabsf(goal.z - pos.z) < 64)
     {
         st.path.clear();
         return false;
+    }
+    if (g_nav.ok)
+        NavProgress(bot, st, pos, goal, now);
+    if (now < st.navBackUntil && st.navBackUntil - now <= NAV_BACK_TIME && Len2D(st.navBackTo - pos) > 32.0f)
+    {
+        out = st.navBackTo;
+        return true;
     }
     if (!g_nav.ok)
     {
@@ -1085,23 +1323,41 @@ static bool NextWaypoint(void* bot, BotState& st, V3 pos, V3 goal, float arrive,
     }
     if (st.path.empty() || now >= st.nextRepath || Len(goal - st.pathGoal) > 120.0f)
     {
-        if (!FindPath(pos, goal, st.path))
+        g_navAvoid = &st.navAvoid;
+        if (!FindPath(pos, goal, st.path, partial))
             st.path = { goal };
+        g_navAvoid = nullptr;
         st.pathIndex = 0;
         st.pathGoal = goal;
         st.nextRepath = now + 1.0f;
+        st.navNextCheck = 0;
     }
+    // close to this one: on to the next, unless that's round a corner the body wouldn't clear from here
     while (st.pathIndex + 1 < st.path.size() && Len2D(st.path[st.pathIndex] - pos) < 48.0f)
-        st.pathIndex++;
-    // skip ahead to a waypoint in plain view to cut corners
-    TraceResult tr;
-    V3 eye = pos + V3{ 0, 0, 16 };
-    for (size_t i = min(st.path.size() - 1, st.pathIndex + 3); i > st.pathIndex; i--)
-        if (fabsf(st.path[i].z - pos.z) < 40 && Trace(eye, st.path[i] + V3{ 0, 0, 16 }, bot, 1, tr))
-        {
-            st.pathIndex = i;
+    {
+        if (Len2D(st.path[st.pathIndex] - pos) >= 20.0f && !BodyClear(bot, pos, PathBody(st, st.pathIndex + 1)))
             break;
+        st.pathIndex++;
+    }
+    if (now >= st.navNextCheck || now < st.navNextCheck - 1.0f)
+    {
+        st.navNextCheck = now + 0.1f;
+        // a shortcut to a later waypoint the whole body can walk to in a straight line
+        for (size_t i = min(st.path.size() - 1, st.pathIndex + 3); i > st.pathIndex; i--)
+        {
+            V3 body = PathBody(st, i);
+            if (fabsf(body.z - pos.z) < 40 && BodyClear(bot, pos, body) && FloorAlong(bot, pos, body))
+            {
+                st.pathIndex = i;
+                break;
+            }
         }
+        // the mesh's low areas are for crouching
+        V3 at = st.path[st.pathIndex];
+        int here = AreaAt(pos), next = Len2D(at - pos) < 96.0f ? AreaAt(at) : -1;
+        if ((here >= 0 && (g_nav.areas[here].attr & NAV_CROUCH)) || (next >= 0 && (g_nav.areas[next].attr & NAV_CROUCH)))
+            st.duckUntil = now + 0.3f;
+    }
     out = st.path[st.pathIndex];
     return true;
 }
@@ -1194,7 +1450,7 @@ static V3 AimPoint(void* target)
         return p;
     }
     p.z += height * 0.2f;
-    return p + Vec((float*)(v + EV_VELOCITY)) * 0.06f;
+    return p + Vec((float*)(v + EV_VELOCITY)) * HsAimLead(target);
 }
 
 // half the target's width as seen from `dist` away, in degrees: the aim error that still hits
@@ -1222,25 +1478,35 @@ static float ClearYaw(void* bot, V3 pos, float yaw, float dist)
     {
         float y = yaw + t;
         V3 to = knee + V3{ cosf(y / RAD) * dist, sinf(y / RAD) * dist, 0 };
-        if (Trace(knee, to, bot, 1, tr))
+        if (Trace(knee, to, bot, 1, tr) && BodyStep(bot, pos, y))
             return y;
     }
     return yaw;
 }
 
 // ClearYaw for walking a nav path: a line at knee height also hits stairs and ramps going up (40 u ahead they have
-// risen above it), which sent the bot sideways instead of up them. A wall blocks a line at head height too.
+// risen above it), which sent the bot sideways instead of up them. It looks with the whole body (BodyStep), and goes round
+// an obstacle by the side with more room, staying on that side: choosing again each frame had it bouncing off the middle.
 static float WalkYaw(void* bot, V3 pos, float yaw, float dist)
 {
-    TraceResult tr;
-    static const float tries[] = { 0, 30, -30, 60, -60, 90, -90, 120, -120 };
-    V3 head = pos + V3{ 0, 0, 20 };
+    float look = dist < BODY_LOOK ? dist : BODY_LOOK;
+    if (BodyStep(bot, pos, yaw, look))
+        return yaw;
+    BotState& st = StateFor(bot);
+    float now = Now(), side = st.steerSide;
+    if (now < st.duckUntil && st.duckUntil - now < 1.0f)
+        return yaw; // into a low area of the mesh: to a standing body that's a wall
+    if (now >= st.steerUntil || st.steerUntil - now > 1.0f)
+        side = BodyRoom(bot, pos, yaw + 60.0f, 160.0f) >= BodyRoom(bot, pos, yaw - 60.0f, 160.0f) ? 1.0f : -1.0f;
+    static const float tries[] = { 30, 60, 90, 120 };
     for (float t : tries)
-    {
-        float y = yaw + t;
-        if (Trace(head, head + V3{ cosf(y / RAD) * dist, sinf(y / RAD) * dist, 0 }, bot, 1, tr))
-            return y;
-    }
+        for (float s : { side, -side })
+            if (BodyStep(bot, pos, yaw + s * t, look))
+            {
+                st.steerSide = s;
+                st.steerUntil = now + 0.6f;
+                return yaw + s * t;
+            }
     return yaw;
 }
 
@@ -1653,12 +1919,12 @@ static void Drive(void* bot, BotState& st, Command& cmd, float dt)
         wantMove = true;
         break;
     case ORDER_INDEPENDENT:
-        if (st.threat && !st.target)
+        if (st.threat && !st.target && !HsNoChase(st.threat, st.target, eye))
         {
             goal = Origin(st.threat);
             wantMove = true;
         }
-        else if (!st.threat && leader && Len(Origin(leader) - pos) > 900.0f)
+        else if ((!st.threat || HsNoChase(st.threat, st.target, eye)) && leader && Len(Origin(leader) - pos) > 900.0f)
         {
             goal = FormationSpot(leader, st.slot, cfg.followDistance); // nothing to hunt: rejoin
             wantMove = true;
@@ -1667,7 +1933,7 @@ static void Drive(void* bot, BotState& st, Command& cmd, float dt)
     }
 
     V3 waypoint;
-    bool moving = wantMove && NextWaypoint(bot, st, pos, goal, arrive, waypoint);
+    bool moving = wantMove && NextWaypoint(bot, st, pos, goal, arrive, waypoint, true);
     float moveYaw = 0;
     if (moving)
     {
@@ -1713,7 +1979,17 @@ static void Drive(void* bot, BotState& st, Command& cmd, float dt)
         }
     }
     if (moving && !(danger && !HsFlying(danger) && Len2D(Center(danger) - pos) < cfg.fleeDistance))
-        moveYaw = ClearYaw(bot, pos, moveYaw, 40.0f); // walk around obstacles
+    {
+        moveYaw = WalkYaw(bot, pos, moveYaw, 40.0f); // walk around obstacles
+        // a low ledge or a crate ahead: over it, crouching in the air to clear it
+        if (LedgeAhead(bot, pos, moveYaw) && (now - st.jumpAt > 0.7f || now < st.jumpAt) && !DropAhead(bot, pos, moveYaw, 120.0f, SAFE_DROP))
+        {
+            st.jumpAt = now;
+            cmd.buttons |= IN_JUMP;
+        }
+    }
+    if (now - st.jumpAt > 0.1f && now - st.jumpAt < 0.5f)
+        cmd.buttons |= IN_DUCK;
 
     // ---- stuck: jump and sidestep, then repath
     if (moving)
@@ -1726,9 +2002,10 @@ static void Drive(void* bot, BotState& st, Command& cmd, float dt)
         else if (now - st.lastProgress > 1.0f && now >= st.unstickUntil)
         {
             st.unstickUntil = now + 0.5f;
-            st.unstickSide = (rand() & 1) ? 1.0f : -1.0f;
+            st.unstickSide = BodyRoom(bot, pos, moveYaw + 70.0f, 96.0f) >= BodyRoom(bot, pos, moveYaw - 70.0f, 96.0f) ? 1.0f : -1.0f;
             st.lastProgress = now;
             st.nextRepath = 0;
+            st.jumpAt = now;
             cmd.buttons |= IN_JUMP;
         }
         if (now < st.unstickUntil)
@@ -1833,7 +2110,7 @@ static void Drive(void* bot, BotState& st, Command& cmd, float dt)
     }
     // long range: bursts with short pauses to let the recoil settle
     float targetDist = st.target ? Len(AimPoint(st.target) - eye) : 0;
-    if (onTarget && targetDist > 600.0f)
+    if (onTarget && targetDist > 600.0f && !HsIsMissile(st.target))
     {
         if (now >= st.burstPause && now >= st.burstEnd)
         {
@@ -4520,7 +4797,7 @@ static bool OrderedMove(void* bot, BotState& st, float viewYaw, float& fwd, floa
         arrive = 60.0f;
     }
     V3 wp;
-    if (!NextWaypoint(bot, st, pos, goal, arrive, wp))
+    if (!NextWaypoint(bot, st, pos, goal, arrive, wp, true))
     {
         if (st.order == ORDER_HOLD)
         {
@@ -4532,7 +4809,7 @@ static bool OrderedMove(void* bot, BotState& st, float viewYaw, float& fwd, floa
     float moveYaw = YawOf(wp - pos);
     if (wp.z > pos.z + 24.0f && Len2D(wp - pos) < 120.0f)
         buttons |= IN_JUMP;
-    moveYaw = ClearYaw(bot, pos, moveYaw, 40.0f);
+    moveYaw = WalkYaw(bot, pos, moveYaw, 40.0f);
     float now = Now();
     if (Len2D(pos - st.lastPos) > 24.0f)
     {
@@ -4973,6 +5250,8 @@ static void HookedRunPlayerMove(void* fakeclient, const float* angles, float fwd
         if (faults++ < 5)
             Log("exception 0x%08lX in the bot hook (ignored)", GetExceptionCode());
     }
+    if (dbg && Now() < dbg->duckUntil && dbg->duckUntil - Now() < 1.0f)
+        buttons |= IN_DUCK;
     g_RunPlayerMove(fakeclient, aim, fwd, side, up, buttons, impulse, msec);
     if (dbg && CoopMode()) // debugging is about the scenario modes
         __try { DebugBot(fakeclient, *dbg, aim, buttons); } __except (EXCEPTION_EXECUTE_HANDLER) {}
@@ -5201,6 +5480,7 @@ static bool Install(HMODULE mp)
 
     g_FindEntityInSphere = (FindEntityInSphereFn)table[ENG_FINDENTITYINSPHERE];
     g_TraceLine = (TraceLineFn)table[ENG_TRACELINE];
+    g_TraceHull = (TraceHullFn)table[ENG_TRACEHULL];
     g_CmdArgv = (CmdArgvFn)table[ENG_CMD_ARGV];
     g_LoadFile = (LoadFileFn)table[ENG_LOADFILE];
     g_FreeFile = (FreeFileFn)table[ENG_FREEFILE];

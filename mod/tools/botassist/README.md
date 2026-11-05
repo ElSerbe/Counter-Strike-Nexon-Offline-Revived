@@ -731,10 +731,26 @@ once its controller falls; DM_port and zm_requiem are team deathmatch. The game 
 ## Human Scenario (mode 17) with room bots
 
 `modes/human_scenario.inl` (rules CSOGameRulesHumanScen, vtable 0x11962378). It runs on the zombie scenario's code and is in `CoopModes`, so the companion AI
-plays it. Soldiers come from the maps' `zombiespawn` points as monsters. The aircraft of `hs_blaze` are `airbot_drone` and `airbot_osprey`, which the
-`Ignore` list leaves out (friendly in other modes), so bots didn't shoot them and weren't even driven until something else appeared. The shared code asks
-the mode's functions: `HsIsEnemyClass` (`IsIgnored`; the homing missile stays ignored), `HsScanRadius` (6000 here against `Radius`), `HsFlying` (`AimPoint`,
-no backing away), `HsClearShotAt` (firing). botassist.log: "Human Scenario: enemy <class> <model>, health..., bots shoot it".
+plays it. Soldiers come from the maps' `zombiespawn` points as monsters. The soldiers are `monster_entity` (`models/monster/bot_light`, `bot_rocket`, `bot_sniper`, `bot_heavy`, `bot_heavy_boss`). The aircraft of `hs_blaze` are `airbot_drone` and `airbot_osprey`, which the
+`Ignore` list leaves out (friendly in other modes), so bots didn't shoot them and weren't even driven until something else appeared. Their missile, `airbot_hmissile` (10 health, damage 1: it can be shot
+down), comes first when in sight within 1800 u. The shared code asks the mode's functions: `HsIsEnemyClass` (`IsIgnored`), `HsScanRadius` (6000 here against `Radius`), `HsTooFar` and `HsMissileFirst`
+(`ScanMonsters`), `HsFlying` (`AimPoint`, no backing away), `HsAimLead`, `HsClearShotAt` (firing), `HsNoChase` (independent order). botassist.log: "Human Scenario: enemy <class> <model>, health..., bots shoot it".
+
+## Getting around (every mode)
+
+A shared change, because bots got caught on corners in every mode: `FindPath`, `NextWaypoint`, `WalkYaw`, `ClearYaw`, `FormationSpot`, `AreaAt`.
+
+- Engine `TraceHull` is index 36 of the table (`UTIL_TraceHull` 0x1151ad70: v1, v2, noMonsters, hull, skip, tr; hull 1 standing, 3 crouching). Lines had three blind spots: no width (a corner catches the 32 u
+  of a player), no clip brushes (hull 0 doesn't have them), and with noMonsters the engine skips every solid that isn't SOLID_BSP (`cycler_sprite` is SOLID_SLIDEBOX). `BodyFraction` traces the crouching hull raised
+  18 u (the upper half of a standing body), against everything, and ignores people and monsters. `BodyStep` tells stairs from walls: a level hull hits rising steps, but above them it's free and the floor is within 48 u.
+- `WalkYaw` looks with the body and keeps going round an obstacle by the side with more room. `NextWaypoint`'s shortcuts need the body to fit and floor along the way (`FloorAlong`, every 48 u), and it moves on to the next waypoint
+  early only if the body can get there.
+- `NavProgress` (from `NextWaypoint`, so all modes): no leaving a circle of 64 u in 1.5 s is stuck, whatever the bot does inside it. The area it was going into costs 1500 for 12 s for this bot (`g_navAvoid`), the second time it also walks back
+  to a place it came through (`navCrumbs`). botassist.log: "stuck: bot N at ... by ..., N in a row: <what stops its body>".
+- `FindPath(..., partial)`: with no connection to the goal, the way to the closest area instead of a straight line into a wall. Only the companions ask for it (`Drive`, `OrderedMove`): Conquest and `zombie_humans.inl` read a one-point
+  path as "no way there" and pick another goal. `AreaAt` off the mesh measures to the area's edge, not its centre (just outside hs_desertstorm's 2500 x 5150 area, its centre is far past the 400 u limit: no area, so a straight line again).
+- Mesh attributes: `NAV_CROUCH` areas are walked crouching (`duckUntil`, applied in `HookedRunPlayerMove`; hs_sidewinder has 12, de_dust2 8). `Drive` jumps low ledges (`LedgeAhead`): its old check compared a floor height with the origin, so it only
+  fired for floors 60 u above the feet, too high to jump.
 
 ## Create room: Random Map in fun modes
 
