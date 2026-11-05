@@ -736,6 +736,18 @@ plays it. Soldiers come from the maps' `zombiespawn` points as monsters. The sol
 down), comes first when in sight within 1800 u. The shared code asks the mode's functions: `HsIsEnemyClass` (`IsIgnored`), `HsScanRadius` (6000 here against `Radius`), `HsTooFar` and `HsMissileFirst`
 (`ScanMonsters`), `HsFlying` (`AimPoint`, no backing away), `HsAimLead`, `HsClearShotAt` (firing), `HsNoChase` (independent order). botassist.log: "Human Scenario: enemy <class> <model>, health..., bots shoot it".
 
+## Navigation tools (console)
+
+`nav_tools.inl`. `nav_help` lists it all in game. Files: `Bin/botassist_nav/<map>.nav` (with `.bak`, the one before the last save) and `<map>.poi`. The game's .nar files aren't touched.
+
+- The game has Condition Zero's editor and generator, reachable once the mesh has somewhere to go. `bot_nav_edit 1` and `bot_nav_*` are the game's own (`ServerCommand` 0x11318420, edit loop 0x11322fb0, it finds your player itself at 0x1131ad30). `bot_nav_analyze` and `bot_nav_load` are
+  registered but `ServerCommand` no longer handles them: `bot_nav_analyze` is `CmdNavAnalyze` here (sets flag 0x1218293e, which `CCSBot::Update` 0x1130f4e0 reads; `bot_nav_load` stays dead, a restart does it).
+- `HookedSaveNav` (`SaveNavigationMap` 0x1132c4c0) ignores `<game dir>\maps` and writes to `botassist_nav`; `HookedLoadFile` and `HookedFreeFile` replace entries 100 and 101 of mp.dll's engine table and serve a `.nav` from there to the game and to `LoadNav`. Format: version 5, same as the shipped ones.
+- `nav_generate`: `map <map>` with the load answering "no file", then `StartLearnProcess` 0x11305230 (fastcall, the CCSBot) on the first living bot whose vtable[0] is `CCSBot::Spawn` 0x113041d0; `bot_add` if no bot shows up in 8 s. Process mode +0x5a50: 1 learn (flood fill from the bot), 2 and 3 analyse,
+  4 `FUN_113057b0` saves and restarts the map. It only reaches what can be walked from that bot's spawn. `CCSBot::Spawn` starts it by itself on a map without a mesh (no area loaded, and engine function 200's interface doesn't object). `HookedSaveNav` refuses to save a mesh with no areas.
+- `nav_restore` renames the file to `.old` and restarts.
+- Points of interest: `poi_add spot [name]`, `poi_add avoid [radius] [name]`, `poi_list`, `poi_del [number]`, `poi_clear`, `poi_show`. An avoid costs its areas 3000 in `FindPath`, blocks shortcuts through it (`FloorAlong`) and `PickSpot`. A spot comes first in `PickSpot` (skipping `OpenDirections`: somebody chose it) and half of the tries of `GdmPickVia`'s random places (Gun Deathmatch, Super Soldier and the modes on its routes). Other modes choose their goals themselves and only feel the avoids.
+
 ## Getting around (every mode)
 
 A shared change, because bots got caught on corners in every mode: `FindPath`, `NextWaypoint`, `WalkYaw`, `ClearYaw`, `FormationSpot`, `AreaAt`.

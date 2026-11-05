@@ -149,7 +149,10 @@ static void GdmPickVia(void* bot, GdmBot& z, V3 me, V3 target)
     float bestScore = -1e9f;
     for (int tries = 0; tries < 16 && !g_nav.areas.empty(); tries++)
     {
-        V3 c = g_nav.areas[rand() % g_nav.areas.size()].center;
+        // (half of the time a point of interest of the map, when it has them)
+        V3 c = PoiSpotCount() && (rand() & 1) ? PoiSpotAt(rand() % PoiSpotCount()) : g_nav.areas[rand() % g_nav.areas.size()].center;
+        if (PoiAvoidAt(c))
+            continue;
         float there = Len(c - me);
         if (there < GDM_VIA_REACHED * 2.0f)
             continue;

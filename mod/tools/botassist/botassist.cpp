@@ -506,6 +506,9 @@ static int CheckClock()
     return levels;
 }
 
+static void PoiLoad(const std::string& map); // points of interest: see nav_tools.inl
+static void PoiRebuild();
+
 static void LoadNav()
 {
     std::string map = String(*(int*)((DWORD)*g_pGlobals + GV_MAPNAME));
@@ -522,6 +525,7 @@ static void LoadNav()
     g_nav.map = map;
     g_nav.areas.clear();
     g_nav.ok = false;
+    PoiLoad(map);
     std::string path = "maps/" + map + ".nav";
     int len = 0;
     unsigned char* data = g_LoadFile(path.c_str(), &len);
@@ -605,6 +609,7 @@ static void LoadNav()
                     g_nav.areas[i].adj[d].push_back(it->second);
             }
     g_nav.ok = true;
+    PoiRebuild();
     Log("%s: %u navigation areas loaded", path.c_str(), (unsigned)g_nav.areas.size());
 }
 
@@ -668,6 +673,11 @@ static V3 Portal(int ai, int d, int bi)
 }
 
 static float NavWetCost(int area); // Zombie Giant: areas under water cost more
+// points of interest: see nav_tools.inl
+static float PoiAreaCost(int area);
+static bool PoiAvoidAt(V3 at);
+static int PoiSpotCount();
+static V3 PoiSpotAt(int i);
 // extra cost per nav area of the path being found, null for none (Zombie Conquest: each bot's own way, see ZConNewRoute)
 static const std::vector<float>* g_navRouteCost = nullptr;
 // areas this bot couldn't get into a moment ago (see NavProgress): a path through them is the last choice, not forbidden
@@ -889,7 +899,7 @@ static bool FindPath(V3 from, V3 to, std::vector<V3>& out, bool partial = false)
                     continue;
                 float c = cost[cur] + Len(g_nav.areas[nb].center - g_nav.areas[cur].center) + NavWetCost(nb) +
                           (g_navRouteCost && nb < (int)g_navRouteCost->size() ? (*g_navRouteCost)[nb] : 0.0f) +
-                          (drop > SAFE_DROP ? (drop - SAFE_DROP) * DROP_COST : 0.0f) + NavAvoidCost(nb, pathNow);
+                          (drop > SAFE_DROP ? (drop - SAFE_DROP) * DROP_COST : 0.0f) + NavAvoidCost(nb, pathNow) + PoiAreaCost(nb);
                 if (c < cost[nb])
                 {
                     cost[nb] = c;
@@ -1228,7 +1238,7 @@ static bool FloorAlong(void* bot, V3 from, V3 to)
         V3 at = from + d * (s / len);
         if (Trace(at, at - V3{ 0, 0, 100 }, bot, 1, tr))
             return false;
-        if (InHurtZone(V3{ tr.vecEndPos[0], tr.vecEndPos[1], tr.vecEndPos[2] + 8.0f }, 0.0f))
+        if (InHurtZone(V3{ tr.vecEndPos[0], tr.vecEndPos[1], tr.vecEndPos[2] + 8.0f }, 0.0f) || PoiAvoidAt(V3{ tr.vecEndPos[0], tr.vecEndPos[1], tr.vecEndPos[2] }))
             return false;
     }
     return true;
@@ -1401,18 +1411,20 @@ static bool PickSpot(void* bot, BotState& st, V3 pos, V3 around, float minR, flo
     if (!g_nav.ok || g_nav.areas.empty() || now < st.nextRoamPick)
         return false;
     st.nextRoamPick = now + 1.5f; // retried at most this often
-    for (int tries = 0; tries < 60; tries++)
+    // the map's points of interest first: somebody chose them
+    int spots = PoiSpotCount(), firstSpot = spots ? rand() % spots : 0;
+    for (int tries = 0; tries < 60 + spots; tries++)
     {
-        const NavArea& a = g_nav.areas[rand() % g_nav.areas.size()];
-        V3 c = a.center;
+        bool chosen = tries < spots;
+        V3 c = chosen ? PoiSpotAt((firstSpot + tries) % spots) : g_nav.areas[rand() % g_nav.areas.size()].center;
         float d = Len2D(c - around);
-        if (d < minR || d > maxR || fabsf(c.z - around.z) > 160.0f || InHazard(c))
+        if (d < minR || d > maxR || fabsf(c.z - around.z) > 160.0f || InHazard(c) || PoiAvoidAt(c))
             continue;
         bool crowded = false;
         for (auto& o : g_bots)
             if (&o != &st && o.edict && o.hasRoam && Len2D(o.roamGoal - c) < 200.0f)
                 crowded = true;
-        if (crowded || OpenDirections(bot, c) < 6)
+        if (crowded || (!chosen && OpenDirections(bot, c) < 6))
             continue;
         std::vector<V3> path;
         if (!FindPath(pos, c, path) || path.size() > 60)
@@ -4578,6 +4590,8 @@ static bool IsEmptyHandler(void (*fn)())
     return Readable(p, 3) && (p[0] == 0xc3 || (p[0] == 0xc2 && p[1] == 0 && p[2] == 0));
 }
 
+#include "nav_tools.inl"
+
 static void InstallConsoleCommands()
 {
     static const struct { const char* name; void (*fn)(); } cheats[] = {
@@ -4604,6 +4618,7 @@ static void InstallConsoleCommands()
         if (add)
             add("give", CmdGive), patched++;
     }
+    NavAddCommands();
     if (patched)
         Log("console: %d commands set up (god, noclip, notarget, fly, kill, give, bot_add*)", patched);
 }
@@ -4748,6 +4763,7 @@ static void HookedStartFrame()
         ItemWatch();
         AsWatch();
         HsWatch();
+        NavToolsFrame();
         ZgFrame();
     }
     __except (EXCEPTION_EXECUTE_HANDLER)
@@ -5482,8 +5498,7 @@ static bool Install(HMODULE mp)
     g_TraceLine = (TraceLineFn)table[ENG_TRACELINE];
     g_TraceHull = (TraceHullFn)table[ENG_TRACEHULL];
     g_CmdArgv = (CmdArgvFn)table[ENG_CMD_ARGV];
-    g_LoadFile = (LoadFileFn)table[ENG_LOADFILE];
-    g_FreeFile = (FreeFileFn)table[ENG_FREEFILE];
+    NavHookFiles(table);
     g_CVarGetFloat = (CVarGetFloatFn)table[ENG_CVARGETFLOAT];
     g_CVarGetString = (CVarGetStringFn)table[ENG_CVARGETSTRING];
     g_CVarSetString = (CVarSetStringFn)table[ENG_CVARSETSTRING];
