@@ -736,6 +736,16 @@ plays it. Soldiers come from the maps' `zombiespawn` points as monsters. The sol
 down), comes first when in sight within 1800 u. The shared code asks the mode's functions: `HsIsEnemyClass` (`IsIgnored`), `HsScanRadius` (6000 here against `Radius`), `HsTooFar` and `HsMissileFirst`
 (`ScanMonsters`), `HsFlying` (`AimPoint`, no backing away), `HsAimLead`, `HsClearShotAt` (firing), `HsNoChase` (independent order). botassist.log: "Human Scenario: enemy <class> <model>, health..., bots shoot it".
 
+## Zombie Tag / Zombie Hide and Seek (mode 37) with room bots
+
+`modes/zombie_tag.inl`, rules `CSOGameRulesMugoonhwa` (vtable 0x1179e52c, code 0x1082c5a0-0x10831400). The file's header has the facts: zombie pick 0x10830460 (half of the
+players, CBasePlayer +0x3310), AI zombies `dummyman` (CDummyMan +0x12c4: 1 walking, else the emotion id 10..26), `dummygoal` / `playergoal`, fever 0x10830bc0, the
+commands `zbtag_motion 1..5` / `sprintON` / `sprintOFF` (ClientCommand 0x1082d960), "I found the zombie" (0x1082e1f0, settled 1.8 s later in 0x10831010: radius
+`**0x11e56a58`, cone cos 0.9, the target's pev->angles against the human's view below -0.8), the emotion's end 0x114d60f0 (no key ends it for a zombie in this mode).
+`DriveZtBot` drives every bot: zombies blend in (the crowd's measured speed, the fever's emotion after a reaction time, calm or panic with smoke and
+sprint, the last stretch to the goal, a poke from behind), humans score what they see (`ZtObserve`) and test, chase or call the find. botassist.log
+"Zombie Tag:", botassist_debug.log "Zombie Tag bot".
+
 ## Navigation tools (console)
 
 `nav_tools.inl`. `nav_help` lists it all in game. Files: `Bin/botassist_nav/<map>.nav` (with `.bak`, the one before the last save) and `<map>.poi`. The game's .nar files aren't touched.

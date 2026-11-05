@@ -4736,6 +4736,8 @@ static void CommandFile()
 
 #include "modes/human_scenario.inl"
 
+#include "modes/zombie_tag.inl"
+
 // ---------------------------------------------------------------- the frame hook (every mode)
 // The end of mp.dll's StartFrame (DLL function 0x113f8a80) runs botassist's per-frame work: the console, the command
 // file, and each mode's watcher (each returns at once outside its mode).
@@ -5152,6 +5154,28 @@ static void HookedRunPlayerMove(void* fakeclient, const float* angles, float fwd
                     float y = aim[1], p = aim[0], f = fwd, sd = side;
                     unsigned short bt = buttons;
                     if (DriveZheBot(fakeclient, y, p, f, sd, bt))
+                    {
+                        aim[0] = p;
+                        aim[1] = y;
+                        fwd = f;
+                        side = sd;
+                        buttons = bt;
+                        st.driven = true;
+                        float* va = (float*)(v + EV_VANGLE); // fixangle: see below
+                        float* ang = (float*)(v + EV_ANGLES);
+                        va[0] = aim[0];
+                        va[1] = aim[1];
+                        va[2] = 0;
+                        ang[0] = aim[0] / -3.0f;
+                        ang[1] = aim[1];
+                        ang[2] = 0;
+                    }
+                }
+                if (!scenario && GameMode() == MODE_ZTAG)
+                {
+                    float y = aim[1], p = aim[0], f = fwd, sd = side;
+                    unsigned short bt = buttons;
+                    if (DriveZtBot(fakeclient, y, p, f, sd, bt))
                     {
                         aim[0] = p;
                         aim[1] = y;
