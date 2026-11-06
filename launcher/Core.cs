@@ -115,7 +115,7 @@ namespace CsnzLauncher
             ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
         }
 
-        // the token for the private repository: the one saved in the launcher, GH_TOKEN / GITHUB_TOKEN, or the GitHub CLI's
+        // an optional token (the repository is public): the one saved in the launcher, GH_TOKEN / GITHUB_TOKEN, or the GitHub CLI's
         public static string FindToken(Settings settings, out string source)
         {
             source = "none";
@@ -158,7 +158,7 @@ namespace CsnzLauncher
                 var res = await c.SendAsync(req);
                 if (res.StatusCode == HttpStatusCode.NotFound)
                     throw new Exception(string.IsNullOrEmpty(token)
-                        ? "The repository is private: the launcher needs a GitHub token (More > GitHub token...) or a signed-in GitHub CLI."
+                        ? "No release found on GitHub (or GitHub can't be reached right now)."
                         : "No release found (or this token can't read the repository).");
                 if (res.StatusCode == HttpStatusCode.Unauthorized)
                     throw new Exception("GitHub refused the token (expired or wrong). Set a new one in More > GitHub token...");

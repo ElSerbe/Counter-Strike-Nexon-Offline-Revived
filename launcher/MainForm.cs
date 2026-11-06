@@ -339,7 +339,7 @@ namespace CsnzLauncher
         {
             using (var f = new Form { Text = "GitHub token", ClientSize = new Size(480, 150), FormBorderStyle = FormBorderStyle.FixedDialog, StartPosition = FormStartPosition.CenterParent, MinimizeBox = false, MaximizeBox = false })
             {
-                var info = new Label { Text = "The repository is private: a token with read access to it lets the launcher download the updates.\nIt is saved encrypted for your Windows user. Leave it empty to remove it.", Location = new Point(12, 10), Size = new Size(456, 48) };
+                var info = new Label { Text = "Optional: a GitHub token raises GitHub's limit on update checks.\nIt is saved encrypted for your Windows user. Leave it empty to remove it.", Location = new Point(12, 10), Size = new Size(456, 48) };
                 var box = new TextBox { Location = new Point(12, 64), Width = 456, UseSystemPasswordChar = true };
                 var ok = new Button { Text = "Save", DialogResult = DialogResult.OK, Location = new Point(312, 104) };
                 var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Location = new Point(393, 104) };

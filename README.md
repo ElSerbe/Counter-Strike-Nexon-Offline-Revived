@@ -13,9 +13,8 @@ launcher patches *your* copy of the game, keeps a backup of every file it change
 1. Install Counter-Strike Nexon: Zombies from Steam (the launcher points you there if it isn't installed).
 2. Download `CSNZ-Offline-Revived-Launcher.exe` from the latest release and put it in an empty folder of its own
    (the mod is installed next to it, in `mod\`).
-3. Open it. The repository is private, so the launcher needs to read it: it uses, in this order, a token saved in
-   it (**More > GitHub token...**, a fine-grained token with *Contents: read* on this repository), `GH_TOKEN` /
-   `GITHUB_TOKEN`, or the GitHub CLI (`gh auth login`) if it's installed.
+3. Open it. The repository is public, so it needs nothing else to find the releases (a GitHub token in
+   **More > GitHub token...**, `GH_TOKEN` / `GITHUB_TOKEN` or the GitHub CLI is still used if there is one).
 4. **Install** downloads the mod. Later, the same button says **Update** when a newer release is out (the
    launcher updates itself too).
 5. **Play**: the first time Windows asks for administrator rights to add the hosts block (the game's Nexon
@@ -49,6 +48,13 @@ release for the new version is out.
 | `mod/tools/botassist/` | The bots' AI, loaded by the game as `botassist.asi`; one file per mode in `modes/`. Its README has the reverse-engineering notes. |
 | `mod/web/` | The in-game web pages (shop, profile, missions, AI player editor). |
 | `mod/tools/release/build_release.py` | Builds a release into `dist/`. |
+
+## Authors
+
+- **ItsYuri** ([ItsYuriil](https://github.com/ItsYuriil)): the offline port and rework: bot AI, game modes, items,
+  shop, missions, gameplay, new features and quality of life. Discord: https://discord.gg/fjxubwyhYv
+- The local server is based on [JusicP/CSNZ_Server](https://github.com/JusicP/CSNZ_Server) by Jusic, Hardee,
+  NekoMeow, Smilex_Gamer and xRiseless.
 
 ## Making a release
 
