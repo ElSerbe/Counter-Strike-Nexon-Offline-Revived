@@ -405,11 +405,12 @@ static void ScWithBall(void* bot, ScBot& z, const ScBall& ball, int team, V3 me,
 }
 
 // ---------------------------------------------------------------- the bots count as players of their team
-// The rules count each team's players with 0x114bd6a0 (the win check 0x1143cda0, 0x100 in the rules' table, and the pass target 0x114f95a0).
-// It asks the engine for the player's room user (interface 0x121d3cf0, vfunc 100, pev +0x2d8), which a bot doesn't have: a team of bots
-// counted as empty and the other team won when the countdown ended. In this mode a bot on team 1 or 2 now passes the same way a player
-// with a room user does (+0xe10 not 1 nor 3).
-static const DWORD MP_SC_COUNTS = 0x114bd6a0;
+// The win check (0x1143cda0, 0x100 in the rules' table) counts each team's living players: those passing 0x114bd6a0 and not IsBot (vfunc
+// 0x21c). A team of bots counted as empty and the other team won when the countdown ended. 0x114bd6a0 asks the engine for the player's room
+// user (interface 0x121d3cf0, vfunc 100, pev +0x2d8), which a bot doesn't have; it also picks the pass target (0x114f95a0). In this mode a
+// bot on team 1 or 2 now passes it the way a player with a room user does (+0xe10 not 1 nor 3), and the check's IsBot skip (jnz at
+// 0x1143cfa7) is gone.
+static const DWORD MP_SC_COUNTS = 0x114bd6a0, MP_SC_SKIP_BOTS = 0x1143cfa7;
 static const int SC_PL_JOIN_STATE = 0xe10;
 typedef int(__fastcall* ScCountsFn)(void* player, void* edx);
 static ScCountsFn g_scCounts;
@@ -448,6 +449,21 @@ static void InstallScHooks(DWORD delta)
     if (!g_scCounts && Readable(fn, 10) && !memcmp(fn, code, sizeof(code)))
         g_scCounts = (ScCountsFn)DetourCdecl(fn, 10, (void*)ScHookedCounts);
     Log("Soccer: team count hook %s", g_scCounts ? "installed" : "NOT installed (unexpected code)");
+    // and the win check itself skips bots (IsBot, vfunc 0x21c): its "jnz skip" goes. 0x1143cda0 is only CSOGameRulesSoccer's (slot 0x100).
+    unsigned char* jnz = (unsigned char*)(MP_SC_SKIP_BOTS + delta);
+    static const unsigned char before[] = { 0x85, 0xc0, 0x75, 0x4d }; // test eax, eax; jnz +0x4d
+    if (Readable(jnz - 2, 4) && !memcmp(jnz - 2, before, sizeof(before)))
+    {
+        DWORD old;
+        VirtualProtect(jnz, 2, PAGE_EXECUTE_READWRITE, &old);
+        jnz[0] = 0x90;
+        jnz[1] = 0x90;
+        VirtualProtect(jnz, 2, old, &old);
+        FlushInstructionCache(GetCurrentProcess(), jnz, 2);
+        Log("Soccer: the win check counts bots");
+    }
+    else if (!(Readable(jnz, 2) && jnz[0] == 0x90 && jnz[1] == 0x90))
+        Log("Soccer: the win check NOT patched (unexpected code)");
 }
 
 // ---------------------------------------------------------------- every player: the hands and nothing else
