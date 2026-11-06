@@ -5,6 +5,11 @@
 //    to that port is tunnelled to the host over Steam P2P (the client's server transfer opens it).
 // P2P messages (reliable, channel 0): [type u8][connection u32][data]. OPEN asks the host to connect to its server,
 // DATA carries the bytes, CLOSE ends the connection, HELLO keeps the P2P session open.
+//  - matches: the room host's game is the match server and the players' games talk to it over UDP. The server gives each
+//    game addresses on its own PC's bridge (ServerTransfer::NetworkFor): on a joining PC the host PC's game is
+//    127.0.0.1:31000+k*2+portID (k = the tunnel), on the host PC a remote player is 127.0.0.1:33000+slot*2+portID.
+//    portID 0 is a game's server port, 1 its client port; GET /api/udp gives this PC's game ports and the remote slots.
+//    UDP goes over P2P channel 1: [5][direction: 0 player->host, 1 host->player][host portID][player portID][data].
 //
 // --loopback: one PC test. This PC's own lobby is listed as another player's, and its tunnel goes straight back to
 // this PC's server (no P2P). Usage: CSNZ-SteamBridge.exe --steam-api <game Bin\steam_api.dll> --data <server Data>
@@ -26,8 +31,9 @@ namespace SteamBridge
     class Bridge
     {
         const string Tag = "csnzor", Protocol = "1";
-        const byte Open = 1, Data = 2, Close = 3, Hello = 4;
+        const byte Open = 1, Data = 2, Close = 3, Hello = 4, Udp = 5;
         const int ServerPort = 30002, FirstTunnelPort = 30003, LastTunnelPort = 30199, FirstVirtualRoom = 40000;
+        const int JoinerUdpBase = 31000, HostUdpBase = 33000, UnreliableMax = 1200;
 
         readonly Steam steam;
         readonly string dataDir, apiUrl;
@@ -50,7 +56,18 @@ namespace SteamBridge
             public ulong PendingJoin;
             public DateTime Seen;
             public List<Dictionary<string, object>> Rooms = new List<Dictionary<string, object>>();
+            public UdpClient[] Udp; // the host PC's game, as this PC's game sees it (31000+k*2+portID)
         }
+
+        // a player from another PC on this PC's server: their game, as this PC's game sees it (33000+slot*2+portID)
+        class Remote
+        {
+            public ulong SteamID;
+            public int Slot;
+            public UdpClient[] Udp;
+        }
+        readonly Dictionary<ulong, Remote> remotes = new Dictionary<ulong, Remote>();
+        volatile int myPort0, myPort1; // this PC's game: server and client ports (its UDP holepunch, /api/udp)
         readonly Dictionary<ulong, Host> hosts = new Dictionary<ulong, Host>();
 
         // a tunnelled TCP connection: on the joining side it was accepted from the game, on the host side it goes to the server
@@ -80,7 +97,7 @@ namespace SteamBridge
 
         public void Run(Func<bool> keepRunning)
         {
-            DateTime nextList = DateTime.MinValue, nextPublish = DateTime.MinValue, nextIdentity = DateTime.MinValue, nextHello = DateTime.MinValue;
+            DateTime nextList = DateTime.MinValue, nextPublish = DateTime.MinValue, nextIdentity = DateTime.MinValue, nextHello = DateTime.MinValue, nextUdp = DateTime.MinValue;
             lock (Steam.Lock)
                 pendingCreate = Native.SteamAPI_ISteamMatchmaking_CreateLobby(steam.Matchmaking, Steam.LobbyPublic, 250);
             while (keepRunning())
@@ -112,6 +129,11 @@ namespace SteamBridge
                     {
                         KeepSessions();
                         nextHello = now.AddSeconds(2);
+                    }
+                    if (now >= nextUdp)
+                    {
+                        ReadUdpState();
+                        nextUdp = now.AddSeconds(2);
                     }
                     ReadP2P();
                 }
@@ -225,6 +247,7 @@ namespace SteamBridge
                     if (port == 0)
                         continue;
                     h = new Host { SteamID = owner, Port = port };
+                    var host = h;
                     try
                     {
                         h.Listener = new TcpListener(IPAddress.Loopback, port);
@@ -237,7 +260,14 @@ namespace SteamBridge
                     }
                     hosts[owner] = h;
                     log("Found " + steam.LobbyData(lobby, "name") + "'s lobby: their rooms go through 127.0.0.1:" + port);
-                    var host = h;
+                    int k = port - FirstTunnelPort;
+                    h.Udp = OpenUdp(JoinerUdpBase + k * 2, JoinerUdpBase + k * 2 + 1, (portID, from, data, n) =>
+                    {
+                        // this PC's game -> the host PC's game
+                        int mine = MyPortID(from.Port);
+                        if (mine >= 0)
+                            SendUdp(loopback ? LoopHostSide : host.SteamID, 0, portID, mine, data, n);
+                    });
                     new Thread(() => AcceptLoop(host)) { IsBackground = true }.Start();
                 }
                 h.Lobby = lobby;
@@ -260,6 +290,7 @@ namespace SteamBridge
             foreach (var h in hosts.Values.Where(h => (now - h.Seen).TotalSeconds > 30).ToList())
             {
                 try { h.Listener.Stop(); } catch { }
+                CloseUdp(h.Udp);
                 if (h.Joined && !loopback)
                     Native.SteamAPI_ISteamMatchmaking_LeaveLobby(steam.Matchmaking, h.Lobby);
                 hosts.Remove(h.SteamID);
@@ -386,6 +417,12 @@ namespace SteamBridge
         readonly byte[] p2pBuf = new byte[1 << 20];
         void ReadP2P()
         {
+            while (Native.SteamAPI_ISteamNetworking_IsP2PPacketAvailable(steam.Networking, out uint usize, 1))
+            {
+                if (!Native.SteamAPI_ISteamNetworking_ReadP2PPacket(steam.Networking, p2pBuf, (uint)p2pBuf.Length, out usize, out ulong ufrom, 1) || usize < 4)
+                    break;
+                HandleUdp(ufrom, p2pBuf, (int)usize);
+            }
             while (Native.SteamAPI_ISteamNetworking_IsP2PPacketAvailable(steam.Networking, out uint size, 0))
             {
                 if (!Native.SteamAPI_ISteamNetworking_ReadP2PPacket(steam.Networking, p2pBuf, (uint)p2pBuf.Length, out size, out ulong from, 0) || size < 5)
@@ -400,6 +437,8 @@ namespace SteamBridge
         {
             while (loop.TryDequeue(out var m))
                 Handle(m.Item1, m.Item2);
+            while (udpLoop.TryDequeue(out var u))
+                HandleUdp(u.Item1, u.Item2, u.Item2.Length);
         }
 
         // a P2P message from peer
@@ -443,6 +482,146 @@ namespace SteamBridge
             }
         }
 
+        // ------------------------------------------------------------ match traffic (UDP)
+        delegate void UdpReceived(int portID, IPEndPoint from, byte[] data, int n);
+
+        // two UDP sockets on 127.0.0.1 (portID 0 and 1) with a receive thread each
+        UdpClient[] OpenUdp(int port0, int port1, UdpReceived received)
+        {
+            var socks = new UdpClient[2];
+            int[] ports = { port0, port1 };
+            for (int i = 0; i < 2; i++)
+            {
+                try
+                {
+                    var u = new UdpClient(new IPEndPoint(IPAddress.Loopback, ports[i]));
+                    u.Client.IOControl(-1744830452, new byte[] { 0 }, null); // SIO_UDP_CONNRESET off: an ICMP reply doesn't end the socket
+                    socks[i] = u;
+                    int portID = i;
+                    new Thread(() =>
+                    {
+                        var from = new IPEndPoint(IPAddress.Any, 0);
+                        while (true)
+                        {
+                            byte[] data;
+                            try { data = u.Receive(ref from); }
+                            catch (ObjectDisposedException) { return; }
+                            catch (SocketException) { continue; }
+                            received(portID, from, data, data.Length);
+                        }
+                    }) { IsBackground = true }.Start();
+                }
+                catch (Exception ex) { log("UDP port " + ports[i] + " is busy: " + ex.Message); }
+            }
+            return socks;
+        }
+
+        static void CloseUdp(UdpClient[] socks)
+        {
+            if (socks != null)
+                foreach (var u in socks)
+                    try { u?.Close(); } catch { }
+        }
+
+        int MyPortID(int port) => port == myPort0 && port != 0 ? 0 : port == myPort1 && port != 0 ? 1 : -1;
+
+        void SendUdp(ulong peer, byte direction, int hostPortID, int playerPortID, byte[] data, int n)
+        {
+            var msg = new byte[4 + n];
+            msg[0] = Udp;
+            msg[1] = direction;
+            msg[2] = (byte)hostPortID;
+            msg[3] = (byte)playerPortID;
+            Buffer.BlockCopy(data, 0, msg, 4, n);
+            if (loopback)
+            {
+                udpLoop.Enqueue(Tuple.Create(peer == LoopHostSide ? steam.MySteamID : LoopHostSide, msg));
+                return;
+            }
+            lock (Steam.Lock)
+                Native.SteamAPI_ISteamNetworking_SendP2PPacket(steam.Networking, peer, msg, (uint)msg.Length,
+                    msg.Length <= UnreliableMax ? 0 : Steam.SendReliable, 1);
+        }
+        readonly ConcurrentQueue<Tuple<ulong, byte[]>> udpLoop = new ConcurrentQueue<Tuple<ulong, byte[]>>();
+
+        // a UDP packet from the other PC: to this PC's game, from the socket that stands for the other game
+        void HandleUdp(ulong peer, byte[] buf, int size)
+        {
+            if (buf[0] != Udp)
+                return;
+            int direction = buf[1], hostPortID = buf[2] & 1, playerPortID = buf[3] & 1;
+            UdpClient from;
+            int to;
+            if (direction == 1)
+            {
+                // the host PC's game -> this PC's game (this PC joined that host)
+                var h = hosts.Values.FirstOrDefault(x => x.SteamID == (loopback ? steam.MySteamID : peer));
+                if (h?.Udp == null)
+                    return;
+                from = h.Udp[hostPortID];
+                to = playerPortID == 0 ? myPort0 : myPort1;
+            }
+            else
+            {
+                // a remote player's game -> this PC's game (the room host)
+                if (!remotes.TryGetValue(loopback ? steam.MySteamID : peer, out var r) || r.Udp == null)
+                    return;
+                from = r.Udp[playerPortID];
+                to = hostPortID == 0 ? myPort0 : myPort1;
+            }
+            if (from == null || to == 0)
+                return;
+            try { from.Send(buf.Skip(4).Take(size - 4).ToArray(), size - 4, new IPEndPoint(IPAddress.Loopback, to)); }
+            catch { }
+        }
+
+        // GET /api/udp: this PC's game ports and the remote players on this PC's server
+        void ReadUdpState()
+        {
+            string text;
+            try { text = http.GetStringAsync(apiUrl + "/api/udp").GetAwaiter().GetResult(); }
+            catch { return; }
+            Dictionary<string, object> state;
+            try { state = json.Deserialize<Dictionary<string, object>>(text); }
+            catch { return; }
+            if (state["myPorts"] is System.Collections.IList ports && ports.Count == 2)
+            {
+                int p0 = Convert.ToInt32(ports[0]), p1 = Convert.ToInt32(ports[1]);
+                if (p0 != myPort0 || p1 != myPort1)
+                    log("This PC's game uses UDP ports " + p0 + " (server) and " + p1 + " (client)");
+                myPort0 = p0;
+                myPort1 = p1;
+            }
+            var seen = new HashSet<ulong>();
+            if (state["remotes"] is System.Collections.IEnumerable list)
+                foreach (Dictionary<string, object> r in list)
+                {
+                    if (!ulong.TryParse(r["steamID"].ToString(), out ulong id))
+                        continue;
+                    int slot = Convert.ToInt32(r["slot"]);
+                    seen.Add(id);
+                    if (remotes.TryGetValue(id, out var old) && old.Slot == slot)
+                        continue;
+                    if (old != null)
+                        CloseUdp(old.Udp);
+                    var remote = new Remote { SteamID = id, Slot = slot };
+                    remote.Udp = OpenUdp(HostUdpBase + slot * 2, HostUdpBase + slot * 2 + 1, (portID, from, data, n) =>
+                    {
+                        // this PC's game (the room host) -> the remote player's game
+                        int mine = MyPortID(from.Port);
+                        if (mine >= 0)
+                            SendUdp(loopback ? steam.MySteamID : id, 1, mine, portID, data, n);
+                    });
+                    remotes[id] = remote;
+                    log("Player " + id + " plays on this PC's server: their match traffic goes through 127.0.0.1:" + (HostUdpBase + slot * 2) + "-" + (HostUdpBase + slot * 2 + 1));
+                }
+            foreach (var gone in remotes.Keys.Where(k => !seen.Contains(k)).ToList())
+            {
+                CloseUdp(remotes[gone].Udp);
+                remotes.Remove(gone);
+            }
+        }
+
         void CloseConn(Conn c)
         {
             conns.TryRemove(Key(c.Peer, c.Id), out _);
@@ -454,7 +633,12 @@ namespace SteamBridge
             foreach (var c in conns.Values.ToList())
                 CloseConn(c);
             foreach (var h in hosts.Values)
+            {
                 try { h.Listener.Stop(); } catch { }
+                CloseUdp(h.Udp);
+            }
+            foreach (var r in remotes.Values)
+                CloseUdp(r.Udp);
             lock (Steam.Lock)
             {
                 if (myLobby != 0)
