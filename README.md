@@ -10,7 +10,7 @@ launcher patches *your* copy of the game, keeps a backup of every file it change
 
 ## Playing
 
-1. Install Counter-Strike Nexon: Zombies from Steam.
+1. Install Counter-Strike Nexon: Zombies from Steam (the launcher points you there if it isn't installed).
 2. Download `CSNZ-Offline-Revived-Launcher.exe` from the latest release and put it in an empty folder of its own
    (the mod is installed next to it, in `mod\`).
 3. Open it. The repository is private, so the launcher needs to read it: it uses, in this order, a token saved in
@@ -25,8 +25,14 @@ launcher patches *your* copy of the game, keeps a backup of every file it change
 6. Optional: **More > Export shop and profile pictures** makes the item pictures, 3D previews and medal icons of
    the in-game web pages from your game. It needs Python 3 (the launcher installs the Pillow and pefile packages).
 
-**More** also has *Restore the original game* (Steam's files back, the mod's out of `Bin`) and *Remove the hosts
-block* (to play online again).
+The launcher finds the game in Steam's libraries by itself (Steam's manifest of app 273110). If it isn't installed,
+it opens a window with **Install with Steam**, the store page, and the commands for Win+R (`steam://install/273110`
+to install it, `steam://run/273110` to start it with Steam); that window closes by itself once Steam has the game.
+
+Under the game's folder the launcher shows its state (original, patched, or not matching this release) and a
+**Patch the game** / **Unpatch (original game)** button: unpatching puts Steam's files back from the backups, takes
+the mod's files out of `Bin` and keeps your `botassist.ini` for the next patch. If a backup is missing it offers
+Steam's *Verify integrity of game files*. **More > Remove the hosts block** is the other half of going back online.
 
 If Steam updates the game, the patches no longer fit: the launcher says so and doesn't touch anything until a
 release for the new version is out.

@@ -32,6 +32,7 @@ namespace CsnzLauncher
         public static string PatchList => Path.Combine(Mod, "patches.json");
         public static string ServerBin => Path.Combine(Mod, "server", "CSNZ_Server", "bin");
         public static string BackupBin => Path.Combine(Mod, "backup", "original", "Bin");
+        public static string KeptSettings => Path.Combine(Mod, "backup", "settings");
         // a Git checkout of the project: updating would overwrite the sources
         public static bool IsDevCheckout => Directory.Exists(Path.Combine(Root, ".git"));
 
@@ -257,11 +258,19 @@ namespace CsnzLauncher
     // ------------------------------------------------------------ the game's folder
     public static class GameLocator
     {
+        // Counter-Strike Nexon on Steam
+        public const int AppId = 273110;
+        public static string StorePage => $"https://store.steampowered.com/app/{AppId}/";
+        public static string InstallCommand => $"steam://install/{AppId}";
+        public static string RunCommand => $"steam://run/{AppId}";
+        public static string VerifyCommand => $"steam://validate/{AppId}";
+        public const string SteamDownload = "https://store.steampowered.com/about/";
+
         public static bool IsGame(string dir) => !string.IsNullOrEmpty(dir) && File.Exists(Path.Combine(dir, "Bin", "cstrike-online.exe"));
 
-        public static string Find()
+        // Steam's own folder, or null when Steam isn't installed
+        public static string SteamDir()
         {
-            var libs = new List<string>();
             foreach (var (hive, key, value) in new[] {
                 (Registry.CurrentUser, @"Software\Valve\Steam", "SteamPath"),
                 (Registry.LocalMachine, @"SOFTWARE\WOW6432Node\Valve\Steam", "InstallPath"),
@@ -270,24 +279,99 @@ namespace CsnzLauncher
                 try
                 {
                     using (var k = hive.OpenSubKey(key))
-                        if (k?.GetValue(value) is string s && Directory.Exists(s))
-                            libs.Add(s.Replace('/', '\\'));
+                        if (k?.GetValue(value) is string s && File.Exists(Path.Combine(s, "steam.exe")))
+                            return s.Replace('/', '\\');
                 }
                 catch { }
             }
-            foreach (var steam in libs.ToArray())
+            return null;
+        }
+
+        // every Steam library folder (Steam's own and the ones in libraryfolders.vdf)
+        public static List<string> Libraries()
+        {
+            var libs = new List<string>();
+            var steam = SteamDir();
+            if (steam == null)
+                return libs;
+            libs.Add(steam);
+            var vdf = Path.Combine(steam, "steamapps", "libraryfolders.vdf");
+            try
             {
-                var vdf = Path.Combine(steam, "steamapps", "libraryfolders.vdf");
-                if (!File.Exists(vdf))
-                    continue;
-                foreach (var line in File.ReadAllLines(vdf))
-                {
-                    var parts = line.Trim().Split('"');
-                    if (parts.Length >= 4 && parts[1] == "path")
-                        libs.Add(parts[3].Replace(@"\\", @"\"));
-                }
+                if (File.Exists(vdf))
+                    foreach (var line in File.ReadAllLines(vdf))
+                    {
+                        var parts = line.Trim().Split('"');
+                        if (parts.Length >= 4 && parts[1] == "path")
+                            libs.Add(parts[3].Replace(@"\\", @"\"));
+                    }
             }
-            foreach (var lib in libs.Distinct(StringComparer.OrdinalIgnoreCase))
+            catch { }
+            return libs.Distinct(StringComparer.OrdinalIgnoreCase).Where(Directory.Exists).ToList();
+        }
+
+        // a "key" "value" line of a Steam .acf file
+        static string AcfValue(string acf, string key)
+        {
+            foreach (var line in File.ReadAllLines(acf))
+            {
+                var parts = line.Trim().Split('"');
+                if (parts.Length >= 4 && parts[1].Equals(key, StringComparison.OrdinalIgnoreCase))
+                    return parts[3];
+            }
+            return null;
+        }
+
+        // Steam knows the game (its appmanifest) but its files aren't all there yet: Steam is still downloading it
+        public static string Downloading()
+        {
+            foreach (var lib in Libraries())
+            {
+                var acf = Path.Combine(lib, "steamapps", $"appmanifest_{AppId}.acf");
+                try
+                {
+                    if (File.Exists(acf))
+                    {
+                        var dir = Path.Combine(lib, "steamapps", "common", AcfValue(acf, "installdir") ?? "CSNZ");
+                        if (!IsGame(dir) || AcfValue(acf, "StateFlags") != "4")
+                            return dir;
+                    }
+                }
+                catch { }
+            }
+            return null;
+        }
+
+        // Steam's build number of the installed game, for the log
+        public static string BuildId(string game)
+        {
+            try
+            {
+                var acf = Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(game)), $"appmanifest_{AppId}.acf");
+                return File.Exists(acf) ? AcfValue(acf, "buildid") : null;
+            }
+            catch { return null; }
+        }
+
+        public static string Find()
+        {
+            var libs = Libraries();
+            // the app's manifest says which folder Steam installed it in
+            foreach (var lib in libs)
+            {
+                var acf = Path.Combine(lib, "steamapps", $"appmanifest_{AppId}.acf");
+                try
+                {
+                    if (File.Exists(acf))
+                    {
+                        var dir = Path.Combine(lib, "steamapps", "common", AcfValue(acf, "installdir") ?? "CSNZ");
+                        if (IsGame(dir))
+                            return dir;
+                    }
+                }
+                catch { }
+            }
+            foreach (var lib in libs)
             {
                 var dir = Path.Combine(lib, "steamapps", "common", "CSNZ");
                 if (IsGame(dir))
@@ -395,6 +479,29 @@ namespace CsnzLauncher
             return different > 0 ? $"{different} patch places don't match this game version" : original == 0 ? "patched" : patched == 0 ? "original" : "partly patched";
         }
 
+        // the game as a whole, for the window
+        public enum GameState { NoMod, Original, Patched, Partly, Mismatch }
+
+        public static GameState Check(string game)
+        {
+            if (!File.Exists(Paths.PatchList))
+                return GameState.NoMod;
+            var list = PatchList.Load();
+            var bin = Path.Combine(game, "Bin");
+            var all = Survey(bin, list).Values.SelectMany(v => v).ToList();
+            if (all.Contains(State.Different))
+            {
+                // a file the mod patched but Steam changed since: Restore can still put the backup back only if it's ours
+                return GameState.Mismatch;
+            }
+            bool filesIn = list.files.Where(x => x.overwrite).All(x => File.Exists(Path.Combine(bin, x.dst.Replace('/', '\\'))));
+            if (all.All(s => s == State.Patched))
+                return filesIn ? GameState.Patched : GameState.Partly;
+            if (all.All(s => s == State.Original))
+                return list.files.Any(x => x.overwrite && File.Exists(Path.Combine(bin, x.dst.Replace('/', '\\')))) ? GameState.Partly : GameState.Original;
+            return GameState.Partly;
+        }
+
         public static void Apply(string game, Logger log)
         {
             var bin = Path.Combine(game, "Bin");
@@ -424,6 +531,9 @@ namespace CsnzLauncher
             {
                 var src = Path.Combine(Paths.Mod, x.src.Replace('/', '\\'));
                 var dst = Path.Combine(bin, x.dst.Replace('/', '\\'));
+                var kept = Path.Combine(Paths.KeptSettings, x.dst.Replace('/', '\\'));
+                if (!x.overwrite && !File.Exists(dst) && File.Exists(kept))
+                    src = kept; // the player's settings from before an unpatch
                 if (!File.Exists(src) || (File.Exists(dst) && !x.overwrite))
                     continue;
                 Directory.CreateDirectory(Path.GetDirectoryName(dst));
@@ -433,31 +543,56 @@ namespace CsnzLauncher
             log($"Game patched: {done} new patch places, {list.patches.Count - done} already in place, {copied} mod files copied into Bin.");
         }
 
-        public static void Restore(string game, Logger log)
+        // Steam's files back: the backups of the patched files, the mod's files out of Bin. Returns false when a patched file
+        // had no backup (then Steam's "Verify integrity of game files" fetches it again).
+        public static bool Restore(string game, Logger log)
         {
             var bin = Path.Combine(game, "Bin");
             var list = PatchList.Load();
-            foreach (var file in list.patches.Select(p => p.file).Distinct(StringComparer.OrdinalIgnoreCase))
+            var states = Survey(bin, list);
+            bool complete = true;
+            foreach (var kv in states)
             {
+                var file = kv.Key;
+                if (kv.Value.All(s => s == State.Original))
+                    continue; // untouched already
                 var b = Path.Combine(Paths.BackupBin, file);
+                if (!kv.Value.Contains(State.Patched))
+                {
+                    // not our bytes: Steam changed this file since the mod's release, an old backup would only break it
+                    log($"  {file} isn't patched by this mod (Steam updated it?): left as it is");
+                    continue;
+                }
                 if (File.Exists(b))
                 {
                     File.Copy(b, Path.Combine(bin, file), true);
                     log($"  restored {file}");
                 }
                 else
-                    log($"  no backup of {file}: use Steam's \"Verify integrity of game files\"");
+                {
+                    log($"  no backup of {file}: Steam's \"Verify integrity of game files\" puts it back");
+                    complete = false;
+                }
             }
             foreach (var x in list.files)
             {
                 var dst = Path.Combine(bin, x.dst.Replace('/', '\\'));
-                if (File.Exists(dst))
-                    File.Delete(dst);
+                if (!File.Exists(dst))
+                    continue;
+                if (!x.overwrite)
+                {
+                    // the player's settings (botassist.ini...): kept aside for the next patch
+                    var keep = Path.Combine(Paths.KeptSettings, x.dst.Replace('/', '\\'));
+                    Directory.CreateDirectory(Path.GetDirectoryName(keep));
+                    File.Copy(dst, keep, true);
+                }
+                File.Delete(dst);
             }
             var tables = Path.Combine(bin, "botassist_tables");
             if (Directory.Exists(tables))
                 Directory.Delete(tables, true);
-            log("The game is back to Steam's files.");
+            log(complete ? "The game is back to Steam's files." : "The mod's files are out of Bin; Steam has to put back the files without a backup.");
+            return complete;
         }
     }
 

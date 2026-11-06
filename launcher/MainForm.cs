@@ -17,6 +17,9 @@ namespace CsnzLauncher
         readonly Button updateButton = new Button { Text = "Check for updates", Width = 150, Height = 34 };
         readonly Button playButton = new Button { Text = "Play", Width = 150, Height = 34, Font = new Font(SystemFonts.DefaultFont.FontFamily, 10, FontStyle.Bold) };
         readonly Button moreButton = new Button { Text = "More ▾", Width = 100, Height = 34 };
+        readonly Button patchButton = new Button { Text = "Patch the game", Width = 170, Height = 34 };
+        readonly Label gameState = new Label { AutoSize = true, Font = new Font("Segoe UI", 9, FontStyle.Bold) };
+        readonly LinkLabel getGame = new LinkLabel { Text = "Not installed? Get it free on Steam", AutoSize = true, Visible = false };
         readonly TextBox logBox = new TextBox { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, Font = new Font("Consolas", 9) };
         ReleaseInfo latest;
         bool busy;
@@ -34,18 +37,22 @@ namespace CsnzLauncher
             gameBox.SetBounds(16, 78, 560, 24);
             gameBox.Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Right;
             var browse = new Button { Text = "Browse...", Location = new Point(586, 76), Width = 118, Anchor = AnchorStyles.Top | AnchorStyles.Right };
-            versionLabel.Location = new Point(16, 112);
-            updateButton.Location = new Point(16, 140);
-            playButton.Location = new Point(176, 140);
-            moreButton.Location = new Point(336, 140);
-            logBox.SetBounds(16, 186, 688, 258);
+            gameState.Location = new Point(16, 108);
+            getGame.Location = new Point(480, 108);
+            getGame.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            versionLabel.Location = new Point(16, 132);
+            updateButton.Location = new Point(16, 160);
+            playButton.Location = new Point(176, 160);
+            patchButton.Location = new Point(336, 160);
+            moreButton.Location = new Point(516, 160);
+            logBox.SetBounds(16, 206, 688, 238);
             logBox.Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Right | AnchorStyles.Bottom;
-            Controls.AddRange(new Control[] { title, gameLabel, gameBox, browse, versionLabel, updateButton, playButton, moreButton, logBox });
+            Controls.AddRange(new Control[] { title, gameLabel, gameBox, browse, gameState, getGame, versionLabel, updateButton, playButton, patchButton, moreButton, logBox });
 
             var more = new ContextMenuStrip();
             more.Items.Add("Export shop and profile pictures from the game (Python)", null, (s, e) => _ = Run("Exporting pictures", () => Assets.Export(Game(), Log)));
-            more.Items.Add("Apply the patches only", null, (s, e) => _ = Run("Patching", () => Patcher.Apply(Game(), Log)));
-            more.Items.Add("Restore the original game", null, (s, e) => RestoreGame());
+            more.Items.Add("Verify the game's files with Steam", null, (s, e) => OpenSteam(GameLocator.VerifyCommand));
+            more.Items.Add("Get the game from Steam...", null, (s, e) => GetGame());
             more.Items.Add(new ToolStripSeparator());
             more.Items.Add("Add the hosts block", null, (s, e) => _ = Run("hosts", () => Hosts.Run("add", Log)));
             more.Items.Add("Remove the hosts block", null, (s, e) => _ = Run("hosts", () => Hosts.Run("remove", Log)));
@@ -58,6 +65,8 @@ namespace CsnzLauncher
             browse.Click += (s, e) => BrowseGame();
             updateButton.Click += (s, e) => UpdateClicked();
             playButton.Click += (s, e) => PlayClicked();
+            patchButton.Click += (s, e) => PatchClicked();
+            getGame.LinkClicked += (s, e) => GetGame();
             Shown += async (s, e) => await Startup();
             FormClosing += (s, e) => { if (busy && e.CloseReason == CloseReason.UserClosing && MessageBox.Show(this, "Something is still running. Close anyway?", Text, MessageBoxButtons.YesNo) == DialogResult.No) e.Cancel = true; };
         }
@@ -89,7 +98,7 @@ namespace CsnzLauncher
         void SetBusy(bool on)
         {
             busy = on;
-            updateButton.Enabled = playButton.Enabled = moreButton.Enabled = !on;
+            updateButton.Enabled = playButton.Enabled = moreButton.Enabled = patchButton.Enabled = !on;
             UseWaitCursor = on;
         }
 
@@ -125,6 +134,52 @@ namespace CsnzLauncher
             versionLabel.Text = text + "    Launcher v" + Paths.LauncherVersion.ToString(3);
             updateButton.Text = latest != null && (installed == null || latest.Version > installed || latest.Version > Paths.LauncherVersion) ?
                 (installed == null ? "Install" : "Update") : "Check for updates";
+            RefreshGameState();
+        }
+
+        // the game's line under its folder, and the Patch / Unpatch button
+        Patcher.GameState RefreshGameState()
+        {
+            bool has = GameLocator.IsGame(settings.GamePath);
+            getGame.Visible = !has;
+            if (!has)
+            {
+                gameState.Text = "Game: not found";
+                gameState.ForeColor = Color.Firebrick;
+                patchButton.Text = "Patch the game";
+                patchButton.Enabled = false;
+                return Patcher.GameState.NoMod;
+            }
+            Patcher.GameState st;
+            try { st = Patcher.Check(settings.GamePath); }
+            catch { st = Patcher.GameState.NoMod; }
+            switch (st)
+            {
+                case Patcher.GameState.NoMod:
+                    gameState.Text = "Game: found (install the mod to patch it)";
+                    gameState.ForeColor = SystemColors.ControlText;
+                    break;
+                case Patcher.GameState.Original:
+                    gameState.Text = "Game: original (Steam's files, not patched)";
+                    gameState.ForeColor = SystemColors.ControlText;
+                    break;
+                case Patcher.GameState.Patched:
+                    gameState.Text = "Game: patched for offline play";
+                    gameState.ForeColor = Color.ForestGreen;
+                    break;
+                case Patcher.GameState.Partly:
+                    gameState.Text = "Game: partly patched";
+                    gameState.ForeColor = Color.DarkOrange;
+                    break;
+                default:
+                    gameState.Text = "Game: doesn't match this mod (Steam updated it?)";
+                    gameState.ForeColor = Color.Firebrick;
+                    break;
+            }
+            bool unpatch = st == Patcher.GameState.Patched || st == Patcher.GameState.Partly || st == Patcher.GameState.Mismatch;
+            patchButton.Text = unpatch ? "Unpatch (original game)" : "Patch the game";
+            patchButton.Enabled = !busy && st != Patcher.GameState.NoMod;
+            return st;
         }
 
         // ------------------------------------------------------------ start
@@ -141,11 +196,36 @@ namespace CsnzLauncher
                     Log("Found the game: " + found);
                 }
                 else
-                    Log("The game wasn't found in Steam's libraries: choose its folder with Browse...");
+                    Log("The game wasn't found in Steam's libraries.");
             }
             gameBox.Text = settings.GamePath;
+            if (GameLocator.IsGame(settings.GamePath))
+                Log("Game: " + settings.GamePath + (GameLocator.BuildId(settings.GamePath) is string b ? $" (Steam build {b})" : ""));
             RefreshVersion();
+            if (!GameLocator.IsGame(settings.GamePath))
+                GetGame();
             await CheckLatest(false);
+        }
+
+        // the game isn't on this PC: how to get it from Steam, and a watch that picks it up once installed
+        void GetGame()
+        {
+            using (var f = new GetGameForm())
+            {
+                if (f.ShowDialog(this) != DialogResult.OK)
+                    return;
+                settings.GamePath = f.FoundPath;
+                settings.Save();
+                gameBox.Text = f.FoundPath;
+                Log("Found the game: " + f.FoundPath);
+                RefreshVersion();
+            }
+        }
+
+        void OpenSteam(string command)
+        {
+            try { Process.Start(command); }
+            catch (Exception ex) { MessageBox.Show(this, "Steam didn't open: " + ex.Message, Text); }
         }
 
         void BrowseGame()
@@ -166,6 +246,7 @@ namespace CsnzLauncher
                 settings.Save();
                 gameBox.Text = dir;
                 Log("Game folder: " + dir);
+                RefreshVersion();
             }
         }
 
@@ -306,9 +387,12 @@ namespace CsnzLauncher
                 MessageBox.Show(this, "The game is already open.", Text);
                 return;
             }
-            string game;
-            try { game = Game(); }
-            catch (Exception ex) { MessageBox.Show(this, ex.Message, Text); return; }
+            if (!GameLocator.IsGame(settings.GamePath))
+            {
+                GetGame();
+                return;
+            }
+            var game = settings.GamePath;
 
             if (!Hosts.HasBlock())
             {
@@ -351,17 +435,31 @@ namespace CsnzLauncher
             Activate();
         }
 
-        void RestoreGame()
+        // Patch the game / Unpatch it back to Steam's files
+        async void PatchClicked()
         {
+            if (busy)
+                return;
             if (Runner.GameRunning())
             {
                 MessageBox.Show(this, "Close the game first.", Text);
                 return;
             }
-            if (MessageBox.Show(this, "Put back Steam's original game files and remove the mod's files from Bin?\n(The hosts block stays: remove it from More if you want to play online.)",
+            var st = RefreshGameState();
+            if (st == Patcher.GameState.Original)
+            {
+                await Run("Patching", () => Patcher.Apply(Game(), Log));
+                return;
+            }
+            if (MessageBox.Show(this, "Unpatch the game: put back Steam's original files and take the mod's files out of Bin?\n\n" +
+                    "Your mod settings are kept for the next time you patch (or press Play). The hosts block stays: remove it from More if you want to play online.",
                     Text, MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
                 return;
-            _ = Run("Restore", () => Patcher.Restore(Game(), Log));
+            bool complete = true;
+            if (await Run("Unpatch", () => complete = Patcher.Restore(Game(), Log)) && !complete &&
+                MessageBox.Show(this, "Some patched files had no backup. Let Steam verify the game's files to download them again?",
+                    Text, MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+                OpenSteam(GameLocator.VerifyCommand);
         }
     }
 
@@ -374,13 +472,27 @@ namespace CsnzLauncher
             {
                 // a test without the window (written to launcher-check.txt): the game's folder, the patches' state and the latest release
                 var lines = new System.Collections.Generic.List<string>();
-                var g = GameLocator.Find();
+                // --game <folder> tests on another copy of the game; --patch / --unpatch change it
+                int gi = Array.IndexOf(args, "--game");
+                var g = gi > 0 && gi + 1 < args.Length ? args[gi + 1] : GameLocator.Find();
                 lines.Add("game: " + (g ?? "not found"));
                 lines.Add("installed: " + (Paths.InstalledVersion()?.ToString(3) ?? "nothing"));
                 try
                 {
                     if (g != null && File.Exists(Paths.PatchList))
-                        lines.Add("patches: " + Patcher.Status(g));
+                    {
+                        lines.Add("patches: " + Patcher.Status(g) + ", game state " + Patcher.Check(g) + ", Steam build " + GameLocator.BuildId(g));
+                        if (args.Contains("--patch"))
+                        {
+                            Patcher.Apply(g, l => lines.Add(l));
+                            lines.Add("after patch: " + Patcher.Check(g));
+                        }
+                        if (args.Contains("--unpatch"))
+                        {
+                            lines.Add("restore complete: " + Patcher.Restore(g, l => lines.Add(l)));
+                            lines.Add("after unpatch: " + Patcher.Check(g));
+                        }
+                    }
                 }
                 catch (Exception ex) { lines.Add("patches: " + ex.Message); }
                 try
@@ -407,6 +519,11 @@ namespace CsnzLauncher
             }
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
+            if (args.Contains("--preview-get-game"))
+            {
+                Application.Run(new GetGameForm(true));
+                return;
+            }
             Application.Run(new MainForm());
         }
     }
