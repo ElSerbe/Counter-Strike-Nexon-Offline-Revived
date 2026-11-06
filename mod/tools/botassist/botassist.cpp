@@ -358,9 +358,20 @@ static bool HsIsMissile(void* e);
 static bool HsTooFar(void* e, float dist);
 static float HsAimLead(void* target);
 static void HsWatch();
+// Zombie Shelter: see modes/zombie_shelter.inl (each returns at once outside the mode)
+struct BotState;
+static bool ShelterFriendlyClass(const char* cls);
+static bool ShelterActive();
+static bool ShelterGoal(void* bot, BotState& st, V3 pos, V3& goal, float& arrive, bool& wantMove);
+static bool ShelterLook(void* bot, BotState& st, V3 eye, float& yaw, float& pitch);
+static bool ShelterSwing(void* bot, BotState& st, float yaw, float pitch);
+static void ShelterBotThink(void* bot, BotState& st);
+static void ShelterWatch();
 
 static bool IsIgnored(const char* classname)
 {
+    if (ShelterFriendlyClass(classname))
+        return true; // the shelter's turrets, walls... are the players'
     if (HsIsEnemyClass(classname))
         return false;
     for (auto& s : cfg.ignore)
@@ -1877,6 +1888,8 @@ static void Drive(void* bot, BotState& st, Command& cmd, float dt)
         arrive = 40.0f;
         wantMove = true;
     }
+    else if ((!st.ordered || st.order == ORDER_INDEPENDENT) && ShelterGoal(bot, st, pos, goal, arrive, wantMove))
+        ; // Zombie Shelter: the mode's own tasks (gathering, warehouse, repairs...)
     else
     switch (st.order)
     {
@@ -2037,6 +2050,8 @@ static void Drive(void* bot, BotState& st, Command& cmd, float dt)
         lookYaw = YawOf(d);
         lookPitch = PitchOf(d);
     }
+    else if (ShelterLook(bot, st, eye, lookYaw, lookPitch))
+        ; // Zombie Shelter: at the resource or building it hits
     else if (st.threat && Len(Center(st.threat) - eye) < 700.0f)
     {
         V3 d = Center(st.threat) - eye; // heard, not seen: watch where it will come from
@@ -2207,6 +2222,8 @@ static void Drive(void* bot, BotState& st, Command& cmd, float dt)
         st.firedSinceReload = false;
         st.nextReload = now + 3.0f;
     }
+    if (ShelterSwing(bot, st, st.yaw, st.pitch))
+        cmd.buttons = (unsigned short)((cmd.buttons | IN_ATTACK) & ~IN_RELOAD); // Zombie Shelter: the axe
 
     // ---- movement relative to where we look
     if (moving)
@@ -4745,6 +4762,8 @@ static void CommandFile()
 
 #include "modes/soccer.inl"
 
+#include "modes/zombie_shelter.inl"
+
 // ---------------------------------------------------------------- the frame hook (every mode)
 // The end of mp.dll's StartFrame (DLL function 0x113f8a80) runs botassist's per-frame work: the console, the command
 // file, and each mode's watcher (each returns at once outside its mode).
@@ -4769,6 +4788,7 @@ static void HookedStartFrame()
         SSWatch();
         PtnWatch();
         BeastWatch();
+        ShelterWatch();
         ItemWatch();
         AsWatch();
         HsWatch();
@@ -5082,6 +5102,7 @@ static void HookedRunPlayerMove(void* fakeclient, const float* angles, float fwd
                 if (cfg.sameTeam && CoopMode())
                     FixCoopTeam(fakeclient, bs);
                 UpdateBuying(fakeclient, bs);
+                ShelterBotThink(fakeclient, bs);
                 if (CoopMode() && MonsterMap())
                 {
                     UpdateRefill(fakeclient, bs);
@@ -5099,7 +5120,7 @@ static void HookedRunPlayerMove(void* fakeclient, const float* angles, float fwd
                 DebugCensus(fakeclient);
                 // take the bots over only in the scenario modes (monsters); elsewhere they play normally
                 bool scenario = CoopMode();
-                bool monsters = scenario && MonsterMap();
+                bool monsters = scenario && (MonsterMap() || ShelterActive()); // the shelter: its tasks even with no zombie around
                 if (scenario && !monsters && Now() >= st.nextScan)
                 {
                     ScanMonsters(fakeclient, st, Eye(fakeclient));

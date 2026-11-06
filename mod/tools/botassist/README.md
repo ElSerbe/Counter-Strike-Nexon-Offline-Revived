@@ -775,6 +775,24 @@ on the hands only (room loadouts came with guns). The rules count each team with
 lets a bot on team 1/2 pass (+0xe10 not 1 nor 3), and the same check then skipped bots outright (IsBot, vfunc 0x21c): its jnz at 0x1143cfa7 is
 NOPed in memory (the function is only the soccer rules'). botassist.log "Soccer:", botassist_debug.log "Soccer bot".
 
+## Zombie Shelter (mode 28) with room bots
+
+`modes/zombie_shelter.inl`, rules `CSOGameRulesSHELTERTeam` (vtable 0x117a1ba8, the event map's 0x117a2d1c; code 0x10836000-0x10846000, the
+buildings and resources 0x10886000-0x10898000). Maps: zsh_deadcity_pve, zsh_dustcity_pve, zsh_hellride_pve, zsh_deadcity_event_pve (and
+zsh_deadcity_pvp, two teams). The whole mode runs in mp.dll; the server has nothing for it. The file's header lists the facts: phases and night
+(rules +0x214 / +0x218 / +0x228), the team storage (+0x27c), what each player carries (+0x14d0) and its limit (+0x1590), sanity (+0x16bc), the
+shelters (+0x16b0, player +0x31be), skill points (player +0x32ee). Wood piles (`zsht_resource`) and rocks (`shelter_team_mineral`) only take hits
+from weapon id 29 (the shelter axe); a teammate's axe hit repairs a building (0x10894e40). The menus' client commands go to rules vfunc 0x24
+(0x108396b0), which reads its arguments from the engine directly, so `ShelterCommand` points g_engfuncs' Cmd_Args/Argv/Argc (slots 87-89) at
+its own for the call: `zsht_warehouse <type> <put 0..5> <take 0..5>` (no distance check) and `zsht_RequestSkillup <0..32>`.
+Bots are driven by the shared monster AI (`Drive`), always on in this mode (`ShelterActive`), with hooks for the mode: `ShelterGoal` (where to
+go when no player ordered them), `ShelterLook` (at what they hit) and `ShelterSwing` (the axe, tapped). By day: gather with the axe, home when
+full, low on sanity (40%) or 45 s before the night, deposit everything, rest to 95% sanity, buy at a `shelter_team_buyzone` with 3500+ money
+(once a day: the shared buying runs there; at spawn only pistols sell), repair team buildings under 80% (one bot in three, or any close by),
+go after the boss (a monster with 20000+ health or taller than 150 units). At night: around the shelter, shooting, repairing what drops under 90%.
+Skill points are spent on random skills the game accepts. The shelter's own entities (`shelter_*`, `zsht_*`) are never targets (`IsIgnored`).
+botassist.log "Shelter:" (state every 15 s, each bot's task every 20 s, deposits, skills, buys, repairs, unreachable resources).
+
 ## Navigation tools (console)
 
 `nav_tools.inl`. `nav_help` lists it all in game. Files: `Bin/botassist_nav/<map>.nav` (with `.bak`, the one before the last save) and `<map>.poi`. The game's .nar files aren't touched.
