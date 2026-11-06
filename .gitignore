@@ -58,3 +58,4 @@ launcher/bin/
 launcher/obj/
 launcher.json
 launcher-check.txt
+mod/server/CSNZ_Server/bin/Data/RemoteServers.json

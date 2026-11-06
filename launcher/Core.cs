@@ -396,7 +396,7 @@ namespace CsnzLauncher
     // ------------------------------------------------------------ the client patches (patches.json, made by tools/release/build_release.py)
     public class PatchList
     {
-        public class Patch { public string file, orig, @new, note; public long offset; public string va; }
+        public class Patch { public string file, orig, @new, note; public long offset; public string va; public List<string> prev = new List<string>(); }
         public class Extra { public string src, dst; public bool overwrite; }
         public string version;
         public List<Patch> patches = new List<Patch>();
@@ -407,7 +407,8 @@ namespace CsnzLauncher
 
     public static class Patcher
     {
-        public enum State { Original, Patched, Different }
+        // Outdated: an older release's bytes at a place whose patch changed since (rewritten by Apply)
+        public enum State { Original, Patched, Different, Outdated }
 
         static byte[] Hex(string s)
         {
@@ -430,6 +431,9 @@ namespace CsnzLauncher
             // patched: the new bytes first, the original ones after them
             if (cur.Take(neu.Length).SequenceEqual(neu) && cur.Skip(neu.Length).SequenceEqual(orig.Skip(neu.Length)))
                 return State.Patched;
+            foreach (var old in (p.prev ?? new List<string>()).Select(Hex))
+                if (cur.Take(old.Length).SequenceEqual(old) && cur.Skip(old.Length).SequenceEqual(orig.Skip(old.Length)))
+                    return State.Outdated;
             return State.Different;
         }
 
@@ -480,7 +484,7 @@ namespace CsnzLauncher
         }
 
         // the game as a whole, for the window
-        public enum GameState { NoMod, Original, Patched, Partly, Mismatch }
+        public enum GameState { NoMod, Original, Patched, Partly, Mismatch, Outdated }
 
         public static GameState Check(string game)
         {
@@ -495,6 +499,8 @@ namespace CsnzLauncher
                 return GameState.Mismatch;
             }
             bool filesIn = list.files.Where(x => x.overwrite).All(x => File.Exists(Path.Combine(bin, x.dst.Replace('/', '\\'))));
+            if (all.Contains(State.Outdated))
+                return GameState.Outdated;
             if (all.All(s => s == State.Patched))
                 return filesIn ? GameState.Patched : GameState.Partly;
             if (all.All(s => s == State.Original))
@@ -518,7 +524,8 @@ namespace CsnzLauncher
                 using (var f = new FileStream(Path.Combine(bin, group.Key), FileMode.Open, FileAccess.ReadWrite))
                     foreach (var p in group)
                     {
-                        if (Check(f, p) != State.Original)
+                        var s = Check(f, p);
+                        if (s != State.Original && s != State.Outdated)
                             continue;
                         var neu = Hex(p.@new);
                         f.Seek(p.offset, SeekOrigin.Begin);
@@ -557,7 +564,7 @@ namespace CsnzLauncher
                 if (kv.Value.All(s => s == State.Original))
                     continue; // untouched already
                 var b = Path.Combine(Paths.BackupBin, file);
-                if (!kv.Value.Contains(State.Patched))
+                if (!kv.Value.Contains(State.Patched) && !kv.Value.Contains(State.Outdated))
                 {
                     // not our bytes: Steam changed this file since the mod's release, an old backup would only break it
                     log($"  {file} isn't patched by this mod (Steam updated it?): left as it is");

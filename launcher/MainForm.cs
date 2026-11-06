@@ -167,6 +167,10 @@ namespace CsnzLauncher
                     gameState.Text = "Game: patched for offline play";
                     gameState.ForeColor = Color.ForestGreen;
                     break;
+                case Patcher.GameState.Outdated:
+                    gameState.Text = "Game: patched by an older release (Patch or Play updates it)";
+                    gameState.ForeColor = Color.DarkOrange;
+                    break;
                 case Patcher.GameState.Partly:
                     gameState.Text = "Game: partly patched";
                     gameState.ForeColor = Color.DarkOrange;
@@ -446,7 +450,7 @@ namespace CsnzLauncher
                 return;
             }
             var st = RefreshGameState();
-            if (st == Patcher.GameState.Original)
+            if (st == Patcher.GameState.Original || st == Patcher.GameState.Outdated)
             {
                 await Run("Patching", () => Patcher.Apply(Game(), Log));
                 return;

@@ -65,6 +65,7 @@ _INIT = 0x2569EF0
 # Developer console (see the console entries in PATCHES)
 _CONSOLE_FALLBACK = 0x23DA56B  # public-buffer executor: call to the whitelisted-cvar fallback
 _CONSOLE_STUB = 0x1D37B20      # 32 int3 bytes between a string and a function
+_PORT_CAVE = 0x1D2B3D0         # inside 59 int3 bytes at 0x1d2b3c5: the game-server socket's port check
 _CBUF_ADDTEXT = 0x23D8710
 _COMPLETION_ON_TEXT = 0x1061AF56    # GameUI: console text changed -> rebuild completion
 _COMPLETION_ON_SUBMIT = 0x10618ED3  # GameUI: command added to history -> rebuild completion
@@ -194,8 +195,28 @@ PATCHES = [
         "hw.dll",
         0x2754F80,
         bytes.fromhex("8b450852ff710489410c668b450c6689410a"),  # mov eax,[ebp+8]; push edx; push [ecx+4]; mov [ecx+0c],eax; mov ax,[ebp+0c]; mov [ecx+0a],ax
-        bytes.fromhex("52ff7104c7410c7f00000166c7410a753290"),  # push edx; push [ecx+4]; mov dword [ecx+0c],127.0.0.1; mov word [ecx+0a],htons(30002); nop
-        "Game-server socket sockaddr forced to 127.0.0.1:30002 (CSNZ_Server); only caller is SocketManager connect 0x2753710",
+        # push edx; push [ecx+4]; mov dword [ecx+0c],127.0.0.1; call the port check below; nop; nop
+        bytes.fromhex("52ff7104c7410c7f000001") + b"\xe8" + _rel32(0x2754F90, _PORT_CAVE) + b"\x90\x90",
+        "Game-server socket: always 127.0.0.1; port 30002 unless a server transfer asks for one of the mod's ports "
+        "(30002-30199, the Steam bridge). Callers: the first connect (port 0 without -lobbyport) and Packet_Transfer",
+    ),
+    (
+        "hw.dll",
+        _PORT_CAVE,
+        b"\xcc" * 31,                       # int3 padding (checked before writing)
+        bytes.fromhex(
+            "668b450c"      # mov ax,[ebp+0c]      the port asked for (network order)
+            "86c4"          # xchg al,ah
+            "663d3275"      # cmp ax,30002
+            "720a"          # jb force
+            "663df775"      # cmp ax,30199
+            "7704"          # ja force
+            "86c4"          # xchg al,ah           back to network order
+            "eb04"          # jmp store
+            "66b87532"      # force: mov ax,htons(30002)
+            "6689410a"      # store: mov [ecx+0a],ax
+            "c3"),          # ret
+        "Game-server socket port check (code cave in int3 padding)",
     ),
     (
         "hw.dll",
@@ -519,6 +540,12 @@ PATCHES += [
 ]
 
 
+# what older releases wrote at a place whose patch changed since: replaced by the current bytes, not an abort
+PREVIOUS = {
+    ("hw.dll", 0x2754F80): [bytes.fromhex("52ff7104c7410c7f00000166c7410a753290")],  # 1.0.x: port always 30002
+}
+
+
 def file_offset(path: Path, va: int) -> int:
     pe = pefile.PE(str(path), fast_load=True)
     return pe.get_offset_from_rva(va - pe.OPTIONAL_HEADER.ImageBase)
@@ -535,11 +562,12 @@ def apply(bin_dir: Path) -> None:
             if cur[:len(new)] == new and cur[len(new):] == orig[len(new):]:
                 print(f"[skip] {name} 0x{va:x} already patched ({note})")
                 continue
-            if cur != orig:
+            older = any(cur[:len(p)] == p and cur[len(p):] == orig[len(p):] for p in PREVIOUS.get((name, va), []))
+            if cur != orig and not older:
                 sys.exit(f"[abort] {name} 0x{va:x}: bytes {cur.hex()} != expected {orig.hex()}")
             f.seek(off)
             f.write(new)
-        print(f"[ok]   {name} 0x{va:x}: {orig.hex()} -> {new.hex()} ({note})")
+        print(f"[{'upd' if older else 'ok'}]  {name} 0x{va:x}: {orig.hex()} -> {new.hex()} ({note})")
     for src, name, overwrite in EXTRA_FILES:
         dst = bin_dir / name
         if dst.exists() and not overwrite:

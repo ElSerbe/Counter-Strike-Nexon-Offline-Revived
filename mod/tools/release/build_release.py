@@ -47,7 +47,8 @@ def patch_list(version: str) -> dict:
         if not src.exists():
             sys.exit(f"missing {src}: the offsets come from the original files")
         out["patches"].append({"file": name, "va": hex(va), "offset": apply_patches.file_offset(src, va),
-                               "orig": orig.hex(), "new": new.hex(), "note": note})
+                               "orig": orig.hex(), "new": new.hex(), "note": note,
+                               "prev": [b.hex() for b in apply_patches.PREVIOUS.get((name, va), [])]})
     for src, name, overwrite in apply_patches.EXTRA_FILES:
         out["files"].append({"src": src.relative_to(MOD).as_posix(), "dst": name, "overwrite": overwrite})
     return out
