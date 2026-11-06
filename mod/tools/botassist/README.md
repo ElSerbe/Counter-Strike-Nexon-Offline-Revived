@@ -742,9 +742,15 @@ down), comes first when in sight within 1800 u. The shared code asks the mode's 
 players, CBasePlayer +0x3310), AI zombies `dummyman` (CDummyMan +0x12c4: 1 walking, else the emotion id 10..26), `dummygoal` / `playergoal`, fever 0x10830bc0, the
 commands `zbtag_motion 1..5` / `sprintON` / `sprintOFF` (ClientCommand 0x1082d960), "I found the zombie" (0x1082e1f0, settled 1.8 s later in 0x10831010: radius
 `**0x11e56a58`, cone cos 0.9, the target's pev->angles against the human's view below -0.8), the emotion's end 0x114d60f0 (no key ends it for a zombie in this mode).
-`DriveZtBot` drives every bot: zombies blend in (the crowd's measured speed, the fever's emotion after a reaction time, calm or panic with smoke and
-sprint, the last stretch to the goal, a poke from behind), humans score what they see (`ZtObserve`) and test, chase or call the find. botassist.log
-"Zombie Tag:", botassist_debug.log "Zombie Tag bot".
+The fever is a row of `resource/ZombieTag/zombiefever` (up to 3 actions of 3 s), the actions are `resource/ZombieTag/ZombieTagAction` (0 nothing, 1 walk, 2 jump,
+3 stop, 4 crouch, 5/6 spin, 7/8 walk in circles, 9 walk backwards, 10..26 emotions; DanceThink 0x1095dab0 keeps 1, 2, 5..9 moving).
+`DriveZtBot` drives every bot: zombies blend in (the crowd's measured speed, each fever action after a reaction time, calm or panic with smoke and
+sprint, the last stretch to the goal, a poke from behind), humans score what they see (`ZtObserve`, per action), shoot a suspect once as a test, chase or
+call the find.
+For every player of the mode (`ZtFrame` and four detours, gated by `g_ztActive`): a zombie player gets the AI zombies' sequences when it stands, walks or
+jumps (`ZtPlayerAnim` from SetAnimation 0x114cced0: zbs_idle1 / zbs_walk / crouch_idle, gaitsequence 0); zombie players don't collide with players
+(solid 0 from PlayerPreThink 0x113f6520 to PlayerPostThink 0x113f6500, and entity_state +0x3e from AddToFullPack 0x113e93b0); humans hold only a Glock
+(`ZtEquipHumans`: RemoveAllItems 0x114c8ac0, GiveNamedItem, GiveAmmo vtable +0x80). botassist.log "Zombie Tag:", botassist_debug.log "Zombie Tag bot".
 
 ## Navigation tools (console)
 

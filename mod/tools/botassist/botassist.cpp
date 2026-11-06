@@ -4304,6 +4304,7 @@ static void GuardZbSkillThinks(DWORD delta)
 }
 
 static void InstallFrameHook(DWORD delta);
+static void InstallZtHooks(DWORD delta); // modes/zombie_tag.inl: what each player looks like, bumps into and carries in mode 37
 
 static void HookBotManager(DWORD delta)
 {
@@ -4320,6 +4321,7 @@ static void HookBotManager(DWORD delta)
     InstallZgDebug(delta);
     InstallZgPlayers(delta);
     InstallFrameHook(delta);
+    InstallZtHooks(delta);
     InstallBeastBotClass(delta);
     InstallAllStarTables(delta);
     InstallZgDropGuard();
@@ -4765,6 +4767,7 @@ static void HookedStartFrame()
         ItemWatch();
         AsWatch();
         HsWatch();
+        ZtFrame();
         NavToolsFrame();
         ZgFrame();
     }
