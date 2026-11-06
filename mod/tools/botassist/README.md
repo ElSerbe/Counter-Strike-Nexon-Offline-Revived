@@ -759,6 +759,19 @@ GiveKnife with the type at +0x2194). The crowbar is the only way to hurt an AI z
 in a cone in front (CDummyMan::TakeDamage 0x1095e7b0: at least 40 a hit, 100 health, the killer pays, 0x1082e9f0). botassist.log "Zombie Tag:",
 botassist_debug.log "Zombie Tag bot".
 
+## Soccer (mode 16) with room bots
+
+`modes/soccer.inl`, rules `CSOGameRulesSoccer` (vtable 0x11964f64, code 0x1143c720-0x11442000; ball and goals 0x114f6000-0x114fd000). Maps: `sc_soccer01`
+(Striker, up to 2 balls) and `sc_cage`. They were in the game but not in the create-room list: for mode 16 GameUI reads MapList.csv's `map_soccer` column
+(table 0x109753c8, mode -> column: 16 -> 54), where only vxl_empty was marked; the server's MapList.csv now marks both.
+Facts (the file's header has them all): balls are `soccerball` (rules +0x268 / +0x26c; +0xd5 in play, +0xd0 holder index, +0xd2 last kicker, +0x158 the
+15 s holding penalty), nets `trgoal` / `ctgoal` (+0xb0 the owner team; the ball in the other team's net scores), attack with the ball charges (+0x20cc)
+and shoots on release (under 1 s normal, after a special shot), attack 2 passes to the teammate most in front, attack without it is the hands' tackle;
+`sc_01`/`sc_02` sprint, `sc_03`/`sc_04`/`sc_05` buy stamina / strength / agility. `DriveSoccerBot`: a goalkeeper per team (3+ players), the nearest player
+to each ball goes for it (humans count), the rest spread ahead in attack and back in defence; with the ball: dribble, dodge, pass when pressed, shoot
+from range (special shots sometimes), never near the penalty; tackles against a holder; sprints for far balls; buys upgrades. `ScFrame` keeps everybody
+on the hands only (room loadouts came with guns). botassist.log "Soccer:", botassist_debug.log "Soccer bot".
+
 ## Navigation tools (console)
 
 `nav_tools.inl`. `nav_help` lists it all in game. Files: `Bin/botassist_nav/<map>.nav` (with `.bak`, the one before the last save) and `<map>.poi`. The game's .nar files aren't touched.

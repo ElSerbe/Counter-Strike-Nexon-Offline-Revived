@@ -4304,6 +4304,7 @@ static void GuardZbSkillThinks(DWORD delta)
 }
 
 static void InstallFrameHook(DWORD delta);
+static void ScFrame();                   // modes/soccer.inl: the hands only in mode 16
 static void InstallZtHooks(DWORD delta); // modes/zombie_tag.inl: what each player looks like, bumps into and carries in mode 37
 
 static void HookBotManager(DWORD delta)
@@ -4740,6 +4741,8 @@ static void CommandFile()
 
 #include "modes/zombie_tag.inl"
 
+#include "modes/soccer.inl"
+
 // ---------------------------------------------------------------- the frame hook (every mode)
 // The end of mp.dll's StartFrame (DLL function 0x113f8a80) runs botassist's per-frame work: the console, the command
 // file, and each mode's watcher (each returns at once outside its mode).
@@ -4768,6 +4771,7 @@ static void HookedStartFrame()
         AsWatch();
         HsWatch();
         ZtFrame();
+        ScFrame();
         NavToolsFrame();
         ZgFrame();
     }
@@ -5174,11 +5178,11 @@ static void HookedRunPlayerMove(void* fakeclient, const float* angles, float fwd
                         ang[2] = 0;
                     }
                 }
-                if (!scenario && GameMode() == MODE_ZTAG)
+                if (!scenario && (GameMode() == MODE_ZTAG || GameMode() == MODE_SOCCER))
                 {
                     float y = aim[1], p = aim[0], f = fwd, sd = side;
                     unsigned short bt = buttons;
-                    if (DriveZtBot(fakeclient, y, p, f, sd, bt))
+                    if (GameMode() == MODE_ZTAG ? DriveZtBot(fakeclient, y, p, f, sd, bt) : DriveSoccerBot(fakeclient, y, p, f, sd, bt))
                     {
                         aim[0] = p;
                         aim[1] = y;
