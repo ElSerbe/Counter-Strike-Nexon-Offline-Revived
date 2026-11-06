@@ -4,7 +4,7 @@
 	"Port": "30002",
 	"TCPSendBufferSize": 131072,
 	"MaxPlayers": 100,
-	"WelcomeMessage": "https://discord.gg/EvUAY6D",
+	"WelcomeMessage": "",
 	"RestartOnCrash": false,
 	"InventorySlotMax": 4000,
 	"CheckClientBuild": false,
@@ -424,10 +424,10 @@
 	"Notices": {
 		"1": {
 			"Type": 0,
-			"Name": "Server information",
-			"Description": "Welcome to the CSO server. Report about bugs in discord: https://discord.gg/EvUAY6D",
-			"StartDate": 0,
-			"EndDate": 0
+			"Name": "Counter-Strike Nexon: Offline Revived",
+			"Description": "Welcome to Counter-Strike Nexon: Offline Revived. Report bugs and get the news on Discord: https://discord.gg/fjxubwyhYv\n\nCredits:\n- Local server: CSNZ_Server by Jusic, Hardee, NekoMeow, Smilex_Gamer and xRiseless, based on Ochii's CSO2 server (github.com/JusicP/CSNZ_Server). Thanks to them for making it!\n- Offline port, bot AI and game modes: ItsYuri",
+			"StartDate": 1793923200,
+			"EndDate": 2082758400
 		}
 	},
 	"GameMatch": {

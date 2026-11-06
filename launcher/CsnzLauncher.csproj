@@ -14,7 +14,7 @@
     <Version>1.0.0</Version>
     <Product>Counter-Strike Nexon Offline Revived</Product>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <ApplicationIcon></ApplicationIcon>
+    <ApplicationIcon>app.ico</ApplicationIcon>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <DebugType>none</DebugType>
   </PropertyGroup>

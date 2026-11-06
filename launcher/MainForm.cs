@@ -21,6 +21,7 @@ namespace CsnzLauncher
         readonly Label gameState = new Label { AutoSize = true, Font = new Font("Segoe UI", 9, FontStyle.Bold) };
         readonly LinkLabel getGame = new LinkLabel { Text = "Not installed? Get it free on Steam", AutoSize = true, Visible = false };
         readonly TextBox logBox = new TextBox { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, Font = new Font("Consolas", 9) };
+        const string DiscordUrl = "https://discord.gg/fjxubwyhYv";
         ReleaseInfo latest;
         bool busy;
 
@@ -30,9 +31,13 @@ namespace CsnzLauncher
             ClientSize = new Size(720, 460);
             MinimumSize = new Size(600, 380);
             StartPosition = FormStartPosition.CenterScreen;
+            try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
             Font = new Font("Segoe UI", 9);
 
             var title = new Label { Text = "Counter-Strike Nexon: Offline Revived", Font = new Font("Segoe UI", 15, FontStyle.Bold), AutoSize = true, Location = new Point(14, 12) };
+            var credits = new LinkLabel { Text = "Offline port by ItsYuri  ·  Local server: CSNZ_Server by Jusic, Hardee, NekoMeow, Smilex_Gamer and xRiseless  ·  Discord", AutoSize = true, Location = new Point(16, 40), ForeColor = SystemColors.GrayText };
+            credits.LinkArea = new LinkArea(credits.Text.Length - 7, 7);
+            credits.LinkClicked += (s, e) => Process.Start(DiscordUrl);
             var gameLabel = new Label { Text = "Game folder (Steam's CSNZ):", AutoSize = true, Location = new Point(16, 58) };
             gameBox.SetBounds(16, 78, 560, 24);
             gameBox.Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Right;
@@ -47,7 +52,7 @@ namespace CsnzLauncher
             moreButton.Location = new Point(516, 160);
             logBox.SetBounds(16, 206, 688, 238);
             logBox.Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Right | AnchorStyles.Bottom;
-            Controls.AddRange(new Control[] { title, gameLabel, gameBox, browse, gameState, getGame, versionLabel, updateButton, playButton, patchButton, moreButton, logBox });
+            Controls.AddRange(new Control[] { title, credits, gameLabel, gameBox, browse, gameState, getGame, versionLabel, updateButton, playButton, patchButton, moreButton, logBox });
 
             var more = new ContextMenuStrip();
             more.Items.Add("Export shop and profile pictures from the game (Python)", null, (s, e) => _ = Run("Exporting pictures", () => Assets.Export(Game(), Log)));
@@ -60,6 +65,7 @@ namespace CsnzLauncher
             more.Items.Add("GitHub token...", null, (s, e) => AskToken());
             more.Items.Add("Open the mod's folder", null, (s, e) => Process.Start("explorer.exe", "\"" + Paths.Mod + "\""));
             more.Items.Add("Open the project on GitHub", null, (s, e) => Process.Start(GitHub.PageUrl));
+            more.Items.Add("Join the Discord", null, (s, e) => Process.Start(DiscordUrl));
             moreButton.Click += (s, e) => more.Show(moreButton, new Point(0, moreButton.Height));
 
             browse.Click += (s, e) => BrowseGame();
