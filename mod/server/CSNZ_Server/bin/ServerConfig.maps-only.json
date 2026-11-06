@@ -425,7 +425,7 @@
 		"1": {
 			"Type": 0,
 			"Name": "Counter-Strike Nexon: Offline Revived",
-			"Description": "Welcome to Counter-Strike Nexon: Offline Revived. Report bugs and get the news on Discord: https://discord.gg/fjxubwyhYv\n\nCredits:\n- Local server: CSNZ_Server by Jusic, Hardee, NekoMeow, Smilex_Gamer and xRiseless, based on Ochii's CSO2 server (github.com/JusicP/CSNZ_Server). Thanks to them for making it!\n- Offline port, bot AI and game modes: ItsYuri",
+			"Description": "Welcome to Counter-Strike Nexon: Offline Revived. Report bugs and get the news on Discord: https://discord.gg/fjxubwyhYv\n\nCredits:\n- Local server: CSNZ_Server by Jusic, Hardee, NekoMeow, Smilex_Gamer and xRiseless, based on Ochii's CSO2 server (github.com/JusicP/CSNZ_Server). Thanks to them for making it!\n- Offline port and rework: ItsYuri, with bot AI, game modes, items, shop, missions, gameplay, new features and quality of life",
 			"StartDate": 1793923200,
 			"EndDate": 2082758400
 		}

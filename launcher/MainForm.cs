@@ -35,7 +35,7 @@ namespace CsnzLauncher
             Font = new Font("Segoe UI", 9);
 
             var title = new Label { Text = "Counter-Strike Nexon: Offline Revived", Font = new Font("Segoe UI", 15, FontStyle.Bold), AutoSize = true, Location = new Point(14, 12) };
-            var credits = new LinkLabel { Text = "Offline port by ItsYuri  ·  Local server: CSNZ_Server by Jusic, Hardee, NekoMeow, Smilex_Gamer and xRiseless  ·  Discord", AutoSize = true, Location = new Point(16, 40), ForeColor = SystemColors.GrayText };
+            var credits = new LinkLabel { Text = "Offline port and rework by ItsYuri  ·  Local server: CSNZ_Server by Jusic, Hardee, NekoMeow, Smilex_Gamer and xRiseless  ·  Discord", AutoSize = true, Location = new Point(16, 40), ForeColor = SystemColors.GrayText };
             credits.LinkArea = new LinkArea(credits.Text.Length - 7, 7);
             credits.LinkClicked += (s, e) => Process.Start(DiscordUrl);
             var gameLabel = new Label { Text = "Game folder (Steam's CSNZ):", AutoSize = true, Location = new Point(16, 58) };

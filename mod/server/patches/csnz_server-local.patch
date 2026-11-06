@@ -44071,7 +44071,7 @@ index 0000000..13bf146
 + C:/Users/itsyu/AppData/Local/Microsoft/WinGet/Packages/BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/mingw64/x86_64-w64-mingw32/include/io.h
 diff --git a/src/build/CMakeFiles/PROJECTNAME.dir/manager/usermanager.cpp.obj b/src/build/CMakeFiles/PROJECTNAME.dir/manager/usermanager.cpp.obj
 new file mode 100644
-index 0000000..63b18bc
+index 0000000..f6d16ca
 Binary files /dev/null and b/src/build/CMakeFiles/PROJECTNAME.dir/manager/usermanager.cpp.obj differ
 diff --git a/src/build/CMakeFiles/PROJECTNAME.dir/manager/usermanager.cpp.obj.d b/src/build/CMakeFiles/PROJECTNAME.dir/manager/usermanager.cpp.obj.d
 new file mode 100644
@@ -45072,7 +45072,7 @@ index 0000000..fd0e8bd
 + C:/Users/itsyu/AppData/Local/Microsoft/WinGet/Packages/BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/mingw64/include/c++/16.2.0/algorithm
 diff --git a/src/build/CMakeFiles/PROJECTNAME.dir/objects.a b/src/build/CMakeFiles/PROJECTNAME.dir/objects.a
 new file mode 100644
-index 0000000..4409136
+index 0000000..4b08694
 Binary files /dev/null and b/src/build/CMakeFiles/PROJECTNAME.dir/objects.a differ
 diff --git a/src/build/CMakeFiles/PROJECTNAME.dir/objects1.rsp b/src/build/CMakeFiles/PROJECTNAME.dir/objects1.rsp
 new file mode 100644
@@ -46359,7 +46359,7 @@ index 0000000..be47a5f
 + D:/COSASA~1/PROYEC~1/COUNTE~1/mod/server/src-repo/src/./interface/izsriftmanager.h
 diff --git a/src/build/CMakeFiles/PROJECTNAME.dir/serverconfig.cpp.obj b/src/build/CMakeFiles/PROJECTNAME.dir/serverconfig.cpp.obj
 new file mode 100644
-index 0000000..2e11bdf
+index 0000000..1853ba0
 Binary files /dev/null and b/src/build/CMakeFiles/PROJECTNAME.dir/serverconfig.cpp.obj differ
 diff --git a/src/build/CMakeFiles/PROJECTNAME.dir/serverconfig.cpp.obj.d b/src/build/CMakeFiles/PROJECTNAME.dir/serverconfig.cpp.obj.d
 new file mode 100644
@@ -128008,7 +128008,7 @@ index 0e1d7d2..a6efa65 100644
  
  	// clan related
 diff --git a/src/manager/usermanager.cpp b/src/manager/usermanager.cpp
-index b426874..042d451 100644
+index b426874..deeebee 100644
 --- a/src/manager/usermanager.cpp
 +++ b/src/manager/usermanager.cpp
 @@ -1,3 +1,6 @@
@@ -128039,7 +128039,7 @@ index b426874..042d451 100644
  	if (g_UserDatabase.IsHWIDBanned(hwid))
  	{
  		Logger().Info("Client (%s) disconnected from the server due to banned HWID\n", socket->GetIP().c_str());
-@@ -171,6 +181,74 @@ bool CUserManager::OnLoginPacket(CReceivePacket* msg, IExtendedSocket* socket)
+@@ -171,6 +181,76 @@ bool CUserManager::OnLoginPacket(CReceivePacket* msg, IExtendedSocket* socket)
  	return true;
  }
  
@@ -128096,7 +128096,9 @@ index b426874..042d451 100644
 +			g_pServerInstance->DisconnectClient(oldSocket);
 +		}
 +
++	m_bTransferLogin = true;
 +	int result = LoginUser(socket, account->userName, account->password);
++	m_bTransferLogin = false;
 +	Logger().Info("TransferLogin: '%s' %s (code %d)\n", userName.c_str(), result == LOGIN_OK ? "logged in" : "failed", result);
 +	if (result != LOGIN_OK)
 +		g_pServerInstance->DisconnectClient(socket);
@@ -128114,7 +128116,7 @@ index b426874..042d451 100644
  bool CUserManager::OnUdpPacket(CReceivePacket* msg, IExtendedSocket* socket)
  {
  	LOG_PACKET;
-@@ -316,7 +394,7 @@ bool CUserManager::OnVersionPacket(CReceivePacket* msg, IExtendedSocket* socket)
+@@ -316,7 +396,7 @@ bool CUserManager::OnVersionPacket(CReceivePacket* msg, IExtendedSocket* socket)
  		GuestData_s& data = socket->GetGuestData();
  		if (!data.isGuest)
  			g_PacketManager.SendVersion(socket, 0);
@@ -128123,12 +128125,12 @@ index b426874..042d451 100644
  			SendGuestUserPacket(socket);
  
  		data.isGuest = true;
-@@ -627,7 +705,253 @@ void CUserManager::SendGuestUserPacket(IExtendedSocket* socket)
+@@ -627,7 +707,253 @@ void CUserManager::SendGuestUserPacket(IExtendedSocket* socket)
  {
  	g_PacketManager.SendUMsgNoticeMessageInChat(socket, OBFUSCATE("Welcome to the CSN server. Enter /login <username> <password> to login to your account."));
  	g_PacketManager.SendUMsgNoticeMessageInChat(socket, OBFUSCATE("If you don't have an account enter /register <username> <password>"));
 -	g_PacketManager.SendUMsgNoticeMessageInChat(socket, OBFUSCATE("Server developers: Jusic, Hardee, NekoMeow, Smilex_Gamer, xRiseless. Our Discord: https://discord.gg/EvUAY6D"));
-+	g_PacketManager.SendUMsgNoticeMessageInChat(socket, OBFUSCATE("Server by Jusic, Hardee, NekoMeow, Smilex_Gamer, xRiseless. Offline port by ItsYuri. Discord: https://discord.gg/fjxubwyhYv"));
++	g_PacketManager.SendUMsgNoticeMessageInChat(socket, OBFUSCATE("Server by Jusic, Hardee, NekoMeow, Smilex_Gamer, xRiseless. Offline port and rework by ItsYuri. Discord: https://discord.gg/fjxubwyhYv"));
 +}
 +
 +/**
@@ -128378,27 +128380,49 @@ index b426874..042d451 100644
  }
  
  void CUserManager::SendLoginPacket(IUser* user, const CUserCharacter& character)
-@@ -659,7 +983,9 @@ void CUserManager::SendLoginPacket(IUser* user, const CUserCharacter& character)
+@@ -654,12 +980,19 @@ void CUserManager::SendLoginPacket(IUser* user, const CUserCharacter& character)
+ 	g_PacketManager.SendGameMatchUnk(socket);
+ 	g_PacketManager.SendGameMatchUnk9(socket);
  
- 	g_PacketManager.SendEventUnk(socket);
+-	if (g_pServerConfig->mainMenuSkinEvent > 0)
++	// offline build: after a server transfer the client keeps its home screen; these packets add to it (a second
++	// "Training Ground" card), so they're only sent on the first login
++	bool transfer = m_bTransferLogin;
++	if (!transfer && g_pServerConfig->mainMenuSkinEvent > 0)
+ 		g_PacketManager.SendEventMainMenuSkin(socket, g_pServerConfig->mainMenuSkinEvent);
+ 
+-	g_PacketManager.SendEventUnk(socket);
++	if (!transfer)
++		g_PacketManager.SendEventUnk(socket);
  
 -	g_PacketManager.SendEventAdd(socket, g_pServerConfig->activeMiniGamesFlag);
 +	// offline build: event 13 shows the lobby's Mileage Bingo icon (GameUI checks IsEventActive(13) before its
 +	// "MileageBingoBtn" command); the bingo itself is CBingoManager, played with Bingo Tickets
-+	g_PacketManager.SendEventAdd(socket, g_pServerConfig->activeMiniGamesFlag | kEventFlag_Bingo_NEW);
++	if (!transfer)
++		g_PacketManager.SendEventAdd(socket, g_pServerConfig->activeMiniGamesFlag | kEventFlag_Bingo_NEW);
  
  	if (g_pServerConfig->activeMiniGamesFlag & kEventFlag_WeaponRelease)
  		g_MiniGameManager.SendWeaponReleaseUpdate(user);
-@@ -673,7 +999,7 @@ void CUserManager::SendLoginPacket(IUser* user, const CUserCharacter& character)
+@@ -673,11 +1006,14 @@ void CUserManager::SendLoginPacket(IUser* user, const CUserCharacter& character)
  	g_PacketManager.SendShopPopularProducts(socket, g_ShopManager.GetPopularProducts());
  
  	// CN: 欢迎来到CSN服务器! 我们的服务器是非商业性的, 不要相信任何人说的售卖CSOL私服的信息.\n官方Discord: https://discord.gg/EvUAY6D \n
 -	const char* text = OBFUSCATE("EN: Welcome to the CSN server! The project is non-commercial. Don't trust people trying to sell you a server.\nServer developer Discord: https://discord.gg/EvUAY6D \n");
-+	const char* text = OBFUSCATE("Welcome to Counter-Strike Nexon: Offline Revived!\n\nThe local server is CSNZ_Server, made by Jusic, Hardee, NekoMeow, Smilex_Gamer and xRiseless (based on Ochii's CSO2 server). Thank you for making it!\nOffline port, bots and game modes by ItsYuri.\n\nDiscord: https://discord.gg/fjxubwyhYv");
- 	g_PacketManager.SendUMsgNoticeMsgBoxToUuid(socket, text);
+-	g_PacketManager.SendUMsgNoticeMsgBoxToUuid(socket, text);
++	if (!transfer)
++	{
++		const char* text = OBFUSCATE("Welcome to Counter-Strike Nexon: Offline Revived!\n\nThe local server is CSNZ_Server, made by Jusic, Hardee, NekoMeow, Smilex_Gamer and xRiseless (based on Ochii's CSO2 server). Thank you for making it!\nOffline port and rework by ItsYuri: bot AI, game modes, items, shop, missions, gameplay, new features and quality of life.\n\nDiscord: https://discord.gg/fjxubwyhYv");
++		g_PacketManager.SendUMsgNoticeMsgBoxToUuid(socket, text);
  
- 	if (!g_pServerConfig->welcomeMessage.empty())
-@@ -877,8 +1203,10 @@ bool CUserManager::OnCharacterPacket(CReceivePacket* msg, IExtendedSocket* socke
+-	if (!g_pServerConfig->welcomeMessage.empty())
+-		g_PacketManager.SendUMsgNoticeMsgBoxToUuid(socket, g_pServerConfig->welcomeMessage);
++		if (!g_pServerConfig->welcomeMessage.empty())
++			g_PacketManager.SendUMsgNoticeMsgBoxToUuid(socket, g_pServerConfig->welcomeMessage);
++	}
+ 
+ 	g_ChannelManager.JoinChannel(user, g_ChannelManager.channelServers[0]->GetID(), g_ChannelManager.channelServers[0]->GetChannels()[0]->GetID(), false);
+ 
+@@ -877,8 +1213,10 @@ bool CUserManager::OnCharacterPacket(CReceivePacket* msg, IExtendedSocket* socke
  	g_ItemManager.OnUserLogin(user);
  	g_ClanManager.OnUserLogin(user);
  	g_QuestManager.OnUserLogin(user);
@@ -128409,7 +128433,7 @@ index b426874..042d451 100644
  
  	return true;
  }
-@@ -989,6 +1317,15 @@ void CUserManager::OnSecondTick(time_t curTime)
+@@ -989,6 +1327,15 @@ void CUserManager::OnSecondTick(time_t curTime)
  {
  	for (auto u : m_Users)
  		u->OnTick();
@@ -128425,7 +128449,7 @@ index b426874..042d451 100644
  }
  
  void CUserManager::SendNoticeMessageToAll(const string& msg)
-@@ -1080,8 +1417,10 @@ int CUserManager::LoginUser(IExtendedSocket* socket, const string& userName, con
+@@ -1080,8 +1427,10 @@ int CUserManager::LoginUser(IExtendedSocket* socket, const string& userName, con
  		g_ItemManager.OnUserLogin(newUser);
  		g_ClanManager.OnUserLogin(newUser);
  		g_QuestManager.OnUserLogin(newUser);
@@ -128436,7 +128460,7 @@ index b426874..042d451 100644
  	}
  
  	return LOGIN_OK;
-@@ -1285,7 +1624,7 @@ bool CUserManager::OnUserSurveyPacket(CReceivePacket* msg, IExtendedSocket* sock
+@@ -1285,7 +1634,7 @@ bool CUserManager::OnUserSurveyPacket(CReceivePacket* msg, IExtendedSocket* sock
  
  	IUser* user = GetUserBySocket(socket);
  	if (user == NULL)
@@ -128446,7 +128470,7 @@ index b426874..042d451 100644
  	int type = msg->ReadUInt8();
  	switch (type)
 diff --git a/src/manager/usermanager.h b/src/manager/usermanager.h
-index 3054001..ab40a1d 100644
+index 3054001..39e52cb 100644
 --- a/src/manager/usermanager.h
 +++ b/src/manager/usermanager.h
 @@ -18,6 +18,8 @@ public:
@@ -128466,9 +128490,11 @@ index 3054001..ab40a1d 100644
  	void DisconnectUser(IUser* user);
  	void DisconnectAllFromServer();
  	IUser* AddUser(IExtendedSocket* socket, int userID, const std::string& userName);
-@@ -66,6 +69,9 @@ public:
+@@ -65,7 +68,11 @@ public:
+ 	void SendCrypt(IExtendedSocket* socket);
  
  private:
++	bool m_bTransferLogin = false; // offline build: LoginUser called by OnTransferLoginPacket
  	void SendGuestUserPacket(IExtendedSocket* socket);
 +	bool OnCharacterSelectAnswer(CReceivePacket* msg, IExtendedSocket* socket);
 +	bool SendCharacterDelete(IExtendedSocket* socket);
@@ -131427,7 +131453,7 @@ index 69a1cd9..823c6f8 100644
  	int GetDefaultZbRespawn(int gameModeId);
  	int GetDefaultZbBalance(int gameModeId);
 diff --git a/src/serverconfig.cpp b/src/serverconfig.cpp
-index d2a28c1..f70b038 100644
+index d2a28c1..6dd8b0b 100644
 --- a/src/serverconfig.cpp
 +++ b/src/serverconfig.cpp
 @@ -53,7 +53,7 @@ const char* defaultServerConfig = R"(
@@ -131444,7 +131470,7 @@ index d2a28c1..f70b038 100644
  			"Type": 0,
  			"Name": "Server information",
 -			"Description": "Welcome to the CSO server. Report about bugs in discord: https://discord.gg/EvUAY6D",
-+			"Description": "Welcome to Counter-Strike Nexon: Offline Revived. Report bugs and get the news on Discord: https://discord.gg/fjxubwyhYv\n\nCredits:\n- Local server: CSNZ_Server by Jusic, Hardee, NekoMeow, Smilex_Gamer and xRiseless, based on Ochii's CSO2 server (github.com/JusicP/CSNZ_Server). Thanks to them for making it!\n- Offline port, bot AI and game modes: ItsYuri",
++			"Description": "Welcome to Counter-Strike Nexon: Offline Revived. Report bugs and get the news on Discord: https://discord.gg/fjxubwyhYv\n\nCredits:\n- Local server: CSNZ_Server by Jusic, Hardee, NekoMeow, Smilex_Gamer and xRiseless, based on Ochii's CSO2 server (github.com/JusicP/CSNZ_Server). Thanks to them for making it!\n- Offline port and rework: ItsYuri, with bot AI, game modes, items, shop, missions, gameplay, new features and quality of life",
  			"StartDate": 0,
  			"EndDate": 0
  		}
