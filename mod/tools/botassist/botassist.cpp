@@ -4305,6 +4305,7 @@ static void GuardZbSkillThinks(DWORD delta)
 
 static void InstallFrameHook(DWORD delta);
 static void ScFrame();                   // modes/soccer.inl: the hands only in mode 16
+static void InstallScHooks(DWORD delta); // modes/soccer.inl: bots count as their team's players in mode 16
 static void InstallZtHooks(DWORD delta); // modes/zombie_tag.inl: what each player looks like, bumps into and carries in mode 37
 
 static void HookBotManager(DWORD delta)
@@ -4323,6 +4324,7 @@ static void HookBotManager(DWORD delta)
     InstallZgPlayers(delta);
     InstallFrameHook(delta);
     InstallZtHooks(delta);
+    InstallScHooks(delta);
     InstallBeastBotClass(delta);
     InstallAllStarTables(delta);
     InstallZgDropGuard();

@@ -770,7 +770,9 @@ and shoots on release (under 1 s normal, after a special shot), attack 2 passes 
 `sc_01`/`sc_02` sprint, `sc_03`/`sc_04`/`sc_05` buy stamina / strength / agility. `DriveSoccerBot`: a goalkeeper per team (3+ players), the nearest player
 to each ball goes for it (humans count), the rest spread ahead in attack and back in defence; with the ball: dribble, dodge, pass when pressed, shoot
 from range (special shots sometimes), never near the penalty; tackles against a holder; sprints for far balls; buys upgrades. `ScFrame` keeps everybody
-on the hands only (room loadouts came with guns). botassist.log "Soccer:", botassist_debug.log "Soccer bot".
+on the hands only (room loadouts came with guns). The rules count each team with 0x114bd6a0, which wants a room user (engine interface
+0x121d3cf0 vfunc 100) that bots lack: a team of bots was empty and the match ended when the countdown did. `ScHookedCounts` (detour, gated to mode 16)
+lets a bot on team 1/2 pass (+0xe10 not 1 nor 3). botassist.log "Soccer:", botassist_debug.log "Soccer bot".
 
 ## Navigation tools (console)
 

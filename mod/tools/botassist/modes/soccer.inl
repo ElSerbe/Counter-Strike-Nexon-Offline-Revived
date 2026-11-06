@@ -404,13 +404,60 @@ static void ScWithBall(void* bot, ScBot& z, const ScBall& ball, int team, V3 me,
     z.doing = foe ? "dribbling past a defender" : "dribbling to the goal";
 }
 
+// ---------------------------------------------------------------- the bots count as players of their team
+// The rules count each team's players with 0x114bd6a0 (the win check 0x1143cda0, 0x100 in the rules' table, and the pass target 0x114f95a0).
+// It asks the engine for the player's room user (interface 0x121d3cf0, vfunc 100, pev +0x2d8), which a bot doesn't have: a team of bots
+// counted as empty and the other team won when the countdown ended. In this mode a bot on team 1 or 2 now passes the same way a player
+// with a room user does (+0xe10 not 1 nor 3).
+static const DWORD MP_SC_COUNTS = 0x114bd6a0;
+static const int SC_PL_JOIN_STATE = 0xe10;
+typedef int(__fastcall* ScCountsFn)(void* player, void* edx);
+static ScCountsFn g_scCounts;
+static bool g_scActive = false; // mode 16 with its rules, set each frame by ScFrame
+
+static int ScBotCounts(unsigned char* pl)
+{
+    __try
+    {
+        unsigned char* pev = *(unsigned char**)(pl + 8);
+        if (!pev)
+            return 0;
+        int flags = F<int>(pev, EV_FLAGS);
+        int team = *(int*)(pl + SC_TEAM), join = *(int*)(pl + SC_PL_JOIN_STATE);
+        return (flags & FL_FAKECLIENT) && flags >= 0 && (team == 1 || team == 2) && join != 1 && join != 3;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        return 0;
+    }
+}
+static int __fastcall ScHookedCounts(void* pl, void* edx)
+{
+    int r = g_scCounts(pl, edx);
+    if ((r & 0xff) || !g_scActive || !pl || !ScBotCounts((unsigned char*)pl))
+        return r;
+    static int reports = 0;
+    if (reports++ < 3)
+        Log("Soccer: a bot counted as a player of its team (the game's check said no)");
+    return 1;
+}
+static void InstallScHooks(DWORD delta)
+{
+    unsigned char* fn = (unsigned char*)(MP_SC_COUNTS + delta);
+    static const unsigned char code[] = { 0x56, 0x57, 0x8b, 0xf1, 0xff, 0x15 }; // push esi; push edi; mov esi, ecx; call [abs]
+    if (!g_scCounts && Readable(fn, 10) && !memcmp(fn, code, sizeof(code)))
+        g_scCounts = (ScCountsFn)DetourCdecl(fn, 10, (void*)ScHookedCounts);
+    Log("Soccer: team count hook %s", g_scCounts ? "installed" : "NOT installed (unexpected code)");
+}
+
 // ---------------------------------------------------------------- every player: the hands and nothing else
 // Soccer is played with the hands only (the knife, which the mode turns into CKnifeHelperSoccer), but room loadouts came on top, and with
 // a gun in hand the attack key fires it. Anybody holding more loses it all and gets the knife back (ZtHandleSet / ZtStripToKnife, the same
 // as in Zombie Tag: the slot layout and the functions are the player's, not the mode's).
 static void ScFrame()
 {
-    if (!g_mpDelta || GameMode() != MODE_SOCCER || g_edictToPrivate < 0 || !ScRules())
+    g_scActive = g_mpDelta && GameMode() == MODE_SOCCER && g_edictToPrivate >= 0 && ScRules() != nullptr;
+    if (!g_scActive)
         return;
     static float nextTry[65];
     float now = Now();
