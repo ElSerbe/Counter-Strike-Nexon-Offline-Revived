@@ -20,6 +20,8 @@ namespace CsnzLauncher
         readonly FlatButton updateButton = new FlatButton { Text = "Check for updates" };
         readonly FlatButton playButton = new FlatButton { Text = "Play", Primary = true, Sub = "Starts the local server and the game" };
         readonly FlatButton moreButton = new FlatButton { Text = "More  \u25BE" };
+        readonly FlatButton logsButton = new FlatButton { Text = "Logs  \u25BE" };
+        readonly Toggle detailBox = new Toggle { Text = "Detailed logs: the server and the Steam bridge log every packet (for bug reports)" };
         readonly FlatButton patchButton = new FlatButton { Text = "Patch game" };
         readonly FlatButton browseButton = new FlatButton { Text = "Browse" };
         readonly Toggle onlineBox = new Toggle { Text = "Online play through Steam: other players' rooms in Game lobby, yours in theirs" };
@@ -48,7 +50,7 @@ namespace CsnzLauncher
             header.LogoClicked += (s, e) => Process.Start(DiscordUrl);
 
             // the game card
-            gameCard.SetBounds(24, 222, 600, 178);
+            gameCard.SetBounds(24, 222, 600, 206);
             var folderLabel = new Label { Text = "Steam's Counter-Strike Nexon folder", AutoSize = true, ForeColor = Theme.Muted, Location = new Point(18, 42) };
             gameBox.SetBounds(18, 62, 466, 26);
             Theme.Dark(gameBox);
@@ -64,31 +66,49 @@ namespace CsnzLauncher
             versionLabel.ForeColor = Theme.Muted;
             onlineBox.SetBounds(16, 144, 570, 26);
             onlineBox.BackColor = Theme.Panel;
+            detailBox.SetBounds(16, 172, 570, 26);
+            detailBox.BackColor = Theme.Panel;
             foreach (Control c in new Control[] { folderLabel, gameState, getGame, versionLabel })
                 c.BackColor = Theme.Panel;
-            gameCard.Controls.AddRange(new Control[] { folderLabel, gameBox, browseButton, gameState, getGame, versionLabel, onlineBox });
+            gameCard.Controls.AddRange(new Control[] { folderLabel, gameBox, browseButton, gameState, getGame, versionLabel, onlineBox, detailBox });
 
             // the actions
-            playButton.SetBounds(648, 222, 308, 88);
+            playButton.SetBounds(648, 222, 308, 100);
             playButton.Font = Theme.Display(34);
-            updateButton.SetBounds(648, 318, 150, 38);
-            patchButton.SetBounds(806, 318, 150, 38);
-            moreButton.SetBounds(648, 364, 308, 36);
-            foreach (var bt in new[] { updateButton, patchButton, moreButton })
+            updateButton.SetBounds(648, 330, 150, 44);
+            patchButton.SetBounds(806, 330, 150, 44);
+            moreButton.SetBounds(648, 384, 150, 44);
+            logsButton.SetBounds(806, 384, 150, 44);
+            foreach (var bt in new[] { updateButton, patchButton, moreButton, logsButton })
                 bt.Font = Theme.Display(16);
 
             // the log
-            logCard.SetBounds(24, 412, 932, 206);
-            logBox.SetBounds(16, 40, 900, 152);
+            logCard.SetBounds(24, 440, 932, 178);
+            logBox.SetBounds(16, 40, 900, 124);
             Theme.Dark(logBox);
             logBox.BorderStyle = BorderStyle.None;
             logBox.BackColor = Theme.Panel;
             logBox.ForeColor = Color.FromArgb(170, 184, 184);
             logCard.Controls.Add(logBox);
 
-            Controls.AddRange(new Control[] { gameCard, playButton, updateButton, patchButton, moreButton, logCard, header });
+            Controls.AddRange(new Control[] { gameCard, playButton, updateButton, patchButton, moreButton, logsButton, logCard, header });
             onlineBox.Checked = settings.OnlinePlay;
             onlineBox.CheckedChanged += (s, e) => { settings.OnlinePlay = onlineBox.Checked; settings.Save(); onlineBox.Invalidate(); };
+            detailBox.Checked = settings.DetailedLogs;
+            detailBox.CheckedChanged += (s, e) =>
+            {
+                settings.DetailedLogs = detailBox.Checked;
+                settings.Save();
+                detailBox.Invalidate();
+                Log(detailBox.Checked ? "Detailed logs on: the next Play logs every packet (bigger log files)." : "Detailed logs off.");
+            };
+
+            // the last session's logs: launcher, Steam bridge, server and game in one text
+            var logsMenu = new ContextMenuStrip { Renderer = new DarkMenuRenderer(), BackColor = Theme.Panel, ForeColor = Theme.Text, ShowImageMargin = false, Font = Theme.UiFont(13) };
+            logsMenu.Items.Add("Copy the last session's logs", null, (s, e) => CopyLogs());
+            logsMenu.Items.Add("Open the last session's logs", null, (s, e) => OpenLogs());
+            logsMenu.Items.Add("Open the logs folder", null, (s, e) => { Directory.CreateDirectory(Paths.LogDir); Process.Start("explorer.exe", "\"" + Paths.LogDir + "\""); });
+            logsButton.Click += (s, e) => logsMenu.Show(logsButton, new Point(0, logsButton.Height));
 
             var more = new ContextMenuStrip { Renderer = new DarkMenuRenderer(), BackColor = Theme.Panel, ForeColor = Theme.Text, ShowImageMargin = false, Font = Theme.UiFont(13) };
             more.Items.Add("Create a desktop shortcut that starts the game", null, (s, e) => CreateShortcut());
@@ -99,7 +119,6 @@ namespace CsnzLauncher
             more.Items.Add("Add the hosts block", null, (s, e) => _ = Run("hosts", () => Hosts.Run("add", Log)));
             more.Items.Add("Remove the hosts block", null, (s, e) => _ = Run("hosts", () => Hosts.Run("remove", Log)));
             more.Items.Add(new ToolStripSeparator());
-            more.Items.Add("GitHub token...", null, (s, e) => AskToken());
             more.Items.Add("Open the mod's folder", null, (s, e) => Process.Start("explorer.exe", "\"" + Paths.Mod + "\""));
             more.Items.Add("Open the project on GitHub", null, (s, e) => Process.Start(GitHub.PageUrl));
             more.Items.Add("Join the Discord", null, (s, e) => Process.Start(DiscordUrl));
@@ -335,24 +354,39 @@ namespace CsnzLauncher
             }
         }
 
-        void AskToken()
+        // ------------------------------------------------------------ logs
+        string BuildLogs()
         {
-            using (var f = new Form { Text = "GitHub token", ClientSize = new Size(480, 150), FormBorderStyle = FormBorderStyle.FixedDialog, StartPosition = FormStartPosition.CenterParent, MinimizeBox = false, MaximizeBox = false })
+            try { return LogBundle.Build(settings); }
+            catch (Exception ex)
             {
-                var info = new Label { Text = "Optional: a GitHub token raises GitHub's limit on update checks.\nIt is saved encrypted for your Windows user. Leave it empty to remove it.", Location = new Point(12, 10), Size = new Size(456, 48) };
-                var box = new TextBox { Location = new Point(12, 64), Width = 456, UseSystemPasswordChar = true };
-                var ok = new Button { Text = "Save", DialogResult = DialogResult.OK, Location = new Point(312, 104) };
-                var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Location = new Point(393, 104) };
-                f.Controls.AddRange(new Control[] { info, box, ok, cancel });
-                f.AcceptButton = ok;
-                f.CancelButton = cancel;
-                if (f.ShowDialog(this) != DialogResult.OK)
-                    return;
-                settings.Token = box.Text;
-                settings.Save();
-                Log(string.IsNullOrWhiteSpace(box.Text) ? "GitHub token removed." : "GitHub token saved.");
+                MessageBox.Show(this, "Couldn't gather the logs: " + ex.Message, Text);
+                return null;
             }
-            _ = CheckLatest(true);
+        }
+
+        void CopyLogs()
+        {
+            var text = BuildLogs();
+            if (text == null)
+                return;
+            try
+            {
+                Clipboard.SetText(text);
+                Log($"The last session's logs are copied ({text.Length / 1024} KB): paste them in a message, or send {LogBundle.FilePath}.");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, "Couldn't copy them (" + ex.Message + "). They are in " + LogBundle.FilePath, Text);
+            }
+        }
+
+        void OpenLogs()
+        {
+            if (BuildLogs() == null)
+                return;
+            try { Process.Start("notepad.exe", "\"" + LogBundle.FilePath + "\""); }
+            catch (Exception ex) { MessageBox.Show(this, "Couldn't open " + LogBundle.FilePath + ": " + ex.Message, Text); }
         }
 
         // ------------------------------------------------------------ updates
@@ -360,8 +394,8 @@ namespace CsnzLauncher
         {
             try
             {
-                var token = GitHub.FindToken(settings, out var source);
-                Log($"Checking GitHub for updates (token: {source})...");
+                var token = GitHub.FindToken(settings, out _);
+                Log("Checking GitHub for updates...");
                 latest = await GitHub.Latest(token);
                 var installed = Paths.InstalledVersion();
                 Log($"Latest release: {latest.Tag}" + (installed != null && latest.Version != null && latest.Version <= installed ? " (installed)" : ""));
@@ -493,18 +527,22 @@ namespace CsnzLauncher
                 Log("Note: the shop and profile pictures aren't exported yet (More > Export...). The game works without them.");
 
             Process server = null, bridge = null;
-            bool online = settings.OnlinePlay;
+            bool online = settings.OnlinePlay, verbose = settings.DetailedLogs;
+            // where the Logs button's "last session" starts
+            Log($"{LogBundle.PlayMark} {DateTime.Now:yyyy-MM-dd HH:mm:ss}: mod v{Paths.InstalledVersion()?.ToString(3)}, online play {(online ? "on" : "off")}, detailed logs {(verbose ? "on" : "off")} ===");
             WindowState = FormWindowState.Minimized;
             bool played = await Run("Play", () =>
             {
                 Certificates.Ensure(Log);
                 Patcher.Apply(game, Log);
+                if (verbose)
+                    Log("Game state after patching: " + Patcher.Check(game) + ", Steam build " + GameLocator.BuildId(game) + ", hosts block " + (Hosts.HasBlock() ? "yes" : "no"));
                 if (Runner.Listening(Runner.ServerPort))
-                    Log("A local server is already running: using it.");
+                    Log("A local server is already running: using it" + (verbose ? " (its detailed logs depend on how it was started)." : "."));
                 else
-                    server = Runner.StartServer(Log);
+                    server = Runner.StartServer(Log, verbose);
                 if (online)
-                    bridge = Runner.StartBridge(game, Log);
+                    bridge = Runner.StartBridge(game, Log, verbose);
                 try
                 {
                     Runner.StartGame(game, Log);
@@ -665,6 +703,9 @@ namespace CsnzLauncher
                     Installer.InstallZip(args[2], l => lines.Add(l));
                     Certificates.Ensure(l => lines.Add(l));
                 }
+                if (args.Contains("--logs"))
+                    try { lines.Add($"logs: {LogBundle.Build(Settings.Load()).Length} characters in {LogBundle.FilePath}"); }
+                    catch (Exception ex) { lines.Add("logs: " + ex); }
                 File.WriteAllLines(Path.Combine(Paths.Root, "launcher-check.txt"), lines);
                 return;
             }

@@ -15,8 +15,7 @@ launcher patches *your* copy of the game, keeps a backup of every file it change
    (the mod is installed next to it, in `mod\`). Don't open it from the browser's downloads bar: the browser runs a new temporary
    copy each time, and the launcher would ask to install everything again (it now offers to move itself to
    `Documents\CSNZ Offline Revived` when that happens).
-3. Open it. The repository is public, so it needs nothing else to find the releases (a GitHub token in
-   **More > GitHub token...**, `GH_TOKEN` / `GITHUB_TOKEN` or the GitHub CLI is still used if there is one).
+3. Open it. The repository is public, so it needs nothing else to find the releases.
 4. **Install** downloads the mod. Later, the same button says **Update** when a newer release is out (the
    launcher updates itself too).
 5. **Play**: the first time Windows asks for administrator rights to add the hosts block (the game's Nexon
@@ -27,6 +26,15 @@ launcher patches *your* copy of the game, keeps a backup of every file it change
    straight into the game (the launcher closes with it). From then on the launcher is how you start the game.
 7. Optional: **More > Export shop and profile pictures** makes the item pictures, 3D previews and medal icons of
    the in-game web pages from your game. It needs Python 3 (the launcher installs the Pillow and pefile packages).
+
+### Reporting a problem
+
+1. Turn on **Detailed logs** under the game's folder. On the next Play the local server and the Steam bridge log
+   every packet; the files get bigger, so turn it off again afterwards.
+2. Play until the problem happens, then close the game.
+3. **Logs > Copy the last session's logs** puts everything in the clipboard: the launcher, the Steam bridge, the
+   local server and the game (`Bin\Error.log`, `botassist.log`). Paste it in your message, or send
+   `mod\logs\last-session.txt`. **Logs > Open the last session's logs** shows the same text in Notepad.
 
 The launcher finds the game in Steam's libraries by itself (Steam's manifest of app 273110). If it isn't installed,
 it opens a window with **Install with Steam**, the store page, and the commands for Win+R (`steam://install/273110`

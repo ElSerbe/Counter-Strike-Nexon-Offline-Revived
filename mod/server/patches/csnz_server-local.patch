@@ -386,6 +386,47 @@ index 6768f4e..f62cd69 100644
  	virtual int GetBytesReceived() = 0;
  	virtual int GetBytesSent() = 0;
  	virtual std::vector<CSendPacket*>& GetPacketsToSend() = 0;
+diff --git a/src/main.cpp b/src/main.cpp
+index bb53760..c487b3f 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -64,8 +64,13 @@ void* GUIThread(void*)
+ }
+ #endif
+ 
++bool g_bVerboseLog = false;
++
+ int main(int argc, char* argv[])
+ {
++	for (int i = 1; i < argc; i++)
++		if (!strcmp(argv[i], "--verbose"))
++			g_bVerboseLog = true;
+ #ifdef WIN32
+ 	SetUnhandledExceptionFilter(ExceptionFilter);
+ 	_set_invalid_parameter_handler(invalid_parameter_function);
+@@ -87,6 +92,8 @@ int main(int argc, char* argv[])
+ 	AddLogger(new CGUILogger());
+ #endif
+ 	AddLogger(new CFileLogger("Server"));
++	if (g_bVerboseLog)
++		Logger().Info("Detailed logs: every packet, the UDP holepunch heartbeats and the match addresses given to games\n");
+ 
+ 	g_pServerInstance = new CServerInstance();
+ 	if (!g_pServerInstance->Init())
+diff --git a/src/main.h b/src/main.h
+index f89ac00..b434010 100644
+--- a/src/main.h
++++ b/src/main.h
+@@ -2,6 +2,9 @@
+ 
+ #include "common/logger.h"
+ 
++// --verbose (the launcher's "Detailed logs"): every packet, the UDP holepunch heartbeats and the addresses given to games
++extern bool g_bVerboseLog;
++
+ #define NOMINMAX
+ 
+ #ifdef _WIN32
 diff --git a/src/manager/bingomanager.cpp b/src/manager/bingomanager.cpp
 new file mode 100644
 index 0000000..b776092
@@ -3070,10 +3111,10 @@ index 223166a..9b3a5a0 100644
  	user->UpdateTitles(slot, titleID);
 diff --git a/src/manager/transfer.cpp b/src/manager/transfer.cpp
 new file mode 100644
-index 0000000..684d815
+index 0000000..6908e06
 --- /dev/null
 +++ b/src/manager/transfer.cpp
-@@ -0,0 +1,246 @@
+@@ -0,0 +1,249 @@
 +#include "transfer.h"
 +#include "main.h"
 +#include "net/sendpacket.h"
@@ -3304,6 +3345,9 @@ index 0000000..684d815
 +		// another remote player (or themselves): no route between two other PCs yet
 +		at(0, 0);
 +	}
++	if (g_bVerboseLog)
++		Logger().Info("detail: user %d sees user %d at %s ports %d (server) / %d (client)\n", viewer ? viewer->GetID() : 0, subject->GetID(),
++			n.m_szExternalIpAddress.c_str(), n.m_nExternalServerPort, n.m_nExternalClientPort);
 +	return n;
 +}
 +
@@ -7531,7 +7575,7 @@ index d2a28c1..6dd8b0b 100644
  			"EndDate": 0
  		}
 diff --git a/src/serverinstance.cpp b/src/serverinstance.cpp
-index b7b0aaa..d82a06b 100644
+index b7b0aaa..7ae9fc5 100644
 --- a/src/serverinstance.cpp
 +++ b/src/serverinstance.cpp
 @@ -1,4 +1,7 @@
@@ -7584,7 +7628,7 @@ index b7b0aaa..d82a06b 100644
  		{
  			Logger().Warn("UpdateHolepunch Failed: %d, %d, %d\n", portID, localPort, port);
  		}
-@@ -249,7 +252,7 @@ void CServerInstance::OnUDPMessage(Buffer& buf, unsigned short port)
+@@ -249,13 +252,15 @@ void CServerInstance::OnUDPMessage(Buffer& buf, unsigned short port)
  		replyBuffer.writeUInt8(1);
  		m_UDPServer.SendTo(replyBuffer);
  	}
@@ -7593,7 +7637,15 @@ index b7b0aaa..d82a06b 100644
  	{
  		int tries = buf.readUInt8();
  
-@@ -305,7 +308,13 @@ void* ReadConsoleThread(void*)
+ #ifdef _DEBUG
+ 		Logger().Debug("OnUDPMessage(1) - userID: %d, tries: %d\n", userID, tries);
+ #endif
++		if (g_bVerboseLog)
++			Logger().Info("detail: UDP heartbeat from user %d (port %d), tries %d\n", userID, port, tries);
+ 	}
+ }
+ 
+@@ -305,7 +310,13 @@ void* ReadConsoleThread(void*)
  	while (g_pServerInstance->IsServerActive())
  	{
  		string cmd;
@@ -7608,7 +7660,20 @@ index b7b0aaa..d82a06b 100644
  
  		// TODO: ignore empty line?
  
-@@ -362,6 +371,9 @@ void CServerInstance::OnPackets(IExtendedSocket* s, CReceivePacket* msg)
+@@ -351,6 +362,12 @@ void CServerInstance::OnEvent()
+ 
+ void CServerInstance::OnPackets(IExtendedSocket* s, CReceivePacket* msg)
+ {
++	if (g_bVerboseLog)
++	{
++		IUser* u = g_UserManager.GetUserBySocket(s);
++		Logger().Info("detail: packet %d (%d bytes) from client %d%s%s\n", msg->GetID(), msg->GetLength(), s->GetID(),
++			u ? ", user " : "", u ? u->GetLogName() : "");
++	}
+ 	switch (msg->GetID())
+ 	{
+ 	case PacketId::Version:
+@@ -362,6 +379,9 @@ void CServerInstance::OnPackets(IExtendedSocket* s, CReceivePacket* msg)
  	case PacketId::Login:
  		g_UserManager.OnLoginPacket(msg, s);
  		break;
@@ -7618,7 +7683,7 @@ index b7b0aaa..d82a06b 100644
  	case PacketId::RequestServerList:
  		g_ChannelManager.OnChannelListPacket(s);
  		break;
-@@ -399,6 +411,10 @@ void CServerInstance::OnPackets(IExtendedSocket* s, CReceivePacket* msg)
+@@ -399,6 +419,10 @@ void CServerInstance::OnPackets(IExtendedSocket* s, CReceivePacket* msg)
  		g_MiniGameManager.OnPacket(msg, s);
  		break;
  	case PacketId::MileageBingo:

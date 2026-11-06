@@ -55,6 +55,7 @@ namespace CsnzLauncher
         public string GamePath = "";
         public string TokenProtected = ""; // a GitHub token, encrypted for this Windows user (DPAPI)
         public bool OnlinePlay = true;      // the Steam bridge runs with the server (offline play works without it)
+        public bool DetailedLogs = false;   // the server and the bridge log every packet (--verbose), for bug reports
 
         static readonly JavaScriptSerializer Json = new JavaScriptSerializer();
 
@@ -714,10 +715,10 @@ namespace CsnzLauncher
         public static bool ServerRunning() => Process.GetProcessesByName("CSNZ_Server").Length > 0;
 
         // CSNZ_Server with its console input kept open (it spins when the input hits its end), output in server\server.log
-        public static Process StartServer(Logger log)
+        public static Process StartServer(Logger log, bool verbose = false)
         {
             var exe = Path.Combine(Paths.ServerBin, "CSNZ_Server.exe");
-            var psi = new ProcessStartInfo(exe)
+            var psi = new ProcessStartInfo(exe, verbose ? "--verbose" : "")
             {
                 WorkingDirectory = Paths.ServerBin,
                 UseShellExecute = false,
@@ -743,7 +744,7 @@ namespace CsnzLauncher
             }
             if (!Listening(ServerPort))
                 throw new Exception("The local server didn't open port 30002: see mod\\server\\server.log.");
-            log("Local server started.");
+            log("Local server started" + (verbose ? " (detailed logs)." : "."));
             return p;
         }
 
@@ -763,7 +764,7 @@ namespace CsnzLauncher
         }
 
         // online play: the Steam bridge (Spacewar lobbies + P2P tunnels to other players' servers). Null when it can't run.
-        public static Process StartBridge(string game, Logger log)
+        public static Process StartBridge(string game, Logger log, bool verbose = false)
         {
             if (!File.Exists(Paths.BridgeExe))
             {
@@ -772,7 +773,7 @@ namespace CsnzLauncher
             }
             var data = Path.Combine(Paths.ServerBin, "Data");
             try { File.Delete(Path.Combine(data, "SteamBridge.stop")); } catch { }
-            var args = $"--steam-api \"{Path.Combine(game, "Bin", "steam_api.dll")}\" --data \"{data}\" --log \"{Path.Combine(Paths.LogDir, "steambridge.log")}\"";
+            var args = $"--steam-api \"{Path.Combine(game, "Bin", "steam_api.dll")}\" --data \"{data}\" --log \"{Path.Combine(Paths.LogDir, "steambridge.log")}\"" + (verbose ? " --verbose" : "");
             try
             {
                 var p = Process.Start(new ProcessStartInfo(Paths.BridgeExe, args) { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = Path.GetDirectoryName(Paths.BridgeExe) });
@@ -809,6 +810,102 @@ namespace CsnzLauncher
                 Thread.Sleep(1000);
             while (GameRunning())
                 Thread.Sleep(2000);
+        }
+    }
+
+    // ------------------------------------------------------------ the last session's logs in one text (Logs button)
+    public static class LogBundle
+    {
+        public const string PlayMark = "=== Play";
+        public static string FilePath => Path.Combine(Paths.LogDir, "last-session.txt");
+
+        // the last lines of a file, from the last line that contains `from` (when given)
+        static List<string> Tail(string path, int max, string from = null)
+        {
+            var lines = new List<string>();
+            try
+            {
+                using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+                using (var r = new StreamReader(fs, Encoding.UTF8, true))
+                {
+                    string l;
+                    while ((l = r.ReadLine()) != null)
+                    {
+                        if (from != null && l.Contains(from))
+                            lines.Clear();
+                        lines.Add(l);
+                    }
+                }
+            }
+            catch (Exception ex) { return new List<string> { "(couldn't read it: " + ex.Message + ")" }; }
+            if (lines.Count > max)
+            {
+                int cut = lines.Count - max;
+                lines.RemoveRange(0, cut);
+                lines.Insert(0, "(" + cut + " earlier lines left out)");
+            }
+            return lines;
+        }
+
+        static void Section(StringBuilder sb, string title, string path, int max, string from = null, Func<string, bool> skip = null)
+        {
+            sb.AppendLine().AppendLine("==================== " + title + " (" + path + ")");
+            if (!File.Exists(path))
+            {
+                sb.AppendLine("(not there)");
+                return;
+            }
+            sb.AppendLine("modified " + File.GetLastWriteTime(path).ToString("yyyy-MM-dd HH:mm:ss"));
+            int skipped = 0;
+            foreach (var l in Tail(path, max, from))
+                if (skip != null && skip(l))
+                    skipped++;
+                else
+                    sb.AppendLine(l);
+            if (skipped > 0)
+                sb.AppendLine("(" + skipped + " repetitive lines left out)");
+        }
+
+        // writes mod\logs\last-session.txt and returns its text: the launcher, the Steam bridge, the server and the game
+        public static string Build(Settings settings)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("Counter-Strike Nexon: Offline Revived - logs of the last session, " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+            string windows = Environment.OSVersion.Version.ToString();
+            try
+            {
+                using (var k = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion"))
+                    windows = $"{k?.GetValue("ProductName")} {k?.GetValue("DisplayVersion")} (build {k?.GetValue("CurrentBuild")})";
+            }
+            catch { }
+            sb.AppendLine("launcher v" + Paths.LauncherVersion.ToString(3) + ", mod " + (Paths.InstalledVersion()?.ToString(3) ?? "not installed") +
+                ", " + windows + (Environment.Is64BitOperatingSystem ? " 64-bit" : ""));
+            var game = settings.GamePath;
+            bool hasGame = GameLocator.IsGame(game);
+            sb.AppendLine("game: " + (hasGame ? game + ", Steam build " + GameLocator.BuildId(game) : "not found"));
+            try { if (hasGame && File.Exists(Paths.PatchList)) sb.AppendLine("game state: " + Patcher.Check(game)); } catch (Exception ex) { sb.AppendLine("game state: " + ex.Message); }
+            try { sb.AppendLine("hosts block: " + (Hosts.HasBlock() ? "yes" : "no")); } catch { }
+            sb.AppendLine("online play: " + (settings.OnlinePlay ? "on" : "off") + ", detailed logs: " + (settings.DetailedLogs ? "on" : "off"));
+
+            Section(sb, "Launcher", Path.Combine(Paths.LogDir, "launcher.log"), 600, PlayMark);
+            Section(sb, "Steam bridge", Path.Combine(Paths.LogDir, "steambridge.log"), 4000, "Steam bridge starting");
+            Section(sb, "Local server", Path.Combine(Paths.Mod, "server", "server.log"), 4000);
+            if (hasGame)
+            {
+                var bin = Path.Combine(game, "Bin");
+                // the game's TLS handshake writes hundreds of these
+                Section(sb, "Game (Error.log)", Path.Combine(bin, "Error.log"), 2000, null,
+                    l => l.Contains("Socket::SSL_connect()>>") || (l.Contains("<<Socket::SSL_connect() /") && !l.Contains("success")));
+                Section(sb, "Bots (botassist.log)", Path.Combine(bin, "botassist.log"), 150);
+                Section(sb, "Offline hook", Path.Combine(bin, "offline_hook.log"), 200);
+                var fatal = Path.Combine(bin, "FatalError.log");
+                if (File.Exists(fatal) && File.GetLastWriteTime(fatal) > DateTime.Now.AddDays(-1))
+                    Section(sb, "Game crash (FatalError.log)", fatal, 400);
+            }
+            var text = sb.ToString();
+            Directory.CreateDirectory(Paths.LogDir);
+            File.WriteAllText(FilePath, text, Encoding.UTF8);
+            return text;
         }
     }
 

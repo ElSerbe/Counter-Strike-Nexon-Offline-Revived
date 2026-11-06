@@ -13,7 +13,9 @@
 //
 // --loopback: one PC test. This PC's own lobby is listed as another player's, and its tunnel goes straight back to
 // this PC's server (no P2P). Usage: CSNZ-SteamBridge.exe --steam-api <game Bin\steam_api.dll> --data <server Data>
-//   [--api http://127.0.0.1:30080] [--log <file>] [--loopback]
+//   [--api http://127.0.0.1:30080] [--log <file>] [--loopback] [--verbose]
+// --verbose (the launcher's "Detailed logs"): every tunnel message and match packet in the log ("detail:" lines, the
+// first bytes of each packet), up to 20000 lines, and the UDP totals every 5 s.
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -79,7 +81,36 @@ namespace SteamBridge
         {
             if (System.Threading.Interlocked.Increment(ref udpNotes) <= 60)
                 log("UDP: " + text);
+            else
+                Detail("UDP: " + text);
         }
+
+        // --verbose
+        public bool Verbose;
+        int detailLines;
+        void Detail(string text)
+        {
+            if (!Verbose)
+                return;
+            int n = System.Threading.Interlocked.Increment(ref detailLines);
+            if (n <= 20000)
+                log("detail: " + text);
+            else if (n == 20001)
+                log("detail: 20000 lines written, no more details this session (the UDP totals go on)");
+        }
+        // the first bytes of a packet: hex, and its first byte as a letter when it is one (the game's holepunch: W, X, Y, `)
+        static string Peek(byte[] data, int offset, int n)
+        {
+            var sb = new StringBuilder();
+            if (n > 0 && data[offset] >= 0x20 && data[offset] < 0x7f)
+                sb.Append('\'').Append((char)data[offset]).Append("' ");
+            for (int i = 0; i < Math.Min(n, 24); i++)
+                sb.Append(data[offset + i].ToString("x2"));
+            if (n > 24)
+                sb.Append("..");
+            return sb.ToString();
+        }
+        static string TypeName(byte type) => type == Open ? "OPEN" : type == Data ? "DATA" : type == Close ? "CLOSE" : type == Hello ? "HELLO" : "type " + type;
         readonly Dictionary<ulong, Host> hosts = new Dictionary<ulong, Host>();
 
         // a tunnelled TCP connection: on the joining side it was accepted from the game, on the host side it goes to the server
@@ -246,6 +277,7 @@ namespace SteamBridge
         void ReadLobbyList(int count)
         {
             var now = DateTime.UtcNow;
+            Detail("Steam lobby list: " + count + " lobbies (this PC's own included)");
             for (int i = 0; i < count; i++)
             {
                 ulong lobby = Native.SteamAPI_ISteamMatchmaking_GetLobbyByIndex(steam.Matchmaking, i);
@@ -407,6 +439,7 @@ namespace SteamBridge
 
         void Send(ulong peer, byte type, uint id, byte[] data, int n)
         {
+            Detail("tunnel out to " + peer + ": " + TypeName(type) + " connection " + id + (n > 0 ? ", " + n + " bytes" : ""));
             var msg = new byte[5 + n];
             msg[0] = type;
             BitConverter.GetBytes(id).CopyTo(msg, 1);
@@ -461,6 +494,8 @@ namespace SteamBridge
             byte type = msg[0];
             uint id = BitConverter.ToUInt32(msg, 1);
             string key = Key(peer, id);
+            if (type != Hello)
+                Detail("tunnel in from " + peer + ": " + TypeName(type) + " connection " + id + (msg.Length > 5 ? ", " + (msg.Length - 5) + " bytes" : ""));
             switch (type)
             {
                 case Open:
@@ -560,6 +595,8 @@ namespace SteamBridge
         {
             if (System.Threading.Interlocked.Increment(ref udpToPeer) == 1)
                 UdpNote("first match packet from this PC's game to " + peer + " (" + (direction == 0 ? "to their room" : "to their game in this PC's room") + ", " + n + " bytes)");
+            Detail("UDP out to " + peer + " (" + (direction == 0 ? "their room's host" : "their game in this PC's room") + "), host port " + hostPortID +
+                ", player port " + playerPortID + ", " + n + " bytes: " + Peek(data, 0, n));
             var msg = new byte[4 + n];
             msg[0] = Udp;
             msg[1] = direction;
@@ -615,6 +652,8 @@ namespace SteamBridge
                 Dropped(from == null ? "a packet for a port this PC couldn't open" : "a packet: this PC's game ports are unknown (no holepunch to this PC's server yet)");
                 return;
             }
+            Detail("UDP in from " + peer + " (" + (direction == 1 ? "the host of the room this PC joined" : "a player in this PC's room") + "), host port " + hostPortID +
+                ", player port " + playerPortID + ", " + (size - 4) + " bytes -> 127.0.0.1:" + to + " from :" + ((IPEndPoint)from.Client.LocalEndPoint).Port + ": " + Peek(buf, 4, size - 4));
             try { from.Send(buf.Skip(4).Take(size - 4).ToArray(), size - 4, new IPEndPoint(IPAddress.Loopback, to)); }
             catch (Exception ex) { Dropped("a packet to 127.0.0.1:" + to + ": " + ex.Message); }
         }
@@ -631,7 +670,7 @@ namespace SteamBridge
             var now = DateTime.UtcNow;
             if (now >= nextUdpReport && (udpToPeer != reportedTo || udpFromPeer != reportedFrom || udpDropped != reportedDropped))
             {
-                nextUdpReport = now.AddSeconds(15);
+                nextUdpReport = now.AddSeconds(Verbose ? 5 : 15);
                 reportedTo = udpToPeer;
                 reportedFrom = udpFromPeer;
                 reportedDropped = udpDropped;
@@ -736,14 +775,14 @@ namespace SteamBridge
             var dataDir = Arg("--data");
             if (steamApi == null || dataDir == null)
             {
-                Console.WriteLine("CSNZ-SteamBridge.exe --steam-api <game Bin\\steam_api.dll> --data <server Data folder> [--api http://127.0.0.1:30080] [--log file] [--loopback]");
+                Console.WriteLine("CSNZ-SteamBridge.exe --steam-api <game Bin\\steam_api.dll> --data <server Data folder> [--api http://127.0.0.1:30080] [--log file] [--loopback] [--verbose]");
                 return 2;
             }
             // Spacewar: Steam's free test app, so every player can use lobbies and P2P
             Directory.SetCurrentDirectory(exeDir);
             File.WriteAllText(Path.Combine(exeDir, "steam_appid.txt"), "480");
 
-            Log("Steam bridge starting" + (args.Contains("--loopback") ? " (loopback test)" : ""));
+            Log("Steam bridge starting" + (args.Contains("--loopback") ? " (loopback test)" : "") + (args.Contains("--verbose") ? " (detailed logs)" : ""));
             var steam = Steam.Start(steamApi, Log);
             if (steam == null)
             {
@@ -757,7 +796,7 @@ namespace SteamBridge
             // stops by itself when the stop file appears (the launcher's way to end it cleanly)
             var stopFile = Path.Combine(dataDir, "SteamBridge.stop");
             try { File.Delete(stopFile); } catch { }
-            var bridge = new Bridge(steam, dataDir, Arg("--api", "http://127.0.0.1:30080"), args.Contains("--loopback"), Log);
+            var bridge = new Bridge(steam, dataDir, Arg("--api", "http://127.0.0.1:30080"), args.Contains("--loopback"), Log) { Verbose = args.Contains("--verbose") };
             try
             {
                 bridge.Run(() => running && !File.Exists(stopFile));
