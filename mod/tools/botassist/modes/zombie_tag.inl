@@ -36,14 +36,13 @@
 //     their 100 health (CDummyMan::TakeDamage 0x1095e7b0) and the one that kills blows up on its killer (0x1082e9f0).
 //   - the emotions: while one lasts the game's SetAnimation puts back the gait it saved (+0x18c4) under it; a zombie player's is 0 (the whole
 //     body plays the emotion), as the AI zombies'.
-//   - the crowd: an AI zombie walks to one dummygoal (+0x12a0, re-pathed every 0.6 s by CDummyManImprov 0x10960140; the game changes it once
-//     in 1000 updates), then to a playergoal (+0x12d0 = 1) and leaves the map, so they stayed bunched. Before its dummygoal each one now walks
-//     by 2 to 4 places spread over the map (nav areas far from where the others are going), written into +0x12a0; the game's goal comes back
-//     after. The zombie bots wander the same way.
+//   - in step with the crowd: the AI zombies start their idle together and switch to walking without restarting it, so they all move in
+//     time; a zombie player that started its own zbs_idle1 at frame 0 (hands joined over the head) stood out among them. A zombie player playing
+//     the same sequence as an AI zombie takes the nearest one's frame, animtime and framerate.
 //
 // The stock bot AI knows the teams and nothing else, so it would beeline at the enemy. botassist plays both sides like a person:
 //   zombie: walks with the crowd at the crowd's own speed, now and then by a dummygoal like they do, looks where it walks, does each fever action
-//           after a human's reaction time (sometimes late, rarely the wrong emotion), mostly keeps calm when a human stares or shoots at it
+//           after a human's reaction time (sometimes late, rarely the wrong emotion), mostly keeps calm when a human stares at it or hits it
 //           (else smoke and sprint), sprints the last stretch when nobody is near, and now and then pokes a human from behind.
 //   human: watches the zombies in sight and scores what gives a player away (running, not doing the fever's action, doing it late, jumping or
 //          crouching out of turn, heading for the goal), hits a suspect once with the crowbar to see how it reacts, and calls "I found the zombie" only when
@@ -58,7 +57,7 @@ static const int ZT_RULES_STARTED = 0x6b9, ZT_RULES_SPAWNED = 0x747, ZT_RULES_OV
                  ZT_RULES_SMOKED = 0x6a1, ZT_RULES_SPRINT = 0x72f;
 static const int ZT_EV_MODELINDEX = 0xc4, ZT_EV_SEQUENCE = 0x138, ZT_EV_GAITSEQUENCE = 0x13c, ZT_EV_FRAME = 0x140, ZT_ES_SOLID = 0x3e;
 static const DWORD MP_ZT_GIVEKNIFE = 0x114bad10;
-static const int ZT_PL_SLOTS = 0xfb4, ZT_PL_KNIFE_SLOT = 3, ZT_PL_KNIFE_TYPE = 0x2194, ZT_DUMMY_GOAL = 0x12a0, ZT_DUMMY_TO_EXIT = 0x12d0;
+static const int ZT_PL_SLOTS = 0xfb4, ZT_PL_KNIFE_SLOT = 3, ZT_PL_KNIFE_TYPE = 0x2194, ZT_EV_ANIMTIME = 0x144, ZT_EV_FRAMERATE = 0x148;
 static const float ZT_MELEE = 58.0f; // the crowbar's reach, centre to centre
 static const float ZT_FIND_CONE = 0.9f, ZT_FIND_FACING = -0.8f, ZT_FIND_RADIUS_DEFAULT = 150.0f, ZT_SIGHT = 1500.0f, ZT_FOV_COS = 0.6f;
 static const float ZT_SUSPECT = 4.5f, ZT_SURE = 10.0f, ZT_GOAL_NEAR = 450.0f, ZT_STARE = 2.0f, ZT_GRACE = 1.6f;
@@ -129,10 +128,6 @@ struct ZtBot
     float spin = 0;          // degrees per second it turns by itself (spin / circle)
     bool ownMove = false;    // moves by fwd/side below, not along a path
     float ownFwd = 0;
-    int wanders = -1;        // places over the map it walks by first, like the AI zombies
-    V3 spot{};
-    bool spotSet = false;
-    float spotSince = 0, spotBest = 1e9f, spotBestAt = 0, spotRetry = 0;
     int round = -1;
     // human
     std::unordered_map<void*, ZtSuspect> sus;
@@ -185,110 +180,6 @@ static void* ZtClient(int i)
     return e && PrivateOf(e) && (F<int>(Vars(e), EV_FLAGS) & FL_CLIENT) ? e : nullptr;
 }
 
-// ---------------------------------------------------------------- the crowd spreads over the map
-struct ZtDummy
-{
-    V3 gameGoal{}, spot{};
-    int left = -1, fails = 0;
-    bool spotSet = false, done = false;
-    float since = 0, best = 1e9f, bestAt = 0, retry = 0;
-};
-static std::unordered_map<void*, ZtDummy> g_ztDummies;
-static std::unordered_map<void*, V3> g_ztSpots; // where each AI zombie and zombie bot is wandering to
-
-// a nav area far from `from` and from the places the others are going to, reachable
-static bool ZtSpreadSpot(void* self, V3 from, V3& out)
-{
-    if (!g_nav.ok || g_nav.areas.empty())
-        return false;
-    float bestScore = -1;
-    V3 best{};
-    for (int tries = 0; tries < 30; tries++)
-    {
-        V3 c = g_nav.areas[rand() % g_nav.areas.size()].center;
-        float d = Len2D(c - from);
-        if (d < 450.0f || d > 2800.0f || InHazard(c) || PoiAvoidAt(c))
-            continue;
-        float room = 1500.0f;
-        for (auto& kv : g_ztSpots)
-            if (kv.first != self && Len2D(kv.second - c) < room)
-                room = Len2D(kv.second - c);
-        float score = room + Rnd() * 300.0f;
-        if (score > bestScore)
-            bestScore = score, best = c;
-    }
-    std::vector<V3> path;
-    if (bestScore < 0 || !FindPath(from, best, path))
-        return false;
-    out = best;
-    g_ztSpots[self] = best;
-    return true;
-}
-
-// an AI zombie on its way to its dummygoal: by a few places first (`picks`: how many new places this scan may still look for)
-static void ZtSpreadDummy(void* e, unsigned char* p, V3 pos, int state, float now, int& picks)
-{
-    if (!p || !Readable(p + ZT_DUMMY_GOAL, ZT_DUMMY_TO_EXIT + 1 - ZT_DUMMY_GOAL))
-        return;
-    float* g = (float*)(p + ZT_DUMMY_GOAL);
-    V3 cur{ g[0], g[1], g[2] };
-    ZtDummy& d = g_ztDummies[e];
-    if (d.left < 0)
-    {
-        d = ZtDummy();
-        d.gameGoal = cur;
-        d.left = 2 + rand() % 3;
-    }
-    if (d.done || p[ZT_DUMMY_TO_EXIT])
-    {
-        d.done = true;
-        g_ztSpots.erase(e);
-        return;
-    }
-    if (d.spotSet && Len(cur - d.spot) > 1.0f)
-    {
-        d.gameGoal = cur; // the game picked its next dummygoal: that's where it goes after
-        d.spotSet = false;
-    }
-    if (state != ZT_ACT_WALK)
-    {
-        d.bestAt = now; // stopped for the fever, not stuck
-        return;
-    }
-    if (d.spotSet)
-    {
-        float dist = Len2D(pos - d.spot);
-        if (dist < d.best - 40.0f)
-            d.best = dist, d.bestAt = now;
-        if (dist > 90.0f && now - d.since < 40.0f && now - d.bestAt < 8.0f)
-            return;
-        d.spotSet = false; // there (or stuck): the next one
-        d.left--;
-    }
-    if (d.left <= 0 || d.fails > 5)
-    {
-        g[0] = d.gameGoal.x, g[1] = d.gameGoal.y, g[2] = d.gameGoal.z;
-        d.done = true;
-        g_ztSpots.erase(e);
-        return;
-    }
-    if (now < d.retry || picks <= 0)
-        return;
-    picks--;
-    V3 s;
-    if (!ZtSpreadSpot(e, pos, s))
-    {
-        d.fails++;
-        d.retry = now + 1.0f + Rnd();
-        return;
-    }
-    d.spot = s;
-    d.spotSet = true;
-    d.since = d.bestAt = now;
-    d.best = Len2D(pos - s);
-    g[0] = s.x, g[1] = s.y, g[2] = s.z;
-}
-
 static void ZtScan(float now)
 {
     if (g_zt.level != g_nav.level)
@@ -296,8 +187,6 @@ static void ZtScan(float now)
         g_zt = {};
         g_zt.level = g_nav.level;
         g_ztBots.clear();
-        g_ztDummies.clear();
-        g_ztSpots.clear();
     }
     if (now < g_zt.next && now > g_zt.next - 1.0f)
         return;
@@ -305,15 +194,8 @@ static void ZtScan(float now)
     unsigned char* rules = ZtRules();
     bool spawned = rules && rules[ZT_RULES_SPAWNED] && !rules[ZT_RULES_OVER];
     if (spawned && !g_zt.spawned)
-    {
         g_zt.round++;
-        g_ztDummies.clear();
-        g_ztSpots.clear();
-    }
     g_zt.spawned = spawned;
-    int picks = 4;
-    static int spreadReports = 0;
-    size_t wandering = g_ztSpots.size();
     g_zt.actors.clear();
     g_zt.playerGoals.clear();
     g_zt.dummyGoals.clear();
@@ -348,8 +230,6 @@ static void ZtScan(float now)
                 a.emoting = a.state >= ZT_ACT_EMOTION;
                 a.ducking = a.state == ZT_ACT_CROUCH;
                 dummies++;
-                if (spawned)
-                    ZtSpreadDummy(e, p, a.pos, a.state, now, picks);
                 if (a.state != ZT_ACT_WALK && a.state != ZT_ACT_NONE)
                 {
                     acting++;
@@ -372,8 +252,6 @@ static void ZtScan(float now)
     });
     if (walkers >= 3)
         g_zt.crowdSpeed += (speedSum / walkers - g_zt.crowdSpeed) * 0.2f;
-    if (wandering < 8 && g_ztSpots.size() >= 8 && spreadReports++ < 20)
-        Log("Zombie Tag: round %d: %u AI zombies and zombie bots wander over the map before their goals", g_zt.round, (unsigned)g_ztSpots.size());
     bool fever = dummies >= 3 && acting * 2 >= dummies;
     int action = ZT_ACT_WALK;
     if (fever)
@@ -530,6 +408,24 @@ static bool ZtPlayerAnim(unsigned char* pl, int anim)
         ((ZtResetSequenceFn)(MP_ZT_RESETSEQUENCE + g_mpDelta))(pl, nullptr);
     }
     *(int*)(pev + ZT_EV_GAITSEQUENCE) = 0;
+    // in step with the nearest AI zombie playing the same (they all started together)
+    V3 me = Vec((float*)(pev + 8));
+    unsigned char* mate = nullptr;
+    float mateDist = 2500.0f;
+    for (auto& a : g_zt.actors)
+    {
+        if (a.player || Len(a.pos - me) >= mateDist)
+            continue;
+        unsigned char* v = Vars(a.e);
+        if (v && *(int*)(v + ZT_EV_SEQUENCE) == seq && *(short*)(v + ZT_EV_MODELINDEX) == model)
+            mate = v, mateDist = Len(a.pos - me);
+    }
+    if (mate)
+    {
+        *(float*)(pev + ZT_EV_FRAME) = *(float*)(mate + ZT_EV_FRAME);
+        *(float*)(pev + ZT_EV_ANIMTIME) = *(float*)(mate + ZT_EV_ANIMTIME);
+        *(float*)(pev + ZT_EV_FRAMERATE) = *(float*)(mate + ZT_EV_FRAMERATE);
+    }
     return true;
 }
 
@@ -718,7 +614,9 @@ static void ZtKnifeOnly(float now)
         bool ok = ZtStripToKnife(pl, type);
         if (ok && (F<int>(Vars(e), EV_FLAGS) & FL_FAKECLIENT))
             FakeCommand(e, "weapon_knife");
-        static int reports = 0;
+        static int reports = 0, reportRound = -1;
+        if (reportRound != g_zt.round)
+            reportRound = g_zt.round, reports = 0;
         if (reports++ < 40)
             Log("Zombie Tag: %s '%s' had a weapon in slot %d (%s): %s", pl[ZT_IS_ZOMBIE] ? "zombie" : "human", String(F<int>(Vars(e), EV_NETNAME)),
                 other, had.c_str(), ok ? (type == 0x2a ? "now only the crowbar" : type == 0x29 ? "now only the zombie hands" : "now only the knife") : "FAILED");
@@ -883,61 +781,28 @@ static void ZtZombieThink(void* bot, ZtBot& z, unsigned char* rules, V3 me, floa
                 ZtCommand(bot, "zbtag_motion", "5");
                 z.smoked = true;
             }
-            z.wanders = 0; // busted anyway: no more strolling
-            g_ztSpots.erase(bot);
             static int reports = 0;
             if (reports++ < 60)
                 Log("Zombie Tag: zombie '%s' %s: it runs", String(F<int>(Vars(bot), EV_NETNAME)), hit ? "was hit" : "is being watched");
         }
     }
 
-    // ---- where to: like the AI zombies, by a few places over the map, now and then by a dummygoal, then the player goal
+    // ---- where to: like the crowd, now and then by a dummygoal, then the player goal
     if (z.goalIndex < 0 || z.goalIndex >= (int)g_zt.playerGoals.size())
         z.goalIndex = g_zt.playerGoals.empty() ? -1 : rand() % (int)g_zt.playerGoals.size();
     if (!z.viaSet)
     {
         z.viaSet = true;
         z.speedJitter = 0.94f + Rnd() * 0.1f;
-        z.wanders = 1 + rand() % 3;
         if (!g_zt.dummyGoals.empty() && Rnd() < 0.55f)
             z.via = g_zt.dummyGoals[rand() % g_zt.dummyGoals.size()];
         else
             z.viaDone = true;
     }
-    bool wandering = false;
-    if (z.wanders > 0)
-    {
-        if (g_zt.fever)
-            z.spotBestAt = now; // walking with the fever's moves, not stuck
-        if (z.spotSet)
-        {
-            float dist = Len2D(me - z.spot);
-            if (dist < z.spotBest - 40.0f)
-                z.spotBest = dist, z.spotBestAt = now;
-            if (dist < 100.0f || now - z.spotSince > 45.0f || now - z.spotBestAt > 8.0f)
-                z.spotSet = false, z.wanders--;
-        }
-        if (!z.spotSet && z.wanders > 0 && now >= z.spotRetry)
-        {
-            V3 s;
-            if (ZtSpreadSpot(bot, me, s))
-            {
-                z.spot = s;
-                z.spotSet = true;
-                z.spotSince = z.spotBestAt = now;
-                z.spotBest = Len2D(me - s);
-            }
-            else
-                z.spotRetry = now + 1.5f;
-        }
-        if (z.wanders <= 0)
-            g_ztSpots.erase(bot);
-        wandering = z.spotSet;
-    }
-    if (!wandering && !z.viaDone && Len2D(z.via - me) < 160.0f)
+    if (!z.viaDone && Len2D(z.via - me) < 160.0f)
         z.viaDone = true;
-    V3 target = wandering ? z.spot : z.viaDone && z.goalIndex >= 0 ? g_zt.playerGoals[z.goalIndex] : z.via;
-    if (!wandering && z.goalIndex < 0 && z.viaDone)
+    V3 target = z.viaDone && z.goalIndex >= 0 ? g_zt.playerGoals[z.goalIndex] : z.via;
+    if (z.goalIndex < 0 && z.viaDone)
     {
         z.doing = "no goal on this map: walking with the crowd";
         speed = g_zt.crowdSpeed * z.speedJitter;
@@ -946,10 +811,10 @@ static void ZtZombieThink(void* bot, ZtBot& z, unsigned char* rules, V3 me, floa
     goal = target;
     hasGoal = true;
     speed = g_zt.crowdSpeed * z.speedJitter;
-    z.doing = act == ZT_ACT_JUMP ? "hopping along with the crowd" : wandering ? "wandering over the map like the AI zombies" : z.viaDone ? "walking to the goal with the crowd" : "walking by a dummy goal like the crowd";
+    z.doing = act == ZT_ACT_JUMP ? "hopping along with the crowd" : z.viaDone ? "walking to the goal with the crowd" : "walking by a dummy goal like the crowd";
     float toGoal = z.goalIndex >= 0 ? Len2D(g_zt.playerGoals[z.goalIndex] - me) : 1e9f;
     bool humanNear = ZtHumanStaring(bot, Center(bot), 380.0f, 180.0f) != nullptr;
-    bool dash = !wandering && z.viaDone && toGoal < ZT_GOAL_NEAR && !humanNear && !g_zt.fever;
+    bool dash = z.viaDone && toGoal < ZT_GOAL_NEAR && !humanNear && !g_zt.fever;
     if (now < z.panicUntil || dash)
     {
         if (now < z.panicUntil && z.goalIndex >= 0)

@@ -745,13 +745,12 @@ commands `zbtag_motion 1..5` / `sprintON` / `sprintOFF` (ClientCommand 0x1082d96
 The fever is a row of `resource/ZombieTag/zombiefever` (up to 3 actions of 3 s), the actions are `resource/ZombieTag/ZombieTagAction` (0 nothing, 1 walk, 2 jump,
 3 stop, 4 crouch, 5/6 spin, 7/8 walk in circles, 9 walk backwards, 10..26 emotions; DanceThink 0x1095dab0 keeps 1, 2, 5..9 moving).
 `DriveZtBot` drives every bot: zombies blend in (the crowd's measured speed, each fever action after a reaction time, calm or panic with smoke and
-sprint, a few places over the map before the goal, the last stretch to it, a poke from behind), humans score what they see (`ZtObserve`, per action),
-spread out to watch, hit a suspect once with the crowbar as a test, chase or call the find.
-The AI zombies spread out too (`ZtSpreadDummy`): each walks to one dummygoal (CDummyMan +0x12a0, re-pathed every 0.6 s by 0x10960140) and then to a
-playergoal (+0x12d0) where it leaves, so they bunched up; botassist writes 2 to 4 nav areas far from the others' (`ZtSpreadSpot`) into +0x12a0 first and
-puts the game's goal back after.
+sprint, the last stretch to the goal, a poke from behind), humans score what they see (`ZtObserve`, per action), spread out to watch, hit a suspect once
+with the crowbar as a test, chase or call the find. (A try at spreading the AI zombies over the map, by writing places into CDummyMan +0x12a0, their
+dummygoal, was taken out: too few of them were left heading for the goals.)
 For every player of the mode (`ZtFrame` and four detours, gated by `g_ztActive`): a zombie player gets the AI zombies' sequences when it stands, walks or
-jumps (`ZtPlayerAnim` from SetAnimation 0x114cced0: zbs_idle1 / zbs_walk / crouch_idle, gaitsequence 0); zombie players don't collide with players
+jumps (`ZtPlayerAnim` from SetAnimation 0x114cced0: zbs_idle1 / zbs_walk / crouch_idle, gaitsequence 0, and the frame, animtime and framerate of the
+nearest AI zombie playing the same, since they all move in step); zombie players don't collide with players
 (solid 0 from PlayerPreThink 0x113f6520 to PlayerPostThink 0x113f6500, and entity_state +0x3e from AddToFullPack 0x113e93b0); an emoting zombie player
 plays its emotion on the whole body (gaitsequence 0 after SetAnimation and PostThink; the game would put back the gait it saved at +0x18c4); everybody
 holds only the mode's knife (`ZtKnifeOnly`): the mode gives it (GiveKnife 0x114bad10 from 0x10830830, type 0x2a the crowbar for humans, 0x29 the emotion
