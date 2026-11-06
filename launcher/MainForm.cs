@@ -387,6 +387,14 @@ namespace CsnzLauncher
                 {
                     var r = GitHub.Latest(GitHub.FindToken(Settings.Load(), out var src)).GetAwaiter().GetResult();
                     lines.Add($"latest: {r.Tag} ({string.Join(", ", r.Assets.Select(a => a.Name))}), token {src}");
+                    if (args.Contains("--download"))
+                    {
+                        var zip = r.Find(n => n.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
+                        var tmp = Path.Combine(Path.GetTempPath(), "csnz-check-" + zip.Name);
+                        GitHub.Download(zip, GitHub.FindToken(Settings.Load(), out _), tmp, l => { }).GetAwaiter().GetResult();
+                        lines.Add($"downloaded {zip.Name}: {new FileInfo(tmp).Length} bytes (release says {zip.Size})");
+                        File.Delete(tmp);
+                    }
                 }
                 catch (Exception ex) { lines.Add("latest: " + ex.Message); }
                 if (args.Length > 1 && args[1] == "--install" && args.Length > 2)

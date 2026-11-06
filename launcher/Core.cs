@@ -163,7 +163,7 @@ namespace CsnzLauncher
                 var json = new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(await res.Content.ReadAsStringAsync());
                 var info = new ReleaseInfo { Tag = json["tag_name"] as string, Notes = json.ContainsKey("body") ? json["body"] as string : "" };
                 info.Version = Paths.ParseVersion(info.Tag);
-                foreach (Dictionary<string, object> a in (object[])json["assets"])
+                foreach (Dictionary<string, object> a in (System.Collections.IEnumerable)json["assets"])
                     info.Assets.Add(new ReleaseAsset { Name = (string)a["name"], ApiUrl = (string)a["url"], Size = Convert.ToInt64(a["size"]) });
                 return info;
             }
