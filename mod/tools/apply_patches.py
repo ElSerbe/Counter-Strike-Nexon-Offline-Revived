@@ -66,6 +66,8 @@ _INIT = 0x2569EF0
 _CONSOLE_FALLBACK = 0x23DA56B  # public-buffer executor: call to the whitelisted-cvar fallback
 _CONSOLE_STUB = 0x1D37B20      # 32 int3 bytes between a string and a function
 _PORT_CAVE = 0x1D2B3D0         # inside 59 int3 bytes at 0x1d2b3c5: the game-server socket's port check
+_UDP_SET = 0x24A7780           # sets the UDP holepunch target (sockaddr_in at 0x2e1aa50) from (ip, port)
+_UDP_CAVE = 0x1D454B0          # inside 2902 int3 bytes at 0x1d454aa: the same port rule for that target
 _CBUF_ADDTEXT = 0x23D8710
 _COMPLETION_ON_TEXT = 0x1061AF56    # GameUI: console text changed -> rebuild completion
 _COMPLETION_ON_SUBMIT = 0x10618ED3  # GameUI: command added to history -> rebuild completion
@@ -217,6 +219,36 @@ PATCHES = [
             "6689410a"      # store: mov [ecx+0a],ax
             "c3"),          # ret
         "Game-server socket port check (code cave in int3 padding)",
+    ),
+    (
+        # The game's UDP holepunch goes to a sockaddr_in at 0x2e1aa50 set by 0x24a7780(ip, port) after each connect
+        # (0x24f698e the first, 0x2672f5d a server transfer). The first connect passes port 0 (no -lobbyport): the
+        # holepunch went to port 0 and never reached CSNZ_Server, so neither the server nor the Steam bridge knew the
+        # game's UDP ports (players from another PC hung at "joining"). Only after a transfer did it reach 30002.
+        "hw.dll",
+        _UDP_SET + 0x20,
+        bytes.fromhex("5dc3cccccc"),        # pop ebp; ret; padding
+        b"\xe9" + _rel32(_UDP_SET + 0x25, _UDP_CAVE),  # jmp to the port check (the stores before it are untouched)
+        "UDP holepunch target: same port rule as the game-server socket (port 0 -> 30002)",
+    ),
+    (
+        "hw.dll",
+        _UDP_CAVE,
+        b"\xcc" * 37,                       # int3 padding (checked before writing)
+        bytes.fromhex(
+            "668b450c"      # mov ax,[ebp+0c]        the port asked for (network order)
+            "86c4"          # xchg al,ah
+            "663d3275"      # cmp ax,30002
+            "7206"          # jb force
+            "663df775"      # cmp ax,30199
+            "7611"          # jbe done               one of the mod's ports: kept
+            "e800000000"    # force: call next
+            "5a"            # next: pop edx          (edx = this address, wherever hw.dll is loaded)
+            "8b92") + _rel32(_UDP_CAVE + 23, _UDP_SET + 0x1C) + bytes.fromhex(  # mov edx,[relocated slot of the port's address]
+            "66c7027532"    # mov word [edx],htons(30002)
+            "5d"            # done: pop ebp
+            "c3"),          # ret
+        "UDP holepunch target port check (code cave in int3 padding)",
     ),
     (
         "hw.dll",

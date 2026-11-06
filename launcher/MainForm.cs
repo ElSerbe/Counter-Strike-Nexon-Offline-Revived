@@ -558,6 +558,65 @@ namespace CsnzLauncher
     static class Program
     {
         [STAThread]
+        // Opened from the browser's download bar, the launcher runs from a new temporary copy each time (Chrome/Edge:
+        // Downloads\scoped_dir..., else %TEMP%): the mod got installed there and every start asked to install it again.
+        // It offers a folder of its own (Documents\CSNZ Offline Revived by default), copies itself there and starts that copy.
+        static bool MoveOutOfTemporaryFolder()
+        {
+            var root = Paths.Root;
+            var temp = Path.GetFullPath(Path.GetTempPath()).TrimEnd('\\');
+            bool temporary = Path.GetFileName(root).StartsWith("scoped_dir", StringComparison.OrdinalIgnoreCase) ||
+                             root.StartsWith(temp, StringComparison.OrdinalIgnoreCase);
+            if (!temporary)
+                return false;
+            var target = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "CSNZ Offline Revived");
+            var answer = MessageBox.Show(
+                "The launcher was opened from a temporary folder (the browser's downloads bar):\n" + root + "\n\n" +
+                "Everything it installs there is lost, and next time it asks to install again.\n\n" +
+                "Yes: move it to " + target + " and open it from there (a desktop shortcut is made too).\n" +
+                "No: choose another folder.\nCancel: keep running from here.",
+                "Counter-Strike Nexon: Offline Revived", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning);
+            if (answer == DialogResult.Cancel)
+                return false;
+            if (answer == DialogResult.No)
+            {
+                using (var d = new FolderBrowserDialog { Description = "An empty folder for the launcher (the mod is installed next to it)", ShowNewFolderButton = true })
+                {
+                    if (d.ShowDialog() != DialogResult.OK)
+                        return false;
+                    target = d.SelectedPath;
+                }
+            }
+            try
+            {
+                Directory.CreateDirectory(target);
+                var exe = Path.Combine(target, "CSNZ-Offline-Revived-Launcher.exe");
+                File.Copy(Application.ExecutablePath, exe, true);
+                foreach (var keep in new[] { "launcher.json" })
+                    if (File.Exists(Path.Combine(root, keep)) && !File.Exists(Path.Combine(target, keep)))
+                        File.Copy(Path.Combine(root, keep), Path.Combine(target, keep));
+                try
+                {
+                    var desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+                    var shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell"));
+                    dynamic sc = shell.GetType().InvokeMember("CreateShortcut", System.Reflection.BindingFlags.InvokeMethod, null, shell,
+                        new object[] { Path.Combine(desktop, "Counter-Strike Nexon Offline Revived Launcher.lnk") });
+                    sc.TargetPath = exe;
+                    sc.WorkingDirectory = target;
+                    sc.IconLocation = exe + ",0";
+                    sc.Save();
+                }
+                catch { }
+                Process.Start(new ProcessStartInfo(exe) { WorkingDirectory = target });
+                return true;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Couldn't move the launcher: " + ex.Message, "Counter-Strike Nexon: Offline Revived");
+                return false;
+            }
+        }
+
         static void Main(string[] args)
         {
             if (args.Length > 0 && args[0] == "--check")
@@ -611,6 +670,8 @@ namespace CsnzLauncher
             }
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
+            if (!args.Contains("--play") && MoveOutOfTemporaryFolder())
+                return;
             if (args.Contains("--preview-get-game"))
             {
                 Application.Run(new GetGameForm(true));

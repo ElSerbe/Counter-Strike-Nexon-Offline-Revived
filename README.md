@@ -12,7 +12,9 @@ launcher patches *your* copy of the game, keeps a backup of every file it change
 
 1. Install Counter-Strike Nexon: Zombies from Steam (the launcher points you there if it isn't installed).
 2. Download `CSNZ-Offline-Revived-Launcher.exe` from the latest release and put it in an empty folder of its own
-   (the mod is installed next to it, in `mod\`).
+   (the mod is installed next to it, in `mod\`). Don't open it from the browser's downloads bar: the browser runs a new temporary
+   copy each time, and the launcher would ask to install everything again (it now offers to move itself to
+   `Documents\CSNZ Offline Revived` when that happens).
 3. Open it. The repository is public, so it needs nothing else to find the releases (a GitHub token in
    **More > GitHub token...**, `GH_TOKEN` / `GITHUB_TOKEN` or the GitHub CLI is still used if there is one).
 4. **Install** downloads the mod. Later, the same button says **Update** when a newer release is out (the
