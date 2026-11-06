@@ -21,6 +21,8 @@ namespace CsnzLauncher
         readonly FlatButton playButton = new FlatButton { Text = "Play", Primary = true, Sub = "Starts the local server and the game" };
         readonly FlatButton moreButton = new FlatButton { Text = "More  \u25BE" };
         readonly FlatButton logsButton = new FlatButton { Text = "Logs  \u25BE" };
+        readonly FlatButton picturesButton = new FlatButton { Text = "Pictures" };
+        readonly ToolTip tips = new ToolTip();
         readonly Toggle detailBox = new Toggle { Text = "Detailed logs: the server and the Steam bridge log every packet (for bug reports)" };
         readonly FlatButton patchButton = new FlatButton { Text = "Patch game" };
         readonly FlatButton browseButton = new FlatButton { Text = "Browse" };
@@ -77,9 +79,12 @@ namespace CsnzLauncher
             playButton.Font = Theme.Display(34);
             updateButton.SetBounds(648, 330, 150, 44);
             patchButton.SetBounds(806, 330, 150, 44);
-            moreButton.SetBounds(648, 384, 150, 44);
-            logsButton.SetBounds(806, 384, 150, 44);
-            foreach (var bt in new[] { updateButton, patchButton, moreButton, logsButton })
+            moreButton.SetBounds(648, 384, 98, 44);
+            logsButton.SetBounds(753, 384, 98, 44);
+            picturesButton.SetBounds(858, 384, 98, 44);
+            tips.SetToolTip(picturesButton, "Exports the shop's item pictures and 3D previews, the medal icons and the mission pictures from your game\n" +
+                                            "for the in-game web pages. Installs Python for your Windows user first if it isn't there.");
+            foreach (var bt in new[] { updateButton, patchButton, moreButton, logsButton, picturesButton })
                 bt.Font = Theme.Display(16);
 
             // the log
@@ -91,7 +96,8 @@ namespace CsnzLauncher
             logBox.ForeColor = Color.FromArgb(170, 184, 184);
             logCard.Controls.Add(logBox);
 
-            Controls.AddRange(new Control[] { gameCard, playButton, updateButton, patchButton, moreButton, logsButton, logCard, header });
+            Controls.AddRange(new Control[] { gameCard, playButton, updateButton, patchButton, moreButton, logsButton, picturesButton, logCard, header });
+            picturesButton.Click += (s, e) => PicturesClicked();
             onlineBox.Checked = settings.OnlinePlay;
             onlineBox.CheckedChanged += (s, e) => { settings.OnlinePlay = onlineBox.Checked; settings.Save(); onlineBox.Invalidate(); };
             detailBox.Checked = settings.DetailedLogs;
@@ -112,7 +118,6 @@ namespace CsnzLauncher
 
             var more = new ContextMenuStrip { Renderer = new DarkMenuRenderer(), BackColor = Theme.Panel, ForeColor = Theme.Text, ShowImageMargin = false, Font = Theme.UiFont(13) };
             more.Items.Add("Create a desktop shortcut that starts the game", null, (s, e) => CreateShortcut());
-            more.Items.Add("Export shop and profile pictures from the game (Python)", null, (s, e) => _ = Run("Exporting pictures", () => Assets.Export(Game(), Log)));
             more.Items.Add("Verify the game's files with Steam", null, (s, e) => OpenSteam(GameLocator.VerifyCommand));
             more.Items.Add("Get the game from Steam...", null, (s, e) => GetGame());
             more.Items.Add(new ToolStripSeparator());
@@ -192,7 +197,7 @@ namespace CsnzLauncher
         void SetBusy(bool on)
         {
             busy = on;
-            updateButton.Enabled = playButton.Enabled = moreButton.Enabled = patchButton.Enabled = !on;
+            updateButton.Enabled = playButton.Enabled = moreButton.Enabled = patchButton.Enabled = picturesButton.Enabled = !on;
             UseWaitCursor = on;
         }
 
@@ -352,6 +357,50 @@ namespace CsnzLauncher
                 Log("Game folder: " + dir);
                 RefreshVersion();
             }
+        }
+
+        // ------------------------------------------------------------ pictures
+        // the in-game web pages' pictures and 3D previews, made from the player's own game by the mod's Python scripts.
+        // No Python: python.org's newest installer, for this Windows user (asked first)
+        async void PicturesClicked()
+        {
+            if (busy)
+                return;
+            if (Paths.InstalledVersion() == null)
+            {
+                MessageBox.Show(this, "The mod isn't installed yet: press Install first.", Text);
+                return;
+            }
+            if (!GameLocator.IsGame(settings.GamePath))
+            {
+                GetGame();
+                return;
+            }
+            if (Assets.Present && MessageBox.Show(this, "The pictures are already exported. Export them again (a few minutes)?", Text,
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+                return;
+            bool install = false;
+            SetBusy(true);
+            bool hasPython = await Task.Run(() => Assets.HasPython());
+            SetBusy(false);
+            if (!hasPython)
+            {
+                if (MessageBox.Show(this,
+                        "The pictures are made by Python scripts, and Python isn't installed on this PC.\n\n" +
+                        "Download the latest Python from python.org (about 30 MB) and install it for your Windows user? " +
+                        "No administrator rights are needed; it shows up in Windows' Installed apps like any program.",
+                        Text, MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+                    return;
+                install = true;
+            }
+            var game = settings.GamePath;
+            if (await Run("Pictures", () =>
+            {
+                if (install)
+                    Assets.InstallPython(Log);
+                Assets.Export(game, Log);
+            }))
+                MessageBox.Show(this, "The pictures are ready: the in-game shop, profile and missions pages show them now.", Text);
         }
 
         // ------------------------------------------------------------ logs
@@ -524,7 +573,7 @@ namespace CsnzLauncher
                     return false;
             }
             if (!Assets.Present)
-                Log("Note: the shop and profile pictures aren't exported yet (More > Export...). The game works without them.");
+                Log("Note: the shop and profile pictures aren't exported yet (the Pictures button). The game works without them.");
 
             Process server = null, bridge = null;
             bool online = settings.OnlinePlay, verbose = settings.DetailedLogs;
@@ -703,6 +752,14 @@ namespace CsnzLauncher
                     Installer.InstallZip(args[2], l => lines.Add(l));
                     Certificates.Ensure(l => lines.Add(l));
                 }
+                if (args.Contains("--python"))
+                    try
+                    {
+                        lines.Add("python found: " + Assets.HasPython());
+                        var (v, url) = Assets.LatestPython();
+                        lines.Add($"latest python installer: {v} {url}");
+                    }
+                    catch (Exception ex) { lines.Add("python: " + ex.Message); }
                 if (args.Contains("--logs"))
                     try { lines.Add($"logs: {LogBundle.Build(Settings.Load()).Length} characters in {LogBundle.FilePath}"); }
                     catch (Exception ex) { lines.Add("logs: " + ex); }

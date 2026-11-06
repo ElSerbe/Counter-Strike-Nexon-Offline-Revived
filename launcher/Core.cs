@@ -10,6 +10,7 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.NetworkInformation;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
@@ -925,7 +926,8 @@ namespace CsnzLauncher
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
-                WorkingDirectory = Path.Combine(Paths.Mod, "tools"),
+                // the mod's scripts run in mod\tools (a check for Python runs anywhere)
+                WorkingDirectory = Directory.Exists(Path.Combine(Paths.Mod, "tools")) ? Path.Combine(Paths.Mod, "tools") : Path.GetTempPath(),
             };
             if (game != null)
                 psi.EnvironmentVariables["CSNZ_GAME"] = game;
@@ -941,9 +943,25 @@ namespace CsnzLauncher
             }
         }
 
+        // the Pythons this launcher may have installed (per user, python.org's installer) or the PATH's
+        static IEnumerable<(string exe, string prefix)> PythonCandidates()
+        {
+            var dirs = new List<string>();
+            foreach (var root in new[] { Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "Python"),
+                                         Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles) })
+                try { dirs.AddRange(Directory.GetDirectories(root, "Python3*")); } catch { }
+            foreach (var d in dirs.OrderByDescending(d => d.Length).ThenByDescending(d => d, StringComparer.OrdinalIgnoreCase))
+                if (File.Exists(Path.Combine(d, "python.exe")))
+                    yield return (Path.Combine(d, "python.exe"), "");
+            // the PATH's (Windows' "python" Store alias fails the test below, so it's skipped)
+            yield return ("py", "-3 ");
+            yield return ("python", "");
+            yield return ("python3", "");
+        }
+
         static string FindPython(out string prefix)
         {
-            foreach (var (exe, pre) in new[] { ("py", "-3 "), ("python", ""), ("python3", "") })
+            foreach (var (exe, pre) in PythonCandidates())
             {
                 try
                 {
@@ -959,17 +977,96 @@ namespace CsnzLauncher
             return null;
         }
 
+        public static bool HasPython() => FindPython(out _) != null;
+
+        // the newest Python 3 with a Windows installer on python.org (newer folders can hold only previews)
+        public static (Version version, string url) LatestPython()
+        {
+            var arch = RuntimeInformation.OSArchitecture == Architecture.Arm64 ? "-arm64" : Environment.Is64BitOperatingSystem ? "-amd64" : "";
+            using (var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) })
+            {
+                http.DefaultRequestHeaders.UserAgent.ParseAdd("CSNZ-Offline-Revived-Launcher");
+                var index = http.GetStringAsync("https://www.python.org/ftp/python/").GetAwaiter().GetResult();
+                var versions = System.Text.RegularExpressions.Regex.Matches(index, "href=\"(3\\.\\d+\\.\\d+)/\"")
+                    .Cast<System.Text.RegularExpressions.Match>().Select(m => new Version(m.Groups[1].Value)).Distinct().OrderByDescending(v => v);
+                foreach (var v in versions.Take(20))
+                {
+                    var url = $"https://www.python.org/ftp/python/{v}/python-{v}{arch}.exe";
+                    using (var head = new HttpRequestMessage(HttpMethod.Head, url))
+                    using (var r = http.SendAsync(head).GetAwaiter().GetResult())
+                        if (r.IsSuccessStatusCode)
+                            return (v, url);
+                }
+            }
+            throw new Exception("No Python installer found on python.org.");
+        }
+
+        // python.org's installer, for this Windows user only (no administrator rights), with the py launcher and PATH
+        public static void InstallPython(Logger log)
+        {
+            log("Looking for the latest Python on python.org...");
+            var (version, url) = LatestPython();
+            var file = Path.Combine(Path.GetTempPath(), Path.GetFileName(url));
+            log($"Downloading Python {version} ({url})...");
+            using (var http = new HttpClient { Timeout = TimeSpan.FromMinutes(10) })
+            {
+                http.DefaultRequestHeaders.UserAgent.ParseAdd("CSNZ-Offline-Revived-Launcher");
+                using (var r = http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead).GetAwaiter().GetResult())
+                {
+                    r.EnsureSuccessStatusCode();
+                    long total = r.Content.Headers.ContentLength ?? 0, done = 0;
+                    int shown = 0;
+                    using (var src = r.Content.ReadAsStreamAsync().GetAwaiter().GetResult())
+                    using (var dst = File.Create(file))
+                    {
+                        var buf = new byte[81920];
+                        int n;
+                        while ((n = src.Read(buf, 0, buf.Length)) > 0)
+                        {
+                            dst.Write(buf, 0, n);
+                            done += n;
+                            if (total > 0 && done * 4 / total > shown)
+                                log($"  {++shown * 25}% of {total / 1048576} MB");
+                        }
+                    }
+                }
+            }
+            // only an installer signed by the Python Software Foundation runs
+            string signer;
+            try { signer = new X509Certificate2(X509Certificate.CreateFromSignedFile(file)).GetNameInfo(X509NameType.SimpleName, false); }
+            catch { signer = null; }
+            if (signer == null || signer.IndexOf("Python Software Foundation", StringComparison.OrdinalIgnoreCase) < 0)
+            {
+                try { File.Delete(file); } catch { }
+                throw new Exception("The Python installer isn't signed by the Python Software Foundation" + (signer != null ? " (" + signer + ")" : "") + ": not run.");
+            }
+            log($"Installing Python {version} for your Windows user (a minute or two, no window)...");
+            var psi = new ProcessStartInfo(file, "/quiet InstallAllUsers=0 PrependPath=1 Include_launcher=1 InstallLauncherAllUsers=0 " +
+                                                 "Include_pip=1 Include_test=0 Include_doc=0 Shortcuts=0") { UseShellExecute = false, CreateNoWindow = true };
+            using (var p = Process.Start(psi))
+            {
+                p.WaitForExit();
+                try { File.Delete(file); } catch { }
+                if (p.ExitCode != 0 && p.ExitCode != 3010)
+                    throw new Exception($"The Python installer stopped with code {p.ExitCode}. Install Python from https://www.python.org/downloads/ and press Pictures again.");
+            }
+            if (!HasPython())
+                throw new Exception("Python was installed but the launcher can't find it: restart the launcher and press Pictures again.");
+            log($"Python {version} is installed.");
+        }
+
         public static void Export(string game, Logger log)
         {
             var py = FindPython(out var pre);
             if (py == null)
-                throw new Exception("Python 3 isn't installed (https://www.python.org/downloads/, tick \"Add python.exe to PATH\").\n" +
+                throw new Exception("Python 3 isn't installed: press Pictures to let the launcher install it, or get it from https://www.python.org/downloads/.\n" +
                                     "Without these pictures the in-game shop and profile pages show no item images; everything else works.");
-            if (Run(py, pre + "-c \"import PIL, pefile\"", _ => { }) != 0)
+            log("Python: " + py);
+            if (Run(py, pre + "-c \"import pefile\"", _ => { }) != 0)
             {
-                log("Installing the Python packages Pillow and pefile...");
-                if (Run(py, pre + "-m pip install --user --disable-pip-version-check pillow pefile", log) != 0)
-                    throw new Exception("pip couldn't install Pillow and pefile.");
+                log("Installing the Python package pefile...");
+                if (Run(py, pre + "-m pip install --user --disable-pip-version-check pefile", log) != 0)
+                    throw new Exception("pip couldn't install pefile.");
             }
             foreach (var script in Scripts)
             {
