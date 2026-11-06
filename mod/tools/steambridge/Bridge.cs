@@ -68,6 +68,18 @@ namespace SteamBridge
         }
         readonly Dictionary<ulong, Remote> remotes = new Dictionary<ulong, Remote>();
         volatile int myPort0, myPort1; // this PC's game: server and client ports (its UDP holepunch, /api/udp)
+        // where this PC's game really sent its match packets from (by portID): replies go there. A packet from a port the
+        // holepunch didn't announce is no longer dropped: it counts as the client port's and the reply goes back to it
+        volatile int seenPort0, seenPort1;
+        long udpToPeer, udpFromPeer, udpDropped;
+        long reportedTo = -1, reportedFrom = -1, reportedDropped = -1;
+        DateTime nextUdpReport = DateTime.MinValue;
+        int udpNotes;
+        void UdpNote(string text)
+        {
+            if (System.Threading.Interlocked.Increment(ref udpNotes) <= 60)
+                log("UDP: " + text);
+        }
         readonly Dictionary<ulong, Host> hosts = new Dictionary<ulong, Host>();
 
         // a tunnelled TCP connection: on the joining side it was accepted from the game, on the host side it goes to the server
@@ -267,6 +279,8 @@ namespace SteamBridge
                         int mine = MyPortID(from.Port);
                         if (mine >= 0)
                             SendUdp(loopback ? LoopHostSide : host.SteamID, 0, portID, mine, data, n);
+                        else
+                            Dropped("a packet from 127.0.0.1:" + from.Port + " to " + (JoinerUdpBase + k * 2 + portID));
                     });
                     new Thread(() => AcceptLoop(host)) { IsBackground = true }.Start();
                 }
@@ -523,10 +537,29 @@ namespace SteamBridge
                     try { u?.Close(); } catch { }
         }
 
-        int MyPortID(int port) => port == myPort0 && port != 0 ? 0 : port == myPort1 && port != 0 ? 1 : -1;
+        int MyPortID(int port)
+        {
+            int id = port == myPort0 && port != 0 ? 0 : port == myPort1 && port != 0 ? 1 : -1;
+            if (id < 0)
+            {
+                if (port == 0)
+                    return -1;
+                if (seenPort1 != port)
+                    UdpNote("this PC's game sends from port " + port + ", not one of its holepunch ports (" + myPort0 + ", " + myPort1 + "): used as its client port");
+                id = 1;
+            }
+            if (id == 0)
+                seenPort0 = port;
+            else
+                seenPort1 = port;
+            return id;
+        }
+        int ReplyPort(int portID) => portID == 0 ? (seenPort0 != 0 ? seenPort0 : myPort0) : (seenPort1 != 0 ? seenPort1 : myPort1);
 
         void SendUdp(ulong peer, byte direction, int hostPortID, int playerPortID, byte[] data, int n)
         {
+            if (System.Threading.Interlocked.Increment(ref udpToPeer) == 1)
+                UdpNote("first match packet from this PC's game to " + peer + " (" + (direction == 0 ? "to their room" : "to their game in this PC's room") + ", " + n + " bytes)");
             var msg = new byte[4 + n];
             msg[0] = Udp;
             msg[1] = direction;
@@ -552,32 +585,58 @@ namespace SteamBridge
             int direction = buf[1], hostPortID = buf[2] & 1, playerPortID = buf[3] & 1;
             UdpClient from;
             int to;
+            if (System.Threading.Interlocked.Increment(ref udpFromPeer) == 1)
+                UdpNote("first match packet from " + peer + " (" + (direction == 1 ? "their game hosts the room this PC joined" : "their game joined this PC's room") + ", " + (size - 4) + " bytes)");
             if (direction == 1)
             {
                 // the host PC's game -> this PC's game (this PC joined that host)
                 var h = hosts.Values.FirstOrDefault(x => x.SteamID == (loopback ? steam.MySteamID : peer));
                 if (h?.Udp == null)
+                {
+                    Dropped("a packet from host " + peer + ", whose lobby this PC doesn't know (no 31000+ ports for it)");
                     return;
+                }
                 from = h.Udp[hostPortID];
-                to = playerPortID == 0 ? myPort0 : myPort1;
+                to = ReplyPort(playerPortID);
             }
             else
             {
                 // a remote player's game -> this PC's game (the room host)
                 if (!remotes.TryGetValue(loopback ? steam.MySteamID : peer, out var r) || r.Udp == null)
+                {
+                    Dropped("a packet from player " + peer + ", who isn't on this PC's server (no 33000+ ports for them)");
                     return;
+                }
                 from = r.Udp[playerPortID];
-                to = hostPortID == 0 ? myPort0 : myPort1;
+                to = ReplyPort(hostPortID);
             }
             if (from == null || to == 0)
+            {
+                Dropped(from == null ? "a packet for a port this PC couldn't open" : "a packet: this PC's game ports are unknown (no holepunch to this PC's server yet)");
                 return;
+            }
             try { from.Send(buf.Skip(4).Take(size - 4).ToArray(), size - 4, new IPEndPoint(IPAddress.Loopback, to)); }
-            catch { }
+            catch (Exception ex) { Dropped("a packet to 127.0.0.1:" + to + ": " + ex.Message); }
+        }
+
+        void Dropped(string what)
+        {
+            System.Threading.Interlocked.Increment(ref udpDropped);
+            UdpNote("dropped " + what);
         }
 
         // GET /api/udp: this PC's game ports and the remote players on this PC's server
         void ReadUdpState()
         {
+            var now = DateTime.UtcNow;
+            if (now >= nextUdpReport && (udpToPeer != reportedTo || udpFromPeer != reportedFrom || udpDropped != reportedDropped))
+            {
+                nextUdpReport = now.AddSeconds(15);
+                reportedTo = udpToPeer;
+                reportedFrom = udpFromPeer;
+                reportedDropped = udpDropped;
+                log("UDP: " + udpToPeer + " match packets sent to the other PC, " + udpFromPeer + " received, " + udpDropped + " dropped");
+            }
             string text;
             try { text = http.GetStringAsync(apiUrl + "/api/udp").GetAwaiter().GetResult(); }
             catch { return; }
@@ -611,6 +670,8 @@ namespace SteamBridge
                         int mine = MyPortID(from.Port);
                         if (mine >= 0)
                             SendUdp(loopback ? steam.MySteamID : id, 1, mine, portID, data, n);
+                        else
+                            Dropped("a packet from 127.0.0.1:" + from.Port + " to " + (HostUdpBase + slot * 2 + portID));
                     });
                     remotes[id] = remote;
                     log("Player " + id + " plays on this PC's server: their match traffic goes through 127.0.0.1:" + (HostUdpBase + slot * 2) + "-" + (HostUdpBase + slot * 2 + 1));
