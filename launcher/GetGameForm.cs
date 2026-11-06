@@ -10,7 +10,7 @@ namespace CsnzLauncher
     {
         public string FoundPath { get; private set; }
 
-        readonly Label status = new Label { AutoSize = false };
+        readonly Label status = new Label { AutoSize = false, ForeColor = Theme.Muted };
         readonly Timer watch = new Timer { Interval = 3000 };
 
         // preview: the window as a player without the game sees it (no watch, which would find the game here)
@@ -21,10 +21,12 @@ namespace CsnzLauncher
             FormBorderStyle = FormBorderStyle.FixedDialog;
             StartPosition = FormStartPosition.CenterParent;
             MinimizeBox = MaximizeBox = false;
-            Font = new Font("Segoe UI", 9);
+            Font = Theme.UiFont(13);
+            BackColor = Theme.Back;
+            ForeColor = Theme.Text;
 
             bool steam = GameLocator.SteamDir() != null;
-            var head = new Label { Text = "Counter-Strike Nexon isn't installed on this PC", Font = new Font("Segoe UI", 12, FontStyle.Bold), AutoSize = true, Location = new Point(14, 12) };
+            var head = new Label { Text = "COUNTER-STRIKE NEXON ISN'T INSTALLED ON THIS PC", Font = Theme.Display(22), ForeColor = Theme.Accent, AutoSize = true, Location = new Point(14, 10) };
             var info = new Label
             {
                 Location = new Point(16, 44),
@@ -33,25 +35,28 @@ namespace CsnzLauncher
                     ? "The mod plays on your own copy of the game. It's free on Steam: install its latest version, and the launcher finds it by itself as soon as Steam has finished."
                     : "The mod plays on your own copy of the game, which is free on Steam. Steam isn't installed on this PC: get Steam first, then install the game.",
             };
-            var cmdLabel = new Label { Text = "Or press Win+R and run one of these commands:", AutoSize = true, Location = new Point(16, 152) };
+            var cmdLabel = new Label { Text = "Or press Win+R and run one of these commands:", AutoSize = true, ForeColor = Theme.Muted, Location = new Point(16, 152) };
             var cmds = new TextBox
             {
                 Multiline = true,
                 ReadOnly = true,
                 Font = new Font("Consolas", 10),
+                BackColor = Theme.Field,
+                ForeColor = Theme.Text,
+                BorderStyle = BorderStyle.FixedSingle,
                 Location = new Point(16, 172),
                 Size = new Size(528, 48),
                 Text = $"{GameLocator.InstallCommand}      (install the game){Environment.NewLine}{GameLocator.RunCommand}          (start it with Steam)",
             };
 
-            var getSteam = new Button { Text = "Get Steam", Location = new Point(16, 104), Size = new Size(120, 32), Visible = !steam };
-            var install = new Button { Text = "Install with Steam", Location = new Point(steam ? 16 : 146, 104), Size = new Size(150, 32), Enabled = steam };
-            var store = new Button { Text = "Steam store page", Location = new Point(install.Right + 10, 104), Size = new Size(130, 32) };
-            var copy = new Button { Text = "Copy", Location = new Point(store.Right + 10, 104), Size = new Size(70, 32) };
+            var getSteam = new FlatButton { Text = "Get Steam", Location = new Point(16, 104), Size = new Size(120, 32), Visible = !steam };
+            var install = new FlatButton { Text = "Install with Steam", Location = new Point(steam ? 16 : 146, 104), Size = new Size(150, 32), Enabled = steam };
+            var store = new FlatButton { Text = "Steam store page", Location = new Point(install.Right + 10, 104), Size = new Size(130, 32) };
+            var copy = new FlatButton { Text = "Copy", Location = new Point(store.Right + 10, 104), Size = new Size(70, 32) };
 
             status.SetBounds(16, 232, 528, 40);
-            var browse = new Button { Text = "It's somewhere else...", Location = new Point(16, 284), Size = new Size(150, 32) };
-            var close = new Button { Text = "Close", DialogResult = DialogResult.Cancel, Location = new Point(464, 284), Size = new Size(80, 32) };
+            var browse = new FlatButton { Text = "It's somewhere else...", Location = new Point(16, 284), Size = new Size(150, 32) };
+            var close = new FlatButton { Text = "Close", DialogResult = DialogResult.Cancel, Location = new Point(464, 284), Size = new Size(80, 32) };
             CancelButton = close;
             Controls.AddRange(new Control[] { head, info, getSteam, install, store, copy, cmdLabel, cmds, status, browse, close });
 

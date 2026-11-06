@@ -12,52 +12,86 @@ namespace CsnzLauncher
     public class MainForm : Form
     {
         readonly Settings settings = Settings.Load();
+        readonly Header header = new Header { Dock = DockStyle.Top, Height = 214 };
+        readonly Card gameCard = new Card { Title = "Game" };
+        readonly Card logCard = new Card { Title = "Activity" };
         readonly TextBox gameBox = new TextBox { ReadOnly = true };
         readonly Label versionLabel = new Label { AutoSize = true };
-        readonly Button updateButton = new Button { Text = "Check for updates", Width = 150, Height = 34 };
-        readonly Button playButton = new Button { Text = "Play", Width = 150, Height = 34, Font = new Font(SystemFonts.DefaultFont.FontFamily, 10, FontStyle.Bold) };
-        readonly Button moreButton = new Button { Text = "More ▾", Width = 100, Height = 34 };
-        readonly CheckBox onlineBox = new CheckBox { Text = "Online play through Steam: other players’ rooms in Game lobby, and yours in theirs (offline play works either way)", AutoSize = true };
-        readonly Button patchButton = new Button { Text = "Patch the game", Width = 170, Height = 34 };
-        readonly Label gameState = new Label { AutoSize = true, Font = new Font("Segoe UI", 9, FontStyle.Bold) };
+        readonly FlatButton updateButton = new FlatButton { Text = "Check for updates" };
+        readonly FlatButton playButton = new FlatButton { Text = "Play", Primary = true, Sub = "Starts the local server and the game" };
+        readonly FlatButton moreButton = new FlatButton { Text = "More  \u25BE" };
+        readonly FlatButton patchButton = new FlatButton { Text = "Patch game" };
+        readonly FlatButton browseButton = new FlatButton { Text = "Browse" };
+        readonly Toggle onlineBox = new Toggle { Text = "Online play through Steam: other players' rooms in Game lobby, yours in theirs" };
+        readonly Label gameState = new Label { AutoSize = true };
         readonly LinkLabel getGame = new LinkLabel { Text = "Not installed? Get it free on Steam", AutoSize = true, Visible = false };
-        readonly TextBox logBox = new TextBox { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, Font = new Font("Consolas", 9) };
+        readonly TextBox logBox = new TextBox { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.None, Font = new Font("Consolas", 9) };
         const string DiscordUrl = "https://discord.gg/fjxubwyhYv";
+        readonly bool autoPlay;
         ReleaseInfo latest;
         bool busy;
 
-        public MainForm()
+        // autoPlay (--play, the desktop shortcut): plays as soon as the checks are done and closes with the game
+        public MainForm(bool autoPlay = false)
         {
+            this.autoPlay = autoPlay;
             Text = "Counter-Strike Nexon: Offline Revived";
-            ClientSize = new Size(720, 460);
-            MinimumSize = new Size(600, 380);
+            FormBorderStyle = FormBorderStyle.None;
+            ClientSize = new Size(980, 640);
             StartPosition = FormStartPosition.CenterScreen;
-            Font = new Font("Segoe UI", 9);
+            BackColor = Theme.Back;
+            ForeColor = Theme.Text;
+            Font = Theme.UiFont(13);
+            DoubleBuffered = true;
+            try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
+            header.Credits = "Offline port and rework by ItsYuri  \u00B7  Local server: CSNZ_Server by Jusic, Hardee, NekoMeow, Smilex_Gamer and xRiseless";
+            header.LogoClicked += (s, e) => Process.Start(DiscordUrl);
 
-            var title = new Label { Text = "Counter-Strike Nexon: Offline Revived", Font = new Font("Segoe UI", 15, FontStyle.Bold), AutoSize = true, Location = new Point(14, 12) };
-            var credits = new LinkLabel { Text = "Offline port and rework by ItsYuri  ·  Local server: CSNZ_Server by Jusic, Hardee, NekoMeow, Smilex_Gamer and xRiseless  ·  Discord", AutoSize = true, Location = new Point(16, 40), ForeColor = SystemColors.GrayText };
-            credits.LinkArea = new LinkArea(credits.Text.Length - 7, 7);
-            credits.LinkClicked += (s, e) => Process.Start(DiscordUrl);
-            var gameLabel = new Label { Text = "Game folder (Steam's CSNZ):", AutoSize = true, Location = new Point(16, 58) };
-            gameBox.SetBounds(16, 78, 560, 24);
-            gameBox.Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Right;
-            var browse = new Button { Text = "Browse...", Location = new Point(586, 76), Width = 118, Anchor = AnchorStyles.Top | AnchorStyles.Right };
-            gameState.Location = new Point(16, 108);
-            getGame.Location = new Point(480, 108);
-            getGame.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            versionLabel.Location = new Point(16, 132);
-            updateButton.Location = new Point(16, 160);
-            playButton.Location = new Point(176, 160);
-            patchButton.Location = new Point(336, 160);
-            moreButton.Location = new Point(516, 160);
-            onlineBox.Location = new Point(18, 202);
-            logBox.SetBounds(16, 230, 688, 214);
-            logBox.Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Right | AnchorStyles.Bottom;
-            Controls.AddRange(new Control[] { title, credits, gameLabel, gameBox, browse, gameState, getGame, versionLabel, updateButton, playButton, patchButton, moreButton, onlineBox, logBox });
+            // the game card
+            gameCard.SetBounds(24, 222, 600, 178);
+            var folderLabel = new Label { Text = "Steam's Counter-Strike Nexon folder", AutoSize = true, ForeColor = Theme.Muted, Location = new Point(18, 42) };
+            gameBox.SetBounds(18, 62, 466, 26);
+            Theme.Dark(gameBox);
+            gameBox.Font = Theme.UiFont(13);
+            browseButton.SetBounds(494, 60, 88, 30);
+            browseButton.Font = Theme.Display(15);
+            gameState.Location = new Point(18, 100);
+            gameState.Font = Theme.UiFont(13, FontStyle.Bold);
+            getGame.Location = new Point(360, 100);
+            getGame.LinkColor = getGame.ActiveLinkColor = Theme.Accent;
+            getGame.VisitedLinkColor = Theme.Accent;
+            versionLabel.Location = new Point(18, 122);
+            versionLabel.ForeColor = Theme.Muted;
+            onlineBox.SetBounds(16, 144, 570, 26);
+            onlineBox.BackColor = Theme.Panel;
+            foreach (Control c in new Control[] { folderLabel, gameState, getGame, versionLabel })
+                c.BackColor = Theme.Panel;
+            gameCard.Controls.AddRange(new Control[] { folderLabel, gameBox, browseButton, gameState, getGame, versionLabel, onlineBox });
+
+            // the actions
+            playButton.SetBounds(648, 222, 308, 88);
+            playButton.Font = Theme.Display(34);
+            updateButton.SetBounds(648, 318, 150, 38);
+            patchButton.SetBounds(806, 318, 150, 38);
+            moreButton.SetBounds(648, 364, 308, 36);
+            foreach (var bt in new[] { updateButton, patchButton, moreButton })
+                bt.Font = Theme.Display(16);
+
+            // the log
+            logCard.SetBounds(24, 412, 932, 206);
+            logBox.SetBounds(16, 40, 900, 152);
+            Theme.Dark(logBox);
+            logBox.BorderStyle = BorderStyle.None;
+            logBox.BackColor = Theme.Panel;
+            logBox.ForeColor = Color.FromArgb(170, 184, 184);
+            logCard.Controls.Add(logBox);
+
+            Controls.AddRange(new Control[] { gameCard, playButton, updateButton, patchButton, moreButton, logCard, header });
             onlineBox.Checked = settings.OnlinePlay;
-            onlineBox.CheckedChanged += (s, e) => { settings.OnlinePlay = onlineBox.Checked; settings.Save(); };
+            onlineBox.CheckedChanged += (s, e) => { settings.OnlinePlay = onlineBox.Checked; settings.Save(); onlineBox.Invalidate(); };
 
-            var more = new ContextMenuStrip();
+            var more = new ContextMenuStrip { Renderer = new DarkMenuRenderer(), BackColor = Theme.Panel, ForeColor = Theme.Text, ShowImageMargin = false, Font = Theme.UiFont(13) };
+            more.Items.Add("Create a desktop shortcut that starts the game", null, (s, e) => CreateShortcut());
             more.Items.Add("Export shop and profile pictures from the game (Python)", null, (s, e) => _ = Run("Exporting pictures", () => Assets.Export(Game(), Log)));
             more.Items.Add("Verify the game's files with Steam", null, (s, e) => OpenSteam(GameLocator.VerifyCommand));
             more.Items.Add("Get the game from Steam...", null, (s, e) => GetGame());
@@ -71,13 +105,45 @@ namespace CsnzLauncher
             more.Items.Add("Join the Discord", null, (s, e) => Process.Start(DiscordUrl));
             moreButton.Click += (s, e) => more.Show(moreButton, new Point(0, moreButton.Height));
 
-            browse.Click += (s, e) => BrowseGame();
+            browseButton.Click += (s, e) => BrowseGame();
             updateButton.Click += (s, e) => UpdateClicked();
             playButton.Click += (s, e) => PlayClicked();
             patchButton.Click += (s, e) => PatchClicked();
             getGame.LinkClicked += (s, e) => GetGame();
             Shown += async (s, e) => await Startup();
             FormClosing += (s, e) => { if (busy && e.CloseReason == CloseReason.UserClosing && MessageBox.Show(this, "Something is still running. Close anyway?", Text, MessageBoxButtons.YesNo) == DialogResult.No) e.Cancel = true; };
+        }
+
+        // a thin frame around the borderless window
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            base.OnPaint(e);
+            using (var p = new Pen(Theme.PanelLine))
+                e.Graphics.DrawRectangle(p, 0, 0, ClientSize.Width - 1, ClientSize.Height - 1);
+        }
+
+        // a shortcut on the desktop to this launcher in --play mode, with its icon
+        void CreateShortcut()
+        {
+            try
+            {
+                var desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+                var link = Path.Combine(desktop, "Counter-Strike Nexon Offline Revived.lnk");
+                var shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell"));
+                dynamic sc = shell.GetType().InvokeMember("CreateShortcut", System.Reflection.BindingFlags.InvokeMethod, null, shell, new object[] { link });
+                sc.TargetPath = Application.ExecutablePath;
+                sc.Arguments = "--play";
+                sc.WorkingDirectory = Paths.Root;
+                sc.IconLocation = Application.ExecutablePath + ",0";
+                sc.Description = "Counter-Strike Nexon: Offline Revived";
+                sc.Save();
+                Log("Desktop shortcut created: it opens the launcher and starts the game.");
+                MessageBox.Show(this, "\"Counter-Strike Nexon Offline Revived\" is on your desktop: it starts the game directly.", Text);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, "Couldn't create the shortcut: " + ex.Message, Text);
+            }
         }
 
         // ------------------------------------------------------------ helpers
@@ -154,8 +220,8 @@ namespace CsnzLauncher
             if (!has)
             {
                 gameState.Text = "Game: not found";
-                gameState.ForeColor = Color.Firebrick;
-                patchButton.Text = "Patch the game";
+                gameState.ForeColor = Theme.Bad;
+                patchButton.Text = "Patch game";
                 patchButton.Enabled = false;
                 return Patcher.GameState.NoMod;
             }
@@ -166,31 +232,31 @@ namespace CsnzLauncher
             {
                 case Patcher.GameState.NoMod:
                     gameState.Text = "Game: found (install the mod to patch it)";
-                    gameState.ForeColor = SystemColors.ControlText;
+                    gameState.ForeColor = Theme.Text;
                     break;
                 case Patcher.GameState.Original:
                     gameState.Text = "Game: original (Steam's files, not patched)";
-                    gameState.ForeColor = SystemColors.ControlText;
+                    gameState.ForeColor = Theme.Text;
                     break;
                 case Patcher.GameState.Patched:
                     gameState.Text = "Game: patched for offline play";
-                    gameState.ForeColor = Color.ForestGreen;
+                    gameState.ForeColor = Theme.Good;
                     break;
                 case Patcher.GameState.Outdated:
                     gameState.Text = "Game: patched by an older release (Patch or Play updates it)";
-                    gameState.ForeColor = Color.DarkOrange;
+                    gameState.ForeColor = Theme.Warn;
                     break;
                 case Patcher.GameState.Partly:
                     gameState.Text = "Game: partly patched";
-                    gameState.ForeColor = Color.DarkOrange;
+                    gameState.ForeColor = Theme.Warn;
                     break;
                 default:
                     gameState.Text = "Game: doesn't match this mod (Steam updated it?)";
-                    gameState.ForeColor = Color.Firebrick;
+                    gameState.ForeColor = Theme.Bad;
                     break;
             }
             bool unpatch = st == Patcher.GameState.Patched || st == Patcher.GameState.Partly || st == Patcher.GameState.Mismatch;
-            patchButton.Text = unpatch ? "Unpatch (original game)" : "Patch the game";
+            patchButton.Text = unpatch ? "Unpatch game" : "Patch game";
             patchButton.Enabled = !busy && st != Patcher.GameState.NoMod;
             return st;
         }
@@ -218,6 +284,12 @@ namespace CsnzLauncher
             if (!GameLocator.IsGame(settings.GamePath))
                 GetGame();
             await CheckLatest(false);
+            if (autoPlay)
+            {
+                // the desktop shortcut: straight into the game, the launcher closes with it
+                if (await PlayAsync())
+                    Close();
+            }
         }
 
         // the game isn't on this PC: how to get it from Steam, and a watch that picks it up once installed
@@ -386,24 +458,26 @@ namespace CsnzLauncher
         }
 
         // ------------------------------------------------------------ play
-        async void PlayClicked()
+        async void PlayClicked() => await PlayAsync();
+
+        async Task<bool> PlayAsync()
         {
             if (busy)
-                return;
+                return false;
             if (Paths.InstalledVersion() == null || !File.Exists(Paths.PatchList))
             {
                 MessageBox.Show(this, "The mod isn't installed yet: press Install first.", Text);
-                return;
+                return false;
             }
             if (Runner.GameRunning())
             {
                 MessageBox.Show(this, "The game is already open.", Text);
-                return;
+                return false;
             }
             if (!GameLocator.IsGame(settings.GamePath))
             {
                 GetGame();
-                return;
+                return false;
             }
             var game = settings.GamePath;
 
@@ -413,7 +487,7 @@ namespace CsnzLauncher
                     "The game still points at Nexon's servers. The launcher adds a block to the Windows hosts file that sends those addresses to this PC (127.0.0.1); Windows will ask for administrator rights.\n\nAdd it now?",
                     Text, MessageBoxButtons.YesNo, MessageBoxIcon.Question);
                 if (answer != DialogResult.Yes || !await Run("hosts", () => { if (!Hosts.Run("add", Log)) throw new Exception("The hosts block wasn't added."); }))
-                    return;
+                    return false;
             }
             if (!Assets.Present)
                 Log("Note: the shop and profile pictures aren't exported yet (More > Export...). The game works without them.");
@@ -421,7 +495,7 @@ namespace CsnzLauncher
             Process server = null, bridge = null;
             bool online = settings.OnlinePlay;
             WindowState = FormWindowState.Minimized;
-            await Run("Play", () =>
+            bool played = await Run("Play", () =>
             {
                 Certificates.Ensure(Log);
                 Patcher.Apply(game, Log);
@@ -450,6 +524,7 @@ namespace CsnzLauncher
             });
             WindowState = FormWindowState.Normal;
             Activate();
+            return played;
         }
 
         // Patch the game / Unpatch it back to Steam's files
@@ -541,7 +616,7 @@ namespace CsnzLauncher
                 Application.Run(new GetGameForm(true));
                 return;
             }
-            Application.Run(new MainForm());
+            Application.Run(new MainForm(args.Contains("--play")));
         }
     }
 }
