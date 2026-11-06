@@ -32,7 +32,8 @@ import mdl_export
 import nar_index
 
 MOD = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-GAME = r"D:\SteamLibrary\steamapps\common\CSNZ"
+# the game folder (the one with Bin and Data): CSNZ_GAME, set by the launcher, or the developer's install
+GAME = os.environ.get("CSNZ_GAME") or r"D:\SteamLibrary\steamapps\common\CSNZ"
 SERVER_DATA = os.path.join(MOD, "server", "CSNZ_Server", "bin", "Data")
 ICON_DIR = os.path.join(MOD, "web", "shop", "icons")
 NARTOOL = os.path.join(MOD, "tools", "nartool", "nartool.exe")

@@ -2,6 +2,13 @@
 
 ## Jugar
 
+**Con el launcher** (cualquier PC): `CSNZ-Offline-Revived-Launcher.exe` de la última release de GitHub, en una
+carpeta propia. Instala y actualiza el mod, parchea la copia de Steam del juego, añade el bloque del archivo `hosts`
+y arranca el servidor y el juego. Ver `README.md` en la raíz del repositorio.
+
+**En el PC de desarrollo** (lo de abajo):
+
+
 Doble clic en **CSNZ Offline** (en el escritorio o en esta carpeta). Windows pedirá permiso de
 administrador: el ejecutable del juego lo exige.
 

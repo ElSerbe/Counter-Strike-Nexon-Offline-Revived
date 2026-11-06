@@ -13,6 +13,7 @@ Rounds use waves 1..5 (zbs_zsrift_splinter: waveTypes = round), 6..8 are unused 
 Usage: python gen_zsrift_waves.py   (game in D:/SteamLibrary/steamapps/common/CSNZ, or pass its folder)
 """
 import subprocess
+import os
 import sys
 import tempfile
 from pathlib import Path
@@ -52,7 +53,7 @@ def read_original(game: Path) -> str:
 
 
 def main() -> None:
-    game = Path(sys.argv[1] if len(sys.argv) > 1 else "D:/SteamLibrary/steamapps/common/CSNZ")
+    game = Path(sys.argv[1] if len(sys.argv) > 1 else os.environ.get("CSNZ_GAME") or "D:/SteamLibrary/steamapps/common/CSNZ")
     lines = read_original(game).splitlines()
     head = lines[0].split(",")
     wave, zombi, ratio = head.index("waveID"), head.index("zombi"), head.index("zombiRatio")

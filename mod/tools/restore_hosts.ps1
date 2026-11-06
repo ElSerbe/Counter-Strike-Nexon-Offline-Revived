@@ -1,7 +1,7 @@
 # Restores the original hosts file from the project backup. Run elevated.
 $ErrorActionPreference = "Stop"
 $hosts = "$env:SystemRoot\System32\drivers\etc\hosts"
-$backup = "D:\Cosas AI 2\Proyectos\Counter Strike Nexon Revived\mod\backup\system\hosts.original"
+$backup = Join-Path $PSScriptRoot "..\backup\system\hosts.original"
 try {
     $item = Get-Item $hosts
     $item.IsReadOnly = $false
