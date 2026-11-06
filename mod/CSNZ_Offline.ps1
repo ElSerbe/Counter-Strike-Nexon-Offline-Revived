@@ -1,5 +1,7 @@
 ﻿# CSNZ offline launcher: one click starts CSNZ_Server, makes sure the client patches are applied,
 # launches the game, and stops the server it started once the game is closed.
+# Online play: the Steam bridge (mod\tools\steambridge) runs alongside when it's built; -Loopback tests it on one PC.
+param([switch]$Loopback)
 $ErrorActionPreference = "Stop"
 
 $Mod = $PSScriptRoot
@@ -40,7 +42,7 @@ function Stop-Server {
 }
 
 Write-Log "---- launch"
-$started = @{ Server = $false }
+$started = @{ Server = $false; Bridge = $null }
 
 try {
     if (Get-Process -Name "cstrike-online" -ErrorAction SilentlyContinue) {
@@ -74,6 +76,18 @@ try {
         $started.Server = $true
         if (-not (Wait-Listening 30002 30)) { throw "CSNZ_Server no arrancó en el puerto 30002. Revisa mod\server\server.log." }
         Write-Log "started CSNZ_Server"
+    }
+
+    # Online play through Steam: optional, the game works offline whatever happens to it
+    $bridgeExe = Join-Path $Mod "tools\steambridge\out\CSNZ-SteamBridge.exe"
+    if (Test-Path $bridgeExe) {
+        $bridgeArgs = @("--steam-api", "`"$(Join-Path $GameBin "steam_api.dll")`"", "--data", "`"$(Join-Path $Mod "server\CSNZ_Server\bin\Data")`"",
+            "--log", "`"$(Join-Path $LogDir "steambridge.log")`"")
+        if ($Loopback) { $bridgeArgs += "--loopback" }
+        try {
+            $started.Bridge = Start-Process -FilePath $bridgeExe -ArgumentList $bridgeArgs -WindowStyle Hidden -PassThru
+            Write-Log "started the Steam bridge$(if ($Loopback) { ' (loopback test)' })"
+        } catch { Write-Log "Steam bridge didn't start: $($_.Exception.Message)" }
     }
 
     try {
@@ -123,6 +137,11 @@ catch {
     Show-Error $_.Exception.Message
 }
 finally {
+    if ($started.Bridge) {
+        # the bridge closes its Steam lobby when this file appears
+        New-Item -ItemType File -Force (Join-Path $Mod "server\CSNZ_Server\bin\Data\SteamBridge.stop") | Out-Null
+        if (-not $started.Bridge.WaitForExit(8000)) { Stop-Process -Id $started.Bridge.Id -Force -ErrorAction SilentlyContinue }
+    }
     if ($started.Server) {
         Start-Sleep -Seconds 5  # let the server finish saving the account after the client disconnects
         Stop-Server

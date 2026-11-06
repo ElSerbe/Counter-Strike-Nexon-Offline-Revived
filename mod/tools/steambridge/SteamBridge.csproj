@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- CSNZ Offline Revived Steam bridge: online play through Steam (Spacewar, app 480) with the game's own 32-bit
+       steam_api.dll. It publishes this PC's rooms in a Steam lobby, lists the other players' lobbies for the local
+       server (Data/RemoteRooms.json) and tunnels the game's connection to their servers over Steam P2P.
+       Without Steam it just exits: offline play never depends on it. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <PlatformTarget>x86</PlatformTarget>
+    <AssemblyName>CSNZ-SteamBridge</AssemblyName>
+    <RootNamespace>SteamBridge</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <Version>1.0.0</Version>
+    <DebugType>none</DebugType>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="System.Net.Http" />
+    <Reference Include="System.Web.Extensions" />
+  </ItemGroup>
+
+</Project>

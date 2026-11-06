@@ -32,6 +32,7 @@ namespace CsnzLauncher
         public static string PatchList => Path.Combine(Mod, "patches.json");
         public static string ServerBin => Path.Combine(Mod, "server", "CSNZ_Server", "bin");
         public static string BackupBin => Path.Combine(Mod, "backup", "original", "Bin");
+        public static string BridgeExe => Path.Combine(Mod, "tools", "steambridge", "out", "CSNZ-SteamBridge.exe");
         public static string KeptSettings => Path.Combine(Mod, "backup", "settings");
         // a Git checkout of the project: updating would overwrite the sources
         public static bool IsDevCheckout => Directory.Exists(Path.Combine(Root, ".git"));
@@ -53,6 +54,7 @@ namespace CsnzLauncher
     {
         public string GamePath = "";
         public string TokenProtected = ""; // a GitHub token, encrypted for this Windows user (DPAPI)
+        public bool OnlinePlay = true;      // the Steam bridge runs with the server (offline play works without it)
 
         static readonly JavaScriptSerializer Json = new JavaScriptSerializer();
 
@@ -758,6 +760,47 @@ namespace CsnzLauncher
             try { Process.Start(psi); }
             catch (System.ComponentModel.Win32Exception) { throw new Exception("The game didn't start (Windows' permission prompt was cancelled)."); }
             log("Game started.");
+        }
+
+        // online play: the Steam bridge (Spacewar lobbies + P2P tunnels to other players' servers). Null when it can't run.
+        public static Process StartBridge(string game, Logger log)
+        {
+            if (!File.Exists(Paths.BridgeExe))
+            {
+                log("Online play: the Steam bridge isn't installed.");
+                return null;
+            }
+            var data = Path.Combine(Paths.ServerBin, "Data");
+            try { File.Delete(Path.Combine(data, "SteamBridge.stop")); } catch { }
+            var args = $"--steam-api \"{Path.Combine(game, "Bin", "steam_api.dll")}\" --data \"{data}\" --log \"{Path.Combine(Paths.LogDir, "steambridge.log")}\"";
+            try
+            {
+                var p = Process.Start(new ProcessStartInfo(Paths.BridgeExe, args) { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = Path.GetDirectoryName(Paths.BridgeExe) });
+                Thread.Sleep(3000);
+                if (p.HasExited)
+                {
+                    log("Online play is off this time (Steam isn't running or refused): see mod\\logs\\steambridge.log. Offline play works as always.");
+                    return null;
+                }
+                log("Online play: the Steam bridge is running (Spacewar). Other players' rooms show up in Game lobby.");
+                return p;
+            }
+            catch (Exception ex)
+            {
+                log("Online play: the Steam bridge didn't start: " + ex.Message);
+                return null;
+            }
+        }
+
+        // asks the bridge to close its Steam lobby, then makes sure it's gone
+        public static void StopBridge(Process p, Logger log)
+        {
+            if (p == null || p.HasExited)
+                return;
+            try { File.WriteAllText(Path.Combine(Paths.ServerBin, "Data", "SteamBridge.stop"), ""); } catch { }
+            if (!p.WaitForExit(8000))
+                try { p.Kill(); } catch { }
+            log("Steam bridge stopped.");
         }
 
         public static void WaitForGame()

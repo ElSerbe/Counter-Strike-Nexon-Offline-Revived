@@ -34,6 +34,8 @@ BINARIES = [
     "server/CSNZ_Server/bin/libstdc++-6.dll",
     "server/CSNZ_Server/bin/libwinpthread-1.dll",
     "tools/nartool/nartool.exe",
+    "tools/steambridge/out/CSNZ-SteamBridge.exe",  # built below (online play through Steam)
+    "tools/steambridge/out/CSNZ-SteamBridge.exe.config",
 ]
 # tracked but not for players
 LEAVE_OUT = ["mod/CSNZ_Offline.ps1"]  # the developer's old launcher (his paths)
@@ -57,6 +59,9 @@ def patch_list(version: str) -> dict:
 def main():
     version = (MOD / "VERSION").read_text().strip()
     DIST.mkdir(exist_ok=True)
+    # the Steam bridge (x86, .NET Framework 4.8)
+    subprocess.run(["dotnet", "build", str(MOD / "tools" / "steambridge" / "SteamBridge.csproj"), "-c", "Release",
+                    "-o", str(MOD / "tools" / "steambridge" / "out"), f"-p:Version={version}", "-nologo", "-v", "q"], check=True)
     for b in BINARIES:
         if not (MOD / b).exists():
             sys.exit(f"missing build output mod/{b}")

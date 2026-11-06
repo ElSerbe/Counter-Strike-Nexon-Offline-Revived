@@ -22,7 +22,6 @@ namespace CsnzLauncher
             StartPosition = FormStartPosition.CenterParent;
             MinimizeBox = MaximizeBox = false;
             Font = new Font("Segoe UI", 9);
-            try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
 
             bool steam = GameLocator.SteamDir() != null;
             var head = new Label { Text = "Counter-Strike Nexon isn't installed on this PC", Font = new Font("Segoe UI", 12, FontStyle.Bold), AutoSize = true, Location = new Point(14, 12) };

@@ -58,4 +58,10 @@ launcher/bin/
 launcher/obj/
 launcher.json
 launcher-check.txt
-mod/server/CSNZ_Server/bin/Data/RemoteServers.json
+# Steam bridge: build output and runtime files
+mod/tools/steambridge/out/
+mod/tools/steambridge/bin/
+mod/tools/steambridge/obj/
+mod/server/CSNZ_Server/bin/Data/RemoteRooms.json
+mod/server/CSNZ_Server/bin/Data/SteamIdentity.json
+mod/server/CSNZ_Server/bin/Data/SteamBridge.stop

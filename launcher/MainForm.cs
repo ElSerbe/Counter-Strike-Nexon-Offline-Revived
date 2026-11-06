@@ -17,6 +17,7 @@ namespace CsnzLauncher
         readonly Button updateButton = new Button { Text = "Check for updates", Width = 150, Height = 34 };
         readonly Button playButton = new Button { Text = "Play", Width = 150, Height = 34, Font = new Font(SystemFonts.DefaultFont.FontFamily, 10, FontStyle.Bold) };
         readonly Button moreButton = new Button { Text = "More ▾", Width = 100, Height = 34 };
+        readonly CheckBox onlineBox = new CheckBox { Text = "Online play through Steam: other players’ rooms in Game lobby, and yours in theirs (offline play works either way)", AutoSize = true };
         readonly Button patchButton = new Button { Text = "Patch the game", Width = 170, Height = 34 };
         readonly Label gameState = new Label { AutoSize = true, Font = new Font("Segoe UI", 9, FontStyle.Bold) };
         readonly LinkLabel getGame = new LinkLabel { Text = "Not installed? Get it free on Steam", AutoSize = true, Visible = false };
@@ -31,7 +32,6 @@ namespace CsnzLauncher
             ClientSize = new Size(720, 460);
             MinimumSize = new Size(600, 380);
             StartPosition = FormStartPosition.CenterScreen;
-            try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
             Font = new Font("Segoe UI", 9);
 
             var title = new Label { Text = "Counter-Strike Nexon: Offline Revived", Font = new Font("Segoe UI", 15, FontStyle.Bold), AutoSize = true, Location = new Point(14, 12) };
@@ -50,9 +50,12 @@ namespace CsnzLauncher
             playButton.Location = new Point(176, 160);
             patchButton.Location = new Point(336, 160);
             moreButton.Location = new Point(516, 160);
-            logBox.SetBounds(16, 206, 688, 238);
+            onlineBox.Location = new Point(18, 202);
+            logBox.SetBounds(16, 230, 688, 214);
             logBox.Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Right | AnchorStyles.Bottom;
-            Controls.AddRange(new Control[] { title, credits, gameLabel, gameBox, browse, gameState, getGame, versionLabel, updateButton, playButton, patchButton, moreButton, logBox });
+            Controls.AddRange(new Control[] { title, credits, gameLabel, gameBox, browse, gameState, getGame, versionLabel, updateButton, playButton, patchButton, moreButton, onlineBox, logBox });
+            onlineBox.Checked = settings.OnlinePlay;
+            onlineBox.CheckedChanged += (s, e) => { settings.OnlinePlay = onlineBox.Checked; settings.Save(); };
 
             var more = new ContextMenuStrip();
             more.Items.Add("Export shop and profile pictures from the game (Python)", null, (s, e) => _ = Run("Exporting pictures", () => Assets.Export(Game(), Log)));
@@ -415,7 +418,8 @@ namespace CsnzLauncher
             if (!Assets.Present)
                 Log("Note: the shop and profile pictures aren't exported yet (More > Export...). The game works without them.");
 
-            Process server = null;
+            Process server = null, bridge = null;
+            bool online = settings.OnlinePlay;
             WindowState = FormWindowState.Minimized;
             await Run("Play", () =>
             {
@@ -425,6 +429,8 @@ namespace CsnzLauncher
                     Log("A local server is already running: using it.");
                 else
                     server = Runner.StartServer(Log);
+                if (online)
+                    bridge = Runner.StartBridge(game, Log);
                 try
                 {
                     Runner.StartGame(game, Log);
@@ -433,6 +439,7 @@ namespace CsnzLauncher
                 }
                 finally
                 {
+                    Runner.StopBridge(bridge, Log);
                     if (server != null && !server.HasExited)
                     {
                         System.Threading.Thread.Sleep(5000); // the server saves the account after the client leaves
