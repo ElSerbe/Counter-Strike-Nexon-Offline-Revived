@@ -225,11 +225,15 @@ PATCHES = [
         # (0x24f698e the first, 0x2672f5d a server transfer). The first connect passes port 0 (no -lobbyport): the
         # holepunch went to port 0 and never reached CSNZ_Server, so neither the server nor the Steam bridge knew the
         # game's UDP ports (players from another PC hung at "joining"). Only after a transfer did it reach 30002.
+        # 1.1.2: always 30002, the server on this PC, which answers any account's holepunch. 1.1.1 kept the mod's
+        # ports, so after a transfer to a Steam bridge port (30003+, TCP only) the holepunch got no answer and the
+        # game never punched the room's other players; cso_connect (0x241c590) waits for that, so the player who
+        # joined stayed at "connecting".
         "hw.dll",
         _UDP_SET + 0x20,
         bytes.fromhex("5dc3cccccc"),        # pop ebp; ret; padding
         b"\xe9" + _rel32(_UDP_SET + 0x25, _UDP_CAVE),  # jmp to the port check (the stores before it are untouched)
-        "UDP holepunch target: same port rule as the game-server socket (port 0 -> 30002)",
+        "UDP holepunch target: always 30002, this PC's server (port 0 at the first connect, a bridge port after a transfer)",
     ),
     (
         "hw.dll",
@@ -238,10 +242,10 @@ PATCHES = [
         bytes.fromhex(
             "668b450c"      # mov ax,[ebp+0c]        the port asked for (network order)
             "86c4"          # xchg al,ah
-            "663d3275"      # cmp ax,30002
-            "7206"          # jb force
+            "663d3275"      # cmp ax,30002           (left from 1.1.1, which kept the ports 30002-30199)
+            "eb06"          # jmp force              always 30002
             "663df775"      # cmp ax,30199
-            "7611"          # jbe done               one of the mod's ports: kept
+            "7611"          # jbe done
             "e800000000"    # force: call next
             "5a"            # next: pop edx          (edx = this address, wherever hw.dll is loaded)
             "8b92") + _rel32(_UDP_CAVE + 23, _UDP_SET + 0x1C) + bytes.fromhex(  # mov edx,[relocated slot of the port's address]
@@ -575,6 +579,9 @@ PATCHES += [
 # what older releases wrote at a place whose patch changed since: replaced by the current bytes, not an abort
 PREVIOUS = {
     ("hw.dll", 0x2754F80): [bytes.fromhex("52ff7104c7410c7f00000166c7410a753290")],  # 1.0.x: port always 30002
+    # 1.1.1: the UDP holepunch kept the ports 30002-30199
+    ("hw.dll", _UDP_CAVE): [bytes.fromhex("668b450c86c4663d32757206663df7757611e8000000005a8b92")
+                            + _rel32(_UDP_CAVE + 23, _UDP_SET + 0x1C) + bytes.fromhex("66c70275325dc3")],
 }
 
 
