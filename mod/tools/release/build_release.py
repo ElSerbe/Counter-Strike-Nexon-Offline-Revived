@@ -66,7 +66,7 @@ def main():
     count = 0
     with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z, tarfile.open(fileobj=io.BytesIO(tar)) as t:
         for m in t.getmembers():
-            if not m.isfile() or m.name in LEAVE_OUT:
+            if not m.isfile() or m.name in LEAVE_OUT or m.name == "mod/VERSION":
                 continue
             z.writestr(m.name, t.extractfile(m).read())
             count += 1
