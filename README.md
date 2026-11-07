@@ -11,6 +11,11 @@ launcher patches *your* copy of the game, keeps a backup of every file it change
 ## Playing
 
 1. Install Counter-Strike Nexon: Zombies from Steam (the launcher points you there if it isn't installed).
+   If Steam doesn't give you the game any more, the same window (also **More > Get the game**) downloads the
+   copy of the same Steam version kept on the Internet Archive
+   ([csnz-1362486462562801379](https://archive.org/details/csnz-1362486462562801379), Steam depot manifest
+   1362486462562801379): 12.9 GB, resumable, checked against archive.org's MD5 and unpacked into the folder you
+   choose (about 27 GB free needed while installing). The repository doesn't host the game.
 2. Download `CSNZ-Offline-Revived-Launcher.exe` from the latest release and put it in an empty folder of its own
    (the mod is installed next to it, in `mod\`). Don't open it from the browser's downloads bar: the browser runs a new temporary
    copy each time, and the launcher would ask to install everything again (it now offers to move itself to

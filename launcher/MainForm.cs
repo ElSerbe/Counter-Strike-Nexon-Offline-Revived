@@ -133,7 +133,7 @@ namespace CsnzLauncher
             var more = new ContextMenuStrip { Renderer = new DarkMenuRenderer(), BackColor = Theme.Panel, ForeColor = Theme.Text, ShowImageMargin = false, Font = Theme.UiFont(13) };
             more.Items.Add("Create a desktop shortcut that starts the game", null, (s, e) => CreateShortcut());
             more.Items.Add("Verify the game's files with Steam", null, (s, e) => OpenSteam(GameLocator.VerifyCommand));
-            more.Items.Add("Get the game from Steam...", null, (s, e) => GetGame());
+            more.Items.Add("Get the game (Steam or archive.org)...", null, (s, e) => GetGame());
             more.Items.Add(new ToolStripSeparator());
             more.Items.Add("Add the hosts block", null, (s, e) => _ = Run("hosts", () => Hosts.Run("add", Log)));
             more.Items.Add("Remove the hosts block", null, (s, e) => _ = Run("hosts", () => Hosts.Run("remove", Log)));
@@ -361,7 +361,7 @@ namespace CsnzLauncher
         // the game isn't on this PC: how to get it from Steam, and a watch that picks it up once installed
         void GetGame()
         {
-            using (var f = new GetGameForm())
+            using (var f = new GetGameForm(false, Log))
             {
                 if (f.ShowDialog(this) != DialogResult.OK)
                     return;
@@ -818,6 +818,15 @@ namespace CsnzLauncher
                         lines.Add($"latest python installer: {v} {url}");
                     }
                     catch (Exception ex) { lines.Add("python: " + ex.Message); }
+                if (args.Contains("--archive"))
+                    try
+                    {
+                        // archive.org's answer about the game's zip, and whether its server resumes downloads (HEAD: nothing is downloaded)
+                        var z = ArchiveGame.Info().GetAwaiter().GetResult();
+                        lines.Add($"archive.org zip: {z.Name}, {z.Size} bytes, md5 {z.Md5}");
+                        lines.Add("archive.org head: " + ArchiveGame.Head(z).GetAwaiter().GetResult());
+                    }
+                    catch (Exception ex) { lines.Add("archive.org: " + ex.Message); }
                 if (args.Contains("--logs"))
                     try { lines.Add($"logs: {LogBundle.Build(Settings.Load()).Length} characters in {LogBundle.FilePath}"); }
                     catch (Exception ex) { lines.Add("logs: " + ex); }
