@@ -931,9 +931,7 @@
 		"Description": "PntCoupon_MSG",
 		"Localized": true,
 		"Points": [
-			250,
-			500,
-			1000
+			300
 		]
 	},
 	"1031": {

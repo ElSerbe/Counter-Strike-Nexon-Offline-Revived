@@ -1,41 +1,50 @@
 {
-	// Daily login rewards (CMissionManager, Missions page > Daily Login). The first time each day (local midnight)
-	// that a player logs in, finishes a match or opens Missions, the next day of this calendar is given. Days missed
-	// don't reset it; after the last day it starts again from the first.
-	// A day can give: Medals, BlackBadges (Black Market), RiftTickets (Rift Exchange), BingoTickets (Mileage Bingo)
-	// and Items: [{ "ItemID": 2179, "Count": 1, "Days": 0 }] (Item.csv id; Days 0 = permanent).
+	// Login Supplies: the lobby's Login Supplies button (bottom right) opens the game's window; its button collects
+	// today's item (CMissionManager, loginsupplies.cpp). The calendar has as many days as "Days" (63 at most) and starts
+	// on a Sunday; after the last day a new one starts. A day not collected is lost, and every day collected counts
+	// toward the bonuses (5 at most, "After" days collected).
+	// A day: "Item" (Item.csv id, shown in the window), "Count", "Days" (0 = permanent), "Name" (chat line and the
+	// Missions page), and currencies given with it: "Medals", "BlackBadges", "RiftTickets", "BingoTickets".
+	// 396 Code A Decoder (ItemBox.json), 8292 Transcendence Decoder, 1030 300 Point Coupon, 2179 Bingo Ticket.
 	"Enabled": true,
 	"Days": [
-		{ "Medals": 30 },
-		{ "BingoTickets": 1 },
-		{ "RiftTickets": 3 },
-		{ "Medals": 40 },
-		{ "BlackBadges": 3 },
-		{ "Medals": 50 },
-		{ "Medals": 80, "BlackBadges": 5, "RiftTickets": 5, "BingoTickets": 1 },
+		{ "Item": 396, "Count": 2, "Name": "Code A Decoder" },
+		{ "Item": 1030, "Count": 1, "Name": "300 Point Coupon" },
+		{ "Item": 396, "Count": 3, "Name": "Code A Decoder" },
+		{ "Item": 2179, "Count": 1, "Name": "Bingo Ticket" },
+		{ "Item": 1030, "Count": 2, "Name": "300 Point Coupon" },
+		{ "Item": 396, "Count": 4, "Name": "Code A Decoder" },
+		{ "Item": 8292, "Count": 1, "Name": "Transcendence Decoder", "RiftTickets": 5, "BlackBadges": 5 },
 
-		{ "Medals": 35 },
-		{ "BingoTickets": 1 },
-		{ "RiftTickets": 4 },
-		{ "Medals": 45 },
-		{ "BlackBadges": 4 },
-		{ "Medals": 55 },
-		{ "Medals": 100, "BlackBadges": 6, "RiftTickets": 6, "BingoTickets": 2 },
+		{ "Item": 396, "Count": 2, "Name": "Code A Decoder" },
+		{ "Item": 1030, "Count": 2, "Name": "300 Point Coupon" },
+		{ "Item": 396, "Count": 3, "Name": "Code A Decoder" },
+		{ "Item": 2179, "Count": 1, "Name": "Bingo Ticket" },
+		{ "Item": 1030, "Count": 2, "Name": "300 Point Coupon" },
+		{ "Item": 396, "Count": 5, "Name": "Code A Decoder" },
+		{ "Item": 8292, "Count": 2, "Name": "Transcendence Decoder", "RiftTickets": 6, "BlackBadges": 6 },
 
-		{ "Medals": 40 },
-		{ "BingoTickets": 1 },
-		{ "RiftTickets": 4 },
-		{ "Medals": 50 },
-		{ "BlackBadges": 4 },
-		{ "Medals": 60 },
-		{ "Medals": 120, "BlackBadges": 8, "RiftTickets": 8, "BingoTickets": 2 },
+		{ "Item": 396, "Count": 3, "Name": "Code A Decoder" },
+		{ "Item": 1030, "Count": 2, "Name": "300 Point Coupon" },
+		{ "Item": 396, "Count": 3, "Name": "Code A Decoder" },
+		{ "Item": 2179, "Count": 2, "Name": "Bingo Ticket" },
+		{ "Item": 1030, "Count": 3, "Name": "300 Point Coupon" },
+		{ "Item": 396, "Count": 5, "Name": "Code A Decoder" },
+		{ "Item": 8292, "Count": 2, "Name": "Transcendence Decoder", "RiftTickets": 8, "BlackBadges": 8 },
 
-		{ "Medals": 45 },
-		{ "BingoTickets": 2 },
-		{ "RiftTickets": 5 },
-		{ "Medals": 55 },
-		{ "BlackBadges": 5 },
-		{ "Medals": 70 },
-		{ "Medals": 200, "BlackBadges": 15, "RiftTickets": 15, "BingoTickets": 3 }
+		{ "Item": 396, "Count": 3, "Name": "Code A Decoder" },
+		{ "Item": 1030, "Count": 3, "Name": "300 Point Coupon" },
+		{ "Item": 396, "Count": 4, "Name": "Code A Decoder" },
+		{ "Item": 2179, "Count": 2, "Name": "Bingo Ticket" },
+		{ "Item": 1030, "Count": 3, "Name": "300 Point Coupon" },
+		{ "Item": 396, "Count": 6, "Name": "Code A Decoder" },
+		{ "Item": 8292, "Count": 3, "Name": "Transcendence Decoder", "RiftTickets": 15, "BlackBadges": 15 }
+	],
+	"Bonuses": [
+		{ "After": 5, "Item": 8292, "Count": 1, "Name": "Transcendence Decoder" },
+		{ "After": 10, "Item": 1030, "Count": 5, "Name": "300 Point Coupon" },
+		{ "After": 15, "Item": 8292, "Count": 2, "Name": "Transcendence Decoder" },
+		{ "After": 20, "Item": 2179, "Count": 3, "Name": "Bingo Ticket" },
+		{ "After": 25, "Item": 8292, "Count": 3, "Name": "Transcendence Decoder" }
 	]
 }

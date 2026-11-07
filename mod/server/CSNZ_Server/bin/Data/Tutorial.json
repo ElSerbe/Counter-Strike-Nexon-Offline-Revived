@@ -1,0 +1,12 @@
+{
+	// The tutorial window's rewards (Tutorial button; CMissionManager::OnTutorialUpdate). The game keeps a byte of
+	// tutorial bits and sends it when one is done: bit 0 Zombie Experience, 1 Tutorial 1, 2 Tutorial 2, 3 Mission Chain.
+	// Each bit gives its reward once. The window's text is CSO_ZUX_TUTODLG_QUEST_DESC in Data/GameTexts.json.
+	// A reward: "Item", "Count", "Days" (0 = permanent), "Name", and "Medals", "BlackBadges", "RiftTickets", "BingoTickets".
+	"Rewards": [
+		{ "Bit": 0, "Item": 1030, "Count": 1, "Name": "300 Point Coupon" },
+		{ "Bit": 1, "Item": 1030, "Count": 1, "Name": "300 Point Coupon" },
+		{ "Bit": 2, "Item": 1030, "Count": 1, "Name": "300 Point Coupon" },
+		{ "Bit": 3, "Item": 1030, "Count": 1, "Name": "300 Point Coupon" }
+	]
+}

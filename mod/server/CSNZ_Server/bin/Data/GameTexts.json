@@ -1,0 +1,9 @@
+{
+	// Game texts replaced while the game runs (botassist.asi asks GET /api/questtexts once, after the login): a token of
+	// the game's language file (resource/cso_na_en.txt, without "#") and its new text. "\n" is a new line, <rrggbb> a
+	// color. CSO_ZUX_TUTODLG_QUEST_DESC gets the tutorial's four progress numbers (%d), in this order.
+	"CSO_ZUX_TUTODLG_QUEST_DESC": "<a0dcff>* Zombie Experience Clear Reward <ff9a77>(%d/1)\n <c0c0c0>- 300 Point Coupon x1\n\n<a0dcff>* Tutorial 1 Clear Reward <ff9a77>(%d/1)\n <c0c0c0>- 300 Point Coupon x1\n\n<a0dcff>* Tutorial 2 Clear Reward <ff9a77>(%d/1)\n <c0c0c0>- 300 Point Coupon x1\n\n<a0dcff>* Check [Mission Chain] <ff9a77>(%d/1)\n <c0c0c0>- 300 Point Coupon x1",
+	"CSO_Item_Name_PntCoupon1": "300 Point Coupon",
+	"CSO_Item_Desc_PntCoupon1": "Click the [Use] button to exchange it for 300 Points.",
+	"CSO_BS_InfoText": "*Collect one item a day before midnight. Missed days are lost; every day collected counts toward the bonuses below."
+}

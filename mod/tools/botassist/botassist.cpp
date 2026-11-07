@@ -6038,7 +6038,8 @@ static const wchar_t* QuestText(const char* token)
         return nullptr;
     if (*token == '#')
         token++;
-    if (_strnicmp(token, "CSO_Quest", 9) != 0)
+    // the medals' texts and a few others CSNZ_Server changes (the tutorial's rewards, the Point Coupon): all CSO_ tokens
+    if (_strnicmp(token, "CSO_", 4) != 0)
         return nullptr;
     std::string key(token);
     for (char& c : key)
@@ -6203,7 +6204,7 @@ static DWORD WINAPI QuestTexts(LPVOID)
     vt[3] = (void*)LocFind3;
     vt[4] = (void*)LocFind4;
     VirtualProtect(vt + 3, 2 * sizeof(void*), old, &old);
-    Log("medal texts: %d texts of the Medals tab replaced by the offline conditions", (int)g_questTexts->size());
+    Log("game texts: %d texts replaced (the Medals tab's offline conditions, the tutorial's rewards...)", (int)g_questTexts->size());
     return 0;
 }
 

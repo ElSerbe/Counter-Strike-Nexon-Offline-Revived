@@ -1,8 +1,8 @@
 diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
-index b5e72be..eb369d6 100644
+index b5e72be..be588e4 100644
 --- a/src/CMakeLists.txt
 +++ b/src/CMakeLists.txt
-@@ -38,6 +38,12 @@ endif()
+@@ -38,6 +38,13 @@ endif()
  target_sources(PROJECTNAME PRIVATE "main.cpp")
  target_sources(PROJECTNAME PRIVATE "serverinstance.cpp")
  target_sources(PROJECTNAME PRIVATE "serverconfig.cpp")
@@ -11,11 +11,12 @@ index b5e72be..eb369d6 100644
 +target_sources(PROJECTNAME PRIVATE "manager/zsriftmanager.cpp")
 +target_sources(PROJECTNAME PRIVATE "manager/medalmanager.cpp")
 +target_sources(PROJECTNAME PRIVATE "manager/missionmanager.cpp")
++target_sources(PROJECTNAME PRIVATE "manager/loginsupplies.cpp")
 +target_sources(PROJECTNAME PRIVATE "net/webserver.cpp")
  target_sources(PROJECTNAME PRIVATE "command.cpp")
  target_sources(PROJECTNAME PRIVATE "common/buffer.cpp")
  target_sources(PROJECTNAME PRIVATE "common/buildnum.cpp")
-@@ -56,6 +62,7 @@ target_sources(PROJECTNAME PRIVATE "command.cpp")
+@@ -56,6 +63,7 @@ target_sources(PROJECTNAME PRIVATE "command.cpp")
  
  target_sources(PROJECTNAME PRIVATE "manager/manager.cpp")
  target_sources(PROJECTNAME PRIVATE "manager/usermanager.cpp")
@@ -23,7 +24,7 @@ index b5e72be..eb369d6 100644
  if (SERVER_DB_PROXY)
  	target_sources(PROJECTNAME PRIVATE "manager/userdatabase.cpp")
  endif()
-@@ -148,6 +155,8 @@ if (MSVC)
+@@ -148,6 +156,8 @@ if (MSVC)
  else()
  	# don't treat some warnings as errors
  	target_compile_options(PROJECTNAME PRIVATE -Wno-error=sign-compare -Wno-error=unused-variable -Wno-error=delete-non-virtual-dtor -Wno-error=unused-parameter -Wno-error=conversion-null -Wno-error=register -Wno-error=unused-value -Wno-error=reorder -Wno-error=attributes)
@@ -86,10 +87,29 @@ index c342dd1..e1994a9 100644
  #ifdef WIN32
  #include <winsock2.h>
 diff --git a/src/definitions.h b/src/definitions.h
-index e96eb5f..0f0ba5b 100644
+index e96eb5f..eb280e8 100644
 --- a/src/definitions.h
 +++ b/src/definitions.h
-@@ -1441,6 +1441,70 @@ enum UserSurveyAnswerResult
+@@ -355,6 +355,18 @@ struct RewardItem
+ 	int eventFlag;
+ 	int lockStatus;
+ };
++
++// offline build: the Login Supplies window (Item packet DailyRewards, CMissionManager): a calendar from start (a
++// Sunday) to end, one item a day, days collected as bits, and up to 5 bonuses for days collected
++struct LoginSuppliesInfo
++{
++	bool canGet = false;
++	unsigned int start = 0, end = 0;
++	unsigned long long collected = 0;
++	int collectedCount = 0, bonusMask = 0;
++	std::vector<RewardItem> days;
++	std::vector<std::pair<int, RewardItem>> bonuses; // days needed, item
++};
+ struct RewardItemRandomDuration
+ {
+ 	int chance;
+@@ -1441,6 +1453,70 @@ enum UserSurveyAnswerResult
  	ANSWER_DB_ERROR,
  };
  
@@ -215,7 +235,7 @@ index 0000000..ebbd422
 +	virtual void AddCounter(IUser* user, const char* name, long long value) = 0;
 +};
 diff --git a/src/interface/ipacketmanager.h b/src/interface/ipacketmanager.h
-index 50cc528..ed77068 100644
+index 50cc528..276aedc 100644
 --- a/src/interface/ipacketmanager.h
 +++ b/src/interface/ipacketmanager.h
 @@ -33,6 +33,7 @@ public:
@@ -244,6 +264,17 @@ index 50cc528..ed77068 100644
  
  	virtual void SendGameMatchInfo(IExtendedSocket* socket) = 0;
  	virtual void SendGameMatchUnk(IExtendedSocket* socket) = 0;
+@@ -108,8 +109,8 @@ public:
+ 	virtual void SendItemUnk1(IExtendedSocket* socket) = 0;
+ 	virtual void SendItemUnk3(IExtendedSocket* socket) = 0;
+ 	virtual void SendItemEquipTattoo(IExtendedSocket* socket) = 0;
+-	virtual void SendItemDailyRewardsUpdate(IExtendedSocket* socket, const UserDailyRewards& dailyRewards) = 0;
+-	virtual void SendItemDailyRewardsSpinResult(IExtendedSocket* socket, const RewardItem& item) = 0;
++	virtual void SendItemDailyRewardsUpdate(IExtendedSocket* socket, const LoginSuppliesInfo& info) = 0;
++	virtual void SendItemDailyRewardsSpinResult(IExtendedSocket* socket, unsigned long long collected, int collectedCount, const std::vector<RewardItem>& items) = 0;
+ 	virtual void SendItemOpenDecoderResult(IExtendedSocket* socket, const ItemBoxOpenResult& result) = 0;
+ 	virtual void SendItemOpenDecoderErrorReply(IExtendedSocket* socket, ItemBoxError code) = 0;
+ 	virtual void SendItemEnhanceResult(IExtendedSocket* socket, const EnhResult& result) = 0;
 diff --git a/src/interface/iroom.h b/src/interface/iroom.h
 index b6d950f..6430867 100644
 --- a/src/interface/iroom.h
@@ -1488,15 +1519,22 @@ index 24d1ccc..e4b37a8 100644
  		if (destRoom->GetSettings()->gameModeId == 15)
  		{
 diff --git a/src/manager/itemmanager.cpp b/src/manager/itemmanager.cpp
-index ad8d88a..9844970 100644
+index ad8d88a..6c7eb24 100644
 --- a/src/manager/itemmanager.cpp
 +++ b/src/manager/itemmanager.cpp
-@@ -1,3 +1,4 @@
+@@ -1,9 +1,11 @@
 +#include "bingomanager.h"
  #include "itemmanager.h"
  
  #include "serverinstance.h"
-@@ -1364,8 +1365,8 @@ int CItemManager::AddItems(int userID, IUser* user, vector<RewardItem>& items)
+ #include "packetmanager.h"
+ #include "userdatabase.h"
+ #include "luckyitemmanager.h"
++#include "missionmanager.h"
+ 
+ #include "user/userinventoryitem.h"
+ 
+@@ -1364,8 +1366,8 @@ int CItemManager::AddItems(int userID, IUser* user, vector<RewardItem>& items)
  			}
  		}
  
@@ -1507,7 +1545,7 @@ index ad8d88a..9844970 100644
  	}
  
  	if (result == ITEM_ADD_DB_ERROR)
-@@ -1450,6 +1451,8 @@ int CItemManager::UseItem(IUser* user, int slot, int additionalArg, int addition
+@@ -1450,6 +1452,8 @@ int CItemManager::UseItem(IUser* user, int slot, int additionalArg, int addition
  
  	switch (item.m_nItemID)
  	{
@@ -1516,6 +1554,452 @@ index ad8d88a..9844970 100644
  	case 676:
  	{
  		CUserInventoryItem targetItem;
+@@ -2039,18 +2043,8 @@ void CItemManager::OnNicknameChangeUse(IUser* user, string newNickname)
+ 
+ bool CItemManager::OnDailyRewardsRequest(IUser* user, int requestID)
+ {
+-	switch (requestID)
+-	{
+-	case 0:
+-		Logger().Info("CItemManager::OnDailyRewardsRequest: received type 0\n");
+-		break;
+-	case 1:
+-		Logger().Info("CItemManager::OnDailyRewardsRequest: received type 1\n");
+-		break;
+-	default:
+-		Logger().Warn("CItemManager::OnDailyRewardsRequest: unknown request: %d\n", requestID);
+-		break;
+-	}
++	// offline build: Login Supplies (0: the calendar, 1: the window's button collects today's item)
++	g_MissionManager.OnLoginSuppliesRequest(user, requestID);
+ 
+ 	return true;
+ }
+diff --git a/src/manager/loginsupplies.cpp b/src/manager/loginsupplies.cpp
+new file mode 100644
+index 0000000..b5024a4
+--- /dev/null
++++ b/src/manager/loginsupplies.cpp
+@@ -0,0 +1,419 @@
++// Offline build: Login Supplies (the lobby's Login Supplies button) and the tutorial's rewards, part of CMissionManager.
++//
++// Login Supplies is the game's roulette window (GameUI CRoulettePopupDlg): a calendar of dates with one item a day, a
++// button that collects today's ("Get Login Supplies", Item packet DailyRewards request 1; request 0 asks for the
++// calendar), and up to 5 bonuses for days collected. Data/DailyLogin.json: the calendar has as many days as "Days"
++// (28 by default) and starts on a Sunday, then starts again; a day not collected is lost.
++//
++// The tutorial window (Tutorial button) lists four rewards with the game's text CSO_ZUX_TUTODLG_QUEST_DESC and their
++// progress from a byte of the user info; the game sends RequestUpdateTutorial with that byte (Data/Tutorial.json).
++#include "missionmanager.h"
++#include "medalmanager.h"
++#include "warbondmanager.h"
++#include "userdatabase.h"
++#include "itemmanager.h"
++#include "bingomanager.h"
++#include "packetmanager.h"
++#include "serverinstance.h"
++#include "main.h"
++#include "common/utils.h"
++
++#include <fstream>
++#include <ctime>
++#include <algorithm>
++
++using namespace std;
++using json = nlohmann::json;
++
++int SecondsToMidnight(); // missionmanager.cpp
++
++static const int FirstSunday = 3; // the day number (CMissionManager::Today) of 1970-01-04, a Sunday
++
++static LoginReward ReadReward(const json& j)
++{
++	LoginReward r;
++	r.itemID = j.value("Item", 0);
++	r.count = max(1, j.value("Count", 1));
++	r.days = max(0, j.value("Days", 0));
++	r.name = j.value("Name", "");
++	r.medals = max(0, j.value("Medals", 0));
++	r.badges = max(0, j.value("BlackBadges", 0));
++	r.riftTickets = max(0, j.value("RiftTickets", 0));
++	r.bingoTickets = max(0, j.value("BingoTickets", 0));
++	r.after = j.value("After", 0);
++	r.bit = j.value("Bit", 0);
++	return r;
++}
++
++static json LoadJson(const char* path)
++{
++	ifstream f(path);
++	json cfg = json::parse(f, nullptr, false, true);
++	return cfg.is_discarded() || !cfg.is_object() ? json() : cfg;
++}
++
++void CMissionManager::LoadLoginSupplies()
++{
++	m_LoginDays.clear();
++	m_LoginBonuses.clear();
++	m_TutorialRewards.clear();
++	m_LoginEnabled = false;
++
++	json cfg = LoadJson("Data/DailyLogin.json");
++	if (cfg.is_null())
++		Logger().Warn("MissionManager: couldn't load Data/DailyLogin.json, no Login Supplies\n");
++	else
++	{
++		try
++		{
++			m_LoginEnabled = cfg.value("Enabled", true);
++			for (auto& d : cfg.value("Days", json::array()))
++				m_LoginDays.push_back(ReadReward(d));
++			for (auto& b : cfg.value("Bonuses", json::array()))
++			{
++				LoginReward r = ReadReward(b);
++				if (r.after > 0)
++					m_LoginBonuses.push_back(r);
++			}
++		}
++		catch (exception& e)
++		{
++			Logger().Error("MissionManager: Data/DailyLogin.json: %s\n", e.what());
++		}
++	}
++	// the window shows 10 weeks at most and keeps the days in a 64-bit mask; 5 bonus boxes
++	if (m_LoginDays.size() > 63)
++		m_LoginDays.resize(63);
++	sort(m_LoginBonuses.begin(), m_LoginBonuses.end(), [](const LoginReward& a, const LoginReward& b) { return a.after < b.after; });
++	if (m_LoginBonuses.size() > 5)
++		m_LoginBonuses.resize(5);
++	m_PeriodDays = (int)m_LoginDays.size();
++	if (m_LoginDays.empty())
++		m_LoginEnabled = false;
++	Logger().Info("MissionManager: Login Supplies of %d days, %d bonuses%s\n", m_PeriodDays, (int)m_LoginBonuses.size(), m_LoginEnabled ? "" : " (off)");
++
++	cfg = LoadJson("Data/Tutorial.json");
++	try
++	{
++		for (auto& r : cfg.is_null() ? json::array() : cfg.value("Rewards", json::array()))
++			m_TutorialRewards.push_back(ReadReward(r));
++	}
++	catch (exception& e)
++	{
++		Logger().Error("MissionManager: Data/Tutorial.json: %s\n", e.what());
++	}
++
++	m_GameTexts = LoadJson("Data/GameTexts.json");
++	if (m_GameTexts.is_null())
++		m_GameTexts = json::object();
++	m_GameTexts.erase("//");
++}
++
++json CMissionManager::TextOverrides()
++{
++	json texts = json::object();
++	for (auto& t : m_GameTexts.items())
++		if (t.value().is_string())
++			texts[t.key()] = t.value();
++	return texts;
++}
++
++// ---------------------------------------------------------------- the calendar
++
++int CMissionManager::PeriodStart(int day)
++{
++	int n = max(1, m_PeriodDays), d = day - FirstSunday;
++	return FirstSunday + (d >= 0 ? d / n : -((-d + n - 1) / n)) * n;
++}
++
++// local midnight `offset` days from today
++static time_t LocalMidnight(int offset)
++{
++	time_t now = time(NULL);
++	tm t = *localtime(&now);
++	t.tm_hour = t.tm_min = t.tm_sec = 0;
++	t.tm_mday += offset;
++	t.tm_isdst = -1;
++	return mktime(&t);
++}
++
++static int PopCount(unsigned long long v)
++{
++	int n = 0;
++	for (; v; v &= v - 1)
++		n++;
++	return n;
++}
++
++// counters: LoginPeriod = the day the user's current calendar started, LoginCollected = its days collected (bits),
++// LoginBonuses = its bonuses given (bits), LoginRewards = days ever collected (a statistic). Another period: all clear.
++CMissionManager::LoginState CMissionManager::GetLoginState(int userID)
++{
++	vector<UserCounter_s> counters;
++	g_UserDatabase.GetCounters(userID, counters);
++	LoginState s = { 0, 0, 0 };
++	for (auto& c : counters)
++		if (c.mode != -1)
++			continue;
++		else if (c.name == "LoginPeriod")
++			s.period = (int)c.value;
++		else if (c.name == "LoginCollected")
++			s.collected = c.value;
++		else if (c.name == "LoginBonuses")
++			s.bonuses = c.value;
++	int start = PeriodStart(Today());
++	if (s.period != start)
++		s = { start, 0, 0 };
++	return s;
++}
++
++static RewardItem ShownItem(const LoginReward& r)
++{
++	RewardItem item = {};
++	item.itemID = r.itemID;
++	item.count = r.count;
++	item.duration = r.days;
++	return item;
++}
++
++void CMissionManager::SendLoginSupplies(IUser* user)
++{
++	if (!m_LoginEnabled || !user)
++		return;
++	int today = Today(), start = PeriodStart(today), index = today - start;
++	LoginState s = GetLoginState(user->GetID());
++
++	LoginSuppliesInfo info;
++	info.canGet = index >= 0 && index < m_PeriodDays && !((s.collected >> index) & 1);
++	info.start = (unsigned int)LocalMidnight(start - today);
++	info.end = (unsigned int)LocalMidnight(start + m_PeriodDays - today) - 1;
++	info.collected = (unsigned long long)s.collected;
++	info.collectedCount = PopCount(info.collected);
++	info.bonusMask = (int)s.bonuses;
++	for (auto& d : m_LoginDays)
++		info.days.push_back(ShownItem(d));
++	for (auto& b : m_LoginBonuses)
++		info.bonuses.push_back({ b.after, ShownItem(b) });
++	g_PacketManager.SendItemDailyRewardsUpdate(user->GetExtendedSocket(), info);
++	m_LoginSentDay[user->GetID()] = today;
++}
++
++void CMissionManager::OnLogin(IUser* user)
++{
++	if (!m_LoginEnabled || !user)
++		return;
++	SendLoginSupplies(user);
++	int today = Today(), index = today - PeriodStart(today);
++	LoginState s = GetLoginState(user->GetID());
++	if (index < m_PeriodDays && !((s.collected >> index) & 1))
++		g_PacketManager.SendUMsgNoticeMessageInChat(user->GetExtendedSocket(),
++			va("Today's Login Supplies are ready (%s): Login Supplies button, bottom right of the lobby.", RewardName(m_LoginDays[index]).c_str()));
++}
++
++void CMissionManager::OnMatchEnd(IUser* user)
++{
++	if (!m_LoginEnabled || !user)
++		return;
++	auto it = m_LoginSentDay.find(user->GetID());
++	if (it == m_LoginSentDay.end() || it->second != Today())
++		SendLoginSupplies(user);
++}
++
++string CMissionManager::RewardName(const LoginReward& r)
++{
++	string name = r.name;
++	if (name.empty() && r.itemID)
++	{
++		name = g_WarbondManager.ItemName(r.itemID);
++		if (name.empty())
++			name = va("item %d", r.itemID);
++	}
++	if (!name.empty() && r.count > 1)
++		name += va(" x%d", r.count);
++	return name;
++}
++
++// gives a reward: its item (shown in the window) and currencies; the text for the chat line
++string CMissionManager::Give(IUser* user, const LoginReward& r, vector<RewardItem>& shown)
++{
++	int userID = user->GetID();
++	vector<string> parts;
++	if (r.itemID)
++	{
++		int added = g_ItemManager.AddItem(userID, user, r.itemID, r.count, r.days);
++		if (added == ITEM_ADD_SUCCESS)
++		{
++			shown.push_back(ShownItem(r));
++			parts.push_back(RewardName(r));
++		}
++		else
++			Logger().Warn("MissionManager: couldn't give item %d to user %d (%d)\n", r.itemID, userID, added);
++	}
++	if (r.medals)
++	{
++		user->UpdatePoints(r.medals);
++		parts.push_back(va("%d medals", r.medals));
++	}
++	if (r.badges)
++	{
++		g_MedalManager.AddCounter(user, "BlackBadges", r.badges);
++		parts.push_back(va("%d Black Badge%s", r.badges, r.badges == 1 ? "" : "s"));
++	}
++	if (r.riftTickets)
++	{
++		g_MedalManager.AddCounter(user, "RiftTickets", r.riftTickets);
++		parts.push_back(va("%d Rift Ticket%s", r.riftTickets, r.riftTickets == 1 ? "" : "s"));
++	}
++	if (r.bingoTickets)
++	{
++		g_BingoManager.GiveTickets(user, r.bingoTickets, NULL);
++		parts.push_back(va("%d Bingo Ticket%s", r.bingoTickets, r.bingoTickets == 1 ? "" : "s"));
++	}
++	string text;
++	for (size_t i = 0; i < parts.size(); i++)
++		text += (i ? ", " : "") + parts[i];
++	return text;
++}
++
++void CMissionManager::OnLoginSuppliesRequest(IUser* user, int request)
++{
++	if (!user)
++		return;
++	if (!m_LoginEnabled)
++	{
++		g_PacketManager.SendUMsgNoticeMessageInChat(user->GetExtendedSocket(), "Login Supplies are off on this server (Data/DailyLogin.json).");
++		return;
++	}
++	if (request != 1)
++	{
++		if (request != 0)
++			Logger().Warn("MissionManager: Login Supplies request %d from user %d\n", request, user->GetID());
++		SendLoginSupplies(user);
++		return;
++	}
++
++	int userID = user->GetID(), today = Today(), index = today - PeriodStart(today);
++	LoginState s = GetLoginState(userID);
++	if (index >= m_PeriodDays || ((s.collected >> index) & 1))
++	{
++		g_PacketManager.SendUMsgNoticeMessageInChat(user->GetExtendedSocket(), "Today's Login Supplies are already collected. Come back tomorrow!");
++		SendLoginSupplies(user);
++		return;
++	}
++
++	// written first: a second click while this one runs gives nothing
++	s.collected |= 1LL << index;
++	int count = PopCount((unsigned long long)s.collected);
++	vector<int> bonuses;
++	for (size_t b = 0; b < m_LoginBonuses.size(); b++)
++		if (!((s.bonuses >> b) & 1) && count >= m_LoginBonuses[b].after)
++		{
++			s.bonuses |= 1LL << b;
++			bonuses.push_back((int)b);
++		}
++	g_UserDatabase.SetCounter(userID, { -1, "LoginPeriod", s.period });
++	g_UserDatabase.SetCounter(userID, { -1, "LoginCollected", s.collected });
++	g_UserDatabase.SetCounter(userID, { -1, "LoginBonuses", s.bonuses });
++	g_MedalManager.AddCounter(user, "LoginRewards", 1);
++
++	vector<RewardItem> shown;
++	string text = Give(user, m_LoginDays[index], shown);
++	for (int b : bonuses)
++	{
++		string bonus = Give(user, m_LoginBonuses[b], shown);
++		if (!bonus.empty())
++			text += va("%s%s (bonus for %d days)", text.empty() ? "" : "; ", bonus.c_str(), m_LoginBonuses[b].after);
++	}
++	g_PacketManager.SendItemDailyRewardsSpinResult(user->GetExtendedSocket(), (unsigned long long)s.collected, count, shown);
++	g_PacketManager.SendUMsgNoticeMessageInChat(user->GetExtendedSocket(),
++		va("Login Supplies, day %d of %d (%d collected): %s.", index + 1, m_PeriodDays, count, text.c_str()));
++	Logger().Info("MissionManager: user %d collected Login Supplies day %d of %d (%d collected): %s\n", userID, index + 1, m_PeriodDays, count, text.c_str());
++	m_LoginSentDay[userID] = today;
++	g_MedalManager.CheckMedals(user);
++}
++
++json CMissionManager::RewardJson(const LoginReward& r)
++{
++	return { { "name", RewardName(r) }, { "itemID", r.itemID }, { "count", r.count }, { "days", r.days }, { "medals", r.medals },
++		{ "badges", r.badges }, { "riftTickets", r.riftTickets }, { "bingoTickets", r.bingoTickets }, { "after", r.after } };
++}
++
++// the Missions page's Login Supplies tab: the same calendar as the game's window
++json CMissionManager::LoginJson(IUser* user)
++{
++	if (!m_LoginEnabled)
++		return nullptr;
++	int today = Today(), start = PeriodStart(today);
++	LoginState s = GetLoginState(user->GetID());
++	json days = json::array(), bonuses = json::array();
++	for (size_t i = 0; i < m_LoginDays.size(); i++)
++	{
++		json d = RewardJson(m_LoginDays[i]);
++		d["collected"] = ((s.collected >> i) & 1) != 0;
++		days.push_back(d);
++	}
++	for (size_t b = 0; b < m_LoginBonuses.size(); b++)
++	{
++		json d = RewardJson(m_LoginBonuses[b]);
++		d["given"] = ((s.bonuses >> b) & 1) != 0;
++		bonuses.push_back(d);
++	}
++	return { { "days", days }, { "bonuses", bonuses }, { "today", today - start }, { "start", (long long)LocalMidnight(start - today) },
++		{ "collected", PopCount((unsigned long long)s.collected) }, { "nextIn", SecondsToMidnight() } };
++}
++
++// ---------------------------------------------------------------- the tutorial
++
++int CMissionManager::TutorialFlags(int userID)
++{
++	auto it = m_TutorialFlags.find(userID);
++	if (it != m_TutorialFlags.end())
++		return it->second;
++	vector<UserCounter_s> counters;
++	g_UserDatabase.GetCounters(userID, counters);
++	int flags = 0;
++	for (auto& c : counters)
++		if (c.mode == -1 && c.name == "TutorialFlags")
++			flags = (int)c.value;
++	m_TutorialFlags[userID] = flags;
++	return flags;
++}
++
++void CMissionManager::OnTutorialUpdate(IUser* user, int value)
++{
++	if (!user)
++		return;
++	int userID = user->GetID(), before = TutorialFlags(userID), after = before | (value & 0xff);
++	Logger().Info("MissionManager: user %d tutorial update %d (bits %d -> %d)\n", userID, value, before, after);
++	if (after == before)
++		return;
++	m_TutorialFlags[userID] = after;
++	g_UserDatabase.SetCounter(userID, { -1, "TutorialFlags", after });
++
++	vector<RewardItem> shown;
++	string text;
++	int medals = 0;
++	for (auto& r : m_TutorialRewards)
++	{
++		if (r.bit < 0 || r.bit > 7 || !((after >> r.bit) & 1) || ((before >> r.bit) & 1))
++			continue;
++		string part = Give(user, r, shown);
++		medals += r.medals;
++		if (!part.empty())
++			text += (text.empty() ? "" : ", ") + part;
++	}
++	if (!text.empty())
++	{
++		RewardNotice notice = {};
++		notice.status = true;
++		notice.points = medals;
++		notice.items = shown;
++		g_PacketManager.SendUMsgRewardNotice(user->GetExtendedSocket(), notice, "Tutorial reward",
++			"Thanks for playing the tutorial! Use the coupons from the Inventory.", false);
++		g_PacketManager.SendUMsgNoticeMessageInChat(user->GetExtendedSocket(), "Tutorial reward: " + text + ".");
++		Logger().Info("MissionManager: user %d tutorial reward: %s\n", userID, text.c_str());
++	}
++	// the tutorial window's progress
++	CUserCharacter character = user->GetCharacter(UFLAG_LOW_UNK15);
++	g_PacketManager.SendUserUpdateInfo(user->GetExtendedSocket(), user, character);
++}
 diff --git a/src/manager/medalmanager.cpp b/src/manager/medalmanager.cpp
 new file mode 100644
 index 0000000..4911081
@@ -2146,10 +2630,10 @@ index 0000000..1a0e4c5
 +bool IsZombieModeOffline(int mode);
 diff --git a/src/manager/missionmanager.cpp b/src/manager/missionmanager.cpp
 new file mode 100644
-index 0000000..3ae8681
+index 0000000..d9831a0
 --- /dev/null
 +++ b/src/manager/missionmanager.cpp
-@@ -0,0 +1,635 @@
+@@ -0,0 +1,461 @@
 +#include "missionmanager.h"
 +#include "medalmanager.h"
 +#include "warbondmanager.h"
@@ -2178,7 +2662,7 @@ index 0000000..3ae8681
 +
 +bool CMissionManager::Init()
 +{
-+	LoadLoginCalendar();
++	LoadLoginSupplies();
 +	return LoadConfig();
 +}
 +
@@ -2276,7 +2760,7 @@ index 0000000..3ae8681
 +	return (Today() + 3) / 7; // 1970-01-01 was a Thursday: weeks start on Monday
 +}
 +
-+static int SecondsToMidnight()
++int SecondsToMidnight()
 +{
 +	time_t now = time(NULL);
 +	tm local = *localtime(&now);
@@ -2373,182 +2857,8 @@ index 0000000..3ae8681
 +	g_PacketManager.SendUMsgNoticeMessageInChat(user->GetExtendedSocket(), text);
 +}
 +
-+// ---------------------------------------------------------------- daily login calendar
-+
-+void CMissionManager::LoadLoginCalendar()
-+{
-+	m_LoginDays.clear();
-+	ifstream f("Data/DailyLogin.json");
-+	json cfg = json::parse(f, nullptr, false, true);
-+	if (cfg.is_discarded() || !cfg.is_object())
-+	{
-+		m_LoginEnabled = false;
-+		Logger().Warn("MissionManager: couldn't load Data/DailyLogin.json, no daily login rewards\n");
-+		return;
-+	}
-+	try
-+	{
-+		m_LoginEnabled = cfg.value("Enabled", true);
-+		for (auto& d : cfg.value("Days", json::array()))
-+		{
-+			LoginReward r;
-+			r.medals = max(0, d.value("Medals", 0));
-+			r.badges = max(0, d.value("BlackBadges", 0));
-+			r.riftTickets = max(0, d.value("RiftTickets", 0));
-+			r.bingoTickets = max(0, d.value("BingoTickets", 0));
-+			for (auto& i : d.value("Items", json::array()))
-+			{
-+				LoginRewardItem item = { i.value("ItemID", 0), max(1, i.value("Count", 1)), max(0, i.value("Days", 0)) };
-+				if (item.itemID > 0)
-+					r.items.push_back(item);
-+			}
-+			m_LoginDays.push_back(r);
-+		}
-+	}
-+	catch (exception& e)
-+	{
-+		Logger().Error("MissionManager: Data/DailyLogin.json: %s\n", e.what());
-+	}
-+	if (m_LoginDays.empty())
-+		m_LoginEnabled = false;
-+	Logger().Info("MissionManager: daily login calendar of %d days%s\n", (int)m_LoginDays.size(), m_LoginEnabled ? "" : " (off)");
-+}
-+
-+json CMissionManager::RewardJson(const LoginReward& r)
-+{
-+	json items = json::array();
-+	for (auto& i : r.items)
-+		items.push_back({ { "itemID", i.itemID }, { "count", i.count }, { "days", i.days }, { "name", g_WarbondManager.ItemName(i.itemID) } });
-+	return { { "medals", r.medals }, { "badges", r.badges }, { "riftTickets", r.riftTickets }, { "bingoTickets", r.bingoTickets },
-+		{ "items", items } };
-+}
-+
-+string CMissionManager::RewardText(const LoginReward& r, int medals)
-+{
-+	vector<string> parts;
-+	if (medals)
-+		parts.push_back(va("%d medals", medals));
-+	if (r.badges)
-+		parts.push_back(va("%d Black Badge%s", r.badges, r.badges == 1 ? "" : "s"));
-+	if (r.riftTickets)
-+		parts.push_back(va("%d Rift Ticket%s", r.riftTickets, r.riftTickets == 1 ? "" : "s"));
-+	if (r.bingoTickets)
-+		parts.push_back(va("%d Bingo Ticket%s", r.bingoTickets, r.bingoTickets == 1 ? "" : "s"));
-+	for (auto& i : r.items)
-+	{
-+		string name = g_WarbondManager.ItemName(i.itemID);
-+		if (name.empty())
-+			name = va("item %d", i.itemID);
-+		parts.push_back(i.count > 1 ? va("%s x%d", name.c_str(), i.count) : name);
-+	}
-+	string text;
-+	for (size_t i = 0; i < parts.size(); i++)
-+		text += (i ? ", +" : "+") + parts[i];
-+	return text;
-+}
-+
-+// counters: LoginRewardDay = the local day (Today()) of the last reward, LoginRewardStep = calendar days given in the
-+// current round of the calendar, LoginRewards = every reward ever given (a statistic)
-+void CMissionManager::CheckDailyLogin(IUser* user)
-+{
-+	if (!m_LoginEnabled || !user)
-+		return;
-+	int userID = user->GetID(), day = Today();
-+	vector<UserCounter_s> counters;
-+	g_UserDatabase.GetCounters(userID, counters);
-+	long long lastDay = 0, step = 0;
-+	for (auto& c : counters)
-+		if (c.mode == -1 && c.name == "LoginRewardDay")
-+			lastDay = c.value;
-+		else if (c.mode == -1 && c.name == "LoginRewardStep")
-+			step = c.value;
-+	if (lastDay == day)
-+		return;
-+	int index = (int)(step % (long long)m_LoginDays.size());
-+	const LoginReward& r = m_LoginDays[index];
-+
-+	// written first: a second check while this one runs (login + Missions page) gives nothing
-+	g_UserDatabase.SetCounter(userID, { -1, "LoginRewardDay", day });
-+	g_UserDatabase.SetCounter(userID, { -1, "LoginRewardStep", index + 1 >= (int)m_LoginDays.size() ? 0 : index + 1 });
-+	g_MedalManager.AddCounter(user, "LoginRewards", 1);
-+
-+	if (r.medals)
-+		user->UpdatePoints(r.medals);
-+	if (r.badges)
-+		g_MedalManager.AddCounter(user, "BlackBadges", r.badges);
-+	if (r.riftTickets)
-+		g_MedalManager.AddCounter(user, "RiftTickets", r.riftTickets);
-+	if (r.bingoTickets)
-+		g_BingoManager.GiveTickets(user, r.bingoTickets, NULL);
-+	RewardNotice notice = {};
-+	notice.status = true;
-+	notice.points = r.medals;
-+	for (auto& i : r.items)
-+	{
-+		int added = g_ItemManager.AddItem(userID, user, i.itemID, i.count, i.days);
-+		if (added != ITEM_ADD_SUCCESS)
-+		{
-+			Logger().Warn("MissionManager: couldn't give item %d of the login reward to user %d (%d)\n", i.itemID, userID, added);
-+			continue;
-+		}
-+		RewardItem item = {};
-+		item.itemID = i.itemID;
-+		item.count = i.count;
-+		item.duration = i.days;
-+		notice.items.push_back(item);
-+	}
-+	if (r.bingoTickets)
-+	{
-+		RewardItem item = {};
-+		item.itemID = 2179; // Bingo Ticket (Data/Bingo.json TicketItemID)
-+		item.count = r.bingoTickets;
-+		notice.items.push_back(item);
-+	}
-+
-+	string text = RewardText(r, r.medals);
-+	string extra;
-+	if (r.badges)
-+		extra += va(" +%d Black Badge%s.", r.badges, r.badges == 1 ? "" : "s");
-+	if (r.riftTickets)
-+		extra += va(" +%d Rift Ticket%s.", r.riftTickets, r.riftTickets == 1 ? "" : "s");
-+	g_PacketManager.SendUMsgRewardNotice(user->GetExtendedSocket(), notice, va("Daily login - day %d of %d", index + 1, (int)m_LoginDays.size()),
-+		va("Thanks for playing today!%s Tomorrow's reward is in Missions > Daily Login.", extra.c_str()), false);
-+	g_PacketManager.SendUMsgNoticeMessageInChat(user->GetExtendedSocket(),
-+		va("Daily login reward, day %d of %d: %s. See the calendar in Missions > Daily Login.", index + 1, (int)m_LoginDays.size(), text.c_str()));
-+	Logger().Info("MissionManager: user %d daily login reward, day %d of %d: %s\n", userID, index + 1, (int)m_LoginDays.size(), text.c_str());
-+	g_MedalManager.CheckMedals(user);
-+}
-+
-+json CMissionManager::LoginJson(IUser* user)
-+{
-+	if (!m_LoginEnabled)
-+		return nullptr;
-+	vector<UserCounter_s> counters;
-+	g_UserDatabase.GetCounters(user->GetID(), counters);
-+	long long lastDay = 0, step = 0, total = 0;
-+	for (auto& c : counters)
-+		if (c.mode == -1 && c.name == "LoginRewardDay")
-+			lastDay = c.value;
-+		else if (c.mode == -1 && c.name == "LoginRewardStep")
-+			step = c.value;
-+		else if (c.mode == -1 && c.name == "LoginRewards")
-+			total = c.value;
-+	int n = (int)m_LoginDays.size();
-+	bool claimedToday = lastDay == Today();
-+	int next = (int)(step % n);
-+	// today's day of the calendar (the one just given) and how many are done in this round
-+	int today = claimedToday ? (next + n - 1) % n : next;
-+	int done = claimedToday ? (next == 0 ? n : next) : next;
-+	json days = json::array();
-+	for (auto& d : m_LoginDays)
-+		days.push_back(RewardJson(d));
-+	return { { "days", days }, { "today", today }, { "done", done }, { "claimedToday", claimedToday }, { "total", total },
-+		{ "nextIn", SecondsToMidnight() } };
-+}
-+
 +json CMissionManager::Build(IUser* user)
 +{
-+	CheckDailyLogin(user); // the Missions page opened on a new day (the game left running past midnight)
 +	int userID = user->GetID(), day = Today(), week = ThisWeek();
 +	vector<UserCounter_s> counters;
 +	g_UserDatabase.GetCounters(userID, counters);
@@ -2787,10 +3097,10 @@ index 0000000..3ae8681
 +}
 diff --git a/src/manager/missionmanager.h b/src/manager/missionmanager.h
 new file mode 100644
-index 0000000..239d101
+index 0000000..f7d9e86
 --- /dev/null
 +++ b/src/manager/missionmanager.h
-@@ -0,0 +1,116 @@
+@@ -0,0 +1,137 @@
 +#pragma once
 +
 +#include <string>
@@ -2804,6 +3114,7 @@ index 0000000..239d101
 +class IUser;
 +struct UserCounter_s;
 +struct UserMission_s;
++struct RewardItem;
 +
 +// a statistic (CMedalManager counter) that must grow by `target` after the mission is taken
 +struct MissionRequirement
@@ -2843,16 +3154,15 @@ index 0000000..239d101
 +	int price;
 +};
 +
-+// one day of the login calendar (Data/DailyLogin.json)
-+struct LoginRewardItem
-+{
-+	int itemID, count, days; // days 0: permanent
-+};
-+
++// a day of Login Supplies (Data/DailyLogin.json), a bonus for days collected, or a tutorial reward (Data/Tutorial.json):
++// the item the game's window shows, and currencies that come with it
 +struct LoginReward
 +{
++	int itemID = 0, count = 1, days = 0; // days 0: permanent
++	std::string name;                    // for the chat line and the Missions page (the item's name when empty)
 +	int medals = 0, badges = 0, riftTickets = 0, bingoTickets = 0;
-+	std::vector<LoginRewardItem> items;
++	int after = 0;                       // a bonus: given when this many days of the period are collected
++	int bit = 0;                         // a tutorial reward: its bit of the tutorial byte
 +};
 +
 +class IMissionManager : public IBaseManager
@@ -2875,16 +3185,33 @@ index 0000000..239d101
 +	// GET / POST /api/missions {action: accept|abandon|claim (id) | claimEvent (index) | claimBonus | buy (itemID)}
 +	nlohmann::json Api(IUser* user, const std::string& method, const std::string& body, int& status);
 +
-+	// the daily login reward: the first time a day (login, a finished match or the Missions page), the next day of the
-+	// calendar is given (Data/DailyLogin.json; days missed don't reset it, after the last day it starts again)
-+	void CheckDailyLogin(IUser* user);
++	// Login Supplies (the lobby's Login Supplies button, the game's roulette window, Item packet DailyRewards): a
++	// calendar of PeriodDays days starting on Sundays, one reward a day collected with the window's button (missed days
++	// are lost), and bonuses for days collected (Data/DailyLogin.json, loginsupplies.cpp)
++	void SendLoginSupplies(IUser* user);
++	void OnLoginSuppliesRequest(IUser* user, int request);
++	void OnLogin(IUser* user);
++	void OnMatchEnd(IUser* user); // a new day while the game is open: the window gets the new day
++
++	// the tutorial window (Tutorial button): the game sends RequestUpdateTutorial with its byte of tutorial bits (bit 0
++	// Zombie Experience, 1 Tutorial 1, 2 Tutorial 2, 3 Mission Chain); each new bit gives its reward (Data/Tutorial.json).
++	// The byte goes back to the game in the user info (UFLAG_LOW_UNK15, second byte).
++	int TutorialFlags(int userID);
++	void OnTutorialUpdate(IUser* user, int value);
++
++	// game texts botassist replaces (GET /api/questtexts, Data/GameTexts.json): the tutorial's reward list, the Point Coupon
++	nlohmann::json TextOverrides();
 +
 +private:
 +	bool LoadConfig();
-+	void LoadLoginCalendar();
++	void LoadLoginSupplies();
 +	nlohmann::json LoginJson(IUser* user);
-+	static nlohmann::json RewardJson(const LoginReward& r);
-+	static std::string RewardText(const LoginReward& r, int medals);
++	nlohmann::json RewardJson(const LoginReward& r);
++	std::string RewardName(const LoginReward& r);
++	std::string Give(IUser* user, const LoginReward& r, std::vector<RewardItem>& shown);
++	int PeriodStart(int day);
++	struct LoginState { int period; long long collected; long long bonuses; };
++	LoginState GetLoginState(int userID);
 +	nlohmann::json Build(IUser* user);
 +	static int Today();
 +	static int ThisWeek();
@@ -2903,12 +3230,16 @@ index 0000000..239d101
 +	std::vector<MarketItem> m_Market;
 +	int m_RequestOffers = 4, m_RequestSlots = 3, m_MarketWeapons = 6, m_MarketCostumes = 2;
 +	bool m_LoginEnabled = false;
-+	std::vector<LoginReward> m_LoginDays;
++	int m_PeriodDays = 28;
++	std::vector<LoginReward> m_LoginDays, m_LoginBonuses, m_TutorialRewards;
++	nlohmann::json m_GameTexts;           // Data/GameTexts.json
++	std::map<int, int> m_LoginSentDay;    // the day each user's window was last sent
++	std::map<int, int> m_TutorialFlags; // cache: the user info is built often
 +};
 +
 +extern CMissionManager g_MissionManager;
 diff --git a/src/manager/packetmanager.cpp b/src/manager/packetmanager.cpp
-index 0defb02..d203077 100644
+index 0defb02..d8e87e3 100644
 --- a/src/manager/packetmanager.cpp
 +++ b/src/manager/packetmanager.cpp
 @@ -1,4 +1,6 @@
@@ -2967,7 +3298,91 @@ index 0defb02..d203077 100644
  {
  	CSendPacket* msg = CreatePacket(socket, PacketId::Metadata);
  	msg->BuildHeader();
-@@ -2245,12 +2262,17 @@ void CPacketManager::SendRoomListFull(IExtendedSocket* socket, const vector<IRoo
+@@ -1819,43 +1836,63 @@ void CPacketManager::SendItemEquipTattoo(IExtendedSocket* socket)
+ 	socket->Send(msg);
+ }
+ 
+-void CPacketManager::SendItemDailyRewardsUpdate(IExtendedSocket* socket, const UserDailyRewards& dailyRewards)
++// offline build: the Login Supplies window (GameUI CRoulettePopupDlg, hw Packet_Item 8 parser 0x0264a0d0, listener
++// IItemRouletteListener). An item: u32 itemID, u16 days (0 permanent), u16 count, u16, u32, u8 n + n x u16, u8 m + m x u16
++static void WriteRouletteItem(CSendPacket* msg, const RewardItem& item)
++{
++	msg->WriteUInt32(item.itemID);
++	msg->WriteUInt16(item.duration);
++	msg->WriteUInt16(item.count);
++	msg->WriteUInt16(0);
++	msg->WriteUInt32(0);
++	msg->WriteUInt8(0);
++	msg->WriteUInt8(0);
++}
++
++// type 0, state 1: u8 can collect (the button), u32 start, u32 end (the days are placed from start's weekday), u64 days
++// checked, u8 day count, u64 days received, the days, u8 days collected, u8 bonus count (up to 5), u8 bonuses received,
++// the bonuses (u8 days needed + item)
++void CPacketManager::SendItemDailyRewardsUpdate(IExtendedSocket* socket, const LoginSuppliesInfo& info)
+ {
+ 	CSendPacket* msg = CreatePacket(socket, PacketId::Item);
+ 	msg->BuildHeader();
+ 
+ 	msg->WriteUInt8(ItemPacketType::DailyRewards);
+-
+-	msg->WriteUInt8(0); // updatedailyrewards
+-
++	msg->WriteUInt8(0);
+ 	msg->WriteUInt8(1);
+-	msg->WriteUInt32(1);
+-
+-	if (1)
++	msg->WriteUInt8(info.canGet);
++	msg->WriteUInt32(info.start);
++	msg->WriteUInt32(info.end);
++	msg->WriteUInt64(info.collected);
++	msg->WriteUInt8((unsigned char)info.days.size());
++	msg->WriteUInt64(info.collected);
++	for (auto& d : info.days)
++		WriteRouletteItem(msg, d);
++	msg->WriteUInt8(info.collectedCount);
++	msg->WriteUInt8((unsigned char)info.bonuses.size());
++	msg->WriteUInt8(info.bonusMask);
++	for (auto& b : info.bonuses)
+ 	{
+-		msg->WriteUInt32(222222);
+-		msg->WriteUInt32(222222);
+-		msg->WriteUInt64(0);
+-		msg->WriteUInt8(0x24);
+-		msg->WriteUInt64(0);
++		msg->WriteUInt8(b.first);
++		WriteRouletteItem(msg, b.second);
+ 	}
+ 
+ 	socket->Send(msg);
+ }
+ 
+-void CPacketManager::SendItemDailyRewardsSpinResult(IExtendedSocket* socket, const RewardItem& item)
++// type 1: u64 days checked (today's plays its animation), u8 days collected, u8 item count + items (the result popup)
++void CPacketManager::SendItemDailyRewardsSpinResult(IExtendedSocket* socket, unsigned long long collected, int collectedCount, const vector<RewardItem>& items)
+ {
+ 	CSendPacket* msg = CreatePacket(socket, PacketId::Item);
+ 	msg->BuildHeader();
+ 
+ 	msg->WriteUInt8(ItemPacketType::DailyRewards);
+-
+-	msg->WriteUInt8(1); // spinresult
+-
+-	msg->WriteUInt32(item.itemID);
+-	msg->WriteUInt16(item.duration);
+-	msg->WriteUInt16(item.count);
+-	msg->WriteUInt8(1); // event flag
++	msg->WriteUInt8(1);
++	msg->WriteUInt64(collected);
++	msg->WriteUInt8(collectedCount);
++	msg->WriteUInt8((unsigned char)items.size());
++	for (auto& item : items)
++		WriteRouletteItem(msg, item);
+ 
+ 	socket->Send(msg);
+ }
+@@ -2245,12 +2282,17 @@ void CPacketManager::SendRoomListFull(IExtendedSocket* socket, const vector<IRoo
  
  	msg->WriteUInt16(2);
  	msg->WriteUInt16(1);
@@ -2986,7 +3401,7 @@ index 0defb02..d203077 100644
  
  	socket->Send(msg);
  }
-@@ -2934,7 +2956,7 @@ void CPacketManager::SendRoomCreateAndJoin(IExtendedSocket* socket, IRoom* roomI
+@@ -2934,7 +2976,7 @@ void CPacketManager::SendRoomCreateAndJoin(IExtendedSocket* socket, IRoom* roomI
  	msg->WriteUInt8((unsigned int)roomInfo->GetUsers().size());
  	for (auto user : roomInfo->GetUsers())
  	{
@@ -2995,7 +3410,7 @@ index 0defb02..d203077 100644
  
  		msg->WriteUInt32(user->GetID());
  		msg->WriteUInt32(0);
-@@ -2972,7 +2994,7 @@ void CPacketManager::SendRoomPlayerJoin(IExtendedSocket* socket, IUser* user, Ro
+@@ -2972,7 +3014,7 @@ void CPacketManager::SendRoomPlayerJoin(IExtendedSocket* socket, IUser* user, Ro
  	msg->WriteUInt32(0);
  	msg->WriteString(user->GetUsername());
  
@@ -3004,7 +3419,7 @@ index 0defb02..d203077 100644
  
  	// user network info
  	msg->WriteUInt8(num);
-@@ -3044,6 +3066,62 @@ void CPacketManager::SendRoomSetHost(IExtendedSocket* socket, IUser* user)
+@@ -3044,6 +3086,62 @@ void CPacketManager::SendRoomSetHost(IExtendedSocket* socket, IUser* user)
  	socket->Send(msg);
  }
  
@@ -3067,7 +3482,7 @@ index 0defb02..d203077 100644
  void CPacketManager::SendRoomPlayerLeave(IExtendedSocket* socket, int userId)
  {
  	CSendPacket* msg = CreatePacket(socket, PacketId::Room);
-@@ -3144,7 +3222,7 @@ void CPacketManager::SendRoomGameResult(IExtendedSocket* socket, IRoom* room, CG
+@@ -3144,7 +3242,7 @@ void CPacketManager::SendRoomGameResult(IExtendedSocket* socket, IRoom* room, CG
  		msg->WriteUInt16(0);
  		msg->WriteUInt16(0);
  		msg->WriteUInt8(0); // kakaito huita sleva
@@ -3076,7 +3491,7 @@ index 0defb02..d203077 100644
  		msg->WriteUInt8(0); // frag kills
  		msg->WriteUInt8(0); // knife kills
  
-@@ -3636,6 +3714,25 @@ void CPacketManager::SendHostGameStart(IExtendedSocket* socket, int userId)
+@@ -3636,6 +3734,25 @@ void CPacketManager::SendHostGameStart(IExtendedSocket* socket, int userId)
  	socket->Send(msg);
  }
  
@@ -3102,7 +3517,7 @@ index 0defb02..d203077 100644
  void CPacketManager::SendHostZBAddon(IExtendedSocket* socket, int userID, const vector<int>& addons)
  {
  	CSendPacket* msg = CreatePacket(socket, PacketId::Host);
-@@ -3662,7 +3759,7 @@ void CPacketManager::SendHostJoin(IExtendedSocket* socket, IUser* host)
+@@ -3662,7 +3779,7 @@ void CPacketManager::SendHostJoin(IExtendedSocket* socket, IUser* host)
  	msg->WriteUInt32(host->GetID());
  	msg->WriteUInt64(0); // что это?
  
@@ -3111,15 +3526,15 @@ index 0defb02..d203077 100644
  
  	msg->WriteUInt32(ip_string_to_int(network.m_szExternalIpAddress), false);
  	msg->WriteUInt16(network.m_nExternalClientPort);
-@@ -6072,10 +6169,85 @@ void CPacketManager::SendTitle(IExtendedSocket* socket, int id)
+@@ -6072,7 +6189,82 @@ void CPacketManager::SendTitle(IExtendedSocket* socket, int id)
  
  	msg->WriteUInt8(0);
  	msg->WriteUInt16(id);
 +	msg->WriteUInt8(0); // read by the client too (Packet_Title type 0: u16 title, u8), passed to its listeners
- 
- 	socket->Send(msg);
- }
- 
++
++	socket->Send(msg);
++}
++
 +// offline build: the medals as the client's honor quests (hw.dll Packet_Quest type 1, the full quest list): they are
 +// what My Info's Medals tab shows, with a gauge per requirement. Quest ID = 2000 + title ID.
 +void CPacketManager::SendHonorQuests(IExtendedSocket* socket, const vector<HonorQuest_s>& quests, int honorPoints)
@@ -3159,7 +3574,7 @@ index 0defb02..d203077 100644
 +
 +	socket->Send(msg);
 +}
-+
+ 
 +// offline build: the game's Steam achievements (hw.dll Packet_Steam, id 192, calls ISteamUserStats). Type 0: stats
 +// (SetStat, optionally IndicateAchievementProgress); type 1: achievements (SetAchievement), then StoreStats.
 +// Only for clients started through Steam: the game has no ISteamUserStats otherwise.
@@ -3191,14 +3606,11 @@ index 0defb02..d203077 100644
 +	msg->WriteUInt16(achievements.size());
 +	for (auto& a : achievements)
 +		msg->WriteString(a);
-+	socket->Send(msg);
-+}
-+
- void CPacketManager::SendUDPHostData(IExtendedSocket* socket, bool host, int userID, const string& ipAddress, int port)
- {
- 	CSendPacket* msg = CreatePacket(socket, PacketId::Udp);
+ 	socket->Send(msg);
+ }
+ 
 diff --git a/src/manager/packetmanager.h b/src/manager/packetmanager.h
-index b9ca2f3..99204f9 100644
+index b9ca2f3..6df8ba2 100644
 --- a/src/manager/packetmanager.h
 +++ b/src/manager/packetmanager.h
 @@ -66,6 +66,7 @@ public:
@@ -3227,6 +3639,17 @@ index b9ca2f3..99204f9 100644
  
  	void SendGameMatchInfo(IExtendedSocket* socket);
  	void SendGameMatchUnk(IExtendedSocket* socket);
+@@ -141,8 +142,8 @@ public:
+ 	void SendItemUnk1(IExtendedSocket* socket);
+ 	void SendItemUnk3(IExtendedSocket* socket);
+ 	void SendItemEquipTattoo(IExtendedSocket* socket);
+-	void SendItemDailyRewardsUpdate(IExtendedSocket* socket, const UserDailyRewards& dailyRewards);
+-	void SendItemDailyRewardsSpinResult(IExtendedSocket* socket, const RewardItem& item);
++	void SendItemDailyRewardsUpdate(IExtendedSocket* socket, const LoginSuppliesInfo& info);
++	void SendItemDailyRewardsSpinResult(IExtendedSocket* socket, unsigned long long collected, int collectedCount, const std::vector<RewardItem>& items);
+ 	void SendItemOpenDecoderResult(IExtendedSocket* socket, const ItemBoxOpenResult& result);
+ 	void SendItemOpenDecoderErrorReply(IExtendedSocket* socket, ItemBoxError code);
+ 	void SendItemEnhanceResult(IExtendedSocket* socket, const EnhResult& result);
 @@ -174,6 +175,8 @@ public:
  	void SendRoomSetPlayerReady(IExtendedSocket* socket, IUser* user, RoomReadyStatus readyStatus);
  	void SendRoomSetHost(IExtendedSocket* socket, IUser* user);
@@ -4128,7 +4551,7 @@ index 0e1d7d2..a6efa65 100644
  
  	// clan related
 diff --git a/src/manager/usermanager.cpp b/src/manager/usermanager.cpp
-index b426874..cba267d 100644
+index b426874..4ad7830 100644
 --- a/src/manager/usermanager.cpp
 +++ b/src/manager/usermanager.cpp
 @@ -1,3 +1,7 @@
@@ -4667,7 +5090,7 @@ index b426874..cba267d 100644
 -	if (!g_pServerConfig->welcomeMessage.empty())
 -		g_PacketManager.SendUMsgNoticeMsgBoxToUuid(socket, g_pServerConfig->welcomeMessage);
 +		// offline build: the day's login reward (Data/DailyLogin.json), shown after the welcome box
-+		g_MissionManager.CheckDailyLogin(user);
++		g_MissionManager.OnLogin(user); // Login Supplies: the calendar, and a chat line when today's is ready
 +	}
  
  	g_ChannelManager.JoinChannel(user, g_ChannelManager.channelServers[0]->GetID(), g_ChannelManager.channelServers[0]->GetChannels()[0]->GetID(), false);
@@ -4683,6 +5106,15 @@ index b426874..cba267d 100644
  
  	return true;
  }
+@@ -951,7 +1415,7 @@ bool CUserManager::OnUpdateInfoPacket(CReceivePacket* msg, IExtendedSocket* sock
+ 	case UpdateInfoPacketType::RequestUpdateTutorial:
+ 	{
+ 		int tutorial = msg->ReadUInt8();
+-		Logger().Info("RequestTutorial: %d\n", tutorial);
++		g_MissionManager.OnTutorialUpdate(user, tutorial); // offline build: the tutorial's bits and rewards
+ 
+ 		break;
+ 	}
 @@ -989,6 +1453,15 @@ void CUserManager::OnSecondTick(time_t curTime)
  {
  	for (auto u : m_Users)
@@ -4775,10 +5207,10 @@ index 3054001..f98d66b 100644
  	void SendUserLoadout(IUser* user);
 diff --git a/src/manager/warbondmanager.cpp b/src/manager/warbondmanager.cpp
 new file mode 100644
-index 0000000..a730066
+index 0000000..d0230ca
 --- /dev/null
 +++ b/src/manager/warbondmanager.cpp
-@@ -0,0 +1,993 @@
+@@ -0,0 +1,994 @@
 +#include "channelmanager.h"
 +#include "transfer.h"
 +#include "warbondmanager.h"
@@ -4974,6 +5406,7 @@ index 0000000..a730066
 +	{
 +		// for botassist.asi: the medals' offline conditions replace the game's texts in My Info's Medals tab
 +		result = g_MedalManager.QuestTexts();
++		result.update(g_MissionManager.TextOverrides()); // the tutorial's rewards, the Point Coupon (Data/GameTexts.json)
 +	}
 +	else if (req.method == "GET" && req.path == "/api/rooms")
 +	{
@@ -5697,7 +6130,7 @@ index 0000000..a730066
 +		{ "TopPlayer", topPlayer ? 1 : 0 }, { "Headshots", headshots } });
 +	g_BingoManager.OnMatchResult(user, kills, won);
 +	g_ZSRiftManager.OnMatchResult(user, gameMode, kills, won);
-+	g_MissionManager.CheckDailyLogin(user); // a session that went past midnight gets the new day's login reward
++	g_MissionManager.OnMatchEnd(user); // a session that went past midnight: Login Supplies get the new day
 +	return medals;
 +}
 +
@@ -6967,10 +7400,25 @@ index 0000000..08e7a04
 +	ApiHandler m_ApiHandler;
 +};
 diff --git a/src/packet/packethelper_fulluserinfo.cpp b/src/packet/packethelper_fulluserinfo.cpp
-index 2321d64..af77a81 100644
+index 2321d64..99cfa6d 100644
 --- a/src/packet/packethelper_fulluserinfo.cpp
 +++ b/src/packet/packethelper_fulluserinfo.cpp
-@@ -201,7 +201,7 @@ void CPacketHelper_FullUserInfo::Build(Buffer& buf, int userID, const CUserChara
+@@ -1,4 +1,5 @@
+ #include "packethelper_fulluserinfo.h"
++#include "manager/missionmanager.h"
+ 
+ using namespace std;
+ 
+@@ -176,7 +177,7 @@ void CPacketHelper_FullUserInfo::Build(Buffer& buf, int userID, const CUserChara
+ 	if (character.lowFlag & UFLAG_LOW_UNK15)
+ 	{
+ 		buf.writeUInt8(0);
+-		buf.writeUInt8(0);
++		buf.writeUInt8(g_MissionManager.TutorialFlags(userID)); // offline build: the tutorial window's bits (hw CGameUser +0x257)
+ 	}
+ 
+ 	if (character.lowFlag & UFLAG_LOW_PASSWORDBOXES)
+@@ -201,7 +202,7 @@ void CPacketHelper_FullUserInfo::Build(Buffer& buf, int userID, const CUserChara
  	{
  		vector<int> list = character.achievementList;
  		sort(list.begin(), list.end());

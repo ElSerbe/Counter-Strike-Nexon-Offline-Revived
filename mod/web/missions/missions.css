@@ -155,6 +155,9 @@
 .lday .lstate { font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); min-height: 12px; }
 .lday.big { border-color: var(--accent-dim); background: #15140c; }
 .lday.claimed { opacity: .55; }
+.lday .lrew .i { white-space: normal; align-items: flex-start; line-height: 1.25; }
+.lday.missed { opacity: .35; }
+.lday.missed .lstate { color: #c77; }
 .lday.claimed .lstate { color: var(--owned); }
 .lday.today { opacity: 1; border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .lday.today .lstate { color: var(--accent); }
