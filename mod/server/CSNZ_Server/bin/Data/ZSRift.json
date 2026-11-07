@@ -22,6 +22,13 @@
 	"ClearTickets": 3,
 	"TicketsPerLevel": 1,
 	"LevelsPerTicket": 2,
+	// Rift Tickets from other modes, for every finished match (also cut when sv_cheats was on): Clear when it's won
+	// (the scenario cleared), Play when it isn't. Mode = GameModeList.csv id
+	"ScenarioTickets": [
+		{ "Mode": 15, "Name": "Zombie Scenario", "Clear": 4, "Play": 1 },
+		{ "Mode": 17, "Name": "Human Scenario", "Clear": 4, "Play": 1 },
+		{ "Mode": 33, "Name": "Zombie Files", "Clear": 3, "Play": 1 }
+	],
 	// the Rift Exchange (Missions page): ExchangeStock cosmetics a day for each player (items in Data/RiftExchange.json,
 	// tools/gen_rift_exchange.py). Holding one keeps it one more day for HoldCostPercent % of its price (at least
 	// HoldMinCost; 0 % = HoldMinCost tickets a day for every item), up to MaxHoldDays days after the first hold,

@@ -138,6 +138,46 @@
     </div>`;
   }
 
+  // ---------------------------------------------------------------- daily login
+  // the calendar of Data/DailyLogin.json: the server gives the next day at the first login (or match, or look at this
+  // page) of each day; days missed don't reset it
+  function loginLines(d) {
+    const lines = [];
+    const what = (n, one, many) => `${num(n)}<small>${n === 1 ? one : many}</small>`;
+    if (d.medals) lines.push(`<span class="m">${medal(true)}${what(d.medals, "medal", "medals")}</span>`);
+    if (d.badges) lines.push(`<span class="b" title="Black Badges (Black Market)">${badge(true)}${what(d.badges, "Black Badge", "Black Badges")}</span>`);
+    if (d.riftTickets) lines.push(`<span class="t" title="Rift Tickets (Rift Exchange)">${ticket(true)}${what(d.riftTickets, "Rift Ticket", "Rift Tickets")}</span>`);
+    if (d.bingoTickets) lines.push(`<span class="g" title="Bingo Tickets (Mileage Bingo)"><img src="../shop/icons/2179.png" alt="">${what(d.bingoTickets, "Bingo Ticket", "Bingo Tickets")}</span>`);
+    (d.items || []).forEach(i => lines.push(`<span class="i" title="${esc(i.name || "Item " + i.itemID)}${i.days ? ` (${i.days} days)` : ""}"><img src="../shop/icons/${i.itemID}.png" alt="" onerror="this.style.display='none'">${esc(i.name || "Item")}${i.count > 1 ? " x" + i.count : ""}</span>`));
+    return lines.join("");
+  }
+
+  function renderLogin() {
+    const lg = data.login;
+    if (!lg) {
+      view.innerHTML = '<div class="message">Daily login rewards are off (Data/DailyLogin.json of CSNZ_Server).</div>';
+      return;
+    }
+    const n = lg.days.length;
+    const weeks = [];
+    for (let w = 0; w * 7 < n; w++) weeks.push(lg.days.slice(w * 7, w * 7 + 7).map((d, k) => [d, w * 7 + k]));
+    const cell = ([d, i]) => {
+      const claimed = i < lg.done;
+      const isToday = i === lg.today;
+      const isNext = lg.claimedToday ? i === (lg.today + 1) % n : false;
+      const label = isToday ? (lg.claimedToday ? "Today &middot; claimed" : "Today") : isNext ? "Tomorrow" : claimed ? "Claimed" : "";
+      return `<div class="lday${claimed ? " claimed" : ""}${isToday ? " today" : ""}${isNext ? " next" : ""}${(i + 1) % 7 === 0 ? " big" : ""}">
+        <div class="lhead"><span class="dn">Day ${i + 1}</span>${claimed ? '<span class="check">&#10003;</span>' : ""}</div>
+        <div class="lrew">${loginLines(d)}</div>
+        <div class="lstate">${label}</div></div>`;
+    };
+    view.innerHTML = `<div class="event login">
+      <div class="event-head"><h2>Daily Login</h2><span class="ends">Next reward in ${timeLeft(lg.nextIn)}</span>
+        <p>Log in every day for the next reward of the calendar: it's given the first time you log in each day, and it's in your wallet and inventory right away. Days you miss don't reset it; after day ${n} it starts again. Day ${lg.claimedToday ? lg.today + 1 : lg.done + 1} of ${n} &middot; ${num(lg.total)} rewards so far.</p></div>
+      ${weeks.map((w, k) => `<section class="lweek"><h2 class="section-title">Week ${k + 1}</h2><div class="lgrid">${w.map(cell).join("")}</div></section>`).join("")}
+    </div>`;
+  }
+
   // ---------------------------------------------------------------- black market
   // 3D preview like the shop's battle passes (../shop/viewer.js, models from tools/export_shop_assets.py): costumes
   // worn by the player's character, zombie skins as the zombie, weapons in the character's hands
@@ -240,9 +280,10 @@
     const every = r.levelsPerTicket || 1;
     const atMax = r.maxTickets || r.clearTickets + r.ticketsPerLevel * Math.floor((r.maxDifficulty - 1) / every);
     const scroll = view.querySelector(".market-main") ? view.querySelector(".market-main").scrollTop : 0;
+    const scen = (r.scenarios || []).map(s => `${esc(s.name)} ${s.clear}${s.play ? ` (${s.play} if not cleared)` : ""}`).join(", ");
     view.innerHTML = `<div class="market rift"><div class="market-main">
       <div class="market-head"><div><h2>Rift Exchange</h2>
-        <p>Clear Zombie Disaster Zone for Rift Tickets: ${r.clearTickets} at level 1, +${r.ticketsPerLevel} ${every > 1 ? `every ${every} levels` : "per level"} (${atMax} at level ${r.maxDifficulty}).${r.unlocked ? ` Unlocked: level ${r.unlocked}.` : ""}${rift.bestClear ? ` Best clear: ${rift.bestClear}.` : ""}</p></div>
+        <p>Clear Zombie Disaster Zone for Rift Tickets: ${r.clearTickets} at level 1, +${r.ticketsPerLevel} ${every > 1 ? `every ${every} levels` : "per level"} (${atMax} at level ${r.maxDifficulty}).${r.unlocked ? ` Unlocked: level ${r.unlocked}.` : ""}${rift.bestClear ? ` Best clear: ${rift.bestClear}.` : ""}${scen ? ` Finished matches of other modes give them too: ${scen}.` : ""}</p></div>
         <span class="refresh">New stock in ${timeLeft(rift.refreshIn)}</span></div>
       <section class="rift-section"><h2 class="section-title">Held for you<small>${held.length} / ${r.maxHolds} · up to ${r.maxHoldDays} days each</small></h2>
         ${held.length ? `<div class="market-grid">${held.map(riftCard).join("")}</div>` : `<div class="rift-empty">Hold an item of today's stock to keep it for another day</div>`}</section>
@@ -303,6 +344,7 @@
     $("tickets").textContent = rift ? num(rift.tickets) : "--";
     document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("active", b.dataset.tab === tab));
     if (tab === "event") renderEvent();
+    else if (tab === "login") renderLogin();
     else if (tab === "market") renderMarket();
     else if (tab === "rift") renderRift();
     else if (tab === "orders") renderOrders();
@@ -396,6 +438,10 @@
         [9424, "M 249ex (S25-3)", 30, "Weapon"], [9108, "Balrog 7 (S24-3)", 30, "Weapon"], [9023, "Skull 2 (S24-2)", 30, "Weapon"],
         [9655, "Agenth (Pet)", 300, "Costume"], [9586, "Coralcrown (Head)", 300, "Costume"], [8928, "Beveragecan (Pelvis)", 300, "Costume"],
         [9413, "Orientalinkfan (Back)", 300, "Costume"], [8584, "Boomerskin (S21-4)", 30, "Costume"]].map(([itemID, name, price, kind], i) => ({ itemID, name, price, kind, owned: i === 4 }));
+      const week = (m, b, t, g, big) => [{ medals: m }, { bingoTickets: g },{ riftTickets: t }, { medals: m + 10 }, { badges: b }, { medals: m + 20 }, big];
+      mock.login = { today: 9, done: 10, claimedToday: true, total: 38, nextIn: 30000,
+        days: [].concat(week(30, 3, 3, 1, { medals: 80, badges: 5, riftTickets: 5, bingoTickets: 1 }), week(35, 4, 4, 1, { medals: 100, badges: 6, riftTickets: 6, bingoTickets: 2 }),
+          week(40, 4, 4, 1, { medals: 120, badges: 8, riftTickets: 8, bingoTickets: 2 }), week(45, 5, 5, 2, { medals: 200, badges: 15, riftTickets: 15, bingoTickets: 3, items: [{ itemID: 707, count: 1, days: 0, name: "Dinosaur Head" }] })) };
     }
     if (path === "/api/riftexchange") {
       if (!mock.rift) {
@@ -403,7 +449,8 @@
           [8597, "S21-4 Pet Costume A", "Pet", 60], [8030, "Evolution Level 3 Jiang Shi", "Zombie Skin", 55], [949, "Paladin Crown", "Head", 45],
           [8626, "Tttiger 22", "Tattoo", 25], [8364, "Tin Man's Helmet", "Head", 45], [9124, "Turtle (Back)", "Back", 50]];
         const items = kinds.map(([itemID, name, kind, price]) => ({ itemID, name, kind, price, holdCost: 2, owned: false }));
-        mock.rift = { tickets: 64, refreshIn: 30000, bestClear: 12, rules: { clearTickets: 3, ticketsPerLevel: 1, levelsPerTicket: 2, maxTickets: 12, maxDifficulty: 20, unlocked: 13, maxHolds: 3, maxHoldDays: 7 },
+        mock.rift = { tickets: 64, refreshIn: 30000, bestClear: 12, rules: { clearTickets: 3, ticketsPerLevel: 1, levelsPerTicket: 2, maxTickets: 12, maxDifficulty: 20, unlocked: 13, maxHolds: 3, maxHoldDays: 7,
+            scenarios: [{ name: "Zombie Scenario", clear: 4, play: 1 }, { name: "Human Scenario", clear: 4, play: 1 }, { name: "Zombie Files", clear: 3, play: 1 }] },
           held: [Object.assign({ daysLeft: 3, heldDays: 3, canExtend: true }, items[8])], stock: items.slice(0, 8) };
       }
       const r = mock.rift;

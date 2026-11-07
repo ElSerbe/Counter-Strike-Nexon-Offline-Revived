@@ -7,7 +7,7 @@
 
 No file of the game goes in: the launcher patches the player's own Steam copy. Nor does anything of the player's:
 accounts (UserDatabase.db3), the server's certificate and key (the launcher makes them on each PC), logs, backups,
-or the pictures exported from the game (the launcher's More > Export... makes them from the player's game).
+or the pictures exported from the game (the launcher's Pictures button makes them from the player's game).
 
 Usage: python mod/tools/release/build_release.py      (version: mod/VERSION; needs git, pefile and the .NET SDK)
 """

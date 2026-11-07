@@ -136,3 +136,27 @@
   .rift .market-grid { grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); }
   .event { padding: 16px 18px; }
 }
+
+/* ---------- daily login ---------- */
+.login .event-head { margin-bottom: 14px; }
+.lweek { margin-top: 14px; }
+.lgrid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+.lday { display: flex; flex-direction: column; gap: 8px; min-height: 104px; border: 1px solid var(--line); background: var(--panel); padding: 9px 10px; }
+.lday .lhead { display: flex; justify-content: space-between; align-items: center; }
+.lday .dn { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); }
+.lday .check { color: var(--owned); font-size: 14px; font-weight: 700; }
+.lday .lrew { flex: 1; display: flex; flex-direction: column; gap: 4px; font-size: 14px; font-weight: 600; }
+.lday .lrew span { display: flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lday .lrew .m { color: var(--accent); }
+.lday .lrew .b { color: #e7e2d4; }
+.lday .lrew .t { color: #7fd6cf; }
+.lday .lrew .g, .lday .lrew .i { color: #d8c8f0; }
+.lday .lrew img { width: 18px; height: 18px; object-fit: contain; flex: none; }
+.lday .lstate { font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); min-height: 12px; }
+.lday.big { border-color: var(--accent-dim); background: #15140c; }
+.lday.claimed { opacity: .55; }
+.lday.claimed .lstate { color: var(--owned); }
+.lday.today { opacity: 1; border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.lday.today .lstate { color: var(--accent); }
+.lday.next .lstate { color: #cfc6b8; }
+.lday .lrew small { font-size: 11px; font-weight: 400; color: var(--muted); margin-left: -2px; overflow: hidden; text-overflow: ellipsis; }
