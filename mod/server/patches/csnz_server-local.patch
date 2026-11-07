@@ -3255,7 +3255,7 @@ index 0000000..f7d9e86
 +
 +extern CMissionManager g_MissionManager;
 diff --git a/src/manager/packetmanager.cpp b/src/manager/packetmanager.cpp
-index 0defb02..d8e87e3 100644
+index 0defb02..e7b9aa4 100644
 --- a/src/manager/packetmanager.cpp
 +++ b/src/manager/packetmanager.cpp
 @@ -1,4 +1,6 @@
@@ -3417,6 +3417,15 @@ index 0defb02..d8e87e3 100644
  
  	socket->Send(msg);
  }
+@@ -2732,7 +2774,7 @@ void WriteSettings(CSendPacket* msg, CRoomSettings* newSettings, int low, int lo
+ 		}
+ 	}
+ 	if (lowMidFlag & ROOM_LOWMID_VOXEL) {
+-		msg->WriteUInt32(newSettings->voxelFlag);
++		msg->WriteUInt32(newSettings->voxelFlag); // (the client's own requests have a byte before it; replies don't)
+ 		if (newSettings->voxelFlag & VOXELFLAG_ID) {
+ 			msg->WriteString(newSettings->voxel_id);
+ 		}
 @@ -2934,7 +2976,7 @@ void CPacketManager::SendRoomCreateAndJoin(IExtendedSocket* socket, IRoom* roomI
  	msg->WriteUInt8((unsigned int)roomInfo->GetUsers().size());
  	for (auto user : roomInfo->GetUsers())
@@ -3749,10 +3758,10 @@ index 223166a..9b3a5a0 100644
  	user->UpdateTitles(slot, titleID);
 diff --git a/src/manager/studio.cpp b/src/manager/studio.cpp
 new file mode 100644
-index 0000000..6778b32
+index 0000000..27ae983
 --- /dev/null
 +++ b/src/manager/studio.cpp
-@@ -0,0 +1,679 @@
+@@ -0,0 +1,740 @@
 +// Offline Studio: the voxel REST API the game's client (hw.dll VoxelHTTP, cpprestsdk) used to reach on Nexon's
 +// servers, now served by our own web server. Maps live in Data/Studio:
 +//   slots.json            every slot (map) with its details
@@ -3922,7 +3931,8 @@ index 0000000..6778b32
 +	if (detail)
 +	{
 +		j["description"] = s.value("description", "");
-+		j["creator_id"] = s.value("creator_id", "");
++		j["creator_id"] = s.value("creator_username", "");
++		j["creator_username"] = s.value("creator_username", "");
 +		j["savegroup_id"] = s.value("savegroup_id", "");
 +		j["history"] = s.contains("history") ? s["history"] : ordered_json::array();
 +		j["tags"] = s.contains("tags") ? s["tags"] : ordered_json::array();
@@ -4059,7 +4069,10 @@ index 0000000..6778b32
 +		return JsonAnswer(nullptr, false);
 +	}
 +
-+	string id = NewId();
++	// the editor uploads to the location 0x0c gave it (/v4/upload/resources/<location>); keep that name
++	string id = req.path.substr(req.path.find_last_of('/') + 1);
++	if (!SafeId(id) || id == "resources" || id == "images")
++		id = NewId();
 +	string path = string(STUDIO_DIR) + (image ? "/images/" + id + ".vmg" : "/resources/" + id + ".vxl");
 +	if (!WriteFile(path, data))
 +	{
@@ -4416,6 +4429,63 @@ index 0000000..6778b32
 +	case 9:
 +		SendSlotList(socket, user->GetID());
 +		return true;
++	case 0x0c:
++	{
++		// save from the editor: string slot id, u32 size -> u8 status, string upload location
++		// (the client then POSTs the map to /v4/upload/resources/<location> and sends 0x0d)
++		string slotId = msg->ReadString();
++		unsigned size = msg->ReadUInt32();
++		lock_guard<recursive_mutex> lock(m_StudioMutex);
++		ordered_json* s = FindSlot(slotId);
++		CSendPacket* reply = g_PacketManager.CreatePacket(socket, PacketId::Voxel);
++		reply->BuildHeader();
++		reply->WriteUInt8(0x0c);
++		if (!s || s->value("owner", 0) != user->GetID())
++		{
++			Logger().Warn("Studio: %s can't save map %s (not theirs)\n", user->GetUsername().c_str(), slotId.c_str());
++			reply->WriteUInt8(1);
++			socket->Send(reply);
++			return true;
++		}
++		string location = NewId();
++		m_PendingUploads[location] = slotId;
++		Logger().Info("Studio: %s saves map %s (%u bytes) -> %s\n", user->GetUsername().c_str(), slotId.c_str(), size, location.c_str());
++		reply->WriteUInt8(0);
++		reply->WriteString(location);
++		socket->Send(reply);
++		return true;
++	}
++	case 0x0d:
++	{
++		// upload finished: string location -> u8 status, slot info
++		string location = msg->ReadString();
++		lock_guard<recursive_mutex> lock(m_StudioMutex);
++		CSendPacket* reply = g_PacketManager.CreatePacket(socket, PacketId::Voxel);
++		reply->BuildHeader();
++		reply->WriteUInt8(0x0d);
++		auto it = m_PendingUploads.find(location);
++		ordered_json* s = it == m_PendingUploads.end() ? NULL : FindSlot(it->second);
++		bool stored = SafeId(location) && !ReadFile(string(STUDIO_DIR) + "/resources/" + location + ".vxl").empty();
++		if (!s || !stored)
++		{
++			Logger().Warn("Studio: upload %s finished but %s\n", location.c_str(), s ? "no file arrived" : "no map waits for it");
++			reply->WriteUInt8(1);
++			socket->Send(reply);
++			return true;
++		}
++		string old = s->value("resource_id", "");
++		(*s)["resource_id"] = location;
++		(*s)["updated"] = (long long)time(NULL);
++		m_PendingUploads.erase(it);
++		SaveStudio();
++		if (SafeId(old) && old.rfind("tmpl_", 0) != 0)
++			remove((string(STUDIO_DIR) + "/resources/" + old + ".vxl").c_str());
++		Logger().Info("Studio: map %s saved (resource %s)\n", s->value("id", "").c_str(), location.c_str());
++		reply->WriteUInt8(0);
++		WriteSlotInfo(reply, ClientSlot(*s));
++		socket->Send(reply);
++		return true;
++	}
 +	case 0x31:
 +	{
 +		// asked when a map is selected: u8 status, string slot id, u16 n + n strings (its tags; none offline)
@@ -5987,7 +6057,7 @@ index 01aa7a6..88ad8fe 100644
  	if (serverId >= m_VoxelConfigList.size())
  	{
 diff --git a/src/manager/voxelmanager.h b/src/manager/voxelmanager.h
-index c7d2bdb..65757e2 100644
+index c7d2bdb..836e257 100644
 --- a/src/manager/voxelmanager.h
 +++ b/src/manager/voxelmanager.h
 @@ -2,6 +2,10 @@
@@ -6001,7 +6071,7 @@ index c7d2bdb..65757e2 100644
  
  class IExtendedSocket;
  class CReceivePacket;
-@@ -21,8 +25,31 @@ public:
+@@ -21,8 +25,32 @@ public:
  	bool OnPacket(CReceivePacket* msg, IExtendedSocket* socket);
  	std::string GetSlotDetails(const std::string& slotId, int serverId);
  
@@ -6030,6 +6100,7 @@ index c7d2bdb..65757e2 100644
 +
 +	std::recursive_mutex m_StudioMutex;
 +	nlohmann::ordered_json m_Studio; // {"slots":[...]}
++	std::map<std::string, std::string> m_PendingUploads; // upload location -> slot id (editor saves)
  };
  
 -extern CVoxelManager g_VoxelManager;
@@ -8885,7 +8956,7 @@ index 13a4ee8..c36e019 100644
  	std::vector<int> m_KickedUsers;
  	std::vector<int> m_FamilyBattleUsers;
 diff --git a/src/room/roomsettings.cpp b/src/room/roomsettings.cpp
-index 0ba9234..dd9b30d 100644
+index 0ba9234..806eb05 100644
 --- a/src/room/roomsettings.cpp
 +++ b/src/room/roomsettings.cpp
 @@ -8,6 +8,7 @@
@@ -8896,7 +8967,29 @@ index 0ba9234..dd9b30d 100644
  
  using namespace std;
  
-@@ -459,7 +460,7 @@ void CRoomSettings::Init()
+@@ -189,6 +190,21 @@ CRoomSettings::CRoomSettings(Buffer& inPacket) // unfinished
+ 		}
+ 	}
+ 	if (lowMidFlag & ROOM_LOWMID_VOXEL) {
++		{
++			// Studio: dump the bytes around the voxel block (reverse engineering the room packet layout)
++			const std::vector<unsigned char>& b = inPacket.getBuffer();
++			size_t off = (size_t)inPacket.getReadOffset();
++			std::string hex;
++			char h[4];
++			for (size_t i = off >= 16 ? off - 16 : 0; i < b.size() && i < off + 48; i++)
++			{
++				snprintf(h, sizeof(h), i == off ? "|%02x" : " %02x", b[i]);
++				hex += h;
++			}
++			Logger().Info("Studio room packet: low 0x%x lowMid 0x%x, voxel block at %d:%s\n", lowFlag, lowMidFlag, (int)off, hex.c_str());
++		}
++		// this client puts a byte (1) before the voxel flags: seen "01 | 03 00 00 02 <id>" = flags ID|RESOURCEID|SERVERID
++		voxelUnk = inPacket.readUInt8();
+ 		voxelFlag = inPacket.readUInt32_LE();
+ 		if (voxelFlag & VOXELFLAG_ID) {
+ 			voxel_id = inPacket.readStr().c_str();
+@@ -459,7 +475,7 @@ void CRoomSettings::Init()
  	voxel_unk23 = 0;
  	voxel_server_id = 0;
  	unk63 = 0;
@@ -8905,7 +8998,7 @@ index 0ba9234..dd9b30d 100644
  	teamSwitch = 0;
  	zbRespawn = 0;
  	zbBalance = 0;
-@@ -775,14 +776,18 @@ int CRoomSettings::GetMapSetting(int mapId, const string& setting)
+@@ -775,14 +791,18 @@ int CRoomSettings::GetMapSetting(int mapId, const string& setting)
  	return g_pMapListTable->GetCell<int>(setting, to_string(mapId));
  }
  
@@ -8926,7 +9019,7 @@ index 0ba9234..dd9b30d 100644
  }
  
  int CRoomSettings::GetDefaultBuyTime(int gameModeId)
-@@ -899,6 +904,15 @@ int CRoomSettings::GetDefaultFriendlyBots(int gameModeId)
+@@ -899,6 +919,15 @@ int CRoomSettings::GetDefaultFriendlyBots(int gameModeId)
  		case 58:
  			friendlyBots = 8;
  			break;
@@ -8942,7 +9035,7 @@ index 0ba9234..dd9b30d 100644
  	}
  
  	return friendlyBots;
-@@ -931,7 +945,14 @@ int CRoomSettings::GetDefaultEnemyBots(int gameModeId)
+@@ -931,7 +960,14 @@ int CRoomSettings::GetDefaultEnemyBots(int gameModeId)
  	return enemyBots;
  }
  
@@ -8957,7 +9050,7 @@ index 0ba9234..dd9b30d 100644
  {
  	int botAdd = 0;
  
-@@ -1138,6 +1159,10 @@ bool CRoomSettings::IsMapValid(int gameModeId, int mapId)
+@@ -1138,6 +1174,10 @@ bool CRoomSettings::IsMapValid(int gameModeId, int mapId)
  	if (gameModeId == 38 || gameModeId == 39)
  		return mapId == 254;
  
@@ -8968,7 +9061,7 @@ index 0ba9234..dd9b30d 100644
  	string gameModeName = GetGameModeNameByID(gameModeId);
  
  	if (gameModeName.empty())
-@@ -1416,7 +1441,7 @@ void CRoomSettings::LoadDefaultSettings(int gameModeId, int mapId)
+@@ -1416,7 +1456,7 @@ void CRoomSettings::LoadDefaultSettings(int gameModeId, int mapId)
  	botDifficulty = 0;
  	friendlyBots = GetDefaultFriendlyBots(gameModeId);
  	enemyBots = GetDefaultEnemyBots(gameModeId);
@@ -8977,7 +9070,7 @@ index 0ba9234..dd9b30d 100644
  	botAdd = GetDefaultBotAdd(gameModeId);
  	kdRule = 0;
  	startingCash = GetDefaultStartingCash(gameModeId);
-@@ -1425,7 +1450,9 @@ void CRoomSettings::LoadDefaultSettings(int gameModeId, int mapId)
+@@ -1425,7 +1465,9 @@ void CRoomSettings::LoadDefaultSettings(int gameModeId, int mapId)
  	statusSymbol = 0;
  	mapPlaylistIndex = mapPlaylistSize ? 1 : 0;
  	enhanceRestrict = (gameModeId == 22 || gameModeId == 32) ? 1 : 0;
@@ -8988,7 +9081,7 @@ index 0ba9234..dd9b30d 100644
  	{
  		zsDifficulty = 0;
  		unk56 = 0;
-@@ -1438,7 +1465,9 @@ void CRoomSettings::LoadDefaultSettings(int gameModeId, int mapId)
+@@ -1438,7 +1480,9 @@ void CRoomSettings::LoadDefaultSettings(int gameModeId, int mapId)
  	zbLimit.clear();
  	unk63 = 0;
  	unk63_vec.clear();
@@ -8999,7 +9092,7 @@ index 0ba9234..dd9b30d 100644
  	teamSwitch = 0;
  	zbRespawn = GetDefaultZbRespawn(gameModeId);
  	zbBalance = GetDefaultZbBalance(gameModeId);
-@@ -1530,7 +1559,7 @@ void CRoomSettings::LoadZbCompetitiveSettings(int gameModeId)
+@@ -1530,7 +1574,7 @@ void CRoomSettings::LoadZbCompetitiveSettings(int gameModeId)
  	botDifficulty = 0;
  	friendlyBots = GetDefaultFriendlyBots(gameModeId);
  	enemyBots = GetDefaultEnemyBots(gameModeId);
@@ -9008,7 +9101,7 @@ index 0ba9234..dd9b30d 100644
  	botAdd = GetDefaultBotAdd(gameModeId);
  
  	lowMidFlag |= ROOM_LOWMID_KDRULE;
-@@ -1568,6 +1597,8 @@ void CRoomSettings::LoadZbCompetitiveSettings(int gameModeId)
+@@ -1568,6 +1612,8 @@ void CRoomSettings::LoadZbCompetitiveSettings(int gameModeId)
  
  bool CRoomSettings::ParseSlotDetails(std::string voxel_id, int server_id)
  {
@@ -9017,7 +9110,29 @@ index 0ba9234..dd9b30d 100644
  	std::string response = g_VoxelManager.GetSlotDetails(voxel_id, server_id);
  	if (!response.empty())
  	{
-@@ -1766,12 +1797,10 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
+@@ -1596,7 +1642,10 @@ bool CRoomSettings::ParseSlotDetails(std::string voxel_id, int server_id)
+ 
+ 				voxelFlag |= VOXELFLAG_RESOURCEMODE;
+ 				lowFlag |= ROOM_LOW_GAMEMODEID;
+-				voxel_resource_mode = gameModeId = jSlotDetails.value("resource_mode", 0);
++				voxel_resource_mode = jSlotDetails.value("resource_mode", 0);
++				// mode 38 (VoxelCreate) is the editor: the room stays in it; otherwise the map's own mode is played
++				if (gameModeId != 38)
++					gameModeId = voxel_resource_mode;
+ 
+ 				voxelFlag |= VOXELFLAG_PERMISSION;
+ 				voxel_permission = jSlotDetails.value("permission", 0);
+@@ -1611,7 +1660,8 @@ bool CRoomSettings::ParseSlotDetails(std::string voxel_id, int server_id)
+ 				voxel_creator_nickname = jSlotDetails.value("creator_nickname", "");
+ 
+ 				voxelFlag |= VOXELFLAG_CREATORUSERNAME;
+-				voxel_creator_username = voxel_creator_nickname;
++				// the client compares this with its login name to allow editing/saving (offline Studio sends it)
++				voxel_creator_username = jSlotDetails.value("creator_username", voxel_creator_nickname);
+ 
+ 				voxelFlag |= VOXELFLAG_LIKECOUNT;
+ 				voxel_like_count = jSlotDetails.value("like_count", 0);
+@@ -1766,12 +1816,10 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
  		lowFlag |= ROOM_LOW_ROUNDTIME;
  		roundTime = GetGameModeDefaultSetting(gameModeId, "mode_roundtime_id");
  
@@ -9034,7 +9149,7 @@ index 0ba9234..dd9b30d 100644
  
  		lowFlag |= ROOM_LOW_HOSTAGEKILLLIMIT;
  		hostageKillLimit = 0;
-@@ -1807,7 +1836,7 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
+@@ -1807,7 +1855,7 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
  		botDifficulty = 0;
  		friendlyBots = GetDefaultFriendlyBots(gameModeId);
  		enemyBots = GetDefaultEnemyBots(gameModeId);
@@ -9043,7 +9158,7 @@ index 0ba9234..dd9b30d 100644
  		botAdd = GetDefaultBotAdd(gameModeId);
  
  		lowMidFlag |= ROOM_LOWMID_KDRULE;
-@@ -1829,7 +1858,7 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
+@@ -1829,7 +1877,7 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
  			sd = 0;
  
  		lowMidFlag |= ROOM_LOWMID_ZSDIFFICULTY;
@@ -9052,7 +9167,7 @@ index 0ba9234..dd9b30d 100644
  		{
  			zsDifficulty = 0;
  			unk56 = 0;
-@@ -2026,7 +2055,7 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
+@@ -2026,7 +2074,7 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
  					Logger().Warn("User '%s' tried to update a room\'s settings with gameModeId that doesn't allow bots, gameModeId: %d\n", user->GetLogName(), gameModeId);
  					lowMidFlag &= ~ROOM_LOWMID_BOT;
  				}
@@ -9061,7 +9176,7 @@ index 0ba9234..dd9b30d 100644
  				{
  					if (botDifficulty > 7)
  						botDifficulty = 7;
-@@ -2034,31 +2063,22 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
+@@ -2034,31 +2082,22 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
  					if (friendlyBots > 15)
  						friendlyBots = 15;
  
@@ -9106,7 +9221,7 @@ index 0ba9234..dd9b30d 100644
  				}
  			}
  
-@@ -2094,11 +2114,13 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
+@@ -2094,11 +2133,13 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
  
  			if (lowMidFlag & ROOM_LOWMID_ZSDIFFICULTY)
  			{
@@ -9121,7 +9236,7 @@ index 0ba9234..dd9b30d 100644
  				else if (gameModeId == 15)
  				{
  					int mapMaxZsDifficulty = g_pMapListTable->GetCell<int>("ZSmaxDifficulty", to_string(mapId));
-@@ -2364,12 +2386,8 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
+@@ -2364,12 +2405,8 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
  			maxPlayers = g_pMapListTable->GetCell<int>("max_player", to_string(mapId));
  		}
  
@@ -9136,7 +9251,7 @@ index 0ba9234..dd9b30d 100644
  
  		lowMidFlag |= ROOM_LOWMID_BALLNUMBER;
  		ballNumber = GetMapSetting(mapId, "ball_default");
-@@ -2668,6 +2686,10 @@ bool CRoomSettings::CheckSettings(IUser* user)
+@@ -2668,6 +2705,10 @@ bool CRoomSettings::CheckSettings(IUser* user)
  			}
  		}
  
@@ -9148,7 +9263,7 @@ index 0ba9234..dd9b30d 100644
  		{
  			if (lowMidFlag & ROOM_LOWMID_ZSDIFFICULTY)
 diff --git a/src/room/roomsettings.h b/src/room/roomsettings.h
-index 69a1cd9..823c6f8 100644
+index 69a1cd9..8700ec3 100644
 --- a/src/room/roomsettings.h
 +++ b/src/room/roomsettings.h
 @@ -34,6 +34,7 @@ public:
@@ -9159,6 +9274,14 @@ index 69a1cd9..823c6f8 100644
  	int GetDefaultStartingCash(int gameModeId);
  	int GetDefaultZbRespawn(int gameModeId);
  	int GetDefaultZbBalance(int gameModeId);
+@@ -135,6 +136,7 @@ public:
+ 	int mapId2;
+ 	int zbLimitFlag;
+ 	std::vector<int> zbLimit;
++	int voxelUnk = 1; // byte before the voxel flags in the room settings packet
+ 	int voxelFlag;
+ 	std::string voxel_id;
+ 	std::string voxel_resource_id;
 diff --git a/src/serverconfig.cpp b/src/serverconfig.cpp
 index d2a28c1..6dd8b0b 100644
 --- a/src/serverconfig.cpp

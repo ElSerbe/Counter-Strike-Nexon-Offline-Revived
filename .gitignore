@@ -72,3 +72,6 @@ mod/server/CSNZ_Server/bin/Data/SteamBridge.stop
 # Studio maps made by players (the sample-map list templates.json is shipped)
 mod/server/CSNZ_Server/bin/Data/Studio/*
 !mod/server/CSNZ_Server/bin/Data/Studio/templates.json
+!mod/server/CSNZ_Server/bin/Data/Studio/resources/
+mod/server/CSNZ_Server/bin/Data/Studio/resources/*
+!mod/server/CSNZ_Server/bin/Data/Studio/resources/tmpl_*.vxl

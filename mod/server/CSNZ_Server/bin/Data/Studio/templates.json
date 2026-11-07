@@ -1,5 +1,8 @@
 {
 	"templates": [
-		{ "id": "tmpl_empty", "title": "Empty map", "resource_id": "", "resource_mode": 0, "resource_max_player": 16, "creator_nickname": "Studio" }
+		{ "id": "tmpl_empty", "title": "Flat map", "resource_id": "tmpl_flat", "resource_mode": 39, "resource_max_player": 16, "creator_nickname": "Studio" }
 	]
 }
+
+
+
