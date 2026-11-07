@@ -75,7 +75,7 @@ namespace CsnzLauncher
                         dir = System.IO.Path.GetDirectoryName(dir);
                     if (!GameLocator.IsGame(dir))
                     {
-                        MessageBox.Show(this, "That folder has no Bin\\cstrike-online.exe.", Text);
+                        DarkBox.Show(this, "That folder has no Bin\\cstrike-online.exe.", Text);
                         return;
                     }
                     Done(dir);
@@ -115,7 +115,7 @@ namespace CsnzLauncher
         void Open(string target)
         {
             try { Process.Start(target); }
-            catch (Exception ex) { MessageBox.Show(this, "Couldn't open " + target + ": " + ex.Message, Text); }
+            catch (Exception ex) { DarkBox.Show(this, "Couldn't open " + target + ": " + ex.Message, Text); }
         }
     }
 }

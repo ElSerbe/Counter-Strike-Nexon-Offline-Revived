@@ -715,6 +715,25 @@ namespace CsnzLauncher
         public static bool GameRunning() => Process.GetProcessesByName("cstrike-online").Length > 0;
         public static bool ServerRunning() => Process.GetProcessesByName("CSNZ_Server").Length > 0;
 
+        // the game, the local server and the Steam bridge: the server and the bridge have no window, so one left over
+        // (a crash, a closed launcher) is invisible but keeps the mod's files in use
+        static readonly string[] Ours = { "cstrike-online", "CSNZ_Server", "CSNZ-SteamBridge" };
+        public static Process[] OursRunning() => Ours.SelectMany(Process.GetProcessesByName).ToArray();
+
+        public static void CloseOurs(Logger log)
+        {
+            foreach (var p in OursRunning())
+            {
+                try
+                {
+                    p.Kill();
+                    p.WaitForExit(8000);
+                    log($"Closed {p.ProcessName}.exe (PID {p.Id}).");
+                }
+                catch (Exception ex) { log($"Couldn't close {p.ProcessName}.exe (PID {p.Id}): {ex.Message}"); }
+            }
+        }
+
         // CSNZ_Server with its console input kept open (it spins when the input hits its end), output in server\server.log
         public static Process StartServer(Logger log, bool verbose = false)
         {

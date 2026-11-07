@@ -135,7 +135,7 @@ namespace CsnzLauncher
             patchButton.Click += (s, e) => PatchClicked();
             getGame.LinkClicked += (s, e) => GetGame();
             Shown += async (s, e) => await Startup();
-            FormClosing += (s, e) => { if (busy && e.CloseReason == CloseReason.UserClosing && MessageBox.Show(this, "Something is still running. Close anyway?", Text, MessageBoxButtons.YesNo) == DialogResult.No) e.Cancel = true; };
+            FormClosing += (s, e) => { if (busy && e.CloseReason == CloseReason.UserClosing && DarkBox.Show(this, "Something is still running. Close anyway?", Text, MessageBoxButtons.YesNo) == DialogResult.No) e.Cancel = true; };
         }
 
         // a thin frame around the borderless window
@@ -162,11 +162,11 @@ namespace CsnzLauncher
                 sc.Description = "Counter-Strike Nexon: Offline Revived";
                 sc.Save();
                 Log("Desktop shortcut created: it opens the launcher and starts the game.");
-                MessageBox.Show(this, "\"Counter-Strike Nexon Offline Revived\" is on your desktop: it starts the game directly.", Text);
+                DarkBox.Show(this, "\"Counter-Strike Nexon Offline Revived\" is on your desktop: it starts the game directly.", Text);
             }
             catch (Exception ex)
             {
-                MessageBox.Show(this, "Couldn't create the shortcut: " + ex.Message, Text);
+                DarkBox.Show(this, "Couldn't create the shortcut: " + ex.Message, Text);
             }
         }
 
@@ -214,7 +214,7 @@ namespace CsnzLauncher
             catch (Exception ex)
             {
                 Log($"{what}: {ex.Message}");
-                MessageBox.Show(this, ex.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                DarkBox.Show(this, ex.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return false;
             }
             finally
@@ -334,7 +334,7 @@ namespace CsnzLauncher
         void OpenSteam(string command)
         {
             try { Process.Start(command); }
-            catch (Exception ex) { MessageBox.Show(this, "Steam didn't open: " + ex.Message, Text); }
+            catch (Exception ex) { DarkBox.Show(this, "Steam didn't open: " + ex.Message, Text); }
         }
 
         void BrowseGame()
@@ -348,7 +348,7 @@ namespace CsnzLauncher
                     dir = Path.GetDirectoryName(dir); // they picked Bin
                 if (!GameLocator.IsGame(dir))
                 {
-                    MessageBox.Show(this, "That folder has no Bin\\cstrike-online.exe.", Text);
+                    DarkBox.Show(this, "That folder has no Bin\\cstrike-online.exe.", Text);
                     return;
                 }
                 settings.GamePath = dir;
@@ -368,7 +368,7 @@ namespace CsnzLauncher
                 return;
             if (Paths.InstalledVersion() == null)
             {
-                MessageBox.Show(this, "The mod isn't installed yet: press Install first.", Text);
+                DarkBox.Show(this, "The mod isn't installed yet: press Install first.", Text);
                 return;
             }
             if (!GameLocator.IsGame(settings.GamePath))
@@ -376,7 +376,7 @@ namespace CsnzLauncher
                 GetGame();
                 return;
             }
-            if (Assets.Present && MessageBox.Show(this, "The pictures are already exported. Export them again (a few minutes)?", Text,
+            if (Assets.Present && DarkBox.Show(this, "The pictures are already exported. Export them again (a few minutes)?", Text,
                     MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
                 return;
             bool install = false;
@@ -385,7 +385,7 @@ namespace CsnzLauncher
             SetBusy(false);
             if (!hasPython)
             {
-                if (MessageBox.Show(this,
+                if (DarkBox.Show(this,
                         "The pictures are made by Python scripts, and Python isn't installed on this PC.\n\n" +
                         "Download the latest Python from python.org (about 30 MB) and install it for your Windows user? " +
                         "No administrator rights are needed; it shows up in Windows' Installed apps like any program.",
@@ -400,7 +400,7 @@ namespace CsnzLauncher
                     Assets.InstallPython(Log);
                 Assets.Export(game, Log);
             }))
-                MessageBox.Show(this, "The pictures are ready: the in-game shop, profile and missions pages show them now.", Text);
+                DarkBox.Show(this, "The pictures are ready: the in-game shop, profile and missions pages show them now.", Text);
         }
 
         // ------------------------------------------------------------ logs
@@ -409,7 +409,7 @@ namespace CsnzLauncher
             try { return LogBundle.Build(settings); }
             catch (Exception ex)
             {
-                MessageBox.Show(this, "Couldn't gather the logs: " + ex.Message, Text);
+                DarkBox.Show(this, "Couldn't gather the logs: " + ex.Message, Text);
                 return null;
             }
         }
@@ -426,7 +426,7 @@ namespace CsnzLauncher
             }
             catch (Exception ex)
             {
-                MessageBox.Show(this, "Couldn't copy them (" + ex.Message + "). They are in " + LogBundle.FilePath, Text);
+                DarkBox.Show(this, "Couldn't copy them (" + ex.Message + "). They are in " + LogBundle.FilePath, Text);
             }
         }
 
@@ -435,7 +435,7 @@ namespace CsnzLauncher
             if (BuildLogs() == null)
                 return;
             try { Process.Start("notepad.exe", "\"" + LogBundle.FilePath + "\""); }
-            catch (Exception ex) { MessageBox.Show(this, "Couldn't open " + LogBundle.FilePath + ": " + ex.Message, Text); }
+            catch (Exception ex) { DarkBox.Show(this, "Couldn't open " + LogBundle.FilePath + ": " + ex.Message, Text); }
         }
 
         // ------------------------------------------------------------ updates
@@ -454,7 +454,7 @@ namespace CsnzLauncher
                 latest = null;
                 Log("Update check: " + ex.Message);
                 if (loud)
-                    MessageBox.Show(this, ex.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    DarkBox.Show(this, ex.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             RefreshVersion();
         }
@@ -483,14 +483,11 @@ namespace CsnzLauncher
             }
             if (Paths.IsDevCheckout)
             {
-                MessageBox.Show(this, "This launcher sits in a Git checkout of the project: updating would overwrite the sources. Copy it to its own folder.", Text);
+                DarkBox.Show(this, "This launcher sits in a Git checkout of the project: updating would overwrite the sources. Copy it to its own folder.", Text);
                 return;
             }
-            if (Runner.GameRunning() || Runner.ServerRunning())
-            {
-                MessageBox.Show(this, "Close the game (and the local server) first.", Text);
+            if (!CloseRunning("Updating"))
                 return;
-            }
             var token = GitHub.FindToken(settings, out _);
             string newLauncher = null;
             var ok = await Run("Update", () =>
@@ -549,12 +546,12 @@ namespace CsnzLauncher
                 return false;
             if (Paths.InstalledVersion() == null || !File.Exists(Paths.PatchList))
             {
-                MessageBox.Show(this, "The mod isn't installed yet: press Install first.", Text);
+                DarkBox.Show(this, "The mod isn't installed yet: press Install first.", Text);
                 return false;
             }
             if (Runner.GameRunning())
             {
-                MessageBox.Show(this, "The game is already open.", Text);
+                DarkBox.Show(this, "The game is already open.", Text);
                 return false;
             }
             if (!GameLocator.IsGame(settings.GamePath))
@@ -566,7 +563,7 @@ namespace CsnzLauncher
 
             if (!Hosts.HasBlock())
             {
-                var answer = MessageBox.Show(this,
+                var answer = DarkBox.Show(this,
                     "The game still points at Nexon's servers. The launcher adds a block to the Windows hosts file that sends those addresses to this PC (127.0.0.1); Windows will ask for administrator rights.\n\nAdd it now?",
                     Text, MessageBoxButtons.YesNo, MessageBoxIcon.Question);
                 if (answer != DialogResult.Yes || !await Run("hosts", () => { if (!Hosts.Run("add", Log)) throw new Exception("The hosts block wasn't added."); }))
@@ -614,29 +611,44 @@ namespace CsnzLauncher
             return played;
         }
 
+        // The game, the local server or the Steam bridge still running (the last two have no window, so a left-over
+        // one is invisible): name them and offer to close them. True when nothing of ours runs any more.
+        bool CloseRunning(string what)
+        {
+            var running = Runner.OursRunning();
+            if (running.Length == 0)
+                return true;
+            var names = string.Join("\n", running.Select(p => $"   {p.ProcessName}.exe   (PID {p.Id})"));
+            if (DarkBox.Show(this, $"{what} needs the game, the local server and the Steam bridge closed. These are still running (the server and the bridge have no window):\n\n{names}\n\nWould you like to close them now?",
+                    "Close the processes?", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+                return false;
+            Runner.CloseOurs(Log);
+            if (Runner.OursRunning().Length == 0)
+                return true;
+            DarkBox.Show(this, "Some of them couldn't be closed. Close them from the Task Manager (Ctrl+Shift+Esc), then try again.", Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
+
         // Patch the game / Unpatch it back to Steam's files
         async void PatchClicked()
         {
             if (busy)
                 return;
-            if (Runner.GameRunning())
-            {
-                MessageBox.Show(this, "Close the game first.", Text);
+            if (!CloseRunning("Patching"))
                 return;
-            }
             var st = RefreshGameState();
             if (st == Patcher.GameState.Original || st == Patcher.GameState.Outdated)
             {
                 await Run("Patching", () => Patcher.Apply(Game(), Log));
                 return;
             }
-            if (MessageBox.Show(this, "Unpatch the game: put back Steam's original files and take the mod's files out of Bin?\n\n" +
+            if (DarkBox.Show(this, "Unpatch the game: put back Steam's original files and take the mod's files out of Bin?\n\n" +
                     "Your mod settings are kept for the next time you patch (or press Play). The hosts block stays: remove it from More if you want to play online.",
                     Text, MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
                 return;
             bool complete = true;
             if (await Run("Unpatch", () => complete = Patcher.Restore(Game(), Log)) && !complete &&
-                MessageBox.Show(this, "Some patched files had no backup. Let Steam verify the game's files to download them again?",
+                DarkBox.Show(this, "Some patched files had no backup. Let Steam verify the game's files to download them again?",
                     Text, MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
                 OpenSteam(GameLocator.VerifyCommand);
         }
@@ -657,7 +669,7 @@ namespace CsnzLauncher
             if (!temporary)
                 return false;
             var target = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "CSNZ Offline Revived");
-            var answer = MessageBox.Show(
+            var answer = DarkBox.Show(
                 "The launcher was opened from a temporary folder (the browser's downloads bar):\n" + root + "\n\n" +
                 "Everything it installs there is lost, and next time it asks to install again.\n\n" +
                 "Yes: move it to " + target + " and open it from there (a desktop shortcut is made too).\n" +
@@ -699,7 +711,7 @@ namespace CsnzLauncher
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Couldn't move the launcher: " + ex.Message, "Counter-Strike Nexon: Offline Revived");
+                DarkBox.Show("Couldn't move the launcher: " + ex.Message, "Counter-Strike Nexon: Offline Revived");
                 return false;
             }
         }
@@ -768,6 +780,18 @@ namespace CsnzLauncher
             }
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
+            int pd = Array.IndexOf(args, "--preview-dialog");
+            if (pd >= 0)
+            {
+                // the close-the-processes question as a player sees it; with a .png after it, drawn into that file
+                var text = "Updating needs the game, the local server and the Steam bridge closed. These are still running (the server and the bridge have no window):\n\n" +
+                    "   CSNZ_Server.exe   (PID 37796)\n\nWould you like to close them now?";
+                if (pd + 1 < args.Length)
+                    DarkBox.Render(args[pd + 1], text, "Close the processes?", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                else
+                    DarkBox.Show(text, "Close the processes?", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                return;
+            }
             if (!args.Contains("--play") && MoveOutOfTemporaryFolder())
                 return;
             if (args.Contains("--preview-get-game"))
