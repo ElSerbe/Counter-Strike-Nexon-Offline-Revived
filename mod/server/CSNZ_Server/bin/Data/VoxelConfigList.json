@@ -3,12 +3,12 @@
 	"VoxelConfigList": [
 		{
 			"ID": 0,
-			"VxlURL": "http://127.0.0.1/resources_prod/%s.vxl",
-			"VmgURL": "http://127.0.0.1/images_prod/%s.vmg",
+			"VxlURL": "http://127.0.0.1:30080/resources_prod/%s.vxl",
+			"VmgURL": "http://127.0.0.1:30080/images_prod/%s.vmg",
 			"HTTPIPList": [
 				{
 					"IP": "http://127.0.0.1",
-					"Ports": [ 3000 ]
+					"Ports": [ 30080 ]
 				}
 			]
 		}

@@ -1,0 +1,5 @@
+{
+	"templates": [
+		{ "id": "tmpl_empty", "title": "Empty map", "resource_id": "", "resource_mode": 0, "resource_max_player": 16, "creator_nickname": "Studio" }
+	]
+}

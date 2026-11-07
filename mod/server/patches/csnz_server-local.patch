@@ -1,5 +1,5 @@
 diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
-index b5e72be..be588e4 100644
+index b5e72be..e5f5d4f 100644
 --- a/src/CMakeLists.txt
 +++ b/src/CMakeLists.txt
 @@ -38,6 +38,13 @@ endif()
@@ -24,7 +24,15 @@ index b5e72be..be588e4 100644
  if (SERVER_DB_PROXY)
  	target_sources(PROJECTNAME PRIVATE "manager/userdatabase.cpp")
  endif()
-@@ -148,6 +156,8 @@ if (MSVC)
+@@ -74,6 +82,7 @@ target_sources(PROJECTNAME PRIVATE "manager/minigamemanager.cpp")
+ target_sources(PROJECTNAME PRIVATE "manager/clanmanager.cpp")
+ target_sources(PROJECTNAME PRIVATE "manager/rankmanager.cpp")
+ target_sources(PROJECTNAME PRIVATE "manager/voxelmanager.cpp")
++target_sources(PROJECTNAME PRIVATE "manager/studio.cpp")
+ target_sources(PROJECTNAME PRIVATE "manager/classmodmanager.cpp")
+ 
+ target_sources(PROJECTNAME PRIVATE "packet/packethelper_fulluserinfo.cpp")
+@@ -148,6 +157,8 @@ if (MSVC)
  else()
  	# don't treat some warnings as errors
  	target_compile_options(PROJECTNAME PRIVATE -Wno-error=sign-compare -Wno-error=unused-variable -Wno-error=delete-non-virtual-dtor -Wno-error=unused-parameter -Wno-error=conversion-null -Wno-error=register -Wno-error=unused-value -Wno-error=reorder -Wno-error=attributes)
@@ -87,7 +95,7 @@ index c342dd1..e1994a9 100644
  #ifdef WIN32
  #include <winsock2.h>
 diff --git a/src/definitions.h b/src/definitions.h
-index e96eb5f..eb280e8 100644
+index e96eb5f..a862342 100644
 --- a/src/definitions.h
 +++ b/src/definitions.h
 @@ -355,6 +355,18 @@ struct RewardItem
@@ -180,6 +188,14 @@ index e96eb5f..eb280e8 100644
  // ROOM LOW FLAGS
  #define	ROOM_LOW_ROOMNAME				(1<<0)
  #define	ROOM_LOW_UNK					(1<<1)
+@@ -1720,6 +1796,7 @@ struct RandomWeapon
+ };
+ 
+ // Studio mode flags
++#define STUDIO_MAX_SLOTS			20 // offline Studio: maps each player may create
+ #define VOXELFLAG_ID				(1<<0)
+ #define VOXELFLAG_RESOURCEID		(1<<1)
+ #define VOXELFLAG_RESOURCEMAXPLAYER	(1<<2)
 diff --git a/src/interface/ibingomanager.h b/src/interface/ibingomanager.h
 new file mode 100644
 index 0000000..9232ea8
@@ -3731,6 +3747,691 @@ index 223166a..9b3a5a0 100644
  		return;
  
  	user->UpdateTitles(slot, titleID);
+diff --git a/src/manager/studio.cpp b/src/manager/studio.cpp
+new file mode 100644
+index 0000000..6778b32
+--- /dev/null
++++ b/src/manager/studio.cpp
+@@ -0,0 +1,679 @@
++// Offline Studio: the voxel REST API the game's client (hw.dll VoxelHTTP, cpprestsdk) used to reach on Nexon's
++// servers, now served by our own web server. Maps live in Data/Studio:
++//   slots.json            every slot (map) with its details
++//   resources/<id>.vxl    the map files the editor uploads (VxlURL .../resources_prod/%s.vxl)
++//   images/<id>.vmg       their preview images (VmgURL .../images_prod/%s.vmg)
++//   http.log              every request, for reverse engineering the parts still unknown
++// Answers are {"succeed": true, "result": ...}, the shape hw.dll's parsers check first.
++#include "voxelmanager.h"
++#include "packetmanager.h"
++#include "usermanager.h"
++#include "common/logger.h"
++#include "common/utils.h"
++
++#include <fstream>
++#include <sstream>
++#include <ctime>
++#include <random>
++#include <direct.h>
++
++using namespace std;
++using json = nlohmann::json;
++using ordered_json = nlohmann::ordered_json;
++
++static const char* STUDIO_DIR = "Data/Studio";
++
++static bool SafeId(const string& id)
++{
++	if (id.empty() || id.size() > 64)
++		return false;
++	for (char c : id)
++	{
++		if (!isalnum((unsigned char)c) && c != '_' && c != '-')
++			return false;
++	}
++	return true;
++}
++
++static string ReadFile(const string& path)
++{
++	ifstream f(path, ios::binary);
++	if (!f)
++		return "";
++	return string(istreambuf_iterator<char>(f), istreambuf_iterator<char>());
++}
++
++static bool WriteFile(const string& path, const string& data)
++{
++	ofstream f(path, ios::binary | ios::trunc);
++	if (!f)
++		return false;
++	f.write(data.data(), data.size());
++	return (bool)f;
++}
++
++static string UrlDecode(const string& s)
++{
++	string out;
++	for (size_t i = 0; i < s.size(); i++)
++	{
++		if (s[i] == '%' && i + 2 < s.size())
++		{
++			out += (char)strtol(s.substr(i + 1, 2).c_str(), NULL, 16);
++			i += 2;
++		}
++		else if (s[i] == '+')
++			out += ' ';
++		else
++			out += s[i];
++	}
++	return out;
++}
++
++static string QueryValue(const string& query, const string& key)
++{
++	istringstream ss(query);
++	string pair;
++	while (getline(ss, pair, '&'))
++	{
++		size_t eq = pair.find('=');
++		if (eq != string::npos && pair.substr(0, eq) == key)
++			return UrlDecode(pair.substr(eq + 1));
++	}
++	return "";
++}
++
++static WebResponse JsonAnswer(const ordered_json& result, bool succeed = true)
++{
++	WebResponse resp;
++	ordered_json j;
++	j["succeed"] = succeed;
++	j["result"] = result;
++	resp.body = j.dump();
++	return resp;
++}
++
++void CVoxelManager::LoadStudio()
++{
++	lock_guard<recursive_mutex> lock(m_StudioMutex);
++	_mkdir(STUDIO_DIR);
++	_mkdir((string(STUDIO_DIR) + "/resources").c_str());
++	_mkdir((string(STUDIO_DIR) + "/images").c_str());
++
++	m_Studio = ordered_json::parse(ReadFile(string(STUDIO_DIR) + "/slots.json"), nullptr, false, true);
++	if (m_Studio.is_discarded() || !m_Studio.is_object())
++		m_Studio = ordered_json::object();
++	if (!m_Studio.contains("slots") || !m_Studio["slots"].is_array())
++		m_Studio["slots"] = ordered_json::array();
++
++	Logger().Info("Studio: %d maps in %s\n", (int)m_Studio["slots"].size(), STUDIO_DIR);
++}
++
++void CVoxelManager::SaveStudio()
++{
++	lock_guard<recursive_mutex> lock(m_StudioMutex);
++	string path = string(STUDIO_DIR) + "/slots.json";
++	if (!WriteFile(path + ".tmp", m_Studio.dump(1, '\t')))
++	{
++		Logger().Error("Studio: can't write %s\n", path.c_str());
++		return;
++	}
++	remove(path.c_str());
++	rename((path + ".tmp").c_str(), path.c_str());
++}
++
++string CVoxelManager::NewId()
++{
++	// 24 hex digits like the ids Nexon's service gave out (time + random)
++	static mt19937_64 rng((unsigned long long)time(NULL) ^ (unsigned long long)clock() << 32);
++	char buf[32];
++	snprintf(buf, sizeof(buf), "%08x%016llx", (unsigned)time(NULL), (unsigned long long)rng());
++	return buf;
++}
++
++ordered_json* CVoxelManager::FindSlot(const string& id)
++{
++	for (auto& s : m_Studio["slots"])
++	{
++		if (s.value("id", "") == id)
++			return &s;
++	}
++	return NULL;
++}
++
++// The fields hw.dll reads (VoxelOutUIMapInfo / VoxelOutUIMapInfoDetail, all optional): strings title,
++// resource_id, description, image_id, creator_nickname, creator_id, savegroup_id; ints resource_mode,
++// resource_max_player, permission, like_count, play_count, bookmark_count, cube_count, slot_category,
++// notice_type, sandbox_script, is_event, is_removed; arrays history [{creator_nickname, created}] and tags.
++ordered_json CVoxelManager::SlotJson(const ordered_json& s, bool detail)
++{
++	ordered_json j;
++	j["id"] = s.value("id", "");
++	j["title"] = s.value("title", "");
++	j["resource_id"] = s.value("resource_id", "");
++	j["resource_mode"] = s.value("resource_mode", 0);
++	j["resource_max_player"] = s.value("resource_max_player", 16);
++	j["permission"] = s.value("permission", 0);
++	j["image_id"] = s.value("image_id", "");
++	j["creator_nickname"] = s.value("creator_nickname", "");
++	j["like_count"] = s.value("like_count", 0);
++	j["play_count"] = s.value("play_count", 0);
++	j["bookmark_count"] = s.value("bookmark_count", 0);
++	j["cube_count"] = s.value("cube_count", 0);
++	j["slot_category"] = s.value("slot_category", 0);
++	j["notice_type"] = s.value("notice_type", 0);
++	j["sandbox_script"] = s.value("sandbox_script", 0);
++	j["is_event"] = s.value("is_event", 0);
++	if (detail)
++	{
++		j["description"] = s.value("description", "");
++		j["creator_id"] = s.value("creator_id", "");
++		j["savegroup_id"] = s.value("savegroup_id", "");
++		j["history"] = s.contains("history") ? s["history"] : ordered_json::array();
++		j["tags"] = s.contains("tags") ? s["tags"] : ordered_json::array();
++	}
++	else
++	{
++		j["is_removed"] = 0;
++		j["creator_message"] = s.value("creator_message", "");
++	}
++	return j;
++}
++
++ordered_json CVoxelManager::PublishedSlots()
++{
++	ordered_json list = ordered_json::array();
++	for (auto& s : m_Studio["slots"])
++	{
++		if (s.value("published", false) && !s.value("resource_id", "").empty())
++			list.push_back(SlotJson(s, false));
++	}
++	return list;
++}
++
++// For CRoomSettings::ParseSlotDetails (room with a Studio map): same JSON as GET /v6/slots/detail/<id>
++string CVoxelManager::StudioDetailJson(const string& rawId)
++{
++	lock_guard<recursive_mutex> lock(m_StudioMutex);
++	// the room packet's voxel id comes with a 0x02 byte in front of it: keep the printable part
++	string slotId = rawId;
++	while (!slotId.empty() && (unsigned char)slotId[0] < 0x20)
++		slotId.erase(0, 1);
++	ordered_json* s = FindSlot(slotId);
++	if (!s)
++	{
++		string hex;
++		char h[4];
++		for (unsigned char c : slotId)
++		{
++			snprintf(h, sizeof(h), "%02x", c);
++			hex += h;
++		}
++		Logger().Warn("Studio: room asked for unknown map '%s' (%d bytes: %s), %d maps known\n", slotId.c_str(),
++			(int)slotId.size(), hex.c_str(), (int)m_Studio["slots"].size());
++		return "";
++	}
++	ordered_json j;
++	j["succeed"] = true;
++	j["result"] = SlotJson(*s, true);
++	return j.dump();
++}
++
++void CVoxelManager::LogHttp(const WebRequest& req, const WebResponse& resp)
++{
++	Logger().Info("Studio HTTP %s %s%s%s -> %d (%d bytes in, %d out)\n", req.method.c_str(), req.path.c_str(),
++		req.query.empty() ? "" : "?", req.query.c_str(), resp.status, (int)req.body.size(), (int)resp.body.size());
++
++	ofstream f(string(STUDIO_DIR) + "/http.log", ios::app | ios::binary);
++	if (!f)
++		return;
++	time_t now = time(NULL);
++	char stamp[32];
++	strftime(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S", localtime(&now));
++	f << "==== " << stamp << " " << req.method << " " << req.path << (req.query.empty() ? "" : "?") << req.query
++		<< " -> " << resp.status << "\n" << req.headers;
++	if (!req.body.empty())
++	{
++		// text bodies whole (up to 4 KB), binary ones as the first bytes in hex
++		string head = req.body.substr(0, 4096);
++		bool text = true;
++		for (unsigned char c : head)
++		{
++			if (c < 9 || (c > 13 && c < 32))
++			{
++				text = false;
++				break;
++			}
++		}
++		if (text)
++			f << "body: " << head << "\n";
++		else
++		{
++			f << "body (" << req.body.size() << " bytes, binary): ";
++			// multipart: print the part headers so the field names are visible
++			size_t pos = 0;
++			int parts = 0;
++			while ((pos = req.body.find("Content-Disposition", pos)) != string::npos && parts++ < 8)
++			{
++				size_t end = req.body.find("\r\n\r\n", pos);
++				f << "[" << req.body.substr(pos, min(end, pos + 300) - pos) << "] ";
++				pos = end == string::npos ? req.body.size() : end;
++			}
++			char hex[4];
++			for (size_t i = 0; i < min<size_t>(64, req.body.size()); i++)
++			{
++				snprintf(hex, sizeof(hex), "%02x", (unsigned char)req.body[i]);
++				f << hex;
++			}
++			f << "\n";
++		}
++	}
++	if (resp.contentType.find("json") != string::npos)
++		f << "answer: " << resp.body.substr(0, 2048) << "\n";
++}
++
++// POST /v4/upload/resources/... and /v4/upload/images/...: multipart (boundary "098765voxelboundary567890")
++// or a raw body. The file is kept under a new id, which the answer gives back.
++WebResponse CVoxelManager::StoreUpload(const WebRequest& req, bool image)
++{
++	string data = req.body;
++	size_t b = req.contentType.find("boundary=");
++	if (b != string::npos)
++	{
++		string boundary = "--" + req.contentType.substr(b + 9);
++		if (!boundary.empty() && boundary.back() == '"')
++			boundary.pop_back();
++		if (boundary.size() > 2 && boundary[2] == '"')
++			boundary.erase(2, 1);
++		// the part with a file name, else the first part
++		size_t part = req.body.find("filename=");
++		if (part == string::npos)
++			part = req.body.find(boundary);
++		size_t start = part == string::npos ? string::npos : req.body.find("\r\n\r\n", part);
++		if (start != string::npos)
++		{
++			start += 4;
++			size_t end = req.body.find("\r\n" + boundary, start);
++			data = req.body.substr(start, end == string::npos ? string::npos : end - start);
++		}
++	}
++
++	if (data.empty())
++	{
++		Logger().Warn("Studio: empty %s upload\n", image ? "image" : "map");
++		return JsonAnswer(nullptr, false);
++	}
++
++	string id = NewId();
++	string path = string(STUDIO_DIR) + (image ? "/images/" + id + ".vmg" : "/resources/" + id + ".vxl");
++	if (!WriteFile(path, data))
++	{
++		Logger().Error("Studio: can't write %s\n", path.c_str());
++		return JsonAnswer(nullptr, false);
++	}
++	Logger().Info("Studio: stored %s %s (%d bytes)\n", image ? "image" : "map", id.c_str(), (int)data.size());
++
++	ordered_json result;
++	result["id"] = id;
++	result[image ? "image_id" : "resource_id"] = id;
++	result["location"] = id;
++	result["size"] = (int)data.size();
++	return JsonAnswer(result);
++}
++
++WebResponse CVoxelManager::OnHttp(const WebRequest& req)
++{
++	lock_guard<recursive_mutex> lock(m_StudioMutex);
++	WebResponse resp;
++	const string& p = req.path;
++
++	auto after = [&](const string& prefix) { return p.substr(prefix.size()); };
++
++	// Data/Studio/overrides.json {"<path>": <answer JSON>}: read on every request, so answers can be tried
++	// without restarting (reverse engineering aid; the file normally doesn't exist)
++	ordered_json overrides = ordered_json::parse(ReadFile(string(STUDIO_DIR) + "/overrides.json"), nullptr, false, true);
++	if (!overrides.is_discarded() && overrides.is_object() && overrides.contains(p))
++	{
++		resp.body = overrides[p].dump();
++		LogHttp(req, resp);
++		return resp;
++	}
++
++	if (p.rfind("/resources_prod/", 0) == 0 || p.rfind("/images_prod/", 0) == 0)
++	{
++		bool image = p.rfind("/images_prod/", 0) == 0;
++		string file = after(image ? "/images_prod/" : "/resources_prod/");
++		string id = file.substr(0, file.find('.'));
++		resp.contentType = "application/octet-stream";
++		if (SafeId(id))
++			resp.body = ReadFile(string(STUDIO_DIR) + (image ? "/images/" : "/resources/") + id + (image ? ".vmg" : ".vxl"));
++		if (resp.body.empty())
++		{
++			resp.status = 404;
++			Logger().Warn("Studio: %s %s not found\n", image ? "image" : "map", file.c_str());
++		}
++	}
++	else if (p.rfind("/v4/upload/resources", 0) == 0)
++	{
++		resp = StoreUpload(req, false);
++	}
++	else if (p.rfind("/v4/upload/images", 0) == 0)
++	{
++		resp = StoreUpload(req, true);
++	}
++	else if (p == "/v6/slots/list/all")
++	{
++		// home page of the Studio browser: every section must be there ("Key not found" otherwise)
++		ordered_json published = PublishedSlots();
++		ordered_json result;
++		for (const char* key : { "dev_team", "best_creator", "single_play", "published", "events", "promotion",
++			"soar_popular", "popular_rank", "liked", "notable" })
++		{
++			result[key] = ordered_json::array();
++		}
++		result["published"] = published;
++		result["popular_rank"] = published;
++		resp = JsonAnswer(result);
++	}
++	else if (p.rfind("/v6/slots/detail/", 0) == 0 || p.rfind("/v5/slots/newbie/", 0) == 0 ||
++		p.rfind("/v5/slots/lobby_menu_ex/", 0) == 0)
++	{
++		string id = p.substr(p.find_last_of('/') + 1);
++		ordered_json* s = FindSlot(id);
++		resp = s ? JsonAnswer(SlotJson(*s, true)) : JsonAnswer(nullptr, false);
++	}
++	else if (p == "/v5/slots/simple")
++	{
++		ordered_json list = ordered_json::array();
++		istringstream ids(QueryValue(req.query, "ids"));
++		string id;
++		while (getline(ids, id, ','))
++		{
++			if (ordered_json* s = FindSlot(id))
++				list.push_back(SlotJson(*s, false));
++		}
++		resp = JsonAnswer(list);
++	}
++	else if (p.rfind("/v5/slots/list/nick/", 0) == 0)
++	{
++		string nick = UrlDecode(after("/v5/slots/list/nick/"));
++		ordered_json list = ordered_json::array();
++		for (auto& s : m_Studio["slots"])
++		{
++			if (s.value("creator_nickname", "") == nick && s.value("published", false))
++				list.push_back(SlotJson(s, false));
++		}
++		resp = JsonAnswer(list);
++	}
++	else if (p == "/v6/slots/list/search")
++	{
++		// a share code or part of a title
++		string text = QueryValue(req.query, "keyword");
++		if (text.empty())
++			text = QueryValue(req.query, "q");
++		ordered_json list = ordered_json::array();
++		for (auto& s : m_Studio["slots"])
++		{
++			if (!s.value("published", false))
++				continue;
++			string title = s.value("title", ""), code = s.value("code", "");
++			if (text.empty() || title.find(text) != string::npos || code == text || s.value("id", "") == text)
++				list.push_back(SlotJson(s, false));
++		}
++		resp = JsonAnswer(list);
++	}
++	else if (p == "/v5/slots/list/template")
++	{
++		// sample maps offered by "Create a new studio map": Data/Studio/templates.json {"templates":[slot...]}
++		ordered_json t = ordered_json::parse(ReadFile(string(STUDIO_DIR) + "/templates.json"), nullptr, false, true);
++		ordered_json list = ordered_json::array();
++		if (!t.is_discarded() && t.contains("templates"))
++		{
++			for (auto& s : t["templates"])
++				list.push_back(SlotJson(s, false));
++		}
++		resp = JsonAnswer(list);
++	}
++	else if (p.rfind("/v6/slots/list/", 0) == 0 || p.rfind("/v5/slots/list/", 0) == 0)
++	{
++		resp = JsonAnswer(PublishedSlots());
++	}
++	else if (p == "/v6/slots/notification/count")
++	{
++		resp = JsonAnswer(0);
++	}
++	else
++	{
++		// unknown yet: a success with an empty list keeps the client going; http.log shows what it wanted
++		resp = JsonAnswer(ordered_json::array());
++	}
++
++	LogHttp(req, resp);
++	return resp;
++}
++
++// ---------------------------------------------------------------------------------------------------------------
++// TCP (packet 103, hw Packet_VoxelOutUI parser 0x211c340). Slot info = u32 flags + the fields below in bit order
++// (hw reader 0x211eb60; strings are NUL-terminated). Bits 0x400 and 0x4000 are never sent by us.
++enum SlotFieldKind { SF_STR, SF_U8, SF_U32 };
++struct SlotField { unsigned bit; const char* key; SlotFieldKind kind; };
++static const SlotField SLOT_FIELDS[] = {
++	{ 0x1, "id", SF_STR }, { 0x2, "resource_id", SF_STR }, { 0x4, "resource_max_player", SF_U8 },
++	{ 0x8, "title", SF_STR }, { 0x10, "resource_mode", SF_U8 }, { 0x20, "permission", SF_U8 },
++	{ 0x40, "description", SF_STR }, { 0x80, "parent_id", SF_STR }, { 0x100, "image_id", SF_STR },
++	{ 0x200, "creator_nickname", SF_STR }, { 0x400, "creator_username", SF_STR }, { 0x800, "like_count", SF_U32 },
++	{ 0x1000, "play_count", SF_U32 }, { 0x2000, "bookmark_count", SF_U32 }, { 0x4000, "", SF_U32 },
++	{ 0x8000, "cube_count", SF_U32 }, { 0x10000, "unk17", SF_U32 }, { 0x20000, "unk18", SF_U32 },
++	{ 0x80000, "slot_category", SF_U8 }, { 0x200000, "sandbox_script", SF_U8 }, { 0x400000, "savegroup_id", SF_STR },
++	{ 0x800000, "unk22", SF_U8 }, { 0x1000000, "unk23", SF_U8 }, { 0x2000000, "server_id", SF_U8 },
++};
++
++ordered_json CVoxelManager::ReadSlotInfo(CReceivePacket* msg)
++{
++	ordered_json slot = ordered_json::object();
++	unsigned flags = msg->ReadUInt32();
++	slot["_flags"] = flags;
++	for (const SlotField& f : SLOT_FIELDS)
++	{
++		if (!(flags & f.bit))
++			continue;
++		if (f.bit == 0x4000)
++		{
++			// list of (u32, string): read and dropped
++			unsigned n = msg->ReadUInt32();
++			for (unsigned i = 0; i < n && i < 1000; i++)
++			{
++				msg->ReadUInt32();
++				msg->ReadString();
++			}
++			continue;
++		}
++		if (f.kind == SF_STR)
++			slot[f.key] = msg->ReadString();
++		else if (f.kind == SF_U8)
++			slot[f.key] = msg->ReadUInt8();
++		else
++			slot[f.key] = msg->ReadUInt32();
++	}
++	return slot;
++}
++
++void CVoxelManager::WriteSlotInfo(CSendPacket* msg, const ordered_json& slot)
++{
++	unsigned flags = 0;
++	for (const SlotField& f : SLOT_FIELDS)
++	{
++		if (f.bit != 0x4000 && slot.contains(f.key))
++			flags |= f.bit;
++	}
++	msg->WriteUInt32(flags);
++	for (const SlotField& f : SLOT_FIELDS)
++	{
++		if (!(flags & f.bit))
++			continue;
++		const ordered_json& v = slot[f.key];
++		if (f.kind == SF_STR)
++			msg->WriteString(v.is_string() ? v.get<string>() : "");
++		else if (f.kind == SF_U8)
++			msg->WriteUInt8(v.is_number() ? v.get<int>() : 0);
++		else
++			msg->WriteUInt32(v.is_number() ? v.get<unsigned>() : 0);
++	}
++}
++
++// the fields a slot always carries towards the client
++static ordered_json ClientSlot(const ordered_json& s)
++{
++	ordered_json c;
++	c["id"] = s.value("id", "");
++	c["resource_id"] = s.value("resource_id", "");
++	c["resource_max_player"] = s.value("resource_max_player", 16);
++	c["title"] = s.value("title", "");
++	c["resource_mode"] = s.value("resource_mode", 0);
++	c["permission"] = s.value("permission", 0);
++	c["description"] = s.value("description", "");
++	if (!s.value("parent_id", "").empty())
++		c["parent_id"] = s.value("parent_id", "");
++	c["image_id"] = s.value("image_id", "");
++	c["creator_nickname"] = s.value("creator_nickname", "");
++	// hw keeps it at slot +0xc8; GameUI shows the map's buttons only when it equals the local login name
++	c["creator_username"] = s.value("creator_username", "");
++	c["like_count"] = s.value("like_count", 0);
++	c["play_count"] = s.value("play_count", 0);
++	c["bookmark_count"] = s.value("bookmark_count", 0);
++	c["cube_count"] = s.value("cube_count", 0);
++	c["slot_category"] = s.value("slot_category", 0);
++	c["sandbox_script"] = s.value("sandbox_script", 0);
++	c["server_id"] = 0;
++	return c;
++}
++
++void CVoxelManager::SendSlotList(IExtendedSocket* socket, int userID)
++{
++	lock_guard<recursive_mutex> lock(m_StudioMutex);
++	vector<const ordered_json*> mine;
++	for (auto& s : m_Studio["slots"])
++	{
++		if (s.value("owner", 0) == userID && !s.value("deleted", false))
++			mine.push_back(&s);
++	}
++
++	// type 9: u8 total, u8 in this packet, slots (hw collects packets until it has "total")
++	CSendPacket* msg = g_PacketManager.CreatePacket(socket, PacketId::Voxel);
++	msg->BuildHeader();
++	msg->WriteUInt8(9);
++	msg->WriteUInt8((unsigned char)mine.size());
++	msg->WriteUInt8((unsigned char)mine.size());
++	for (auto* s : mine)
++		WriteSlotInfo(msg, ClientSlot(*s));
++	socket->Send(msg);
++}
++
++bool CVoxelManager::OnStudioPacket(int type, CReceivePacket* msg, IExtendedSocket* socket)
++{
++	IUser* user = g_UserManager.GetUserBySocket(socket);
++	if (!user)
++		return false;
++
++	switch (type)
++	{
++	case 0:
++	{
++		// new slot from a sample map (or a copy of one of the player's maps): id = the source, title, description
++		ordered_json req = ReadSlotInfo(msg);
++		lock_guard<recursive_mutex> lock(m_StudioMutex);
++
++		int count = 0;
++		for (auto& s : m_Studio["slots"])
++		{
++			if (s.value("owner", 0) == user->GetID() && !s.value("deleted", false))
++				count++;
++		}
++
++		CSendPacket* reply = g_PacketManager.CreatePacket(socket, PacketId::Voxel);
++		reply->BuildHeader();
++		reply->WriteUInt8(0);
++		if (count >= STUDIO_MAX_SLOTS)
++		{
++			reply->WriteUInt8(1); // failure
++			socket->Send(reply);
++			return true;
++		}
++
++		string source = req.value("id", "");
++		ordered_json slot;
++		slot["id"] = NewId();
++		slot["owner"] = user->GetID();
++		slot["title"] = req.value("title", "New map");
++		slot["description"] = req.value("description", "");
++		slot["parent_id"] = source;
++		slot["creator_nickname"] = user->GetCharacter(UFLAG_LOW_GAMENAME).gameName;
++		slot["creator_username"] = user->GetUsername();
++		slot["resource_max_player"] = 16;
++		slot["resource_mode"] = 0;
++		slot["permission"] = 0;
++		slot["created"] = (long long)time(NULL);
++		slot["published"] = false;
++
++		// copy the source's map file, so editing the new slot never changes the original
++		string sourceResource = req.value("resource_id", "");
++		ordered_json t = ordered_json::parse(ReadFile(string(STUDIO_DIR) + "/templates.json"), nullptr, false, true);
++		if (!t.is_discarded() && t.contains("templates"))
++		{
++			for (auto& tm : t["templates"])
++			{
++				if (tm.value("id", "") == source)
++				{
++					sourceResource = tm.value("resource_id", "");
++					slot["resource_max_player"] = tm.value("resource_max_player", 16);
++					slot["resource_mode"] = tm.value("resource_mode", 0);
++				}
++			}
++		}
++		if (ordered_json* src = FindSlot(source))
++		{
++			sourceResource = src->value("resource_id", "");
++			slot["resource_max_player"] = src->value("resource_max_player", 16);
++			slot["resource_mode"] = src->value("resource_mode", 0);
++		}
++		slot["resource_id"] = "";
++		if (SafeId(sourceResource))
++		{
++			string data = ReadFile(string(STUDIO_DIR) + "/resources/" + sourceResource + ".vxl");
++			if (!data.empty())
++			{
++				string rid = NewId();
++				WriteFile(string(STUDIO_DIR) + "/resources/" + rid + ".vxl", data);
++				slot["resource_id"] = rid;
++			}
++		}
++
++		m_Studio["slots"].push_back(slot);
++		SaveStudio();
++		Logger().Info("Studio: %s created map %s '%s' from %s\n", user->GetUsername().c_str(), slot["id"].get<string>().c_str(),
++			slot["title"].get<string>().c_str(), source.c_str());
++
++		reply->WriteUInt8(0); // ok
++		WriteSlotInfo(reply, ClientSlot(slot));
++		socket->Send(reply);
++		return true;
++	}
++	case 9:
++		SendSlotList(socket, user->GetID());
++		return true;
++	case 0x31:
++	{
++		// asked when a map is selected: u8 status, string slot id, u16 n + n strings (its tags; none offline)
++		string id = msg->ReadString();
++		CSendPacket* reply = g_PacketManager.CreatePacket(socket, PacketId::Voxel);
++		reply->BuildHeader();
++		reply->WriteUInt8(0x31);
++		reply->WriteUInt8(0);
++		reply->WriteString(id);
++		reply->WriteUInt16(0);
++		socket->Send(reply);
++		return true;
++	}
++	}
++	return false;
++}
 diff --git a/src/manager/transfer.cpp b/src/manager/transfer.cpp
 new file mode 100644
 index 0000000..6908e06
@@ -5205,12 +5906,141 @@ index 3054001..f98d66b 100644
  	void SendLoginPacket(IUser* user, const CUserCharacter& character);
  	void SendUserInventory(IUser* user);
  	void SendUserLoadout(IUser* user);
+diff --git a/src/manager/voxelmanager.cpp b/src/manager/voxelmanager.cpp
+index 01aa7a6..88ad8fe 100644
+--- a/src/manager/voxelmanager.cpp
++++ b/src/manager/voxelmanager.cpp
+@@ -22,6 +22,7 @@ bool CVoxelManager::Init()
+ 	if (!LoadVoxelConfigList())
+ 		return false;
+ 
++	LoadStudio();
+ 	return true;
+ }
+ 
+@@ -96,7 +97,53 @@ bool CVoxelManager::OnPacket(CReceivePacket* msg, IExtendedSocket* socket)
+ {
+ 	LOG_PACKET;
+ 
++	// Studio protocol is still being reverse engineered: log every request with its payload
++	{
++		const vector<unsigned char>& buf = msg->GetData().getBuffer();
++		size_t off = (size_t)msg->GetData().getReadOffset();
++		string hex;
++		char h[4];
++		for (size_t i = off; i < buf.size() && i < off + 256; i++)
++		{
++			snprintf(h, sizeof(h), "%02x ", buf[i]);
++			hex += h;
++		}
++		Logger().Info("Studio packet from %s: %s(%d bytes)\n", socket->GetIP().c_str(), hex.c_str(), (int)(buf.size() - off));
++	}
++
+ 	int type = msg->ReadUInt8();
++
++	// Data/Studio/tcp_overrides.json {"<request type>": ["<reply payload in hex>", ...]}: read on every request,
++	// so replies can be tried without restarting (reverse engineering aid; the file normally doesn't exist)
++	{
++		ifstream f("Data/Studio/tcp_overrides.json");
++		ordered_json o = f ? ordered_json::parse(f, nullptr, false, true) : ordered_json();
++		string key = to_string(type);
++		if (o.is_object() && o.contains(key))
++		{
++			for (auto& hex : o[key])
++			{
++				string h = hex.get<string>();
++				vector<unsigned char> bytes;
++				for (size_t i = 0; i + 1 < h.size();)
++				{
++					if (h[i] == ' ') { i++; continue; }
++					bytes.push_back((unsigned char)strtol(h.substr(i, 2).c_str(), NULL, 16));
++					i += 2;
++				}
++				CSendPacket* reply = g_PacketManager.CreatePacket(socket, PacketId::Voxel);
++				reply->BuildHeader();
++				reply->WriteData(bytes.data(), (int)bytes.size());
++				socket->Send(reply);
++				Logger().Info("Studio packet reply (override) to %d: %s\n", type, h.c_str());
++			}
++			return true;
++		}
++	}
++
++	if (OnStudioPacket(type, msg, socket))
++		return true;
++
+ 	switch (type)
+ 	{
+ 	case 4:
+@@ -134,6 +181,13 @@ bool CVoxelManager::OnPacket(CReceivePacket* msg, IExtendedSocket* socket)
+ static const int TIMEOUT = 3000;
+ 
+ std::string CVoxelManager::GetSlotDetails(const std::string& slotId, int serverId)
++{
++	// offline Studio: the maps are ours (asking our own web server from here would wait on ourselves)
++	return StudioDetailJson(slotId);
++}
++
++// the original lookup on an external voxel server (kept for reference, unused offline)
++static std::string GetSlotDetailsHttp(const std::vector<VoxelConfig>& m_VoxelConfigList, const std::string& slotId, int serverId)
+ {
+ 	if (serverId >= m_VoxelConfigList.size())
+ 	{
+diff --git a/src/manager/voxelmanager.h b/src/manager/voxelmanager.h
+index c7d2bdb..65757e2 100644
+--- a/src/manager/voxelmanager.h
++++ b/src/manager/voxelmanager.h
+@@ -2,6 +2,10 @@
+ 
+ #include "manager.h"
+ #include "interface/ivoxelmanager.h"
++#include "net/webserver.h"
++#include "nlohmann/json.hpp"
++
++#include <mutex>
+ 
+ class IExtendedSocket;
+ class CReceivePacket;
+@@ -21,8 +25,31 @@ public:
+ 	bool OnPacket(CReceivePacket* msg, IExtendedSocket* socket);
+ 	std::string GetSlotDetails(const std::string& slotId, int serverId);
+ 
++	// Offline Studio (studio.cpp): the game's voxel REST API served by our own web server (port 30080),
++	// maps kept in Data/Studio. Called on the web server thread.
++	WebResponse OnHttp(const WebRequest& req);
++
+ private:
++	// TCP side of the Studio (studio.cpp): the player's own slots
++	bool OnStudioPacket(int type, CReceivePacket* msg, IExtendedSocket* socket);
++	nlohmann::ordered_json ReadSlotInfo(CReceivePacket* msg);
++	void WriteSlotInfo(class CSendPacket* msg, const nlohmann::ordered_json& slot);
++	void SendSlotList(IExtendedSocket* socket, int userID);
++
++	void LoadStudio();
++	void SaveStudio();
++	nlohmann::ordered_json* FindSlot(const std::string& id);
++	nlohmann::ordered_json SlotJson(const nlohmann::ordered_json& slot, bool detail);
++	nlohmann::ordered_json PublishedSlots();
++	std::string NewId();
++	std::string StudioDetailJson(const std::string& slotId);
++	WebResponse StoreUpload(const WebRequest& req, bool image);
++	void LogHttp(const WebRequest& req, const WebResponse& resp);
++
+ 	std::vector<VoxelConfig> m_VoxelConfigList;
++
++	std::recursive_mutex m_StudioMutex;
++	nlohmann::ordered_json m_Studio; // {"slots":[...]}
+ };
+ 
+-extern CVoxelManager g_VoxelManager;
+\ No newline at end of file
++extern CVoxelManager g_VoxelManager;
 diff --git a/src/manager/warbondmanager.cpp b/src/manager/warbondmanager.cpp
 new file mode 100644
-index 0000000..d0230ca
+index 0000000..4af1b13
 --- /dev/null
 +++ b/src/manager/warbondmanager.cpp
-@@ -0,0 +1,994 @@
+@@ -0,0 +1,997 @@
 +#include "channelmanager.h"
 +#include "transfer.h"
 +#include "warbondmanager.h"
@@ -5225,6 +6055,7 @@ index 0000000..d0230ca
 +#include "room/gamematch.h"
 +#include "bingomanager.h"
 +#include "zsriftmanager.h"
++#include "voxelmanager.h"
 +#include "medalmanager.h"
 +#include "missionmanager.h"
 +
@@ -5249,6 +6080,8 @@ index 0000000..d0230ca
 +	if (!LoadConfig())
 +		return false;
 +
++	// offline Studio: the voxel REST API (VoxelConfigList.json points the game here)
++	m_WebServer.SetStudioHandler([](const WebRequest& req) { return g_VoxelManager.OnHttp(req); });
 +	m_WebServer.Start(m_WebIP, m_WebPort, m_WebRoot, [this](const WebRequest& req) { return OnApiRequest(req); });
 +	return true;
 +}
@@ -7117,10 +7950,10 @@ index d35947b..d6445d7 100644
  	}
 diff --git a/src/net/webserver.cpp b/src/net/webserver.cpp
 new file mode 100644
-index 0000000..b5867ad
+index 0000000..f0b1f8f
 --- /dev/null
 +++ b/src/net/webserver.cpp
-@@ -0,0 +1,223 @@
+@@ -0,0 +1,250 @@
 +#include "webserver.h"
 +
 +#include <winsock2.h>
@@ -7250,20 +8083,33 @@ index 0000000..b5867ad
 +	istringstream rl(requestLine);
 +	string target;
 +	rl >> req.method >> target;
-+	req.path = target.substr(0, target.find('?'));
++	size_t q = target.find('?');
++	req.path = target.substr(0, q);
++	if (q != string::npos)
++		req.query = target.substr(q + 1);
++	// the game's Studio client (cpprestsdk) asks for "/v6/..." and "v6/..." alike
++	if (!req.path.empty() && req.path[0] != '/')
++		req.path = "/" + req.path;
 +
 +	size_t contentLength = 0;
 +	string line;
 +	while (getline(head, line))
 +	{
++		if (!line.empty() && line.back() == '\r')
++			line.pop_back();
++		req.headers += line + "\n";
 +		string lower = line;
 +		transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
 +		if (lower.rfind("content-length:", 0) == 0)
 +			contentLength = strtoul(line.c_str() + 15, NULL, 10);
++		else if (lower.rfind("content-type:", 0) == 0)
++			req.contentType = line.substr(line.find_first_not_of(' ', 13));
 +	}
 +
++	// Studio maps are uploaded whole (up to 64 MB); everything else stays small
++	size_t maxBody = IsStudioPath(req.path) ? 64 * 1024 * 1024 : 1024 * 1024;
 +	req.body = data.substr(headerEnd + 4);
-+	while (req.body.size() < contentLength && contentLength <= 1024 * 1024)
++	while (req.body.size() < contentLength && contentLength <= maxBody)
 +	{
 +		int n = recv(client, buf, sizeof(buf), 0);
 +		if (n <= 0)
@@ -7273,7 +8119,11 @@ index 0000000..b5867ad
 +
 +	WebResponse resp;
 +	string extraHeaders;
-+	if (req.path.rfind("/api/", 0) == 0)
++	if (m_StudioHandler && IsStudioPath(req.path))
++	{
++		resp = m_StudioHandler(req);
++	}
++	else if (req.path.rfind("/api/", 0) == 0)
 +	{
 +		resp = m_ApiHandler(req);
 +	}
@@ -7304,6 +8154,16 @@ index 0000000..b5867ad
 +	send(client, headers.data(), (int)headers.size(), 0);
 +	if (!resp.body.empty())
 +		send(client, resp.body.data(), (int)resp.body.size(), 0);
++}
++
++bool CWebServer::IsStudioPath(const string& path)
++{
++	for (const char* prefix : { "/v4/", "/v5/", "/v6/", "/resources_prod/", "/images_prod/", "/studio/" })
++	{
++		if (path.rfind(prefix, 0) == 0)
++			return true;
++	}
++	return false;
 +}
 +
 +WebResponse CWebServer::ServeFile(const string& urlPath)
@@ -7346,10 +8206,10 @@ index 0000000..b5867ad
 +}
 diff --git a/src/net/webserver.h b/src/net/webserver.h
 new file mode 100644
-index 0000000..08e7a04
+index 0000000..e0380ff
 --- /dev/null
 +++ b/src/net/webserver.h
-@@ -0,0 +1,49 @@
+@@ -0,0 +1,56 @@
 +#pragma once
 +
 +#include <string>
@@ -7362,6 +8222,9 @@ index 0000000..08e7a04
 +	std::string clientIP;
 +	std::string method;
 +	std::string path; // without the query string
++	std::string query; // after '?', raw
++	std::string contentType;
++	std::string headers; // raw header lines, for logging
 +	std::string body;
 +};
 +
@@ -7386,6 +8249,9 @@ index 0000000..08e7a04
 +
 +	bool Start(const std::string& bindIP, int port, const std::string& root, const ApiHandler& apiHandler);
 +	void Stop();
++	// Studio (voxel maps): the game's own REST paths (/v4/, /v5/, /v6/, /resources_prod/, /images_prod/)
++	void SetStudioHandler(const ApiHandler& handler) { m_StudioHandler = handler; }
++	static bool IsStudioPath(const std::string& path);
 +
 +private:
 +	static void* ListenThread(void* data);
@@ -7398,9 +8264,10 @@ index 0000000..08e7a04
 +	volatile bool m_bRunning;
 +	std::string m_Root;
 +	ApiHandler m_ApiHandler;
++	ApiHandler m_StudioHandler;
 +};
 diff --git a/src/packet/packethelper_fulluserinfo.cpp b/src/packet/packethelper_fulluserinfo.cpp
-index 2321d64..99cfa6d 100644
+index 2321d64..37e8ff3 100644
 --- a/src/packet/packethelper_fulluserinfo.cpp
 +++ b/src/packet/packethelper_fulluserinfo.cpp
 @@ -1,4 +1,5 @@
@@ -7427,6 +8294,15 @@ index 2321d64..99cfa6d 100644
  	}
  
  	if (character.lowFlag & UFLAG_LOW_UNK20)
+@@ -292,7 +293,7 @@ void CPacketHelper_FullUserInfo::Build(Buffer& buf, int userID, const CUserChara
+ 		buf.writeUInt32_LE(0);
+ 		buf.writeUInt32_LE(0);
+ 		buf.writeUInt32_LE(0);
+-		buf.writeUInt8(0);
++		buf.writeUInt8(STUDIO_MAX_SLOTS); // hw CGameUser +0x2c8: Studio maps the player may create ("Up to %d slots")
+ 		buf.writeUInt8(0);
+ 	}
+ 
 diff --git a/src/public/net/extendedsocket.h b/src/public/net/extendedsocket.h
 index 4c688f4..c1e0b2a 100644
 --- a/src/public/net/extendedsocket.h
@@ -8009,7 +8885,7 @@ index 13a4ee8..c36e019 100644
  	std::vector<int> m_KickedUsers;
  	std::vector<int> m_FamilyBattleUsers;
 diff --git a/src/room/roomsettings.cpp b/src/room/roomsettings.cpp
-index 0ba9234..fa59bb6 100644
+index 0ba9234..dd9b30d 100644
 --- a/src/room/roomsettings.cpp
 +++ b/src/room/roomsettings.cpp
 @@ -8,6 +8,7 @@
@@ -8132,7 +9008,16 @@ index 0ba9234..fa59bb6 100644
  	botAdd = GetDefaultBotAdd(gameModeId);
  
  	lowMidFlag |= ROOM_LOWMID_KDRULE;
-@@ -1766,12 +1795,10 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
+@@ -1568,6 +1597,8 @@ void CRoomSettings::LoadZbCompetitiveSettings(int gameModeId)
+ 
+ bool CRoomSettings::ParseSlotDetails(std::string voxel_id, int server_id)
+ {
++	Logger().Info("Studio room: client mode %d, map %d, voxel flags 0x%x, server %d, resource '%s', title '%s'\n",
++		gameModeId, mapId, voxelFlag, server_id, voxel_resource_id.c_str(), voxel_title.c_str());
+ 	std::string response = g_VoxelManager.GetSlotDetails(voxel_id, server_id);
+ 	if (!response.empty())
+ 	{
+@@ -1766,12 +1797,10 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
  		lowFlag |= ROOM_LOW_ROUNDTIME;
  		roundTime = GetGameModeDefaultSetting(gameModeId, "mode_roundtime_id");
  
@@ -8149,7 +9034,7 @@ index 0ba9234..fa59bb6 100644
  
  		lowFlag |= ROOM_LOW_HOSTAGEKILLLIMIT;
  		hostageKillLimit = 0;
-@@ -1807,7 +1834,7 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
+@@ -1807,7 +1836,7 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
  		botDifficulty = 0;
  		friendlyBots = GetDefaultFriendlyBots(gameModeId);
  		enemyBots = GetDefaultEnemyBots(gameModeId);
@@ -8158,7 +9043,7 @@ index 0ba9234..fa59bb6 100644
  		botAdd = GetDefaultBotAdd(gameModeId);
  
  		lowMidFlag |= ROOM_LOWMID_KDRULE;
-@@ -1829,7 +1856,7 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
+@@ -1829,7 +1858,7 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
  			sd = 0;
  
  		lowMidFlag |= ROOM_LOWMID_ZSDIFFICULTY;
@@ -8167,7 +9052,7 @@ index 0ba9234..fa59bb6 100644
  		{
  			zsDifficulty = 0;
  			unk56 = 0;
-@@ -2026,7 +2053,7 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
+@@ -2026,7 +2055,7 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
  					Logger().Warn("User '%s' tried to update a room\'s settings with gameModeId that doesn't allow bots, gameModeId: %d\n", user->GetLogName(), gameModeId);
  					lowMidFlag &= ~ROOM_LOWMID_BOT;
  				}
@@ -8176,7 +9061,7 @@ index 0ba9234..fa59bb6 100644
  				{
  					if (botDifficulty > 7)
  						botDifficulty = 7;
-@@ -2034,31 +2061,22 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
+@@ -2034,31 +2063,22 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
  					if (friendlyBots > 15)
  						friendlyBots = 15;
  
@@ -8221,7 +9106,7 @@ index 0ba9234..fa59bb6 100644
  				}
  			}
  
-@@ -2094,11 +2112,13 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
+@@ -2094,11 +2114,13 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
  
  			if (lowMidFlag & ROOM_LOWMID_ZSDIFFICULTY)
  			{
@@ -8236,7 +9121,7 @@ index 0ba9234..fa59bb6 100644
  				else if (gameModeId == 15)
  				{
  					int mapMaxZsDifficulty = g_pMapListTable->GetCell<int>("ZSmaxDifficulty", to_string(mapId));
-@@ -2364,12 +2384,8 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
+@@ -2364,12 +2386,8 @@ void CRoomSettings::LoadNewSettings(int gameModeId, int mapId, IUser* user)
  			maxPlayers = g_pMapListTable->GetCell<int>("max_player", to_string(mapId));
  		}
  
@@ -8251,7 +9136,7 @@ index 0ba9234..fa59bb6 100644
  
  		lowMidFlag |= ROOM_LOWMID_BALLNUMBER;
  		ballNumber = GetMapSetting(mapId, "ball_default");
-@@ -2668,6 +2684,10 @@ bool CRoomSettings::CheckSettings(IUser* user)
+@@ -2668,6 +2686,10 @@ bool CRoomSettings::CheckSettings(IUser* user)
  			}
  		}
  
