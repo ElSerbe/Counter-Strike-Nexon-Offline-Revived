@@ -31,6 +31,8 @@ namespace CsnzLauncher
         readonly LinkLabel getGame = new LinkLabel { Text = "Not installed? Get it free on Steam", AutoSize = true, Visible = false };
         readonly TextBox logBox = new TextBox { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.None, Font = new Font("Consolas", 9) };
         const string DiscordUrl = "https://discord.gg/fjxubwyhYv";
+        const string PatreonUrl = "https://patreon.com/ltsYuri";
+        readonly Music music = new Music();
         readonly bool autoPlay;
         ReleaseInfo latest;
         bool busy;
@@ -50,6 +52,18 @@ namespace CsnzLauncher
             try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
             header.Credits = "Offline port and rework by ItsYuri  \u00B7  Local server: CSNZ_Server by Jusic, Hardee, NekoMeow, Smilex_Gamer and xRiseless";
             header.LogoClicked += (s, e) => Process.Start(DiscordUrl);
+            header.DiscordClicked += (s, e) => Process.Start(DiscordUrl);
+            header.PatreonClicked += (s, e) => Process.Start(PatreonUrl);
+            // the speaker stops the music for now (or starts it again); More turns it off for good
+            header.MusicClicked += (s, e) =>
+            {
+                if (music.Playing)
+                    music.Stop();
+                else if (!music.Play(settings.GamePath))
+                    Log("No music: the game's Bin\\CSOnline.mp3 wasn't found or Windows can't play it (" + Music.LastError + ").");
+            };
+            music.Changed += (s, e) => header.MusicOn = music.Playing;
+            FormClosed += (s, e) => music.Dispose();
 
             // the game card
             gameCard.SetBounds(24, 222, 600, 206);
@@ -127,6 +141,24 @@ namespace CsnzLauncher
             more.Items.Add("Open the mod's folder", null, (s, e) => Process.Start("explorer.exe", "\"" + Paths.Mod + "\""));
             more.Items.Add("Open the project on GitHub", null, (s, e) => Process.Start(GitHub.PageUrl));
             more.Items.Add("Join the Discord", null, (s, e) => Process.Start(DiscordUrl));
+            more.Items.Add("Support the project on Patreon", null, (s, e) => Process.Start(PatreonUrl));
+            more.Items.Add(new ToolStripSeparator());
+            var musicItem = more.Items.Add("", null, (s, e) =>
+            {
+                settings.MusicOff = !settings.MusicOff;
+                settings.Save();
+                if (settings.MusicOff)
+                {
+                    music.Stop();
+                    Log("Launcher music turned off: it won't play any more (More turns it back on).");
+                }
+                else
+                {
+                    Log("Launcher music turned on.");
+                    StartMusic();
+                }
+            });
+            more.Opening += (s, e) => musicItem.Text = settings.MusicOff ? "Turn the launcher music on" : "Turn the launcher music off";
             moreButton.Click += (s, e) => more.Show(moreButton, new Point(0, moreButton.Height));
 
             browseButton.Click += (s, e) => BrowseGame();
@@ -168,6 +200,15 @@ namespace CsnzLauncher
             {
                 DarkBox.Show(this, "Couldn't create the shortcut: " + ex.Message, Text);
             }
+        }
+
+        // the game's lobby theme from its own folder, unless More turned it off (or the shortcut goes straight to the game)
+        void StartMusic()
+        {
+            if (settings.MusicOff || autoPlay || busy || Runner.GameRunning() || music.Playing)
+                return;
+            if (GameLocator.IsGame(settings.GamePath) && !music.Play(settings.GamePath))
+                Log("No music: the game's Bin\\CSOnline.mp3 wasn't found or Windows can't play it (" + Music.LastError + ").");
         }
 
         // ------------------------------------------------------------ helpers
@@ -305,6 +346,7 @@ namespace CsnzLauncher
             if (GameLocator.IsGame(settings.GamePath))
                 Log("Game: " + settings.GamePath + (GameLocator.BuildId(settings.GamePath) is string b ? $" (Steam build {b})" : ""));
             RefreshVersion();
+            StartMusic();
             if (!GameLocator.IsGame(settings.GamePath))
                 GetGame();
             await CheckLatest(false);
@@ -328,6 +370,7 @@ namespace CsnzLauncher
                 gameBox.Text = f.FoundPath;
                 Log("Found the game: " + f.FoundPath);
                 RefreshVersion();
+                StartMusic();
             }
         }
 
@@ -356,6 +399,7 @@ namespace CsnzLauncher
                 gameBox.Text = dir;
                 Log("Game folder: " + dir);
                 RefreshVersion();
+                StartMusic();
             }
         }
 
@@ -572,6 +616,8 @@ namespace CsnzLauncher
             if (!Assets.Present)
                 Log("Note: the shop and profile pictures aren't exported yet (the Pictures button). The game works without them.");
 
+            // the music fades out while the game starts (the window minimizes; the fade keeps running)
+            music.FadeOut();
             Process server = null, bridge = null;
             bool online = settings.OnlinePlay, verbose = settings.DetailedLogs;
             // where the Logs button's "last session" starts
@@ -656,7 +702,6 @@ namespace CsnzLauncher
 
     static class Program
     {
-        [STAThread]
         // Opened from the browser's download bar, the launcher runs from a new temporary copy each time (Chrome/Edge:
         // Downloads\scoped_dir..., else %TEMP%): the mod got installed there and every start asked to install it again.
         // It offers a folder of its own (Documents\CSNZ Offline Revived by default), copies itself there and starts that copy.
@@ -716,6 +761,7 @@ namespace CsnzLauncher
             }
         }
 
+        [STAThread]
         static void Main(string[] args)
         {
             if (args.Length > 0 && args[0] == "--check")

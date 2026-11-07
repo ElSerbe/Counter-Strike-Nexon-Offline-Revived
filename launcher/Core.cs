@@ -57,6 +57,7 @@ namespace CsnzLauncher
         public string TokenProtected = ""; // a GitHub token, encrypted for this Windows user (DPAPI)
         public bool OnlinePlay = true;      // the Steam bridge runs with the server (offline play works without it)
         public bool DetailedLogs = false;   // the server and the bridge log every packet (--verbose), for bug reports
+        public bool MusicOff = false;       // More > the launcher music: never plays when true
 
         static readonly JavaScriptSerializer Json = new JavaScriptSerializer();
 

@@ -65,7 +65,8 @@ release for the new version is out.
 ## Authors
 
 - **ItsYuri** ([ItsYuriil](https://github.com/ItsYuriil)): the offline port and rework: bot AI, game modes, items,
-  shop, missions, gameplay, new features and quality of life. Discord: https://discord.gg/fjxubwyhYv
+  shop, missions, gameplay, new features and quality of life. Discord: https://discord.gg/fjxubwyhYv.
+  Enjoying it? Support the development on Patreon: https://patreon.com/ltsYuri
 - The local server is based on [JusicP/CSNZ_Server](https://github.com/JusicP/CSNZ_Server) by Jusic, Hardee,
   NekoMeow, Smilex_Gamer and xRiseless.
 

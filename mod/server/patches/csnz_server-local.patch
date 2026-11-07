@@ -3758,10 +3758,10 @@ index 223166a..9b3a5a0 100644
  	user->UpdateTitles(slot, titleID);
 diff --git a/src/manager/studio.cpp b/src/manager/studio.cpp
 new file mode 100644
-index 0000000..27ae983
+index 0000000..761853a
 --- /dev/null
 +++ b/src/manager/studio.cpp
-@@ -0,0 +1,740 @@
+@@ -0,0 +1,748 @@
 +// Offline Studio: the voxel REST API the game's client (hw.dll VoxelHTTP, cpprestsdk) used to reach on Nexon's
 +// servers, now served by our own web server. Maps live in Data/Studio:
 +//   slots.json            every slot (map) with its details
@@ -4115,6 +4115,14 @@ index 0000000..27ae983
 +		resp.contentType = "application/octet-stream";
 +		if (SafeId(id))
 +			resp.body = ReadFile(string(STUDIO_DIR) + (image ? "/images/" : "/resources/") + id + (image ? ".vmg" : ".vxl"));
++		// a map this PC doesn't have (a Studio room joined through Steam: the host has the file): the game aborts on a
++		// 404, so it gets the flat sample map instead until maps travel between players
++		if (resp.body.empty() && !image)
++		{
++			resp.body = ReadFile(string(STUDIO_DIR) + "/resources/tmpl_flat.vxl");
++			if (!resp.body.empty())
++				Logger().Warn("Studio: map %s isn't on this PC, sending the flat sample map instead\n", file.c_str());
++		}
 +		if (resp.body.empty())
 +		{
 +			resp.status = 404;
