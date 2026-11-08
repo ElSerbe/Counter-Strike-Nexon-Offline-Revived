@@ -617,15 +617,17 @@ namespace CsnzLauncher
         {
             try { return File.ReadAllText(HostsFile).Contains("# >>> CSNZ offline mod (begin)"); } catch { return false; }
         }
-        // runs tools\hosts_block.ps1 elevated: Windows asks the player first
+        const string Begin = "# >>> CSNZ offline mod (begin)", End = "# <<< CSNZ offline mod (end)";
+
+        // The launcher starts itself again with administrator rights (Windows asks the player first) and "--hosts add"
+        // or "--hosts remove", which calls Edit: no script and no hidden console.
         public static bool Run(string action, Logger log)
         {
-            var script = Path.Combine(Paths.Mod, "tools", "hosts_block.ps1");
-            var psi = new ProcessStartInfo("powershell.exe", $"-NoProfile -ExecutionPolicy Bypass -File \"{script}\" {action}")
+            var psi = new ProcessStartInfo(System.Windows.Forms.Application.ExecutablePath, "--hosts " + (action == "remove" ? "remove" : "add"))
             {
                 UseShellExecute = true,
                 Verb = "runas",
-                WindowStyle = ProcessWindowStyle.Hidden,
+                WorkingDirectory = Paths.Root,
             };
             try
             {
@@ -640,6 +642,53 @@ namespace CsnzLauncher
             {
                 log("hosts file: Windows' permission prompt was cancelled.");
                 return false;
+            }
+        }
+
+        [DllImport("dnsapi.dll")]
+        static extern bool DnsFlushResolverCache();
+
+        // (the elevated launcher) takes the mod's block out of the hosts file and, for "add", puts mod\tools\hosts_block.txt
+        // back at its end. The first time, the file as it was is kept in mod\backup\system\hosts.original.
+        public static int Edit(string action, string hostsFile = null)
+        {
+            hostsFile = hostsFile ?? HostsFile; // another file: --check --hosts-test
+            try
+            {
+                var text = File.Exists(hostsFile) ? File.ReadAllText(hostsFile) : "";
+                var backupDir = Path.Combine(Paths.Mod, "backup", "system");
+                Directory.CreateDirectory(backupDir);
+                var backup = Path.Combine(backupDir, "hosts.original");
+                if (!File.Exists(backup) && hostsFile == HostsFile)
+                    File.WriteAllText(backup, text);
+
+                var kept = new List<string>();
+                bool inside = false;
+                foreach (var line in text.Replace("\r\n", "\n").Split('\n'))
+                {
+                    if (line.StartsWith(Begin)) { inside = true; continue; }
+                    if (inside) { if (line.StartsWith(End)) inside = false; continue; }
+                    kept.Add(line);
+                }
+                var result = string.Join("\r\n", kept).TrimEnd();
+                if (action == "add")
+                    result += "\r\n\r\n" + File.ReadAllText(Path.Combine(Paths.Mod, "tools", "hosts_block.txt")).Trim() + "\r\n";
+                else
+                    result += "\r\n";
+
+                var info = new FileInfo(hostsFile);
+                bool readOnly = info.Exists && info.IsReadOnly;
+                if (readOnly)
+                    info.IsReadOnly = false;
+                try { File.WriteAllText(hostsFile, result, Encoding.ASCII); }
+                finally { if (readOnly) new FileInfo(hostsFile).IsReadOnly = true; }
+                try { DnsFlushResolverCache(); } catch { }
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                try { File.AppendAllText(Path.Combine(Paths.LogDir, "launcher.log"), $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} hosts file: {ex.Message}{Environment.NewLine}"); } catch { }
+                return 1;
             }
         }
     }
@@ -964,6 +1013,7 @@ namespace CsnzLauncher
             if (game != null)
                 psi.EnvironmentVariables["CSNZ_GAME"] = game;
             psi.EnvironmentVariables["PYTHONIOENCODING"] = "utf-8";
+            psi.EnvironmentVariables["PYTHONUNBUFFERED"] = "1"; // the scripts' lines show up as they're printed
             using (var p = Process.Start(psi))
             {
                 p.OutputDataReceived += (s, e) => { if (!string.IsNullOrWhiteSpace(e.Data)) log("  " + e.Data); };
@@ -1100,12 +1150,21 @@ namespace CsnzLauncher
                 if (Run(py, pre + "-m pip install --user --disable-pip-version-check pefile", log) != 0)
                     throw new Exception("pip couldn't install pefile.");
             }
-            foreach (var script in Scripts)
+            if (File.Exists(Path.Combine(Paths.Mod, "tools", "export_all.py")))
             {
-                log($"Running {script} (it can take a few minutes)...");
-                if (Run(py, pre + "\"" + script + "\"", log, game) != 0)
-                    throw new Exception(script + " failed: see the lines above.");
+                // every export in one process: the game's archives are opened once (each start of the mod's nartool.exe is
+                // checked by the antivirus, and one per file group made it pop up again and again)
+                log("Extracting the pictures from your game (a few minutes)...");
+                if (Run(py, pre + "-u export_all.py", log, game) != 0)
+                    throw new Exception("The pictures couldn't be extracted: see the lines above in Activity (or Logs).");
             }
+            else
+                foreach (var script in Scripts)
+                {
+                    log($"Running {script} (it can take a few minutes)...");
+                    if (Run(py, pre + "\"" + script + "\"", log, game) != 0)
+                        throw new Exception(script + " failed: see the lines above.");
+                }
             try
             {
                 File.WriteAllText(Marker, "{\"exported\":\"" + DateTime.UtcNow.ToString("o") + "\",\"mod\":\"" + Paths.InstalledVersion()?.ToString(3) +

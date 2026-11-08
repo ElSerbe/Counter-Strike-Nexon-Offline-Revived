@@ -17,6 +17,7 @@ Writes web/shop/icons/<itemID>.png, web/shop/models/* (+ models/index.json) and
 server/CSNZ_Server/bin/Data/ItemNames.json.
 """
 import csv
+import atexit
 import glob
 import json
 import os
@@ -421,15 +422,67 @@ def nar_files():
     return files
 
 
+# nartool --serve, one per archive choice (None = all of them), started once and kept open for every script of the
+# export: the antivirus checks each start of a program it doesn't know, and thousands of starts (one per skin and
+# archive) made it pop up again and again and slowed everything down.
+_SERVERS = {}
+BLOCKED = ("nartool.exe (the mod's reader of the game's files) was stopped or removed, most likely by an antivirus. "
+           "Restore it from the antivirus' quarantine (or allow it) and extract the pictures again.")
+
+
+def _close_servers():
+    for p in _SERVERS.values():
+        try:
+            p.stdin.write("quit\n")
+            p.stdin.close()
+            p.wait(timeout=10)
+        except Exception:
+            try:
+                p.kill()
+            except Exception:
+                pass
+    _SERVERS.clear()
+
+
+atexit.register(_close_servers)
+
+
+def _server(only):
+    p = _SERVERS.get(only)
+    if p is not None and p.poll() is None:
+        return p
+    if not os.path.exists(NARTOOL):
+        raise RuntimeError(BLOCKED)
+    env = {k: v for k, v in os.environ.items() if k != "NAR_ONLY"}
+    if only:
+        env["NAR_ONLY"] = only
+    try:
+        p = subprocess.Popen([NARTOOL, os.path.join(GAME, "Bin"), GAME, "--serve"], stdin=subprocess.PIPE,
+                             stdout=subprocess.PIPE, env=env, encoding="utf-8", errors="replace",
+                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except OSError as e:
+        raise RuntimeError(f"{BLOCKED} ({e})") from e
+    _SERVERS[only] = p
+    return p
+
+
 def run_nartool(paths, out_dir, only=None):
     """Extracts game files into out_dir. only="fstrike" reads that archive alone (its version of a file)."""
     os.makedirs(out_dir, exist_ok=True)
-    list_file = os.path.join(out_dir, "list.txt")
-    with open(list_file, "w", encoding="utf-8") as f:
-        f.write("\n".join(paths))
-    env = dict(os.environ, NAR_ONLY=only) if only else None
-    subprocess.run([NARTOOL, os.path.join(GAME, "Bin"), GAME, out_dir, "@" + list_file],
-                   check=True, stdout=subprocess.DEVNULL, env=env)
+    paths = [p for p in paths if p and "\n" not in p]
+    if not paths:
+        return
+    p = _server(only)
+    try:
+        p.stdin.write(f"get\t{os.path.abspath(out_dir)}\t{len(paths)}\n" + "".join(x + "\n" for x in paths))
+        p.stdin.flush()
+        answer = p.stdout.readline()
+    except OSError:
+        answer = ""
+    if not answer.startswith("done"):
+        _SERVERS.pop(only, None)
+        code = p.poll()
+        raise RuntimeError(f"{BLOCKED} (answer {answer.strip()!r}, exit code {code})")
 
 
 def tga_to_png(data):

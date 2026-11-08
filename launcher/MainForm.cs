@@ -330,6 +330,8 @@ namespace CsnzLauncher
         async Task Startup()
         {
             Log($"Launcher v{Paths.LauncherVersion.ToString(3)} in {Paths.Root}");
+            // the previous launcher, renamed by an update (SwapLauncher)
+            try { File.Delete(Application.ExecutablePath + ".old"); } catch { }
             if (!GameLocator.IsGame(settings.GamePath))
             {
                 var found = GameLocator.Find();
@@ -608,19 +610,29 @@ namespace CsnzLauncher
                 await OfferPictures(false); // the new launcher asks before its first Play instead
         }
 
-        // the running exe can't overwrite itself: a small script waits for it to close, swaps the files and starts the new one
+        // The running exe can't be overwritten, but it can be renamed: it becomes .old (deleted by the new launcher when it
+        // starts), the new one takes its name and is started. No script and no hidden console.
         void SwapLauncher(string newExe)
         {
             var exe = Application.ExecutablePath;
-            var script = Path.Combine(Path.GetTempPath(), "csnz_launcher_update.cmd");
-            File.WriteAllText(script,
-                "@echo off\r\n" +
-                $"for /l %%i in (1,1,20) do (move /y \"{newExe}\" \"{exe}\" >nul 2>&1 && goto done & timeout /t 1 /nobreak >nul)\r\n" +
-                ":done\r\n" +
-                $"start \"\" \"{exe}\"\r\n" +
-                "del \"%~f0\"\r\n");
+            var old = exe + ".old";
+            try
+            {
+                if (File.Exists(old))
+                    File.Delete(old);
+                File.Move(exe, old);
+                try { File.Move(newExe, exe); }
+                catch { File.Move(old, exe); throw; }
+            }
+            catch (Exception ex)
+            {
+                Log("The new launcher couldn't replace this one (" + ex.Message + "): it's in " + newExe);
+                DarkBox.Show(this, "The mod is updated, but the new launcher couldn't replace this one (" + ex.Message + ").\n\n" +
+                                   "It was downloaded to:\n" + newExe + "\n\nClose this launcher and rename it to " + Path.GetFileName(exe) + ".", Text);
+                return;
+            }
             Log("Restarting the launcher with its new version...");
-            Process.Start(new ProcessStartInfo("cmd.exe", "/c \"" + script + "\"") { CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden, UseShellExecute = false });
+            Process.Start(new ProcessStartInfo(exe) { WorkingDirectory = Paths.Root, UseShellExecute = false });
             busy = false;
             Close();
         }
@@ -809,6 +821,9 @@ namespace CsnzLauncher
         [STAThread]
         static void Main(string[] args)
         {
+            // the hosts block, run by the launcher itself with administrator rights (Hosts.Run starts it)
+            if (args.Length == 2 && args[0] == "--hosts")
+                Environment.Exit(Hosts.Edit(args[1]));
             if (args.Length > 0 && args[0] == "--check")
             {
                 // a test without the window (written to launcher-check.txt): the game's folder, the patches' state and the latest release
@@ -872,6 +887,16 @@ namespace CsnzLauncher
                         lines.Add("archive.org head: " + ArchiveGame.Head(z).GetAwaiter().GetResult());
                     }
                     catch (Exception ex) { lines.Add("archive.org: " + ex.Message); }
+                int ht = Array.IndexOf(args, "--hosts-test");
+                if (ht > 0 && ht + 1 < args.Length)
+                {
+                    // the hosts editing on a copy: add, add again (one block), remove
+                    var f = args[ht + 1];
+                    lines.Add("hosts add: " + Hosts.Edit("add", f) + ", blocks " + (File.ReadAllText(f).Split(new[] { "CSNZ offline mod (begin)" }, StringSplitOptions.None).Length - 1));
+                    lines.Add("hosts add again: " + Hosts.Edit("add", f) + ", blocks " + (File.ReadAllText(f).Split(new[] { "CSNZ offline mod (begin)" }, StringSplitOptions.None).Length - 1));
+                    File.Copy(f, f + ".added", true);
+                    lines.Add("hosts remove: " + Hosts.Edit("remove", f) + ", blocks " + (File.ReadAllText(f).Split(new[] { "CSNZ offline mod (begin)" }, StringSplitOptions.None).Length - 1));
+                }
                 if (args.Contains("--logs"))
                     try { lines.Add($"logs: {LogBundle.Build(Settings.Load()).Length} characters in {LogBundle.FilePath}"); }
                     catch (Exception ex) { lines.Add("logs: " + ex); }

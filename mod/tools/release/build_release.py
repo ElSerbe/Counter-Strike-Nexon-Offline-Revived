@@ -12,9 +12,16 @@ or the pictures exported from the game (the launcher's Pictures button makes the
 Usage: python mod/tools/release/build_release.py      (version: mod/VERSION; needs git, pefile and the .NET SDK)
        Then it installs the release into Play/ (the user's own copy) for a local test before publishing, like the
        launcher's Update: accounts, settings and state stay. --no-play skips that; --play-only only does that.
+
+Signing: with CSNZ_SIGN_CERT set to the SHA-1 thumbprint of a code signing certificate in the Windows certificate
+store (a Certum open source certificate through SimplySign, for example), our own programs are signed with signtool
+before they're packed: the launcher, botassist.asi, CSNZ_Server.exe, nartool.exe and the Steam bridge. The MinGW
+DLLs aren't ours and stay as they come. CSNZ_SIGN_TIMESTAMP changes the timestamp server (Certum's by default).
+Antivirus programs and Windows SmartScreen trust signed programs far more than unsigned ones.
 """
 import io
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -39,6 +46,13 @@ BINARIES = [
     "tools/steambridge/out/CSNZ-SteamBridge.exe",  # built below (online play through Steam)
     "tools/steambridge/out/CSNZ-SteamBridge.exe.config",
 ]
+# our own programs, signed when CSNZ_SIGN_CERT is set
+SIGNED = [
+    "tools/botassist/botassist.asi",
+    "server/CSNZ_Server/bin/CSNZ_Server.exe",
+    "tools/nartool/nartool.exe",
+    "tools/steambridge/out/CSNZ-SteamBridge.exe",
+]
 # tracked but not for players
 LEAVE_OUT = ["mod/CSNZ_Offline.ps1"]  # the developer's old launcher (his paths)
 
@@ -58,6 +72,27 @@ def patch_list(version: str) -> dict:
     return out
 
 
+def signtool():
+    kits = sorted(Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"), "Windows Kits", "10", "bin").glob("10.*/x64/signtool.exe"))
+    if not kits:
+        sys.exit("CSNZ_SIGN_CERT is set but signtool.exe wasn't found (Windows SDK)")
+    return str(kits[-1])
+
+
+def sign(files):
+    """Signs the files with the certificate named by CSNZ_SIGN_CERT (nothing happens without it)."""
+    cert = os.environ.get("CSNZ_SIGN_CERT", "").replace(" ", "")
+    if not cert:
+        print("not signed (CSNZ_SIGN_CERT isn't set)")
+        return
+    stamp = os.environ.get("CSNZ_SIGN_TIMESTAMP", "http://time.certum.pl")
+    subprocess.run([signtool(), "sign", "/sha1", cert, "/fd", "sha256", "/tr", stamp, "/td", "sha256",
+                    "/d", "Counter-Strike Nexon: Offline Revived", "/du", "https://github.com/ElSerbe/Counter-Strike-Nexon-Offline-Revived",
+                    *[str(f) for f in files]], check=True)
+    subprocess.run([signtool(), "verify", "/pa", *[str(f) for f in files]], check=True, stdout=subprocess.DEVNULL)
+    print(f"signed {len(files)} files")
+
+
 def main():
     version = (MOD / "VERSION").read_text().strip()
     DIST.mkdir(exist_ok=True)
@@ -67,6 +102,7 @@ def main():
     for b in BINARIES:
         if not (MOD / b).exists():
             sys.exit(f"missing build output mod/{b}")
+    sign([MOD / b for b in SIGNED])
 
     # the mod at HEAD, as Git has it
     tar = subprocess.run(["git", "-C", str(ROOT), "archive", "--format=tar", "HEAD", "mod"], check=True, capture_output=True).stdout
@@ -91,6 +127,7 @@ def main():
                     f"-p:Version={version}", "-nologo", "-v", "q"], check=True)
     exe = DIST / "CSNZ-Offline-Revived-Launcher.exe"
     shutil.copy2(out / "CSNZ-Offline-Revived-Launcher.exe", exe)
+    sign([exe])
     shutil.rmtree(out)
     print(f"{exe.name}: {exe.stat().st_size / 1024:.0f} KB")
     if "--no-play" not in sys.argv:

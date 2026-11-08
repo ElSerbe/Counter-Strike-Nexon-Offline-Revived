@@ -15,6 +15,12 @@
     <Version>1.0.0</Version>
     <DebugType>none</DebugType>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <Company>ItsYuri</Company>
+    <Authors>ItsYuri</Authors>
+    <Product>Counter-Strike Nexon Offline Revived</Product>
+    <AssemblyTitle>Counter-Strike Nexon: Offline Revived - online rooms through Steam (local bridge)</AssemblyTitle>
+    <Description>Counter-Strike Nexon: Offline Revived - online rooms through Steam (local bridge)</Description>
+    <Copyright>GPL-3.0, github.com/ElSerbe/Counter-Strike-Nexon-Offline-Revived</Copyright>
   </PropertyGroup>
 
   <ItemGroup>

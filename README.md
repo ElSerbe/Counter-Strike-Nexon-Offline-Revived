@@ -46,6 +46,21 @@ while you're online. **Publish online** on that page lists the map for every pla
 in the game's Studio browser and in the page's Online maps tab. A map someone downloaded can be passed on by their PC
 too, and a Studio room on another player's server downloads its map by itself.
 
+### Antivirus warnings
+
+The launcher and the mod's programs are new, unsigned and downloaded by few people, which is what makes antivirus
+programs suspicious of them (Microsoft Defender's `Wacatac.B!ml` and Malwarebytes' `MachineLearning/Anomalous` are
+machine-learning guesses, not a known threat). Everything is built from the source in this repository:
+
+- **The launcher** downloads the mod from this repository's releases, patches your game (with a backup of every file),
+  adds the hosts block (the only thing it asks administrator rights for) and starts the local server and the game.
+- **botassist.asi** is loaded by the game (the bots' AI); **CSNZ_Server.exe** is the local server;
+  **CSNZ-SteamBridge.exe** carries Online play through Steam; **nartool.exe** reads the pictures out of your game's
+  own files with the game's `FileSystem_Nar.dll`, only when you extract the pictures.
+
+If your antivirus stops one of them, restore it from the quarantine and allow it (or add the mod's folder as an
+exception), and tell us which antivirus and which file: we report them as false positives to the vendor.
+
 ### Reporting a problem
 
 1. Turn on **Detailed logs** under the game's folder. On the next Play the local server and the Steam bridge log
@@ -89,8 +104,9 @@ release for the new version is out.
 ## Making a release
 
 1. Build what Git doesn't keep: `botassist.asi` (`mod/tools/botassist/README.md`), `CSNZ_Server.exe`
-   (`mod/server/README.md`) and `nartool.exe`.
-2. Raise `mod/VERSION`, commit, then `python mod/tools/release/build_release.py`.
+   (`mod/server/README.md`) and `nartool.exe` (`mod/tools/nartool/build.cmd`).
+2. Raise `mod/VERSION`, commit, then `python mod/tools/release/build_release.py`. With `CSNZ_SIGN_CERT` set to a code
+   signing certificate's thumbprint it signs our programs first (see the script's header).
 3. `gh release create v<version> dist/CSNZ-Offline-Revived-<version>.zip dist/CSNZ-Offline-Revived-Launcher.exe`.
 
 The launcher compares the release's tag with `mod\VERSION` (and with its own version) to offer the update.

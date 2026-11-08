@@ -5,6 +5,9 @@
 // Usage:
 //   nartool <Bin dir> <game root> <output dir> <file> [file...]
 //   nartool <Bin dir> <game root> <output dir> @listfile        (one relative path per line)
+//   nartool <Bin dir> <game root> --serve                       (stays open, requests on stdin: see Serve)
+// Build with its version information (antivirus programs trust a described program more than a bare one):
+//   rc /nologo nartool.rc  &&  cl /nologo /O2 /EHsc nartool.cpp nartool.res
 // Files are game-relative paths such as resource/res/popup_userresearch.res.
 #include <windows.h>
 #include <stdio.h>
@@ -66,11 +69,25 @@ template <class F> static bool Guard(const char* what, F f)
 	}
 }
 
-static void MakeDirs(const std::string& path)
+static bool g_quiet = false;         // --serve: no line per file, only the batch's answer
+static UINT g_pathCodePage = CP_ACP; // the output folders' encoding: the command line's, or UTF-8 from stdin
+
+static std::wstring Widen(const std::string& s, UINT cp)
+{
+	if (s.empty())
+		return std::wstring();
+	int n = MultiByteToWideChar(cp, 0, s.data(), (int)s.size(), NULL, 0);
+	std::wstring w(n, L'\0');
+	MultiByteToWideChar(cp, 0, s.data(), (int)s.size(), &w[0], n);
+	return w;
+}
+
+// the folders above a file, with wide paths (a Windows user name with accents is in %TEMP%)
+static void MakeDirs(const std::wstring& path)
 {
 	for (size_t i = 0; i < path.size(); i++)
-		if (path[i] == '/' || path[i] == '\\')
-			CreateDirectoryA(path.substr(0, i).c_str(), NULL);
+		if (path[i] == L'/' || path[i] == L'\\')
+			CreateDirectoryW(path.substr(0, i).c_str(), NULL);
 }
 
 // FileSystem_Nar's vtable is GoldSrc's plus a few CSO methods: these offsets are the ones hw.dll uses
@@ -87,7 +104,8 @@ static bool Extract(IFileSystem* fs, const std::string& name, const std::string&
 	Guard("Open", [&] { h = ((OpenFn)vt[0x30 / 4])(fs, name.c_str(), "rb", "GAME"); });
 	if (!h)
 	{
-		printf("[missing] %s\n", name.c_str());
+		if (!g_quiet)
+			printf("[missing] %s\n", name.c_str());
 		return false;
 	}
 	unsigned int size = 0;
@@ -98,19 +116,76 @@ static bool Extract(IFileSystem* fs, const std::string& name, const std::string&
 		Guard("Read", [&] { got = ((ReadFn)vt[0x5c / 4])(fs, buf.data(), (int)size, h); });
 	Guard("Close", [&] { ((CloseFn)vt[0x34 / 4])(fs, h); });
 
-	std::string out = outDir + "/" + name;
+	std::wstring out = Widen(outDir, g_pathCodePage) + L"/" + Widen(name, g_pathCodePage);
 	MakeDirs(out);
-	std::ofstream f(out, std::ios::binary);
-	f.write(buf.data(), got);
-	printf("[ok] %s (%d bytes)\n", name.c_str(), got);
+	FILE* f = _wfopen(out.c_str(), L"wb");
+	if (!f)
+	{
+		fprintf(stderr, "can't write %s\n", name.c_str());
+		return false;
+	}
+	if (got > 0)
+		fwrite(buf.data(), 1, got, f);
+	fclose(f);
+	if (!g_quiet)
+		printf("[ok] %s (%d bytes)\n", name.c_str(), got);
 	return got == (int)size;
+}
+
+// --serve: the archives are opened once and the export scripts ask for files on stdin, so the program starts once
+// per export instead of once per group of files (the antivirus checks every start of a program it doesn't know).
+// Request (UTF-8 lines):  get<TAB><output dir><TAB><count>, then <count> lines with one game path each
+// Answer:                 done<TAB><extracted><TAB><count>
+// "quit" or the end of stdin closes it.
+static int Serve(IFileSystem* fs)
+{
+	g_quiet = true;
+	g_pathCodePage = CP_UTF8;
+	static char buf[8192];
+	auto readLine = [&](std::string& out) -> bool
+	{
+		if (!fgets(buf, sizeof(buf), stdin))
+			return false;
+		out = buf;
+		while (!out.empty() && (out.back() == '\n' || out.back() == '\r'))
+			out.pop_back();
+		return true;
+	};
+	std::string line;
+	while (readLine(line))
+	{
+		if (line == "quit")
+			break;
+		size_t tab = line.compare(0, 4, "get\t") == 0 ? line.find('\t', 4) : std::string::npos;
+		if (tab == std::string::npos)
+		{
+			printf("error\tunknown request\n");
+			fflush(stdout);
+			continue;
+		}
+		std::string outDir = line.substr(4, tab - 4);
+		int count = atoi(line.c_str() + tab + 1), ok = 0;
+		for (int i = 0; i < count; i++)
+		{
+			std::string name;
+			if (!readLine(name))
+				return 0;
+			if (!name.empty())
+				ok += Extract(fs, name, outDir);
+		}
+		printf("done\t%d\t%d\n", ok, count);
+		fflush(stdout);
+	}
+	return 0;
 }
 
 int main(int argc, char** argv)
 {
-	if (argc < 5)
+	bool serve = argc == 4 && std::string(argv[3]) == "--serve";
+	if (argc < 5 && !serve)
 	{
-		fprintf(stderr, "usage: nartool <Bin dir> <game root> <output dir> <file|@list>...\n");
+		fprintf(stderr, "usage: nartool <Bin dir> <game root> <output dir> <file|@list>...\n"
+		                "       nartool <Bin dir> <game root> --serve\n");
 		return 2;
 	}
 	std::string bin = argv[1], root = argv[2], outDir = argv[3];
@@ -175,6 +250,9 @@ int main(int argc, char** argv)
 		std::string dir = root + "/" + p;
 		Guard("AddSearchPath(pack)", [&] { fs->AddSearchPath(dir.c_str(), "GAME"); });
 	}
+
+	if (serve)
+		return Serve(fs);
 
 	// nartool <Bin> <root> <out> --list <wildcard>...: prints matching files (archives and packs included)
 	if (std::string(argv[4]) == "--list")

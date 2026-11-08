@@ -23,7 +23,8 @@ It is loaded by Miles Sound System, which loads every `*.asi` in Bin at startup 
 It only hooks the mp.dll build it was written for (it checks the `CBot::ExecuteCommand` call site first) and logs
 to `Bin/botassist.log`. Settings: `Bin/botassist.ini`.
 
-Build (VS 2019 Build Tools, x86): `cl /nologo /O2 /EHsc /MT /LD botassist.cpp /link /out:botassist.asi user32.lib`
+Build (VS Build Tools, x86): `build.cmd` (with its version information, `botassist.rc`), i.e. `rc botassist.rc` and
+`cl /nologo /O2 /EHsc /MT /LD botassist.cpp botassist.res /link /out:botassist.asi user32.lib`
 
 Source layout: `botassist.cpp` holds what every mode shares (settings, entities, navigation, scenario companions,
 room AI players, buying, teams, console, hooks, the create-room UI). Each mode with its own bot behaviour lives in
