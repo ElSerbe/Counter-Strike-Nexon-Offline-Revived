@@ -29,8 +29,10 @@ launcher patches *your* copy of the game, keeps a backup of every file it change
    closes.
 6. **More > Create a desktop shortcut that starts the game**: a shortcut to the launcher with `--play`, which goes
    straight into the game (the launcher closes with it). From then on the launcher is how you start the game.
-7. Optional: **Pictures** makes the item pictures, 3D previews, medal icons and mission pictures of the in-game web
-   pages from your game (a few minutes). It runs the mod's Python scripts: without Python on the PC, the launcher
+7. Item pictures: after the mod is installed (or before the first Play), the launcher asks once whether to extract the
+   item pictures, 3D previews, medal icons and mission pictures of the in-game web pages from your game (a few
+   minutes). It doesn't ask again: not after an answer, nor when they're already there (updates keep them). The
+   **Pictures** button extracts them any time. It runs the mod's Python scripts: without Python on the PC, the launcher
    offers to download the newest Python installer from python.org (checked to be signed by the Python Software
    Foundation) and installs it for your Windows user only, without administrator rights. It then adds the `pefile`
    package with pip.

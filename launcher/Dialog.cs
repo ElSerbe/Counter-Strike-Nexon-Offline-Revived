@@ -14,7 +14,7 @@ namespace CsnzLauncher
         readonly string title;
         readonly Color stripe;
 
-        DarkBox(string text, string caption, MessageBoxButtons buttons, MessageBoxIcon icon)
+        DarkBox(string text, string caption, MessageBoxButtons buttons, MessageBoxIcon icon, string[] names = null)
         {
             title = string.IsNullOrEmpty(caption) ? "Counter-Strike Nexon: Offline Revived" : caption;
             stripe = icon == MessageBoxIcon.Warning ? Theme.Warn : icon == MessageBoxIcon.Error ? Theme.Bad : Theme.Accent;
@@ -40,11 +40,17 @@ namespace CsnzLauncher
                 case MessageBoxButtons.OKCancel: labels = new[] { "OK", "Cancel" }; results = new[] { DialogResult.OK, DialogResult.Cancel }; break;
                 default: labels = new[] { "OK" }; results = new[] { DialogResult.OK }; break;
             }
+            // other words on the buttons ("Extract now" for Yes), same results
+            if (names != null)
+                for (int i = 0; i < labels.Length && i < names.Length; i++)
+                    if (!string.IsNullOrEmpty(names[i]))
+                        labels[i] = names[i];
             ClientSize = new Size(TextWidth + 2 * Pad, body.Bottom + 22 + 36 + Pad);
             int x = ClientSize.Width - Pad;
             for (int i = labels.Length - 1; i >= 0; i--)
             {
-                var b = new FlatButton { Text = labels[i], DialogResult = results[i], Primary = i == 0, Size = new Size(i == 0 ? 110 : 96, 36) };
+                var b = new FlatButton { Text = labels[i], DialogResult = results[i], Primary = i == 0 };
+                b.Size = new Size(Math.Max(i == 0 ? 110 : 96, TextRenderer.MeasureText(labels[i].ToUpperInvariant(), b.Font).Width + 32), 36);
                 x -= b.Width;
                 b.Location = new Point(x, ClientSize.Height - Pad - b.Height);
                 x -= 10;
@@ -93,9 +99,9 @@ namespace CsnzLauncher
         }
 
         public static DialogResult Show(IWin32Window owner, string text, string caption = null,
-            MessageBoxButtons buttons = MessageBoxButtons.OK, MessageBoxIcon icon = MessageBoxIcon.None)
+            MessageBoxButtons buttons = MessageBoxButtons.OK, MessageBoxIcon icon = MessageBoxIcon.None, string[] names = null)
         {
-            using (var d = new DarkBox(text, caption, buttons, icon))
+            using (var d = new DarkBox(text, caption, buttons, icon, names))
             {
                 d.StartPosition = owner != null ? FormStartPosition.CenterParent : FormStartPosition.CenterScreen;
                 if (owner == null)
@@ -105,9 +111,9 @@ namespace CsnzLauncher
         }
 
         // draws the box into a .png without showing it (to check how it looks)
-        public static void Render(string png, string text, string caption, MessageBoxButtons buttons, MessageBoxIcon icon)
+        public static void Render(string png, string text, string caption, MessageBoxButtons buttons, MessageBoxIcon icon, string[] names = null)
         {
-            using (var d = new DarkBox(text, caption, buttons, icon))
+            using (var d = new DarkBox(text, caption, buttons, icon, names))
             using (var bmp = new Bitmap(d.Width, d.Height))
             {
                 // shown off screen so the text and the buttons get their windows, then copied
@@ -122,7 +128,7 @@ namespace CsnzLauncher
         }
 
         public static DialogResult Show(string text, string caption = null,
-            MessageBoxButtons buttons = MessageBoxButtons.OK, MessageBoxIcon icon = MessageBoxIcon.None) =>
-            Show(null, text, caption, buttons, icon);
+            MessageBoxButtons buttons = MessageBoxButtons.OK, MessageBoxIcon icon = MessageBoxIcon.None, string[] names = null) =>
+            Show(null, text, caption, buttons, icon, names);
     }
 }

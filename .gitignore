@@ -36,6 +36,7 @@ mod/server/CSNZ_Server/bin/Data/*.broken-*
 # shop assets exported from the game's files (mod/tools/export_shop_assets.py)
 mod/web/shop/models/
 mod/web/shop/icons/
+mod/web/pictures.json
 mod/web/shop/sounds/
 mod/web/shop/promo/
 # medal icons and table exported from the game (mod/tools/gen_medals.py)

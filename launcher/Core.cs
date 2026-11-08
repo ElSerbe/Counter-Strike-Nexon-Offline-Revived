@@ -58,6 +58,7 @@ namespace CsnzLauncher
         public bool OnlinePlay = true;      // the Steam bridge runs with the server (offline play works without it)
         public bool DetailedLogs = false;   // the server and the bridge log every packet (--verbose), for bug reports
         public bool MusicOff = false;       // More > the launcher music: never plays when true
+        public bool PicturesAsked = false;  // the "extract the pictures?" question was shown once (yes or no): not again
 
         static readonly JavaScriptSerializer Json = new JavaScriptSerializer();
 
@@ -933,8 +934,19 @@ namespace CsnzLauncher
     // ------------------------------------------------------------ the web pages' pictures and models, exported from the player's game (needs Python)
     public static class Assets
     {
-        public static bool Present => Directory.Exists(Path.Combine(Paths.Mod, "web", "shop", "icons")) &&
-                                      Directory.EnumerateFiles(Path.Combine(Paths.Mod, "web", "shop", "icons")).Any();
+        // written when every script finished; updates never bring nor delete it (nor the pictures)
+        public static string Marker => Path.Combine(Paths.Mod, "web", "pictures.json");
+
+        static bool HasFiles(params string[] dir)
+        {
+            var d = Path.Combine(new[] { Paths.Mod, "web" }.Concat(dir).ToArray());
+            try { return Directory.Exists(d) && Directory.EnumerateFiles(d).Any(); }
+            catch { return false; }
+        }
+
+        // done: the marker, or (exported before the marker existed) the shop's icons and models, the medals and the missions' pictures
+        public static bool Present => File.Exists(Marker) ||
+                                      (HasFiles("shop", "icons") && HasFiles("shop", "models") && HasFiles("profile", "medals") && HasFiles("missions", "npc"));
 
         static readonly string[] Scripts = { "export_shop_assets.py", "export_bingo_icons.py", "export_bot_catalog.py", "gen_medals.py", "gen_missions.py" };
 
@@ -1094,6 +1106,12 @@ namespace CsnzLauncher
                 if (Run(py, pre + "\"" + script + "\"", log, game) != 0)
                     throw new Exception(script + " failed: see the lines above.");
             }
+            try
+            {
+                File.WriteAllText(Marker, "{\"exported\":\"" + DateTime.UtcNow.ToString("o") + "\",\"mod\":\"" + Paths.InstalledVersion()?.ToString(3) +
+                                          "\",\"steamBuild\":\"" + GameLocator.BuildId(game) + "\"}");
+            }
+            catch { }
             log("Shop, profile and mission pictures exported from your game.");
         }
     }

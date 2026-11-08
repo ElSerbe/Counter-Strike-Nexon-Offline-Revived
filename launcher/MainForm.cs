@@ -437,14 +437,56 @@ namespace CsnzLauncher
                     return;
                 install = true;
             }
+            settings.PicturesAsked = true;
+            settings.Save();
+            if (await ExportPictures(install))
+                DarkBox.Show(this, "The pictures are ready: the in-game shop, profile and missions pages show them now.", Text);
+        }
+
+        // Python first when `install`, then the mod's scripts; true when the pictures are ready
+        Task<bool> ExportPictures(bool install)
+        {
             var game = settings.GamePath;
-            if (await Run("Pictures", () =>
+            return Run("Pictures", () =>
             {
                 if (install)
                     Assets.InstallPython(Log);
                 Assets.Export(game, Log);
-            }))
-                DarkBox.Show(this, "The pictures are ready: the in-game shop, profile and missions pages show them now.", Text);
+            });
+        }
+
+        public static string PicturesQuestion(bool hasPython) =>
+            "Extract the item pictures and 3D models from your game?\n\n" +
+            "The in-game shop, the rewards, the profile's medals and the missions show every item with its picture and 3D preview. " +
+            "They're made from your own game's files (a few minutes) and stay through updates.\n\n" +
+            (hasPython ? "" : "Python isn't on this PC: the launcher first downloads the latest one from python.org (about 30 MB) and installs it " +
+                              "for your Windows user, without administrator rights.\n\n") +
+            "Not now: the game works without them, and the Pictures button extracts them any time. This question won't come back.";
+
+        public static string[] PicturesButtons(bool beforePlay) => new[] { beforePlay ? "Extract, then play" : "Extract now", "Not now" };
+
+        // Asked once, after the mod is installed or before the first Play: the pictures from the player's game, or not now.
+        // Not again after that answer (the Pictures button stays), nor when they're already there (updates keep them).
+        async Task OfferPictures(bool beforePlay)
+        {
+            if (busy || settings.PicturesAsked || Assets.Present || Paths.InstalledVersion() == null || !GameLocator.IsGame(settings.GamePath))
+                return;
+            SetBusy(true);
+            bool hasPython = await Task.Run(() => Assets.HasPython());
+            SetBusy(false);
+            var answer = DarkBox.Show(this, PicturesQuestion(hasPython), "Item pictures", MessageBoxButtons.YesNo, MessageBoxIcon.Question,
+                                      PicturesButtons(beforePlay));
+            settings.PicturesAsked = true;
+            settings.Save();
+            if (answer != DialogResult.Yes)
+            {
+                Log("Item pictures: not now (the Pictures button extracts them any time).");
+                return;
+            }
+            if (await ExportPictures(!hasPython))
+                Log("The item pictures are ready: the in-game shop, profile and missions pages show them.");
+            else
+                Log("The item pictures weren't extracted: press Pictures to try again.");
         }
 
         // ------------------------------------------------------------ logs
@@ -562,6 +604,8 @@ namespace CsnzLauncher
             });
             if (ok && newLauncher != null && File.Exists(newLauncher))
                 SwapLauncher(newLauncher);
+            else if (ok)
+                await OfferPictures(false); // the new launcher asks before its first Play instead
         }
 
         // the running exe can't overwrite itself: a small script waits for it to close, swaps the files and starts the new one
@@ -613,6 +657,7 @@ namespace CsnzLauncher
                 if (answer != DialogResult.Yes || !await Run("hosts", () => { if (!Hosts.Run("add", Log)) throw new Exception("The hosts block wasn't added."); }))
                     return false;
             }
+            await OfferPictures(true);
             if (!Assets.Present)
                 Log("Note: the shop and profile pictures aren't exported yet (the Pictures button). The game works without them.");
 
@@ -845,6 +890,16 @@ namespace CsnzLauncher
                     DarkBox.Render(args[pd + 1], text, "Close the processes?", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
                 else
                     DarkBox.Show(text, "Close the processes?", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                return;
+            }
+            int pp = Array.IndexOf(args, "--preview-pictures");
+            if (pp >= 0)
+            {
+                // the item pictures question (without Python, before Play); with a .png after it, drawn into that file
+                if (pp + 1 < args.Length)
+                    DarkBox.Render(args[pp + 1], MainForm.PicturesQuestion(false), "Item pictures", MessageBoxButtons.YesNo, MessageBoxIcon.Question, MainForm.PicturesButtons(true));
+                else
+                    DarkBox.Show(MainForm.PicturesQuestion(false), "Item pictures", MessageBoxButtons.YesNo, MessageBoxIcon.Question, MainForm.PicturesButtons(true));
                 return;
             }
             if (!args.Contains("--play") && MoveOutOfTemporaryFolder())
