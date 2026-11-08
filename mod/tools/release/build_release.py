@@ -10,6 +10,8 @@ accounts (UserDatabase.db3), the server's certificate and key (the launcher make
 or the pictures exported from the game (the launcher's Pictures button makes them from the player's game).
 
 Usage: python mod/tools/release/build_release.py      (version: mod/VERSION; needs git, pefile and the .NET SDK)
+       Then it installs the release into Play/ (the user's own copy) for a local test before publishing, like the
+       launcher's Update: accounts, settings and state stay. --no-play skips that; --play-only only does that.
 """
 import io
 import json
@@ -91,7 +93,50 @@ def main():
     shutil.copy2(out / "CSNZ-Offline-Revived-Launcher.exe", exe)
     shutil.rmtree(out)
     print(f"{exe.name}: {exe.stat().st_size / 1024:.0f} KB")
+    if "--no-play" not in sys.argv:
+        install_into_play(zpath, exe)
+
+
+# the player's state: kept when an update brings its own copy (the launcher's Installer.KeepIfPresent)
+KEEP_IF_PRESENT = {
+    "mod/server/CSNZ_Server/bin/Data/BotPresets.json",
+    "mod/server/CSNZ_Server/bin/Data/BingoState.json",
+    "mod/server/CSNZ_Server/bin/Data/ZSRiftState.json",
+}
+
+
+def install_into_play(zpath: Path, exe: Path):
+    """The release goes into Play/ (the user's own install, gitignored) before it's published, exactly as the launcher's
+    Update would install it: the mod's files are replaced, the player's accounts, settings and state stay."""
+    play = ROOT / "Play"
+    if not play.is_dir():
+        print("No Play folder: the release wasn't installed for a local test.")
+        return
+    written = kept = 0
+    try:
+        with zipfile.ZipFile(zpath) as z:
+            for entry in z.infolist():
+                name = entry.filename.replace("\\", "/")
+                if not name.startswith("mod/") or ".." in name or name.endswith("/"):
+                    continue
+                dest = play / name
+                if dest.exists() and name in KEEP_IF_PRESENT:
+                    kept += 1
+                    continue
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_bytes(z.read(entry))
+                written += 1
+        shutil.copy2(exe, play / exe.name)
+    except PermissionError as e:
+        sys.exit(f"Play: {e.filename} is in use. Close the game, the launcher and the server started from Play, then run "
+                 f"build_release.py --play-only")
+    print(f"Play: installed {written} files ({kept} of the player's own kept) and the launcher, for a local test.")
 
 
 if __name__ == "__main__":
-    main()
+    if "--play-only" in sys.argv:
+        # the release already in dist/ into Play, without building it again
+        v = (MOD / "VERSION").read_text().strip()
+        install_into_play(DIST / f"CSNZ-Offline-Revived-{v}.zip", DIST / "CSNZ-Offline-Revived-Launcher.exe")
+    else:
+        main()
