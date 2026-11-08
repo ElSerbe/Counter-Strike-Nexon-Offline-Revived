@@ -35,6 +35,15 @@ launcher patches *your* copy of the game, keeps a backup of every file it change
    Foundation) and installs it for your Windows user only, without administrator rights. It then adds the `pefile`
    package with pip.
 
+### Studio maps
+
+Studio (Create, the editor and its game rooms) works offline. Every map has a **share code** (like `ZQAH-Y6Y9`),
+shown at the start of its description in the game and on the **Studio maps** page (Shop > Studio maps). With
+**Online play** on, a friend types the code in the game's Studio search and gets the map from your PC over Steam
+while you're online. **Publish online** on that page lists the map for every player online: the online maps show up
+in the game's Studio browser and in the page's Online maps tab. A map someone downloaded can be passed on by their PC
+too, and a Studio room on another player's server downloads its map by itself.
+
 ### Reporting a problem
 
 1. Turn on **Detailed logs** under the game's folder. On the next Play the local server and the Steam bridge log

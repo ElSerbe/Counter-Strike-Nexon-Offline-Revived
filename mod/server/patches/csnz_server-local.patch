@@ -1,5 +1,5 @@
 diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
-index b5e72be..904c1c4 100644
+index b5e72be..6ee22ef 100644
 --- a/src/CMakeLists.txt
 +++ b/src/CMakeLists.txt
 @@ -38,6 +38,13 @@ endif()
@@ -25,15 +25,16 @@ index b5e72be..904c1c4 100644
  if (SERVER_DB_PROXY)
  	target_sources(PROJECTNAME PRIVATE "manager/userdatabase.cpp")
  endif()
-@@ -74,6 +83,7 @@ target_sources(PROJECTNAME PRIVATE "manager/minigamemanager.cpp")
+@@ -74,6 +83,8 @@ target_sources(PROJECTNAME PRIVATE "manager/minigamemanager.cpp")
  target_sources(PROJECTNAME PRIVATE "manager/clanmanager.cpp")
  target_sources(PROJECTNAME PRIVATE "manager/rankmanager.cpp")
  target_sources(PROJECTNAME PRIVATE "manager/voxelmanager.cpp")
 +target_sources(PROJECTNAME PRIVATE "manager/studio.cpp")
++target_sources(PROJECTNAME PRIVATE "manager/studionet.cpp")
  target_sources(PROJECTNAME PRIVATE "manager/classmodmanager.cpp")
  
  target_sources(PROJECTNAME PRIVATE "packet/packethelper_fulluserinfo.cpp")
-@@ -148,6 +158,8 @@ if (MSVC)
+@@ -148,6 +159,8 @@ if (MSVC)
  else()
  	# don't treat some warnings as errors
  	target_compile_options(PROJECTNAME PRIVATE -Wno-error=sign-compare -Wno-error=unused-variable -Wno-error=delete-non-virtual-dtor -Wno-error=unused-parameter -Wno-error=conversion-null -Wno-error=register -Wno-error=unused-value -Wno-error=reorder -Wno-error=attributes)
@@ -4378,10 +4379,10 @@ index 223166a..9b3a5a0 100644
  	user->UpdateTitles(slot, titleID);
 diff --git a/src/manager/studio.cpp b/src/manager/studio.cpp
 new file mode 100644
-index 0000000..761853a
+index 0000000..e5b85e1
 --- /dev/null
 +++ b/src/manager/studio.cpp
-@@ -0,0 +1,748 @@
+@@ -0,0 +1,833 @@
 +// Offline Studio: the voxel REST API the game's client (hw.dll VoxelHTTP, cpprestsdk) used to reach on Nexon's
 +// servers, now served by our own web server. Maps live in Data/Studio:
 +//   slots.json            every slot (map) with its details
@@ -4400,6 +4401,7 @@ index 0000000..761853a
 +#include <ctime>
 +#include <random>
 +#include <direct.h>
++#include <algorithm>
 +
 +using namespace std;
 +using json = nlohmann::json;
@@ -4477,6 +4479,15 @@ index 0000000..761853a
 +	return resp;
 +}
 +
++// the description the client sends back (a copy of a map) starts with the code DescriptionWithCode put there
++static string StripCode(const string& desc)
++{
++	if (desc.rfind("Share code: ", 0) != 0)
++		return desc;
++	size_t sep = desc.find("  -  ");
++	return sep == string::npos ? "" : desc.substr(sep + 5);
++}
++
 +void CVoxelManager::LoadStudio()
 +{
 +	lock_guard<recursive_mutex> lock(m_StudioMutex);
@@ -4550,7 +4561,7 @@ index 0000000..761853a
 +	j["is_event"] = s.value("is_event", 0);
 +	if (detail)
 +	{
-+		j["description"] = s.value("description", "");
++		j["description"] = DescriptionWithCode(s);
 +		j["creator_id"] = s.value("creator_username", "");
 +		j["creator_username"] = s.value("creator_username", "");
 +		j["savegroup_id"] = s.value("savegroup_id", "");
@@ -4565,14 +4576,28 @@ index 0000000..761853a
 +	return j;
 +}
 +
++// the Studio browser's lists: this PC's published maps, the maps fetched from other players, and (with Online play)
++// every map the other players publish (studionet.cpp), newest first
 +ordered_json CVoxelManager::PublishedSlots()
 +{
-+	ordered_json list = ordered_json::array();
++	vector<const ordered_json*> maps;
 +	for (auto& s : m_Studio["slots"])
 +	{
-+		if (s.value("published", false) && !s.value("resource_id", "").empty())
-+			list.push_back(SlotJson(s, false));
++		if (!s.value("deleted", false) && !s.value("resource_id", "").empty() && (s.value("published", false) || s.value("remote", false)))
++			maps.push_back(&s);
 +	}
++	vector<ordered_json> online = CatalogMaps();
++	for (auto& m : online)
++	{
++		if (!FindSlot(m.value("id", "")))
++			maps.push_back(&m);
++	}
++	stable_sort(maps.begin(), maps.end(), [](const ordered_json* a, const ordered_json* b) {
++		return a->value("updated", a->value("created", 0LL)) > b->value("updated", b->value("created", 0LL));
++	});
++	ordered_json list = ordered_json::array();
++	for (auto* s : maps)
++		list.push_back(SlotJson(*s, false));
 +	return list;
 +}
 +
@@ -4585,8 +4610,19 @@ index 0000000..761853a
 +	while (!slotId.empty() && (unsigned char)slotId[0] < 0x20)
 +		slotId.erase(0, 1);
 +	ordered_json* s = FindSlot(slotId);
++	if (s && s->value("deleted", false))
++		s = NULL;
 +	if (!s)
 +	{
++		// a map another player publishes: the room can be made now, the map file comes over Steam while the game loads
++		if (const ordered_json* online = CatalogFind(slotId))
++		{
++			NetRequest(online->value("id", slotId));
++			ordered_json j;
++			j["succeed"] = true;
++			j["result"] = SlotJson(*online, true);
++			return j.dump();
++		}
 +		string hex;
 +		char h[4];
 +		for (unsigned char c : slotId)
@@ -4711,7 +4747,11 @@ index 0000000..761853a
 +
 +WebResponse CVoxelManager::OnHttp(const WebRequest& req)
 +{
-+	lock_guard<recursive_mutex> lock(m_StudioMutex);
++	// the Steam bridge's own calls (studionet.cpp)
++	if (req.path.rfind("/studio/net/", 0) == 0)
++		return OnNetHttp(req);
++
++	unique_lock<recursive_mutex> lock(m_StudioMutex);
 +	WebResponse resp;
 +	const string& p = req.path;
 +
@@ -4735,8 +4775,22 @@ index 0000000..761853a
 +		resp.contentType = "application/octet-stream";
 +		if (SafeId(id))
 +			resp.body = ReadFile(string(STUDIO_DIR) + (image ? "/images/" : "/resources/") + id + (image ? ".vmg" : ".vxl"));
-+		// a map this PC doesn't have (a Studio room joined through Steam: the host has the file): the game aborts on a
-+		// 404, so it gets the flat sample map instead until maps travel between players
++		// a map this PC doesn't have (a room on another player's server, a map from the online list): it comes from the
++		// PCs that have it, over Steam, while the game waits for this answer
++		if (resp.body.empty() && !image && SafeId(id) && id.rfind("tmpl_", 0) != 0)
++		{
++			int request = NetRequest(id);
++			if (request)
++			{
++				lock.unlock();
++				Logger().Info("Studio: the game wants map file %s, which isn't on this PC: fetching it\n", id.c_str());
++				bool got = NetWait(request, 25000);
++				lock.lock();
++				if (got)
++					resp.body = ReadFile(string(STUDIO_DIR) + "/resources/" + id + ".vxl");
++			}
++		}
++		// still missing: the game aborts on a 404, so it gets the flat sample map instead
 +		if (resp.body.empty() && !image)
 +		{
 +			resp.body = ReadFile(string(STUDIO_DIR) + "/resources/tmpl_flat.vxl");
@@ -4776,7 +4830,8 @@ index 0000000..761853a
 +	{
 +		string id = p.substr(p.find_last_of('/') + 1);
 +		ordered_json* s = FindSlot(id);
-+		resp = s ? JsonAnswer(SlotJson(*s, true)) : JsonAnswer(nullptr, false);
++		const ordered_json* online = s ? NULL : CatalogFind(id);
++		resp = s ? JsonAnswer(SlotJson(*s, true)) : online ? JsonAnswer(SlotJson(*online, true)) : JsonAnswer(nullptr, false);
 +	}
 +	else if (p == "/v5/slots/simple")
 +	{
@@ -4787,6 +4842,8 @@ index 0000000..761853a
 +		{
 +			if (ordered_json* s = FindSlot(id))
 +				list.push_back(SlotJson(*s, false));
++			else if (const ordered_json* online = CatalogFind(id))
++				list.push_back(SlotJson(*online, false));
 +		}
 +		resp = JsonAnswer(list);
 +	}
@@ -4794,27 +4851,53 @@ index 0000000..761853a
 +	{
 +		string nick = UrlDecode(after("/v5/slots/list/nick/"));
 +		ordered_json list = ordered_json::array();
-+		for (auto& s : m_Studio["slots"])
++		for (auto& s : PublishedSlots())
 +		{
-+			if (s.value("creator_nickname", "") == nick && s.value("published", false))
-+				list.push_back(SlotJson(s, false));
++			if (s.value("creator_nickname", "") == nick)
++				list.push_back(s);
 +		}
 +		resp = JsonAnswer(list);
 +	}
 +	else if (p == "/v6/slots/list/search")
 +	{
-+		// a share code or part of a title
-+		string text = QueryValue(req.query, "keyword");
++		// hw sends "q" (the search box) and "tag": a share code finds its map even when it isn't on any list (a map
++		// shared by code only: the other PCs are asked for it), else the text is looked for in titles and authors
++		string text = QueryValue(req.query, "q");
 +		if (text.empty())
-+			text = QueryValue(req.query, "q");
++			text = QueryValue(req.query, "keyword");
++		string code = NormalizeCode(text);
++		auto lower = [](string t) { transform(t.begin(), t.end(), t.begin(), ::tolower); return t; };
++		string needle = lower(text);
 +		ordered_json list = ordered_json::array();
-+		for (auto& s : m_Studio["slots"])
++		if (!code.empty())
 +		{
-+			if (!s.value("published", false))
-+				continue;
-+			string title = s.value("title", ""), code = s.value("code", "");
-+			if (text.empty() || title.find(text) != string::npos || code == text || s.value("id", "") == text)
-+				list.push_back(SlotJson(s, false));
++			ordered_json* s = FindSlotByKey(code);
++			const ordered_json* online = s ? NULL : CatalogFind(code);
++			if (!s && !online)
++			{
++				int request = NetRequest(code);
++				if (request)
++				{
++					lock.unlock();
++					bool got = NetWait(request, 12000);
++					lock.lock();
++					if (got)
++						s = FindSlotByKey(code);
++				}
++			}
++			if (s)
++				list.push_back(SlotJson(*s, false));
++			else if ((online = CatalogFind(code)) != NULL)
++				list.push_back(SlotJson(*online, false));
++		}
++		if (list.empty())
++		{
++			for (auto& s : PublishedSlots())
++			{
++				if (needle.empty() || lower(s.value("title", "")).find(needle) != string::npos ||
++					lower(s.value("creator_nickname", "")).find(needle) != string::npos || s.value("id", "") == text)
++					list.push_back(s);
++			}
 +		}
 +		resp = JsonAnswer(list);
 +	}
@@ -4927,7 +5010,7 @@ index 0000000..761853a
 +	c["title"] = s.value("title", "");
 +	c["resource_mode"] = s.value("resource_mode", 0);
 +	c["permission"] = s.value("permission", 0);
-+	c["description"] = s.value("description", "");
++	c["description"] = CVoxelManager::DescriptionWithCode(s);
 +	if (!s.value("parent_id", "").empty())
 +		c["parent_id"] = s.value("parent_id", "");
 +	c["image_id"] = s.value("image_id", "");
@@ -5001,7 +5084,7 @@ index 0000000..761853a
 +		slot["id"] = NewId();
 +		slot["owner"] = user->GetID();
 +		slot["title"] = req.value("title", "New map");
-+		slot["description"] = req.value("description", "");
++		slot["description"] = StripCode(req.value("description", ""));
 +		slot["parent_id"] = source;
 +		slot["creator_nickname"] = user->GetCharacter(UFLAG_LOW_GAMENAME).gameName;
 +		slot["creator_username"] = user->GetUsername();
@@ -5109,6 +5192,9 @@ index 0000000..761853a
 +		if (SafeId(old) && old.rfind("tmpl_", 0) != 0)
 +			remove((string(STUDIO_DIR) + "/resources/" + old + ".vxl").c_str());
 +		Logger().Info("Studio: map %s saved (resource %s)\n", s->value("id", "").c_str(), location.c_str());
++		g_PacketManager.SendUMsgNoticeMessageInChat(socket, "Map saved. Share code: " + ShareCode(s->value("id", "")) +
++			(s->value("published", false) ? " (it's in the online list: other players get the new version)" :
++			" - other players type it in the Studio search. Shop > Studio maps publishes it for everyone online."));
 +		reply->WriteUInt8(0);
 +		WriteSlotInfo(reply, ClientSlot(*s));
 +		socket->Send(reply);
@@ -5130,6 +5216,808 @@ index 0000000..761853a
 +	}
 +	return false;
 +}
+diff --git a/src/manager/studionet.cpp b/src/manager/studionet.cpp
+new file mode 100644
+index 0000000..62948ed
+--- /dev/null
++++ b/src/manager/studionet.cpp
+@@ -0,0 +1,796 @@
++// Studio maps between PCs: share codes, the online catalog and maps sent over Steam.
++//
++// Share code: 8 letters/digits made from the map's slot id (ShareCode), so every PC finds the same map for the same code
++// without asking anyone. The game shows it at the start of the map's description; its Studio browser's search takes it.
++//
++// Online catalog: the Steam bridge (mod/tools/steambridge) puts this PC's published maps in its Spacewar lobby
++// (GET /studio/net/catalog) and writes the maps of every other lobby to Data/StudioNet.json. Those maps show up in the
++// game's Studio browser next to this PC's own, and in the Studio maps page (/maps/, MapsApi).
++//
++// Fetching: a map this PC doesn't have (picked in the browser, a code typed in, a room on another player's server whose
++// map the game asks this PC's server for) becomes a request the bridge takes from GET /studio/net/outbox. It asks the
++// PCs that have the map for it (GET /studio/net/export on theirs) and posts what comes back to /studio/net/result; the
++// map is kept in Data/Studio like this PC's own (a slot with "remote": true, owned by nobody here).
++// None of this runs without the bridge: offline play stays as it was.
++#include "voxelmanager.h"
++#include "usermanager.h"
++#include "common/logger.h"
++#include "interface/iuser.h"
++#include "definitions.h"
++#include "command.h"
++
++#include <fstream>
++#include <sstream>
++#include <ctime>
++#include <condition_variable>
++#include <thread>
++#include <sys/stat.h>
++
++using namespace std;
++using json = nlohmann::json;
++using ordered_json = nlohmann::ordered_json;
++
++static const char* STUDIO_DIR = "Data/Studio";
++static const char* CATALOG_FILE = "Data/StudioNet.json";
++static const int MAX_PUBLISHED = 60; // maps one PC puts in its lobby
++static const int REQUEST_SECONDS = 75; // a request nobody answered in this time has failed
++
++static bool SafeId(const string& id)
++{
++	if (id.empty() || id.size() > 64)
++		return false;
++	for (char c : id)
++		if (!isalnum((unsigned char)c) && c != '_' && c != '-')
++			return false;
++	return true;
++}
++
++static string ReadFile(const string& path)
++{
++	ifstream f(path, ios::binary);
++	if (!f)
++		return "";
++	return string(istreambuf_iterator<char>(f), istreambuf_iterator<char>());
++}
++
++static bool WriteFile(const string& path, const string& data)
++{
++	ofstream f(path + ".tmp", ios::binary | ios::trunc);
++	if (!f)
++		return false;
++	f.write(data.data(), data.size());
++	f.close();
++	if (!f)
++		return false;
++	remove(path.c_str());
++	return rename((path + ".tmp").c_str(), path.c_str()) == 0;
++}
++
++static string QueryValue(const string& query, const string& key)
++{
++	istringstream ss(query);
++	string pair;
++	while (getline(ss, pair, '&'))
++	{
++		size_t eq = pair.find('=');
++		if (eq == string::npos || pair.substr(0, eq) != key)
++			continue;
++		string v = pair.substr(eq + 1), out;
++		for (size_t i = 0; i < v.size(); i++)
++		{
++			if (v[i] == '%' && i + 2 < v.size())
++			{
++				out += (char)strtol(v.substr(i + 1, 2).c_str(), NULL, 16);
++				i += 2;
++			}
++			else
++				out += v[i] == '+' ? ' ' : v[i];
++		}
++		return out;
++	}
++	return "";
++}
++
++// ordered_json (the Studio's own files keep their key order) -> json (the web API's answers)
++static json Plain(const ordered_json& o)
++{
++	return json::parse(o.dump(-1, ' ', false, json::error_handler_t::replace));
++}
++
++static const char B64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
++
++static string Base64Encode(const string& in)
++{
++	string out;
++	out.reserve((in.size() + 2) / 3 * 4);
++	size_t i = 0;
++	for (; i + 2 < in.size(); i += 3)
++	{
++		unsigned v = (unsigned char)in[i] << 16 | (unsigned char)in[i + 1] << 8 | (unsigned char)in[i + 2];
++		out += B64[v >> 18];
++		out += B64[(v >> 12) & 63];
++		out += B64[(v >> 6) & 63];
++		out += B64[v & 63];
++	}
++	if (i < in.size())
++	{
++		unsigned v = (unsigned char)in[i] << 16 | (i + 1 < in.size() ? (unsigned char)in[i + 1] << 8 : 0);
++		out += B64[v >> 18];
++		out += B64[(v >> 12) & 63];
++		out += i + 1 < in.size() ? B64[(v >> 6) & 63] : '=';
++		out += '=';
++	}
++	return out;
++}
++
++static bool Base64Decode(const string& in, string& out)
++{
++	static int table[256];
++	static bool ready = false;
++	if (!ready)
++	{
++		for (int& t : table)
++			t = -1;
++		for (int i = 0; i < 64; i++)
++			table[(unsigned char)B64[i]] = i;
++		ready = true;
++	}
++	out.clear();
++	out.reserve(in.size() / 4 * 3);
++	unsigned v = 0;
++	int bits = 0;
++	for (unsigned char c : in)
++	{
++		if (c == '=' || c == '\r' || c == '\n')
++			continue;
++		if (table[c] < 0)
++			return false;
++		v = v << 6 | table[c];
++		bits += 6;
++		if (bits >= 8)
++		{
++			bits -= 8;
++			out += (char)((v >> bits) & 0xff);
++		}
++	}
++	return true;
++}
++
++// ---------------------------------------------------------------------------------------------------------------
++// share codes: Crockford's base32 (no I, L, O, U), 40 bits of a hash of the slot id
++static const char CODE_CHARS[] = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
++
++string CVoxelManager::ShareCode(const string& slotId)
++{
++	unsigned long long h = 1469598103934665603ULL;
++	for (char c : "csnz-studio:" + slotId)
++	{
++		h ^= (unsigned char)c;
++		h *= 1099511628211ULL;
++	}
++	// splitmix64's finish: every character of the id changes every letter of the code
++	h ^= h >> 30;
++	h *= 0xbf58476d1ce4e5b9ULL;
++	h ^= h >> 27;
++	h *= 0x94d049bb133111ebULL;
++	h ^= h >> 31;
++	string code;
++	for (int i = 0; i < 8; i++)
++	{
++		code += CODE_CHARS[h & 31];
++		h >>= 5;
++		if (i == 3)
++			code += '-';
++	}
++	return code;
++}
++
++string CVoxelManager::NormalizeCode(const string& text)
++{
++	string code;
++	for (char ch : text)
++	{
++		char c = (char)toupper((unsigned char)ch);
++		if (c == '-' || c == ' ' || c == '_')
++			continue;
++		if (c == 'O')
++			c = '0';
++		else if (c == 'I' || c == 'L')
++			c = '1';
++		else if (c == 'U')
++			c = 'V';
++		if (!strchr(CODE_CHARS, c) || c == 0)
++			return "";
++		code += c;
++	}
++	if (code.size() != 8)
++		return "";
++	return code.substr(0, 4) + "-" + code.substr(4);
++}
++
++string CVoxelManager::DescriptionWithCode(const ordered_json& s)
++{
++	string desc = s.value("description", "");
++	size_t a = desc.find_first_not_of(' ');
++	desc = a == string::npos ? "" : desc.substr(a);
++	string id = s.value("id", "");
++	if (id.empty() || id.rfind("tmpl_", 0) == 0)
++		return desc;
++	return "Share code: " + ShareCode(id) + (desc.empty() ? "" : "  -  " + desc);
++}
++
++ordered_json* CVoxelManager::FindSlotByKey(const string& key)
++{
++	string code = NormalizeCode(key);
++	for (auto& s : m_Studio["slots"])
++	{
++		if (s.value("deleted", false) || s.value("resource_id", "").empty())
++			continue;
++		string id = s.value("id", "");
++		if (id == key || s.value("resource_id", "") == key || (!code.empty() && ShareCode(id) == code))
++			return &s;
++	}
++	return NULL;
++}
++
++// what the Studio maps page and the lobbies see of a map
++ordered_json CVoxelManager::MapEntry(const ordered_json& s, bool withSize)
++{
++	ordered_json m;
++	string id = s.value("id", "");
++	m["id"] = id;
++	m["code"] = ShareCode(id);
++	m["resource_id"] = s.value("resource_id", "");
++	m["title"] = s.value("title", "");
++	string desc = s.value("description", "");
++	if (desc.find_first_not_of(' ') == string::npos)
++		desc = "";
++	m["description"] = desc.size() > 160 ? desc.substr(0, 160) : desc;
++	m["creator_nickname"] = s.value("creator_nickname", "");
++	m["resource_mode"] = s.value("resource_mode", 0);
++	m["resource_max_player"] = s.value("resource_max_player", 16);
++	m["updated"] = s.value("updated", s.value("created", 0LL));
++	if (withSize)
++	{
++		struct stat st;
++		string path = string(STUDIO_DIR) + "/resources/" + s.value("resource_id", "") + ".vxl";
++		m["size"] = stat(path.c_str(), &st) == 0 ? (long long)st.st_size : 0LL;
++	}
++	return m;
++}
++
++// ---------------------------------------------------------------------------------------------------------------
++// the catalog: Data/StudioNet.json {"updated": unix, "hosts": [{"steamID", "name", "maps": [MapEntry...], "have": [code...]}]}
++void CVoxelManager::ReadCatalog()
++{
++	struct stat st;
++	if (stat(CATALOG_FILE, &st) != 0)
++	{
++		m_Catalog = ordered_json::array();
++		m_CatalogTime = 0;
++		m_CatalogStamp = -1;
++		return;
++	}
++	if ((long long)st.st_mtime == m_CatalogStamp)
++		return;
++	ordered_json j = ordered_json::parse(ReadFile(CATALOG_FILE), nullptr, false);
++	if (j.is_discarded() || !j.is_object())
++		return; // being rewritten: the next request reads it
++	m_CatalogStamp = (long long)st.st_mtime;
++	m_CatalogTime = j.value("updated", 0LL);
++	m_Catalog = ordered_json::array();
++	map<string, size_t> seen;
++	for (auto& h : j.value("hosts", ordered_json::array()))
++	{
++		for (auto& m : h.value("maps", ordered_json::array()))
++		{
++			string id = m.value("id", ""), rid = m.value("resource_id", "");
++			if (!SafeId(id) || !SafeId(rid))
++				continue;
++			ordered_json e = m;
++			e["code"] = ShareCode(id);
++			e["owner"] = h.value("steamID", "");
++			e["ownerName"] = h.value("name", "");
++			auto it = seen.find(id);
++			if (it != seen.end())
++			{
++				if (e.value("updated", 0LL) > m_Catalog[it->second].value("updated", 0LL))
++					m_Catalog[it->second] = e;
++				continue;
++			}
++			seen[id] = m_Catalog.size();
++			m_Catalog.push_back(e);
++		}
++	}
++}
++
++bool CVoxelManager::BridgeOnline()
++{
++	lock_guard<recursive_mutex> lock(m_StudioMutex);
++	ReadCatalog();
++	return m_CatalogTime && llabs((long long)time(NULL) - m_CatalogTime) < 30;
++}
++
++vector<ordered_json> CVoxelManager::CatalogMaps()
++{
++	lock_guard<recursive_mutex> lock(m_StudioMutex);
++	vector<ordered_json> list;
++	if (!BridgeOnline())
++		return list;
++	for (auto& m : m_Catalog)
++	{
++		// a map this PC has (its own, or fetched before) shows as the local copy
++		ordered_json* local = FindSlot(m.value("id", ""));
++		if (local && !local->value("deleted", false) && !local->value("remote", false))
++			continue;
++		list.push_back(m);
++	}
++	return list;
++}
++
++const ordered_json* CVoxelManager::CatalogFind(const string& key)
++{
++	lock_guard<recursive_mutex> lock(m_StudioMutex);
++	if (!BridgeOnline())
++		return NULL;
++	string code = NormalizeCode(key);
++	for (auto& m : m_Catalog)
++	{
++		if (m.value("id", "") == key || m.value("resource_id", "") == key || (!code.empty() && m.value("code", "") == code))
++			return &m;
++	}
++	return NULL;
++}
++
++// ---------------------------------------------------------------------------------------------------------------
++// requests to the other PCs
++struct NetRequest_s
++{
++	string key;
++	string status; // waiting (for the bridge), sent, done, failed
++	string error;
++	string slotId; // done: the map it brought
++	string from; // done: who sent it
++	time_t created = 0, changed = 0;
++};
++static mutex g_NetMutex;
++static condition_variable g_NetCv;
++static map<int, NetRequest_s> g_NetRequests;
++static int g_NextNetRequest = 1;
++
++int CVoxelManager::NetRequest(const string& key)
++{
++	if (key.empty() || !BridgeOnline())
++		return 0;
++	lock_guard<mutex> lock(g_NetMutex);
++	time_t now = time(NULL);
++	for (auto it = g_NetRequests.begin(); it != g_NetRequests.end();)
++	{
++		if ((it->second.status == "done" || it->second.status == "failed") && now - it->second.changed > 600)
++			it = g_NetRequests.erase(it);
++		else
++			++it;
++	}
++	for (auto& r : g_NetRequests)
++		if (r.second.key == key && (r.second.status == "waiting" || r.second.status == "sent"))
++			return r.first;
++	int id = g_NextNetRequest++;
++	NetRequest_s& r = g_NetRequests[id];
++	r.key = key;
++	r.status = "waiting";
++	r.created = r.changed = now;
++	Logger().Info("Studio: asking the other players' PCs for map %s (request %d)\n", key.c_str(), id);
++	return id;
++}
++
++bool CVoxelManager::NetWait(int id, int ms)
++{
++	if (!id)
++		return false;
++	unique_lock<mutex> lock(g_NetMutex);
++	g_NetCv.wait_for(lock, chrono::milliseconds(ms), [id] {
++		auto it = g_NetRequests.find(id);
++		return it == g_NetRequests.end() || it->second.status == "done" || it->second.status == "failed";
++	});
++	auto it = g_NetRequests.find(id);
++	return it != g_NetRequests.end() && it->second.status == "done";
++}
++
++bool CVoxelManager::ImportMap(const ordered_json& in, const string& vxl, const string& from, string& error)
++{
++	lock_guard<recursive_mutex> lock(m_StudioMutex);
++	string id = in.value("id", ""), rid = in.value("resource_id", "");
++	if (!SafeId(id) || !SafeId(rid) || id.rfind("tmpl_", 0) == 0 || rid.rfind("tmpl_", 0) == 0)
++	{
++		error = "bad map id";
++		return false;
++	}
++	if (vxl.size() < 16 || vxl.compare(0, 4, "csov") != 0)
++	{
++		error = "not a Studio map file";
++		return false;
++	}
++	ordered_json* s = FindSlot(id);
++	if (s && !s->value("remote", false) && !s->value("deleted", false))
++		return true; // this PC's own map
++	if (!WriteFile(string(STUDIO_DIR) + "/resources/" + rid + ".vxl", vxl))
++	{
++		error = "can't write the map file";
++		return false;
++	}
++	if (!s)
++	{
++		m_Studio["slots"].push_back(ordered_json::object());
++		s = &m_Studio["slots"].back();
++	}
++	string old = s->value("resource_id", "");
++	(*s)["id"] = id;
++	(*s)["owner"] = 0;
++	(*s)["remote"] = true;
++	(*s)["from"] = from;
++	(*s)["title"] = in.value("title", "Studio map");
++	(*s)["description"] = in.value("description", "");
++	(*s)["creator_nickname"] = in.value("creator_nickname", "");
++	(*s)["creator_username"] = ""; // nobody here can save over it
++	(*s)["resource_id"] = rid;
++	(*s)["resource_mode"] = in.value("resource_mode", 39);
++	(*s)["resource_max_player"] = in.value("resource_max_player", 16);
++	(*s)["permission"] = 0;
++	(*s)["updated"] = in.value("updated", (long long)time(NULL));
++	(*s)["fetched"] = (long long)time(NULL);
++	(*s)["published"] = false;
++	s->erase("deleted");
++	if (!old.empty() && old != rid && SafeId(old) && old.rfind("tmpl_", 0) != 0)
++		remove((string(STUDIO_DIR) + "/resources/" + old + ".vxl").c_str());
++	SaveStudio();
++	Logger().Info("Studio: got map %s '%s' by %s (%d bytes) from %s\n", id.c_str(), (*s)["title"].get<string>().c_str(),
++		(*s)["creator_nickname"].get<string>().c_str(), (int)vxl.size(), from.c_str());
++	return true;
++}
++
++// ---------------------------------------------------------------------------------------------------------------
++// /studio/net/...: the Steam bridge (this PC only: the web server listens on 127.0.0.1)
++WebResponse CVoxelManager::OnNetHttp(const WebRequest& req)
++{
++	WebResponse resp;
++	json result;
++	const string& p = req.path;
++	if (p == "/studio/net/catalog")
++	{
++		// this PC's published maps, for its lobby, and the codes of the maps it fetched (it can pass them on)
++		lock_guard<recursive_mutex> lock(m_StudioMutex);
++		ordered_json maps = ordered_json::array(), have = ordered_json::array();
++		vector<const ordered_json*> mine;
++		for (auto& s : m_Studio["slots"])
++		{
++			if (s.value("deleted", false) || s.value("resource_id", "").empty())
++				continue;
++			if (s.value("remote", false))
++			{
++				if (have.size() < 300)
++					have.push_back(ShareCode(s.value("id", "")));
++			}
++			else if (s.value("owner", 0) > 0 && s.value("published", false))
++				mine.push_back(&s);
++		}
++		sort(mine.begin(), mine.end(), [](const ordered_json* a, const ordered_json* b) {
++			return a->value("updated", 0LL) > b->value("updated", 0LL);
++		});
++		for (auto* s : mine)
++			if ((int)maps.size() < MAX_PUBLISHED)
++				maps.push_back(MapEntry(*s, true));
++		ordered_json c;
++		c["maps"] = maps;
++		c["have"] = have;
++		resp.body = c.dump(-1, ' ', false, json::error_handler_t::replace);
++		return resp;
++	}
++	else if (p == "/studio/net/outbox")
++	{
++		// requests for the bridge to send; the ones nobody answered in time have failed
++		lock_guard<mutex> lock(g_NetMutex);
++		time_t now = time(NULL);
++		result["requests"] = json::array();
++		bool changed = false;
++		for (auto& r : g_NetRequests)
++		{
++			if ((r.second.status == "waiting" || r.second.status == "sent") && now - r.second.created > REQUEST_SECONDS)
++			{
++				r.second.status = "failed";
++				r.second.error = "No player online has this map.";
++				r.second.changed = now;
++				changed = true;
++			}
++			else if (r.second.status == "waiting")
++			{
++				result["requests"].push_back({ { "id", r.first }, { "key", r.second.key } });
++				r.second.status = "sent";
++				r.second.changed = now;
++			}
++		}
++		if (changed)
++			g_NetCv.notify_all();
++	}
++	else if (p == "/studio/net/result" && req.method == "POST")
++	{
++		json body = json::parse(req.body, nullptr, false);
++		if (body.is_discarded())
++		{
++			resp.status = 400;
++			resp.body = "{}";
++			return resp;
++		}
++		int id = body.value("id", 0);
++		bool ok = body.value("ok", false);
++		string error = body.value("error", ""), from = body.value("from", ""), slotId;
++		if (ok)
++		{
++			string vxl;
++			ordered_json slot = body.contains("slot") && body["slot"].is_object() ? ordered_json::parse(body["slot"].dump()) : ordered_json::object();
++			ok = Base64Decode(body.value("vxl", ""), vxl) && ImportMap(slot, vxl, from, error);
++			slotId = slot.value("id", "");
++			if (!ok && error.empty())
++				error = "the map arrived damaged";
++		}
++		{
++			lock_guard<mutex> lock(g_NetMutex);
++			auto it = g_NetRequests.find(id);
++			if (it != g_NetRequests.end())
++			{
++				it->second.status = ok ? "done" : "failed";
++				it->second.error = ok ? "" : (error.empty() ? "No player online has this map." : error);
++				it->second.slotId = slotId;
++				it->second.from = from;
++				it->second.changed = time(NULL);
++			}
++			g_NetCv.notify_all();
++		}
++		if (!ok)
++			Logger().Info("Studio: request %d failed: %s\n", id, error.c_str());
++		result = { { "ok", ok } };
++	}
++	else if (p == "/studio/net/export")
++	{
++		// another PC asks for a map: by its share code, slot id or resource id
++		string key = QueryValue(req.query, "key");
++		lock_guard<recursive_mutex> lock(m_StudioMutex);
++		ordered_json* s = FindSlotByKey(key);
++		string vxl = s ? ReadFile(string(STUDIO_DIR) + "/resources/" + s->value("resource_id", "") + ".vxl") : "";
++		if (!s || vxl.empty() || s->value("id", "").rfind("tmpl_", 0) == 0)
++			result = { { "ok", false }, { "error", "not on this PC" } };
++		else
++		{
++			ordered_json slot = MapEntry(*s, false);
++			slot["description"] = s->value("description", "");
++			ordered_json out;
++			out["ok"] = true;
++			out["slot"] = slot;
++			out["vxl"] = Base64Encode(vxl);
++			Logger().Info("Studio: sending map %s '%s' (%d bytes) to another player's PC\n", slot["id"].get<string>().c_str(),
++				slot["title"].get<string>().c_str(), (int)vxl.size());
++			resp.body = out.dump(-1, ' ', false, json::error_handler_t::replace);
++			return resp;
++		}
++	}
++	else
++	{
++		resp.status = 404;
++		result = { { "error", "unknown" } };
++	}
++	resp.body = result.dump(-1, ' ', false, json::error_handler_t::replace);
++	return resp;
++}
++
++// ---------------------------------------------------------------------------------------------------------------
++// /api/studio: the Studio maps page (web/maps). Runs under g_ServerCriticalSection: never waits for the bridge.
++json CVoxelManager::MapsApi(IUser* user, const string& method, const string& query, const string& body, int& status)
++{
++	lock_guard<recursive_mutex> lock(m_StudioMutex);
++	if (method == "GET")
++	{
++		json out;
++		out["steam"] = BridgeOnline();
++		out["max"] = STUDIO_MAX_SLOTS;
++		out["mine"] = json::array();
++		out["downloaded"] = json::array();
++		out["online"] = json::array();
++		for (auto& s : m_Studio["slots"])
++		{
++			if (s.value("deleted", false))
++				continue;
++			if (s.value("owner", 0) == user->GetID())
++			{
++				json m = Plain(MapEntry(s, true));
++				m["published"] = s.value("published", false);
++				m["created"] = s.value("created", 0LL);
++				m["empty"] = s.value("resource_id", "").empty();
++				out["mine"].push_back(m);
++			}
++			else if (s.value("remote", false) && !s.value("resource_id", "").empty())
++			{
++				json m = Plain(MapEntry(s, true));
++				m["fetched"] = s.value("fetched", 0LL);
++				out["downloaded"].push_back(m);
++			}
++		}
++		for (auto& m : CatalogMaps())
++		{
++			json e = Plain(m);
++			ordered_json* local = FindSlot(m.value("id", ""));
++			e["have"] = local != NULL && !local->value("deleted", false);
++			e["outdated"] = e["have"].get<bool>() && local->value("resource_id", "") != m.value("resource_id", "");
++			out["online"].push_back(e);
++		}
++		out["requests"] = json::array();
++		{
++			lock_guard<mutex> nl(g_NetMutex);
++			for (auto& r : g_NetRequests)
++				out["requests"].push_back({ { "id", r.first }, { "key", r.second.key }, { "status", r.second.status },
++					{ "error", r.second.error }, { "slotId", r.second.slotId } });
++		}
++		return out;
++	}
++
++	json b = json::parse(body, nullptr, false);
++	if (b.is_discarded() || !b.is_object())
++	{
++		status = 400;
++		return { { "error", "Invalid request." } };
++	}
++	string action = b.value("action", ""), id = b.value("id", "");
++	ordered_json* s = id.empty() ? NULL : FindSlot(id);
++	bool mine = s && s->value("owner", 0) == user->GetID() && !s->value("deleted", false);
++
++	if (action == "get")
++	{
++		string text = b.value("code", "");
++		string key = NormalizeCode(text);
++		if (key.empty())
++		{
++			key = text;
++			if (!SafeId(key))
++			{
++				status = 400;
++				return { { "error", "That isn't a share code: it has 8 letters and digits, like ABCD-1234." } };
++			}
++		}
++		ordered_json* local = FindSlotByKey(key);
++		const ordered_json* online = CatalogFind(key);
++		if (local && (!online || online->value("resource_id", "") == local->value("resource_id", "")))
++			return { { "ok", true }, { "have", true }, { "id", local->value("id", "") }, { "title", local->value("title", "") } };
++		int request = NetRequest(online ? online->value("id", key) : key);
++		if (!request)
++		{
++			status = 409;
++			return { { "error", "Online play is off: maps come from other players through Steam. Turn on Online play in the launcher." } };
++		}
++		return { { "ok", true }, { "request", request } };
++	}
++	if (action == "publish" || action == "rename" || action == "copy" || action == "delete")
++	{
++		if (!s || s->value("deleted", false) || (!mine && !(action == "delete" && s->value("remote", false)) && action != "copy"))
++		{
++			status = 404;
++			return { { "error", "That map isn't yours." } };
++		}
++	}
++	if (action == "publish")
++	{
++		if (s->value("resource_id", "").empty())
++		{
++			status = 409;
++			return { { "error", "Save the map in the editor first (ESC > Save)." } };
++		}
++		bool on = b.value("on", true);
++		(*s)["published"] = on;
++		if (on && !s->contains("updated"))
++			(*s)["updated"] = (long long)time(NULL);
++		SaveStudio();
++		Logger().Info("Studio: %s %s map %s '%s'\n", user->GetUsername().c_str(), on ? "published" : "unpublished",
++			id.c_str(), s->value("title", "").c_str());
++		return { { "ok", true } };
++	}
++	if (action == "rename")
++	{
++		string title = b.value("title", s->value("title", "")), desc = b.value("description", s->value("description", ""));
++		if (title.find_first_not_of(' ') == string::npos)
++		{
++			status = 400;
++			return { { "error", "The map needs a name." } };
++		}
++		(*s)["title"] = title.substr(0, 60);
++		(*s)["description"] = desc.substr(0, 300);
++		(*s)["updated"] = (long long)time(NULL);
++		SaveStudio();
++		return { { "ok", true } };
++	}
++	if (action == "delete")
++	{
++		string rid = s->value("resource_id", "");
++		for (size_t i = 0; i < m_Studio["slots"].size(); i++)
++		{
++			if (&m_Studio["slots"][i] == s)
++			{
++				m_Studio["slots"].erase(i);
++				break;
++			}
++		}
++		if (SafeId(rid) && rid.rfind("tmpl_", 0) != 0)
++			remove((string(STUDIO_DIR) + "/resources/" + rid + ".vxl").c_str());
++		SaveStudio();
++		Logger().Info("Studio: %s deleted map %s\n", user->GetUsername().c_str(), id.c_str());
++		return { { "ok", true } };
++	}
++	if (action == "copy")
++	{
++		// an editable copy in the player's own studio (a fetched map, or one of theirs)
++		int count = 0;
++		for (auto& x : m_Studio["slots"])
++			if (x.value("owner", 0) == user->GetID() && !x.value("deleted", false))
++				count++;
++		if (count >= STUDIO_MAX_SLOTS)
++		{
++			status = 409;
++			return { { "error", "Your studio is full (" + to_string(STUDIO_MAX_SLOTS) + " maps): delete one first." } };
++		}
++		string data = ReadFile(string(STUDIO_DIR) + "/resources/" + s->value("resource_id", "") + ".vxl");
++		if (data.empty())
++		{
++			status = 409;
++			return { { "error", "The map file is missing." } };
++		}
++		ordered_json slot;
++		slot["id"] = NewId();
++		slot["owner"] = user->GetID();
++		slot["title"] = (s->value("title", "Map") + "_Copy").substr(0, 60);
++		slot["description"] = s->value("description", "");
++		slot["parent_id"] = s->value("id", "");
++		slot["creator_nickname"] = user->GetCharacter(UFLAG_LOW_GAMENAME).gameName;
++		slot["creator_username"] = user->GetUsername();
++		slot["resource_max_player"] = s->value("resource_max_player", 16);
++		slot["resource_mode"] = s->value("resource_mode", 39);
++		slot["permission"] = 0;
++		slot["created"] = slot["updated"] = (long long)time(NULL);
++		slot["published"] = false;
++		string rid = NewId();
++		if (!WriteFile(string(STUDIO_DIR) + "/resources/" + rid + ".vxl", data))
++		{
++			status = 500;
++			return { { "error", "Couldn't write the map file." } };
++		}
++		slot["resource_id"] = rid;
++		m_Studio["slots"].push_back(slot);
++		SaveStudio();
++		Logger().Info("Studio: %s copied map %s into their studio as %s\n", user->GetUsername().c_str(), id.c_str(),
++			slot["id"].get<string>().c_str());
++		return { { "ok", true }, { "id", slot["id"] } };
++	}
++	status = 400;
++	return { { "error", "Unknown action." } };
++}
++
++// Console: studiofetch <share code | slot id | resource id>. Asks the other PCs for a map even when this PC has it (with
++// the Steam bridge's --loopback this PC answers itself: the whole trip over Steam, on one PC).
++static void StudioFetch(CCommand*, const vector<string>& args)
++{
++	if (args.size() < 2)
++	{
++		Logger().Info("studiofetch <share code | slot id | resource id>\n");
++		return;
++	}
++	string key = CVoxelManager::NormalizeCode(args[1]);
++	if (key.empty())
++		key = args[1];
++	thread([key]() {
++		int id = g_VoxelManager.NetRequestPublic(key);
++		if (!id)
++		{
++			Logger().Info("studiofetch: the Steam bridge isn't running\n");
++			return;
++		}
++		time_t start = time(NULL);
++		bool got = g_VoxelManager.NetWaitPublic(id, 70000);
++		Logger().Info("studiofetch: %s %s after %d s\n", key.c_str(), got ? "arrived" : "didn't arrive", (int)(time(NULL) - start));
++	}).detach();
++}
++static CCommand studiofetch("studiofetch", "Fetch a Studio map from the other PCs (Steam bridge)", "studiofetch <code>", StudioFetch);
 diff --git a/src/manager/transfer.cpp b/src/manager/transfer.cpp
 new file mode 100644
 index 0000000..4aa532b
@@ -6943,7 +7831,7 @@ index 01aa7a6..88ad8fe 100644
  	if (serverId >= m_VoxelConfigList.size())
  	{
 diff --git a/src/manager/voxelmanager.h b/src/manager/voxelmanager.h
-index c7d2bdb..836e257 100644
+index c7d2bdb..75d0ee9 100644
 --- a/src/manager/voxelmanager.h
 +++ b/src/manager/voxelmanager.h
 @@ -2,6 +2,10 @@
@@ -6957,13 +7845,23 @@ index c7d2bdb..836e257 100644
  
  class IExtendedSocket;
  class CReceivePacket;
-@@ -21,8 +25,32 @@ public:
+@@ -21,8 +25,56 @@ public:
  	bool OnPacket(CReceivePacket* msg, IExtendedSocket* socket);
  	std::string GetSlotDetails(const std::string& slotId, int serverId);
  
 +	// Offline Studio (studio.cpp): the game's voxel REST API served by our own web server (port 30080),
 +	// maps kept in Data/Studio. Called on the web server thread.
 +	WebResponse OnHttp(const WebRequest& req);
++
++	// Studio maps between PCs (studionet.cpp): share codes, the maps other players publish through the Steam bridge
++	// (Data/StudioNet.json) and the maps fetched from them over Steam.
++	static std::string ShareCode(const std::string& slotId); // "ABCD-EFGH", the same on every PC
++	static std::string NormalizeCode(const std::string& text); // "ABCD-EFGH" or "" when it isn't a code
++	static std::string DescriptionWithCode(const nlohmann::ordered_json& slot); // "Share code: ABCD-EFGH  -  <description>"
++	WebResponse OnNetHttp(const WebRequest& req); // /studio/net/... for the Steam bridge
++	int NetRequestPublic(const std::string& key) { return NetRequest(key); } // the studiofetch console test
++	bool NetWaitPublic(int id, int ms) { return NetWait(id, ms); }
++	nlohmann::json MapsApi(class IUser* user, const std::string& method, const std::string& query, const std::string& body, int& status); // /api/studio (the Studio maps page)
 +
  private:
 +	// TCP side of the Studio (studio.cpp): the player's own slots
@@ -6982,11 +7880,25 @@ index c7d2bdb..836e257 100644
 +	WebResponse StoreUpload(const WebRequest& req, bool image);
 +	void LogHttp(const WebRequest& req, const WebResponse& resp);
 +
++	// studionet.cpp
++	nlohmann::ordered_json* FindSlotByKey(const std::string& key); // slot id, resource id or share code
++	const nlohmann::ordered_json* CatalogFind(const std::string& key); // a map another PC publishes
++	std::vector<nlohmann::ordered_json> CatalogMaps(); // the maps other PCs publish, this PC's own left out
++	void ReadCatalog();
++	bool BridgeOnline();
++	int NetRequest(const std::string& key); // asks the other PCs for a map; 0 when Steam is off
++	bool NetWait(int id, int ms); // true when the map arrived (call without m_StudioMutex)
++	bool ImportMap(const nlohmann::ordered_json& slot, const std::string& vxl, const std::string& from, std::string& error);
++	nlohmann::ordered_json MapEntry(const nlohmann::ordered_json& s, bool withSize); // the page's and the catalog's view of a slot
++
  	std::vector<VoxelConfig> m_VoxelConfigList;
 +
 +	std::recursive_mutex m_StudioMutex;
 +	nlohmann::ordered_json m_Studio; // {"slots":[...]}
 +	std::map<std::string, std::string> m_PendingUploads; // upload location -> slot id (editor saves)
++	nlohmann::ordered_json m_Catalog = nlohmann::ordered_json::array(); // Data/StudioNet.json hosts
++	long long m_CatalogTime = 0; // its "updated" (unix time)
++	long long m_CatalogStamp = -1; // its file time, to read it again when the bridge rewrites it
  };
  
 -extern CVoxelManager g_VoxelManager;
@@ -6994,10 +7906,10 @@ index c7d2bdb..836e257 100644
 +extern CVoxelManager g_VoxelManager;
 diff --git a/src/manager/warbondmanager.cpp b/src/manager/warbondmanager.cpp
 new file mode 100644
-index 0000000..64bdab1
+index 0000000..f7d522b
 --- /dev/null
 +++ b/src/manager/warbondmanager.cpp
-@@ -0,0 +1,1016 @@
+@@ -0,0 +1,1021 @@
 +#include "channelmanager.h"
 +#include "guestprofile.h"
 +#include "transfer.h"
@@ -7269,6 +8181,11 @@ index 0000000..64bdab1
 +	else if (req.path == "/api/riftexchange")
 +	{
 +		result = g_ZSRiftManager.ExchangeApi(user, req.method, req.body, resp.status);
++	}
++	else if (req.path == "/api/studio")
++	{
++		// the Studio maps page (web/maps): the player's maps and their share codes, the maps other players publish
++		result = g_VoxelManager.MapsApi(user, req.method, req.query, req.body, resp.status);
 +	}
 +	else if (req.method == "GET" && req.path == "/api/profile")
 +	{
@@ -8929,10 +9846,10 @@ index d35947b..d6445d7 100644
  	}
 diff --git a/src/net/webserver.cpp b/src/net/webserver.cpp
 new file mode 100644
-index 0000000..0df6610
+index 0000000..da50cfa
 --- /dev/null
 +++ b/src/net/webserver.cpp
-@@ -0,0 +1,251 @@
+@@ -0,0 +1,276 @@
 +#include "webserver.h"
 +
 +#include <winsock2.h>
@@ -8941,6 +9858,8 @@ index 0000000..0df6610
 +#include <fstream>
 +#include <sstream>
 +#include <algorithm>
++#include <thread>
++#include <atomic>
 +
 +#include "common/logger.h"
 +
@@ -9019,8 +9938,31 @@ index 0000000..0df6610
 +		DWORD timeout = 5000;
 +		setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof(timeout));
 +
-+		HandleClient(client, ip);
-+		closesocket(client);
++		// each connection on its own thread: a Studio map another PC is sending over Steam keeps the game's request
++		// waiting (studionet.cpp) while the Steam bridge talks to this same server. The handlers lock what they share.
++		static atomic<int> busy(0);
++		if (busy >= 48)
++		{
++			HandleClient(client, ip);
++			closesocket(client);
++			continue;
++		}
++		busy++;
++		string clientIP = ip;
++		try
++		{
++			thread([this, client, clientIP]() {
++				HandleClient(client, clientIP);
++				closesocket(client);
++				busy--;
++			}).detach();
++		}
++		catch (...)
++		{
++			busy--;
++			HandleClient(client, ip);
++			closesocket(client);
++		}
 +	}
 +}
 +
@@ -9186,7 +10128,7 @@ index 0000000..0df6610
 +}
 diff --git a/src/net/webserver.h b/src/net/webserver.h
 new file mode 100644
-index 0000000..e0380ff
+index 0000000..3f1933a
 --- /dev/null
 +++ b/src/net/webserver.h
 @@ -0,0 +1,56 @@
@@ -9217,7 +10159,7 @@ index 0000000..e0380ff
 +
 +/**
 + * Offline build: minimal HTTP/1.1 server for the in-game web shop (CEF). Serves static files from a folder and
-+ * passes /api/ requests to a handler. One connection at a time, "Connection: close" on every response.
++ * passes /api/ requests to a handler. One thread per connection, "Connection: close" on every response.
 + */
 +class CWebServer
 +{

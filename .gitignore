@@ -64,6 +64,7 @@ mod/tools/steambridge/bin/
 mod/tools/steambridge/obj/
 mod/server/CSNZ_Server/bin/Data/RemoteRooms.json
 mod/server/CSNZ_Server/bin/Data/SteamIdentity.json
+mod/server/CSNZ_Server/bin/Data/StudioNet.json
 mod/server/CSNZ_Server/bin/Data/GuestCheckouts.json
 mod/server/CSNZ_Server/bin/Data/GuestBackups/
 mod/server/CSNZ_Server/bin/Data/SteamBridge.stop

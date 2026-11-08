@@ -14,6 +14,10 @@
 // --loopback: one PC test. This PC's own lobby is listed as another player's, and its tunnel goes straight back to
 // this PC's server (no P2P). Usage: CSNZ-SteamBridge.exe --steam-api <game Bin\steam_api.dll> --data <server Data>
 //   [--api http://127.0.0.1:30080] [--log <file>] [--loopback] [--verbose]
+//  - Studio maps: this PC's published maps go in its lobby too (GET /studio/net/catalog), the other lobbies' maps to
+//    Data/StudioNet.json; maps the server asks for (GET /studio/net/outbox) are fetched over P2P from the PCs that have them
+//    (STUDIO messages, see the Studio section) and handed to the server (POST /studio/net/result).
+//
 // --verbose (the launcher's "Detailed logs"): every tunnel message and match packet in the log ("detail:" lines, the
 // first bytes of each packet), up to 20000 lines, and the UDP totals every 5 s.
 using System;
@@ -33,7 +37,7 @@ namespace SteamBridge
     class Bridge
     {
         const string Tag = "csnzor", Protocol = "1";
-        const byte Open = 1, Data = 2, Close = 3, Hello = 4, Udp = 5, Mail = 6;
+        const byte Open = 1, Data = 2, Close = 3, Hello = 4, Udp = 5, Mail = 6, Studio = 7;
         const int ServerPort = 30002, FirstTunnelPort = 30003, LastTunnelPort = 30199, FirstVirtualRoom = 40000;
         const int JoinerUdpBase = 31000, HostUdpBase = 33000, UnreliableMax = 1200;
 
@@ -58,6 +62,8 @@ namespace SteamBridge
             public ulong PendingJoin;
             public DateTime Seen;
             public List<Dictionary<string, object>> Rooms = new List<Dictionary<string, object>>();
+            public List<object> Maps = new List<object>(); // the Studio maps this player publishes
+            public List<object> Have = new List<object>(); // the share codes of the maps their PC fetched (it can pass them on)
             public UdpClient[] Udp; // the host PC's game, as this PC's game sees it (31000+k*2+portID)
         }
 
@@ -140,6 +146,7 @@ namespace SteamBridge
 
         public void Run(Func<bool> keepRunning)
         {
+            DateTime nextStudio = DateTime.MinValue, nextStudioPublish = DateTime.MinValue;
             DateTime nextMail = DateTime.MinValue, nextList = DateTime.MinValue, nextPublish = DateTime.MinValue, nextIdentity = DateTime.MinValue, nextHello = DateTime.MinValue, nextUdp = DateTime.MinValue;
             lock (Steam.Lock)
                 pendingCreate = Native.SteamAPI_ISteamMatchmaking_CreateLobby(steam.Matchmaking, Steam.LobbyPublic, 250);
@@ -183,6 +190,16 @@ namespace SteamBridge
                     {
                         PollMail();
                         nextMail = now.AddMilliseconds(300);
+                    }
+                    if (myLobby != 0 && now >= nextStudioPublish)
+                    {
+                        PublishStudio();
+                        nextStudioPublish = now.AddSeconds(10);
+                    }
+                    if (now >= nextStudio)
+                    {
+                        PollStudio();
+                        nextStudio = now.AddMilliseconds(500);
                     }
                 }
                 ReadLoopback();
@@ -336,6 +353,8 @@ namespace SteamBridge
                             h.Rooms.Add(r);
                 }
                 catch (Exception ex) { log("Bad room list from " + h.Name + ": " + ex.Message); }
+                ReadStudioCatalog(h, lobby);
+                Native.SteamAPI_ISteamNetworking_AcceptP2PSessionWithUser(steam.Networking, owner);
             }
             // hosts gone for 30 s: their port closes
             foreach (var h in hosts.Values.Where(h => (now - h.Seen).TotalSeconds > 30).ToList())
@@ -348,6 +367,7 @@ namespace SteamBridge
                 log(h.Name + " isn't hosting anymore.");
             }
             WriteRemoteRooms();
+            WriteStudioNet();
         }
 
         int FreePort()
@@ -505,6 +525,9 @@ namespace SteamBridge
             {
                 case Mail:
                     HandleMail(peer, msg);
+                    break;
+                case Studio:
+                    HandleStudio(peer, msg);
                     break;
                 case Open:
                     // a player's game connects to this PC's server
@@ -708,6 +731,271 @@ namespace SteamBridge
                 z.CopyTo(m);
                 return m.ToArray();
             }
+        }
+
+        // ------------------------------------------------------------ Studio maps
+        // Lobby data "studio0".."studio<n-1>" (n = "studioparts"): {"maps": [...], "have": [code...]} from GET /studio/net/catalog.
+        // P2P (reliable, channel 0): [7][message u32][part u16][parts u16][a piece of the gzipped JSON]; big maps come in parts.
+        //   {"t":"get","q":N,"key":"<share code, slot id or resource id>"}  ->  {"t":"map","q":N,"ok":true,"slot":{...},"vxl":"<base64>"}
+        //   (or "ok":false). The asking PC tries the players whose lobby lists the map, the hosts it joined and the players on
+        //   its server first, then everyone else.
+        string publishedStudio = null;
+        int nextStudioMessage = 1;
+        readonly HttpClient studioHttp = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+
+        class StudioRequest
+        {
+            public int Id;
+            public string Key;
+            public int Wave;
+            public DateTime WaveEnds, Ends;
+            public readonly HashSet<ulong> Asked = new HashSet<ulong>(), Answered = new HashSet<ulong>();
+        }
+        readonly Dictionary<int, StudioRequest> studioRequests = new Dictionary<int, StudioRequest>();
+
+        class Partial
+        {
+            public byte[][] Parts;
+            public int Got;
+            public DateTime Started;
+        }
+        readonly Dictionary<string, Partial> partials = new Dictionary<string, Partial>();
+
+        void PublishStudio()
+        {
+            string catalog;
+            try { catalog = http.GetStringAsync(apiUrl + "/studio/net/catalog").GetAwaiter().GetResult(); }
+            catch { return; } // the server isn't up, or is older than this bridge
+            if (catalog == publishedStudio)
+                return;
+            publishedStudio = catalog;
+            var parts = new List<string>();
+            for (int i = 0; i < catalog.Length; i += 7000)
+                parts.Add(catalog.Substring(i, Math.Min(7000, catalog.Length - i)));
+            for (int i = 0; i < parts.Count; i++)
+                steam.SetLobbyData(myLobby, "studio" + i, parts[i]);
+            steam.SetLobbyData(myLobby, "studioparts", parts.Count.ToString());
+            try
+            {
+                var maps = json.Deserialize<Dictionary<string, object>>(catalog)["maps"] as System.Collections.ICollection;
+                log("Studio: " + (maps?.Count ?? 0) + " published maps of this PC are in the online list");
+            }
+            catch { }
+        }
+
+        void ReadStudioCatalog(Host h, ulong lobby)
+        {
+            h.Maps = new List<object>();
+            h.Have = new List<object>();
+            int.TryParse(steam.LobbyData(lobby, "studioparts"), out int parts);
+            if (parts <= 0)
+                return;
+            var text = new StringBuilder();
+            for (int p = 0; p < parts; p++)
+                text.Append(steam.LobbyData(lobby, "studio" + p));
+            try
+            {
+                var c = json.Deserialize<Dictionary<string, object>>(text.ToString());
+                if (c.TryGetValue("maps", out var m) && m is System.Collections.IEnumerable ml)
+                    foreach (var x in ml)
+                        h.Maps.Add(x);
+                if (c.TryGetValue("have", out var hv) && hv is System.Collections.IEnumerable hl)
+                    foreach (var x in hl)
+                        h.Have.Add(x);
+            }
+            catch (Exception ex) { Detail("Bad Studio list from " + h.Name + ": " + ex.Message); }
+        }
+
+        void WriteStudioNet()
+        {
+            var list = new List<object>();
+            foreach (var h in hosts.Values)
+                list.Add(new Dictionary<string, object> { { "steamID", h.SteamID.ToString() }, { "name", h.Name ?? "" }, { "maps", h.Maps }, { "have", h.Have } });
+            WriteJson("StudioNet.json", new Dictionary<string, object> {
+                { "updated", (long)(DateTime.UtcNow - new DateTime(1970, 1, 1)).TotalSeconds }, { "hosts", list } });
+        }
+
+        static string Str(object o) => o?.ToString() ?? "";
+
+        bool HostHasMap(Host h, string key)
+        {
+            string code = key.Replace("-", "").ToUpperInvariant();
+            foreach (var o in h.Maps)
+                if (o is Dictionary<string, object> m && (Str(m.TryGetValue("id", out var a) ? a : null) == key ||
+                    Str(m.TryGetValue("resource_id", out var b) ? b : null) == key ||
+                    Str(m.TryGetValue("code", out var c) ? c : null).Replace("-", "") == code))
+                    return true;
+            foreach (var o in h.Have)
+                if (Str(o).Replace("-", "") == code)
+                    return true;
+            return false;
+        }
+
+        void PollStudio()
+        {
+            string text;
+            try { text = http.GetStringAsync(apiUrl + "/studio/net/outbox").GetAwaiter().GetResult(); }
+            catch { return; }
+            try
+            {
+                if (json.Deserialize<Dictionary<string, object>>(text)["requests"] is System.Collections.IEnumerable list)
+                    foreach (Dictionary<string, object> r in list)
+                    {
+                        var req = new StudioRequest { Id = Convert.ToInt32(r["id"]), Key = Str(r["key"]), Ends = DateTime.UtcNow.AddSeconds(60) };
+                        studioRequests[req.Id] = req;
+                        log("Studio: looking for map " + req.Key + " on the other players' PCs");
+                        AskWave(req);
+                    }
+            }
+            catch (Exception ex) { log("Studio: bad request list: " + ex.Message); }
+            var now = DateTime.UtcNow;
+            foreach (var req in studioRequests.Values.ToList())
+            {
+                bool waveOver = now > req.WaveEnds || req.Asked.All(p => req.Answered.Contains(p));
+                if (!waveOver)
+                    continue;
+                if (req.Wave == 1 && now < req.Ends)
+                {
+                    req.Wave = 2;
+                    if (AskWave(req))
+                        continue;
+                }
+                studioRequests.Remove(req.Id);
+                log("Studio: nobody online has map " + req.Key);
+                StudioResult("{\"id\":" + req.Id + ",\"ok\":false,\"error\":\"No player online has this map.\"}");
+            }
+            foreach (var k in partials.Where(x => (now - x.Value.Started).TotalSeconds > 120).Select(x => x.Key).ToList())
+                partials.Remove(k);
+        }
+
+        // wave 1: the PCs likely to have it; wave 2: everyone else. False when nobody was left to ask.
+        bool AskWave(StudioRequest req)
+        {
+            if (req.Wave == 0)
+                req.Wave = 1;
+            var who = new List<ulong>();
+            if (loopback)
+                who.Add(steam.MySteamID);
+            else if (req.Wave == 1)
+            {
+                who.AddRange(hosts.Values.Where(h => HostHasMap(h, req.Key) || h.Joined).Select(h => h.SteamID));
+                who.AddRange(remotes.Keys);
+            }
+            else
+                who.AddRange(hosts.Keys);
+            who = who.Distinct().Where(p => !req.Asked.Contains(p)).ToList();
+            if (who.Count == 0)
+            {
+                req.WaveEnds = DateTime.MinValue;
+                return false;
+            }
+            var ask = "{\"t\":\"get\",\"q\":" + req.Id + ",\"key\":" + json.Serialize(req.Key) + "}";
+            foreach (var p in who)
+            {
+                req.Asked.Add(p);
+                SendStudio(p, ask);
+            }
+            req.WaveEnds = DateTime.UtcNow.AddSeconds(15);
+            Detail("Studio: asked " + who.Count + " PC(s) for map " + req.Key + " (round " + req.Wave + ")");
+            return true;
+        }
+
+        void SendStudio(ulong peer, string text)
+        {
+            var data = Gzip(Encoding.UTF8.GetBytes(text));
+            const int Piece = 400000;
+            int parts = Math.Max(1, (data.Length + Piece - 1) / Piece);
+            uint id = (uint)Interlocked.Increment(ref nextStudioMessage);
+            for (int i = 0; i < parts; i++)
+            {
+                int n = Math.Min(Piece, data.Length - i * Piece);
+                var msg = new byte[9 + n];
+                msg[0] = Studio;
+                BitConverter.GetBytes(id).CopyTo(msg, 1);
+                BitConverter.GetBytes((ushort)i).CopyTo(msg, 5);
+                BitConverter.GetBytes((ushort)parts).CopyTo(msg, 7);
+                Buffer.BlockCopy(data, i * Piece, msg, 9, n);
+                if (loopback)
+                    loop.Enqueue(Tuple.Create(steam.MySteamID, msg));
+                else
+                    lock (Steam.Lock)
+                    {
+                        Native.SteamAPI_ISteamNetworking_AcceptP2PSessionWithUser(steam.Networking, peer);
+                        SendRaw(peer, msg);
+                    }
+            }
+        }
+
+        void HandleStudio(ulong peer, byte[] msg)
+        {
+            if (msg.Length < 9)
+                return;
+            uint id = BitConverter.ToUInt32(msg, 1);
+            int part = BitConverter.ToUInt16(msg, 5), parts = BitConverter.ToUInt16(msg, 7);
+            if (parts == 0 || part >= parts || parts > 200)
+                return;
+            string key = peer + ":" + id;
+            if (!partials.TryGetValue(key, out var pm))
+                partials[key] = pm = new Partial { Parts = new byte[parts][], Started = DateTime.UtcNow };
+            if (pm.Parts.Length != parts || pm.Parts[part] != null)
+                return;
+            pm.Parts[part] = msg.Skip(9).ToArray();
+            if (++pm.Got < parts)
+                return;
+            partials.Remove(key);
+            string text;
+            try
+            {
+                var all = pm.Parts.SelectMany(x => x).ToArray();
+                text = Encoding.UTF8.GetString(Gunzip(all, 0));
+            }
+            catch (Exception ex)
+            {
+                log("Studio: bad message from " + peer + ": " + ex.Message);
+                return;
+            }
+            var head = text.Length > 300 ? text.Substring(0, 300) : text;
+            var t = System.Text.RegularExpressions.Regex.Match(head, "^\\{\"t\":\"(\\w+)\",\"q\":(\\d+)");
+            if (!t.Success)
+                return;
+            int q = int.Parse(t.Groups[2].Value);
+            string from = hosts.TryGetValue(peer, out var fh) ? fh.Name : peer.ToString();
+            if (t.Groups[1].Value == "get")
+            {
+                // another PC wants a map: this PC's server gives it (or says it hasn't got it)
+                string wanted;
+                try { wanted = Str(json.Deserialize<Dictionary<string, object>>(text)["key"]); }
+                catch { return; }
+                new Thread(() =>
+                {
+                    string answer;
+                    try { answer = studioHttp.GetStringAsync(apiUrl + "/studio/net/export?key=" + Uri.EscapeDataString(wanted)).GetAwaiter().GetResult(); }
+                    catch (Exception ex) { answer = "{\"ok\":false,\"error\":" + json.Serialize("this PC's server: " + ex.Message) + "}"; }
+                    if (!answer.StartsWith("{"))
+                        answer = "{\"ok\":false}";
+                    bool ok = answer.StartsWith("{\"ok\":true");
+                    if (ok)
+                        log("Studio: sending map " + wanted + " to " + from + " (" + answer.Length / 1024 + " KB)");
+                    SendStudio(peer, "{\"t\":\"map\",\"q\":" + q + "," + answer.Substring(1));
+                }) { IsBackground = true }.Start();
+                return;
+            }
+            if (t.Groups[1].Value != "map" || !studioRequests.TryGetValue(q, out var req) || !req.Asked.Contains(peer))
+                return;
+            req.Answered.Add(peer);
+            if (!head.Contains("\"ok\":true"))
+                return;
+            // the map: to this PC's server, with who sent it
+            studioRequests.Remove(q);
+            int okAt = text.IndexOf("\"ok\":true", StringComparison.Ordinal);
+            log("Studio: got map " + req.Key + " from " + from + " (" + text.Length / 1024 + " KB)");
+            StudioResult("{\"id\":" + q + ",\"from\":" + json.Serialize(from) + "," + text.Substring(okAt));
+        }
+
+        void StudioResult(string body)
+        {
+            try { studioHttp.PostAsync(apiUrl + "/studio/net/result", new StringContent(body, Encoding.UTF8, "application/json")).GetAwaiter().GetResult(); }
+            catch (Exception ex) { log("Studio: couldn't hand the result to this PC's server: " + ex.Message); }
         }
 
         // ------------------------------------------------------------ match traffic (UDP)
@@ -925,7 +1213,7 @@ namespace SteamBridge
                 foreach (var h in hosts.Values.Where(h => h.Joined))
                     Native.SteamAPI_ISteamMatchmaking_LeaveLobby(steam.Matchmaking, h.Lobby);
             }
-            foreach (var f in new[] { "RemoteRooms.json", "SteamIdentity.json" })
+            foreach (var f in new[] { "RemoteRooms.json", "SteamIdentity.json", "StudioNet.json" })
                 try { File.Delete(Path.Combine(dataDir, f)); } catch { }
         }
     }

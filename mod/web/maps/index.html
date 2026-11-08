@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Studio Maps</title>
+<link rel="stylesheet" href="../shop/style.css">
+<link rel="stylesheet" href="maps.css?v=20261108">
+</head>
+<body>
+<header class="topbar">
+  <a class="back" href="/shop/">&#8249; Shop</a>
+  <h1>Studio Maps</h1>
+  <nav id="tabs" class="tabs">
+    <button type="button" data-tab="mine" class="active">My maps</button>
+    <button type="button" data-tab="online">Online maps</button>
+    <button type="button" data-tab="downloaded">Downloaded</button>
+  </nav>
+  <form id="codeForm" class="code-form" autocomplete="off">
+    <input id="code" type="text" maxlength="12" placeholder="Share code" spellcheck="false">
+    <button type="submit">Get map</button>
+  </form>
+  <div id="steam" class="steam" title="">--</div>
+  <button id="close" class="close" type="button" title="Close (Esc)">Close &times;</button>
+</header>
+
+<div id="requests" class="requests hidden"></div>
+<main id="view"></main>
+
+<div id="toast" class="toast hidden"></div>
+<script src="maps.js?v=20261108"></script>
+</body>
+</html>

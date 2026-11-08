@@ -28,6 +28,8 @@ button { font-family: inherit; cursor: pointer; }
 .tabs button { background: none; border: none; border-bottom: 2px solid transparent; color: var(--muted); padding: 18px 12px 16px; font-size: 13px; letter-spacing: 1.5px; text-transform: uppercase; }
 .tabs button:hover { color: var(--text); }
 .tabs button.active { color: var(--accent); border-bottom-color: var(--accent); }
+.tabs a.tab-link { color: var(--muted); padding: 18px 12px 16px; font-size: 13px; letter-spacing: 1.5px; text-transform: uppercase; text-decoration: none; border-bottom: 2px solid transparent; }
+.tabs a.tab-link:hover { color: var(--accent); }
 .wallet { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 600; color: var(--accent); }
 
 .medal-icon { display: inline-block; width: 18px; height: 18px; flex: none; background: var(--gold);
