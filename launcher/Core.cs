@@ -59,6 +59,7 @@ namespace CsnzLauncher
         public bool DetailedLogs = false;   // the server and the bridge log every packet (--verbose), for bug reports
         public bool MusicOff = false;       // More > the launcher music: never plays when true
         public bool PicturesAsked = false;  // the "extract the pictures?" question was shown once (yes or no): not again
+        public bool AntivirusInfoShown = false; // the antivirus explanation was shown on the first start (More shows it again)
 
         static readonly JavaScriptSerializer Json = new JavaScriptSerializer();
 

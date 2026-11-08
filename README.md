@@ -20,7 +20,9 @@ launcher patches *your* copy of the game, keeps a backup of every file it change
    (the mod is installed next to it, in `mod\`). Don't open it from the browser's downloads bar: the browser runs a new temporary
    copy each time, and the launcher would ask to install everything again (it now offers to move itself to
    `Documents\CSNZ Offline Revived` when that happens).
-3. Open it. The repository is public, so it needs nothing else to find the releases.
+3. Open it. The repository is public, so it needs nothing else to find the releases. Windows may say "Windows
+   protected your PC" the first time (SmartScreen, because the launcher isn't signed yet): **More info > Run anyway**.
+   On its first start the launcher explains antivirus warnings (see [Antivirus warnings](#antivirus-warnings)).
 4. **Install** downloads the mod. Later, the same button says **Update** when a newer release is out (the
    launcher updates itself too).
 5. **Play**: the first time Windows asks for administrator rights to add the hosts block (the game's Nexon
@@ -58,8 +60,15 @@ machine-learning guesses, not a known threat). Everything is built from the sour
   **CSNZ-SteamBridge.exe** carries Online play through Steam; **nartool.exe** reads the pictures out of your game's
   own files with the game's `FileSystem_Nar.dll`, only when you extract the pictures.
 
-If your antivirus stops one of them, restore it from the quarantine and allow it (or add the mod's folder as an
-exception), and tell us which antivirus and which file: we report them as false positives to the vendor.
+There's no need to turn your antivirus off. If it stops one of them:
+
+1. Restore it from the antivirus' quarantine (or, in the launcher, **Download the mod again**: the launcher notices
+   when one of the mod's programs is gone and offers it).
+2. Add two folders as exceptions: the launcher's folder (with `mod\` inside) and the game's `Bin` folder. In Windows
+   Security: *Virus & threat protection > Manage settings > Exclusions > Add or remove exclusions > Add an exclusion >
+   Folder*. **More > Antivirus warnings: is this safe?** in the launcher shows both folders with a Copy button, opens
+   Windows Security and opens this launcher's VirusTotal page (by its SHA-256, nothing is uploaded).
+3. Tell us which antivirus and which file: we report them as false positives to the vendor.
 
 ### Reporting a problem
 

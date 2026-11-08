@@ -134,6 +134,7 @@ namespace CsnzLauncher
             more.Items.Add("Create a desktop shortcut that starts the game", null, (s, e) => CreateShortcut());
             more.Items.Add("Verify the game's files with Steam", null, (s, e) => OpenSteam(GameLocator.VerifyCommand));
             more.Items.Add("Get the game (Steam or archive.org)...", null, (s, e) => GetGame());
+            more.Items.Add("Antivirus warnings: is this safe?", null, (s, e) => ShowAntivirusInfo());
             more.Items.Add(new ToolStripSeparator());
             more.Items.Add("Add the hosts block", null, (s, e) => _ = Run("hosts", () => Hosts.Run("add", Log)));
             more.Items.Add("Remove the hosts block", null, (s, e) => _ = Run("hosts", () => Hosts.Run("remove", Log)));
@@ -352,6 +353,10 @@ namespace CsnzLauncher
             if (!GameLocator.IsGame(settings.GamePath))
                 GetGame();
             await CheckLatest(false);
+            if (!autoPlay && !settings.AntivirusInfoShown)
+                ShowAntivirusInfo();
+            else if (!autoPlay)
+                await CheckRemoved();
             if (autoPlay)
             {
                 // the desktop shortcut: straight into the game, the launcher closes with it
@@ -581,18 +586,7 @@ namespace CsnzLauncher
             var ok = await Run("Update", () =>
             {
                 if (modOld)
-                {
-                    var zip = latest.Find(n => n.StartsWith("CSNZ-Offline-Revived-", StringComparison.OrdinalIgnoreCase) && n.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
-                    if (zip == null)
-                        throw new Exception("The release has no mod package (.zip).");
-                    var tmp = Path.Combine(Path.GetTempPath(), zip.Name);
-                    Log($"Downloading {zip.Name} ({zip.Size / 1048576} MB)...");
-                    GitHub.Download(zip, token, tmp, Log).GetAwaiter().GetResult();
-                    Log("Installing...");
-                    Installer.InstallZip(tmp, Log);
-                    File.Delete(tmp);
-                    Log($"Mod updated to {latest.Tag}.");
-                }
+                    DownloadMod(token);
                 if (launcherOld)
                 {
                     var exe = latest.Find(n => n.EndsWith(".exe", StringComparison.OrdinalIgnoreCase));
@@ -606,8 +600,60 @@ namespace CsnzLauncher
             });
             if (ok && newLauncher != null && File.Exists(newLauncher))
                 SwapLauncher(newLauncher);
-            else if (ok)
+            else if (ok && await CheckRemoved())
                 await OfferPictures(false); // the new launcher asks before its first Play instead
+        }
+
+        // the latest release's mod package, downloaded and installed over the mod (the player's own files are kept)
+        void DownloadMod(string token)
+        {
+            var zip = latest.Find(n => n.StartsWith("CSNZ-Offline-Revived-", StringComparison.OrdinalIgnoreCase) && n.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
+            if (zip == null)
+                throw new Exception("The release has no mod package (.zip).");
+            var tmp = Path.Combine(Path.GetTempPath(), zip.Name);
+            Log($"Downloading {zip.Name} ({zip.Size / 1048576} MB)...");
+            GitHub.Download(zip, token, tmp, Log).GetAwaiter().GetResult();
+            Log("Installing...");
+            Installer.InstallZip(tmp, Log);
+            File.Delete(tmp);
+            Log($"Mod installed: {latest.Tag}.");
+        }
+
+        // ------------------------------------------------------------ antivirus
+        // The explanation (first start, More), or, when an antivirus took some of the mod's programs away, the same
+        // window with them listed and a "Download the mod again". True when nothing is missing (any more).
+        async Task<bool> CheckRemoved()
+        {
+            var missing = Antivirus.Missing();
+            if (missing.Length == 0)
+                return true;
+            Log("Missing from the mod (an antivirus removed them?): " + string.Join(", ", missing));
+            var installed = Paths.InstalledVersion();
+            bool offer = latest?.Version != null && installed != null && latest.Version >= installed;
+            DialogResult answer;
+            using (var f = new AntivirusForm(missing, settings.GamePath, offer))
+                answer = f.ShowDialog(this);
+            if (answer != DialogResult.Retry || !CloseRunning("Downloading the mod again"))
+                return false;
+            var token = GitHub.FindToken(settings, out _);
+            if (!await Run("Download", () => DownloadMod(token)))
+                return false;
+            missing = Antivirus.Missing();
+            if (missing.Length == 0)
+                return true;
+            Log("Still missing after downloading them again: " + string.Join(", ", missing));
+            DarkBox.Show(this, "The antivirus removed them again:\n   " + string.Join("\n   ", missing) +
+                               "\n\nAdd the mod's folder as an exception in your antivirus (the window before shows it), then download them again.",
+                         Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
+
+        void ShowAntivirusInfo()
+        {
+            using (var f = new AntivirusForm(null, settings.GamePath, false))
+                f.ShowDialog(this);
+            settings.AntivirusInfoShown = true;
+            settings.Save();
         }
 
         // The running exe can't be overwritten, but it can be renamed: it becomes .old (deleted by the new launcher when it
@@ -659,6 +705,8 @@ namespace CsnzLauncher
                 GetGame();
                 return false;
             }
+            if (!await CheckRemoved())
+                return false;
             var game = settings.GamePath;
 
             if (!Hosts.HasBlock())
@@ -915,6 +963,32 @@ namespace CsnzLauncher
                     DarkBox.Render(args[pd + 1], text, "Close the processes?", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
                 else
                     DarkBox.Show(text, "Close the processes?", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                return;
+            }
+            int pa = Array.IndexOf(args, "--preview-antivirus");
+            if (pa >= 0)
+            {
+                // the antivirus window; "removed" after it: as when files were quarantined
+                var missing = args.Contains("removed") ? new[] { "botassist.asi", "nartool.exe" } : null;
+                var png = args.FirstOrDefault(a => a.EndsWith(".png", StringComparison.OrdinalIgnoreCase));
+                using (var f = new AntivirusForm(missing, Settings.Load().GamePath, missing != null) { StartPosition = FormStartPosition.CenterScreen, ShowInTaskbar = true })
+                {
+                    if (png == null)
+                    {
+                        f.ShowDialog();
+                        return;
+                    }
+                    // with a .png: drawn into that file, off screen
+                    f.StartPosition = FormStartPosition.Manual;
+                    f.Location = new Point(-5000, -5000);
+                    f.Show();
+                    Application.DoEvents();
+                    using (var bmp = new Bitmap(f.Width, f.Height))
+                    {
+                        f.DrawToBitmap(bmp, new Rectangle(Point.Empty, f.Size));
+                        bmp.Save(png);
+                    }
+                }
                 return;
             }
             int pp = Array.IndexOf(args, "--preview-pictures");
