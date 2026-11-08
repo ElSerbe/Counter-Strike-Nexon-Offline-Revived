@@ -64,6 +64,8 @@ mod/tools/steambridge/bin/
 mod/tools/steambridge/obj/
 mod/server/CSNZ_Server/bin/Data/RemoteRooms.json
 mod/server/CSNZ_Server/bin/Data/SteamIdentity.json
+mod/server/CSNZ_Server/bin/Data/GuestCheckouts.json
+mod/server/CSNZ_Server/bin/Data/GuestBackups/
 mod/server/CSNZ_Server/bin/Data/SteamBridge.stop
 
 # the developer's own player install (launcher + release, like everyone else's): not part of the sources

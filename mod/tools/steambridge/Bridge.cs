@@ -33,7 +33,7 @@ namespace SteamBridge
     class Bridge
     {
         const string Tag = "csnzor", Protocol = "1";
-        const byte Open = 1, Data = 2, Close = 3, Hello = 4, Udp = 5;
+        const byte Open = 1, Data = 2, Close = 3, Hello = 4, Udp = 5, Mail = 6;
         const int ServerPort = 30002, FirstTunnelPort = 30003, LastTunnelPort = 30199, FirstVirtualRoom = 40000;
         const int JoinerUdpBase = 31000, HostUdpBase = 33000, UnreliableMax = 1200;
 
@@ -140,7 +140,7 @@ namespace SteamBridge
 
         public void Run(Func<bool> keepRunning)
         {
-            DateTime nextList = DateTime.MinValue, nextPublish = DateTime.MinValue, nextIdentity = DateTime.MinValue, nextHello = DateTime.MinValue, nextUdp = DateTime.MinValue;
+            DateTime nextMail = DateTime.MinValue, nextList = DateTime.MinValue, nextPublish = DateTime.MinValue, nextIdentity = DateTime.MinValue, nextHello = DateTime.MinValue, nextUdp = DateTime.MinValue;
             lock (Steam.Lock)
                 pendingCreate = Native.SteamAPI_ISteamMatchmaking_CreateLobby(steam.Matchmaking, Steam.LobbyPublic, 250);
             while (keepRunning())
@@ -179,6 +179,11 @@ namespace SteamBridge
                         nextUdp = now.AddSeconds(2);
                     }
                     ReadP2P();
+                    if (now >= nextMail)
+                    {
+                        PollMail();
+                        nextMail = now.AddMilliseconds(300);
+                    }
                 }
                 ReadLoopback();
                 Thread.Sleep(15);
@@ -362,7 +367,7 @@ namespace SteamBridge
                     int rid = Convert.ToInt32(r["id"]);
                     rooms.Add(new Dictionary<string, object> {
                         { "vid", FirstVirtualRoom + (h.Port - FirstTunnelPort) * 100 + rid % 100 },
-                        { "rid", rid }, { "port", h.Port }, { "host", h.Name ?? "" }, { "entry", r["entry"] } });
+                        { "rid", rid }, { "port", h.Port }, { "host", h.Name ?? "" }, { "hostID", h.SteamID.ToString() }, { "entry", r["entry"] } });
                 }
             WriteJson("RemoteRooms.json", new Dictionary<string, object> { { "rooms", rooms } });
         }
@@ -498,6 +503,9 @@ namespace SteamBridge
                 Detail("tunnel in from " + peer + ": " + TypeName(type) + " connection " + id + (msg.Length > 5 ? ", " + (msg.Length - 5) + " bytes" : ""));
             switch (type)
             {
+                case Mail:
+                    HandleMail(peer, msg);
+                    break;
                 case Open:
                     // a player's game connects to this PC's server
                     try
@@ -528,6 +536,177 @@ namespace SteamBridge
                         CloseConn(x);
                     }
                     break;
+            }
+        }
+
+        // ------------------------------------------------------------ profiles ("mail" between the servers)
+        // The servers carry a player's profile to the room host's server and back (the server's guestprofile.h). The bridge
+        // takes the server's mail from GET /api/guest/outbox, sends it over P2P as [6][flags u32: 1 = gzip][JSON], hands mail
+        // from other PCs to POST /api/guest/inbox with the sender's Steam ID (Steam vouches for it) and answers with an ack;
+        // the sender's server learns the outcome from POST /api/guest/sent. A host's lobby is joined first (the host accepts
+        // only its lobby members' P2P sessions); no ack within 20 s = failed.
+        class OutMail
+        {
+            public int Id;
+            public ulong To;
+            public string Text;
+            public DateTime Deadline;
+            public bool Sent;
+        }
+        readonly List<OutMail> outMail = new List<OutMail>();
+        readonly HashSet<ulong> mailPeers = new HashSet<ulong>();
+        readonly HttpClient mailHttp = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+
+        void PollMail()
+        {
+            string text;
+            try { text = http.GetStringAsync(apiUrl + "/api/guest/outbox").GetAwaiter().GetResult(); }
+            catch { return; } // the server isn't up, or is older than this bridge
+            Dictionary<string, object> box;
+            try { box = json.Deserialize<Dictionary<string, object>>(text); }
+            catch { return; }
+            if (box.TryGetValue("peers", out var peers) && peers is System.Collections.IEnumerable pl)
+                foreach (var p in pl)
+                    if (ulong.TryParse(p?.ToString(), out ulong id) && id != 0)
+                    {
+                        // the PCs this server expects profiles from (its players' hosts, its guests): their P2P is welcome
+                        if (mailPeers.Add(id))
+                            Detail("P2P sessions from " + id + " are accepted (profiles)");
+                        Native.SteamAPI_ISteamNetworking_AcceptP2PSessionWithUser(steam.Networking, id);
+                    }
+            if (box.TryGetValue("mail", out var mail) && mail is System.Collections.IEnumerable ml)
+                foreach (Dictionary<string, object> m in ml)
+                {
+                    if (!ulong.TryParse(m["to"]?.ToString(), out ulong to))
+                        continue;
+                    outMail.Add(new OutMail { Id = Convert.ToInt32(m["id"]), To = to, Text = m["text"]?.ToString() ?? "{}", Deadline = DateTime.UtcNow.AddSeconds(20) });
+                    Detail("mail " + m["id"] + " for " + to + ", " + ((string)m["text"]).Length + " characters");
+                }
+            foreach (var m in outMail.ToList())
+            {
+                if (m.Sent)
+                {
+                    if (DateTime.UtcNow > m.Deadline)
+                    {
+                        outMail.Remove(m);
+                        log("Profile mail " + m.Id + " to " + m.To + ": no answer");
+                        MailSent(m.Id, false, "no answer from the other PC");
+                    }
+                    continue;
+                }
+                // a host's server takes P2P only from its lobby's members: join it first
+                var h = hosts.Values.FirstOrDefault(x => x.SteamID == m.To);
+                if (h != null && !h.Joined && !loopback)
+                {
+                    if (h.PendingJoin == 0)
+                        h.PendingJoin = Native.SteamAPI_ISteamMatchmaking_JoinLobby(steam.Matchmaking, h.Lobby);
+                    if (DateTime.UtcNow > m.Deadline)
+                    {
+                        outMail.Remove(m);
+                        MailSent(m.Id, false, "couldn't join " + h.Name + "'s Steam lobby");
+                    }
+                    continue;
+                }
+                var payload = Gzip(Encoding.UTF8.GetBytes("{\"t\":\"mail\",\"id\":" + m.Id + ",\"body\":" + m.Text + "}"));
+                var msg = new byte[5 + payload.Length];
+                msg[0] = Mail;
+                BitConverter.GetBytes(1u).CopyTo(msg, 1);
+                payload.CopyTo(msg, 5);
+                Native.SteamAPI_ISteamNetworking_AcceptP2PSessionWithUser(steam.Networking, m.To);
+                if (loopback)
+                    loop.Enqueue(Tuple.Create(steam.MySteamID, msg));
+                else
+                    SendRaw(m.To, msg);
+                m.Sent = true;
+                m.Deadline = DateTime.UtcNow.AddSeconds(20);
+                log("Profile mail " + m.Id + " sent to " + (h?.Name ?? m.To.ToString()) + " (" + payload.Length / 1024 + " KB)");
+            }
+        }
+
+        void MailSent(int id, bool ok, string error)
+        {
+            try
+            {
+                var body = json.Serialize(new Dictionary<string, object> { { "id", id }, { "ok", ok }, { "error", error ?? "" } });
+                mailHttp.PostAsync(apiUrl + "/api/guest/sent", new StringContent(body, Encoding.UTF8, "application/json")).GetAwaiter().GetResult();
+            }
+            catch (Exception ex) { log("Couldn't tell this PC's server about profile mail " + id + ": " + ex.Message); }
+        }
+
+        void HandleMail(ulong peer, byte[] msg)
+        {
+            string text;
+            try
+            {
+                text = BitConverter.ToUInt32(msg, 1) == 1 ? Encoding.UTF8.GetString(Gunzip(msg, 5)) : Encoding.UTF8.GetString(msg, 5, msg.Length - 5);
+            }
+            catch (Exception ex)
+            {
+                log("Bad profile mail from " + peer + ": " + ex.Message);
+                return;
+            }
+            // the "t" and "id" fields lead the text: read them without parsing the (big) body
+            var head = text.Length > 200 ? text.Substring(0, 200) : text;
+            var t = System.Text.RegularExpressions.Regex.Match(head, "^\\{\"t\":\"(\\w+)\",\"id\":(\\d+)");
+            if (!t.Success)
+                return;
+            int id = int.Parse(t.Groups[2].Value);
+            if (t.Groups[1].Value == "ack")
+            {
+                var m = outMail.FirstOrDefault(x => x.Id == id && (x.To == peer || loopback));
+                if (m == null)
+                    return;
+                outMail.Remove(m);
+                var ack = json.Deserialize<Dictionary<string, object>>(text);
+                bool ok = ack.TryGetValue("ok", out var o) && o is bool b && b;
+                string error = ack.TryGetValue("error", out var e) ? e?.ToString() : null;
+                log("Profile mail " + id + " " + (ok ? "taken by" : "refused by (" + error + ")") + " " + peer);
+                MailSent(id, ok, error);
+                return;
+            }
+            if (t.Groups[1].Value != "mail")
+                return;
+            int bodyAt = text.IndexOf(",\"body\":", StringComparison.Ordinal);
+            string bodyText = bodyAt < 0 ? "null" : text.Substring(bodyAt + 8, text.Length - bodyAt - 9);
+            bool taken = false;
+            string why = "this PC's server didn't answer";
+            try
+            {
+                var post = "{\"from\":\"" + (loopback ? steam.MySteamID : peer) + "\",\"body\":" + bodyText + "}";
+                var resp = mailHttp.PostAsync(apiUrl + "/api/guest/inbox", new StringContent(post, Encoding.UTF8, "application/json")).GetAwaiter().GetResult();
+                var answer = json.Deserialize<Dictionary<string, object>>(resp.Content.ReadAsStringAsync().GetAwaiter().GetResult());
+                taken = answer.TryGetValue("ok", out var o) && o is bool b && b;
+                why = answer.TryGetValue("error", out var e) ? e?.ToString() : null;
+            }
+            catch (Exception ex) { why = "this PC's server: " + ex.Message; }
+            log("Profile mail from " + peer + (taken ? " handed to this PC's server" : " not taken: " + why));
+            var reply = Encoding.UTF8.GetBytes(json.Serialize(new Dictionary<string, object> { { "t", "ack" }, { "id", id }, { "ok", taken }, { "error", why ?? "" } }));
+            var r = new byte[5 + reply.Length];
+            r[0] = Mail;
+            reply.CopyTo(r, 5);
+            if (loopback)
+                loop.Enqueue(Tuple.Create(LoopHostSide, r));
+            else
+                SendRaw(peer, r);
+        }
+
+        static byte[] Gzip(byte[] data)
+        {
+            using (var m = new MemoryStream())
+            {
+                using (var z = new System.IO.Compression.GZipStream(m, System.IO.Compression.CompressionLevel.Optimal, true))
+                    z.Write(data, 0, data.Length);
+                return m.ToArray();
+            }
+        }
+
+        static byte[] Gunzip(byte[] data, int offset)
+        {
+            using (var z = new System.IO.Compression.GZipStream(new MemoryStream(data, offset, data.Length - offset), System.IO.Compression.CompressionMode.Decompress))
+            using (var m = new MemoryStream())
+            {
+                z.CopyTo(m);
+                return m.ToArray();
             }
         }
 

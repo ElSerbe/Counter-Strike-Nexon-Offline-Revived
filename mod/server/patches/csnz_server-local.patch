@@ -1,5 +1,5 @@
 diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
-index b5e72be..e5f5d4f 100644
+index b5e72be..904c1c4 100644
 --- a/src/CMakeLists.txt
 +++ b/src/CMakeLists.txt
 @@ -38,6 +38,13 @@ endif()
@@ -16,15 +16,16 @@ index b5e72be..e5f5d4f 100644
  target_sources(PROJECTNAME PRIVATE "command.cpp")
  target_sources(PROJECTNAME PRIVATE "common/buffer.cpp")
  target_sources(PROJECTNAME PRIVATE "common/buildnum.cpp")
-@@ -56,6 +63,7 @@ target_sources(PROJECTNAME PRIVATE "command.cpp")
+@@ -56,6 +63,8 @@ target_sources(PROJECTNAME PRIVATE "command.cpp")
  
  target_sources(PROJECTNAME PRIVATE "manager/manager.cpp")
  target_sources(PROJECTNAME PRIVATE "manager/usermanager.cpp")
 +target_sources(PROJECTNAME PRIVATE "manager/transfer.cpp")
++target_sources(PROJECTNAME PRIVATE "manager/guestprofile.cpp")
  if (SERVER_DB_PROXY)
  	target_sources(PROJECTNAME PRIVATE "manager/userdatabase.cpp")
  endif()
-@@ -74,6 +82,7 @@ target_sources(PROJECTNAME PRIVATE "manager/minigamemanager.cpp")
+@@ -74,6 +83,7 @@ target_sources(PROJECTNAME PRIVATE "manager/minigamemanager.cpp")
  target_sources(PROJECTNAME PRIVATE "manager/clanmanager.cpp")
  target_sources(PROJECTNAME PRIVATE "manager/rankmanager.cpp")
  target_sources(PROJECTNAME PRIVATE "manager/voxelmanager.cpp")
@@ -32,7 +33,7 @@ index b5e72be..e5f5d4f 100644
  target_sources(PROJECTNAME PRIVATE "manager/classmodmanager.cpp")
  
  target_sources(PROJECTNAME PRIVATE "packet/packethelper_fulluserinfo.cpp")
-@@ -148,6 +157,8 @@ if (MSVC)
+@@ -148,6 +158,8 @@ if (MSVC)
  else()
  	# don't treat some warnings as errors
  	target_compile_options(PROJECTNAME PRIVATE -Wno-error=sign-compare -Wno-error=unused-variable -Wno-error=delete-non-virtual-dtor -Wno-error=unused-parameter -Wno-error=conversion-null -Wno-error=register -Wno-error=unused-value -Wno-error=reorder -Wno-error=attributes)
@@ -322,15 +323,17 @@ index 4e7a9ed..26f10a7 100644
  class IRoom;
  class CRoomUser;
 diff --git a/src/interface/iuserdatabase.h b/src/interface/iuserdatabase.h
-index 48b869d..99c8a3a 100644
+index 48b869d..eae3349 100644
 --- a/src/interface/iuserdatabase.h
 +++ b/src/interface/iuserdatabase.h
-@@ -97,6 +97,20 @@ public:
+@@ -97,6 +97,22 @@ public:
  	virtual int SetAddons(int userID, std::vector<int>& addons) = 0;
  
  	virtual int GetUsersAssociatedWithIP(const std::string& ip, std::vector<CUserData>& userData) = 0;
 +	virtual int GetLocalAccounts(std::vector<LocalAccount_s>& accounts) = 0;
 +	virtual int DeleteLocalAccount(const std::string& userName) = 0;
++	virtual int ExportUserData(int userID, std::string& out) = 0;
++	virtual int ImportUserData(int userID, const std::string& data, bool clearMissing, bool keepGameName) = 0;
 +	virtual int GetWarbondUnlocks(int userID, std::vector<WarbondUnlock_s>& unlocks) = 0;
 +	virtual int AddWarbondUnlock(int userID, const WarbondUnlock_s& unlock) = 0;
 +	virtual int GetOrderProgress(int userID, std::vector<OrderProgress_s>& orders) = 0;
@@ -1195,10 +1198,10 @@ index 0000000..b776092
 +}
 diff --git a/src/manager/bingomanager.h b/src/manager/bingomanager.h
 new file mode 100644
-index 0000000..e369114
+index 0000000..5c99d8e
 --- /dev/null
 +++ b/src/manager/bingomanager.h
-@@ -0,0 +1,92 @@
+@@ -0,0 +1,95 @@
 +#pragma once
 +
 +#include <string>
@@ -1250,6 +1253,9 @@ index 0000000..e369114
 +class CBingoManager : public CBaseManager<IBingoManager>
 +{
 +public:
++	// offline build: one player's state, carried with their profile to another PC's server and back (guestprofile.cpp)
++	nlohmann::json ExportUser(int userID) { auto it = m_State.find(std::to_string(userID)); return it == m_State.end() ? nlohmann::json() : *it; }
++	void ImportUser(int userID, const nlohmann::json& state) { if (state.is_object()) m_State[std::to_string(userID)] = state; else m_State.erase(std::to_string(userID)); Save(); }
 +	CBingoManager();
 +
 +	virtual bool Init();
@@ -1292,16 +1298,17 @@ index 0000000..e369114
 +
 +extern CBingoManager g_BingoManager;
 diff --git a/src/manager/channelmanager.cpp b/src/manager/channelmanager.cpp
-index 35561e8..f09e0f5 100644
+index 35561e8..e21c09e 100644
 --- a/src/manager/channelmanager.cpp
 +++ b/src/manager/channelmanager.cpp
-@@ -1,4 +1,5 @@
+@@ -1,4 +1,6 @@
  #include "channelmanager.h"
 +#include "transfer.h"
++#include "guestprofile.h"
  
  #include "itemmanager.h"
  #include "packetmanager.h"
-@@ -121,7 +122,20 @@ bool CChannelManager::OnRoomRequest(CReceivePacket* msg, IExtendedSocket* socket
+@@ -121,7 +123,20 @@ bool CChannelManager::OnRoomRequest(CReceivePacket* msg, IExtendedSocket* socket
  		g_PacketManager.SendRoomListFull(socket, channelServers[0]->GetChannels()[0]->GetRooms());
  		break;
  	case 27:
@@ -1322,7 +1329,7 @@ index 35561e8..f09e0f5 100644
  	case InRoomType::SetZBAddonsRequest:
  		return OnRoomSetZBAddonRequest(msg, user);
  	case InRoomType::KickRequest:
-@@ -379,7 +393,12 @@ bool CChannelManager::OnCommandHandler(IExtendedSocket* socket, IUser* user, con
+@@ -379,7 +394,12 @@ bool CChannelManager::OnCommandHandler(IExtendedSocket* socket, IUser* user, con
  
  	if (!user)
  	{
@@ -1336,7 +1343,7 @@ index 35561e8..f09e0f5 100644
  		{
  			if (args.size() == 3)
  			{
-@@ -443,6 +462,39 @@ bool CChannelManager::OnCommandHandler(IExtendedSocket* socket, IUser* user, con
+@@ -443,6 +463,42 @@ bool CChannelManager::OnCommandHandler(IExtendedSocket* socket, IUser* user, con
  	}
  	else
  	{
@@ -1353,6 +1360,9 @@ index 35561e8..f09e0f5 100644
 +			if (user->GetCurrentRoom())
 +				user->GetCurrentRoom()->RemoveUser(user);
 +			Logger().Info("User '%s' goes back to their own server (/home)\n", user->GetLogName());
++			// a guest with their own profile: it goes home first, then the transfer
++			if (GuestProfiles::GoHome(user, back))
++				return true;
 +			g_PacketManager.SendTransfer(socket, "127.0.0.1", 30002, back);
 +			return true;
 +		}
@@ -1376,7 +1386,7 @@ index 35561e8..f09e0f5 100644
  		CUserCharacterExtended characterExtended = user->GetCharacterExtended(EXT_UFLAG_GAMEMASTER);
  		if (characterExtended.gameMaster)
  		{
-@@ -1270,10 +1322,50 @@ bool CChannelManager::OnNewRoomRequest(CReceivePacket* msg, IUser* user)
+@@ -1270,10 +1326,50 @@ bool CChannelManager::OnNewRoomRequest(CReceivePacket* msg, IUser* user)
  
  bool CChannelManager::OnJoinRoomRequest(CReceivePacket* msg, IUser* user)
  {
@@ -1418,8 +1428,8 @@ index 35561e8..f09e0f5 100644
 +	string ticket = "r1|" + steamID + "|" + clean(gameName) + "|" + to_string(room.rid) + "|" + clean(password) + "|" + back + "|" + to_string(room.port);
 +
 +	Logger().Info("User '%s' joins %s's room %d (here %d) through the Steam bridge, 127.0.0.1:%d\n", user->GetLogName(), room.host.c_str(), room.rid, roomID, room.port);
-+	g_PacketManager.SendTransfer(socket, "127.0.0.1", room.port, ticket);
-+	return true;
++	// their profile goes first (they play over there with their own account), then the transfer
++	return GuestProfiles::JoinRemote(user, room, room.port, ticket);
 +}
 +
 +bool CChannelManager::JoinRoom(IUser* user, int roomID, const string& password)
@@ -1428,7 +1438,7 @@ index 35561e8..f09e0f5 100644
  	CChannel* channel = user->GetCurrentChannel();
  	if (channel == NULL)
  	{
-@@ -1705,13 +1797,43 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
+@@ -1705,13 +1801,43 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
  		return false;
  	}
  
@@ -1472,7 +1482,7 @@ index 35561e8..f09e0f5 100644
  	if (newSettings.familyBattle)
  	{
  		CUserCharacter character = user->GetCharacter(UFLAG_LOW_CLAN);
-@@ -1921,7 +2043,12 @@ bool CChannelManager::OnRoomKickRequest(CReceivePacket* msg, IUser* user)
+@@ -1921,7 +2047,12 @@ bool CChannelManager::OnRoomKickRequest(CReceivePacket* msg, IUser* user)
  		return false;
  	}
  
@@ -1486,7 +1496,7 @@ index 35561e8..f09e0f5 100644
  	if (destUser == NULL)
  	{
  		Logger().Warn("User '%s' tried to kick a user from a room, although destUser == NULL (RID: %d)\n", user->GetLogName(), currentRoom->GetID());
-@@ -2089,7 +2216,7 @@ bool CChannelManager::OnVoxelRoomListRequest(CReceivePacket* msg, IUser* user)
+@@ -2089,7 +2220,7 @@ bool CChannelManager::OnVoxelRoomListRequest(CReceivePacket* msg, IUser* user)
  {
  	string voxel_id = msg->ReadString();
  
@@ -1508,6 +1518,616 @@ index ab4039d..5a2ce45 100644
  	void EndAllGames();
  
  	std::vector<CChannelServer*> channelServers;
+diff --git a/src/manager/guestprofile.cpp b/src/manager/guestprofile.cpp
+new file mode 100644
+index 0000000..13016e4
+--- /dev/null
++++ b/src/manager/guestprofile.cpp
+@@ -0,0 +1,552 @@
++// offline build: a player's profile on another PC's server and back (see guestprofile.h)
++#include "guestprofile.h"
++#include "transfer.h"
++#include "usermanager.h"
++#include "packetmanager.h"
++#include "userdatabase.h"
++#include "bingomanager.h"
++#include "zsriftmanager.h"
++#include "interface/iroom.h"
++#include "interface/iuser.h"
++#include "command.h"
++
++#include <ctime>
++#include <fstream>
++#include <algorithm>
++#include <filesystem>
++#include <functional>
++#include <map>
++#include <vector>
++
++using namespace std;
++using json = nlohmann::json;
++
++namespace
++{
++	const char* kCheckoutsFile = "Data/GuestCheckouts.json";
++	const int kMailTimeout = 30;          // s: the bridge answers within 20 s
++	const int kProfileLifetime = 10 * 60; // s: a profile that came for a transfer that never happened is dropped
++	const int kResultRetries = 20, kResultRetryEvery = 30;
++
++	struct Mail_s
++	{
++		int id;
++		string to;
++		json body;
++		time_t created = 0, notBefore = 0, takenAt = 0;
++		bool taken = false;
++		int tries = 0;
++		function<void(bool ok, const string& error)> done;
++	};
++	vector<Mail_s> g_Outbox;
++	int g_NextMail = 1;
++
++	// home: this PC's accounts that are away, by user id
++	struct Checkout_s
++	{
++		string hostID, hostName, userName;
++		time_t since;
++	};
++	map<int, Checkout_s> g_Checkouts;
++	bool g_CheckoutsLoaded = false;
++
++	// host: profiles that came for a transfer (by the sender's Steam ID), and the guests on this server (by user id)
++	struct Incoming_s
++	{
++		json profile;
++		time_t at;
++	};
++	map<string, Incoming_s> g_Incoming;
++	struct Guest_s
++	{
++		string steamID;
++		bool finalSent = false;
++	};
++	map<int, Guest_s> g_Guests;
++
++	void LoadCheckouts()
++	{
++		if (g_CheckoutsLoaded)
++			return;
++		g_CheckoutsLoaded = true;
++		ifstream f(kCheckoutsFile);
++		if (!f.is_open())
++			return;
++		json j = json::parse(f, nullptr, false);
++		if (!j.is_object())
++			return;
++		for (auto& [key, c] : j.items())
++			g_Checkouts[atoi(key.c_str())] = { c.value("hostID", string()), c.value("hostName", string()), c.value("userName", string()), (time_t)c.value("since", (int64_t)0) };
++	}
++
++	void SaveCheckouts()
++	{
++		json j = json::object();
++		for (auto& [userID, c] : g_Checkouts)
++			j[to_string(userID)] = { { "hostID", c.hostID }, { "hostName", c.hostName }, { "userName", c.userName }, { "since", (int64_t)c.since } };
++		ofstream f(kCheckoutsFile);
++		f << j.dump(1);
++	}
++
++	int Send(const string& to, const json& body, function<void(bool, const string&)> done)
++	{
++		Mail_s m;
++		m.id = g_NextMail++;
++		m.to = to;
++		m.body = body;
++		m.done = done;
++		m.created = time(NULL);
++		g_Outbox.push_back(m);
++		return m.id;
++	}
++
++	// the profile as it travels: the database's profile tables plus the bingo and rift state
++	bool Export(int userID, json& out)
++	{
++		string tables;
++		if (!g_UserDatabase.ExportUserData(userID, tables))
++			return false;
++		out = json::parse(tables, nullptr, false);
++		if (!out.is_object())
++			return false;
++		out["bingo"] = g_BingoManager.ExportUser(userID);
++		out["zsrift"] = g_ZSRiftManager.ExportUser(userID);
++		out["version"] = 1;
++		return true;
++	}
++
++	string CharacterName(const json& profile);
++
++	bool Import(int userID, json profile, bool asGuest)
++	{
++		// a profile without its character would wipe the account: refused
++		if (!profile.is_object() || !profile.contains("tables") || CharacterName(profile).empty())
++		{
++			Logger().Warn("GuestProfiles: a profile without a character was refused (account %d)\n", userID);
++			return false;
++		}
++		if (!asGuest)
++		{
++			// this PC's own account: what it was before goes to Data/GuestBackups first (the last 10 are kept)
++			json before;
++			if (Export(userID, before))
++			{
++				namespace fs = std::filesystem;
++				std::error_code ec;
++				fs::create_directories("Data/GuestBackups", ec);
++				ofstream("Data/GuestBackups/" + to_string(userID) + "-" + to_string((long long)time(NULL)) + ".json") << before.dump();
++				vector<string> old;
++				for (auto& entry : fs::directory_iterator("Data/GuestBackups", ec))
++				{
++					string name = entry.path().filename().string();
++					if (name.rfind(to_string(userID) + "-", 0) == 0)
++						old.push_back(name);
++				}
++				sort(old.begin(), old.end());
++				for (size_t i = 0; i + 10 < old.size(); i++)
++					fs::remove("Data/GuestBackups/" + old[i], ec);
++			}
++		}
++		if (asGuest)
++		{
++			// no game master rights on someone else's server
++			auto ext = profile["tables"].find("UserCharacterExtended");
++			if (ext != profile["tables"].end())
++			{
++				const json& cols = (*ext)["columns"];
++				for (size_t c = 0; c < cols.size(); c++)
++					if (cols[c] == "gameMaster")
++						for (auto& row : (*ext)["rows"])
++							row[c] = 0;
++			}
++		}
++		if (!g_UserDatabase.ImportUserData(userID, json({ { "tables", profile["tables"] } }).dump(), asGuest, !asGuest))
++			return false;
++		g_BingoManager.ImportUser(userID, profile.value("bingo", json()));
++		g_ZSRiftManager.ImportUser(userID, profile.value("zsrift", json()));
++		return true;
++	}
++
++	string CharacterName(const json& profile)
++	{
++		try
++		{
++			const json& t = profile.at("tables").at("UserCharacter");
++			const json& cols = t.at("columns");
++			for (size_t c = 0; c < cols.size(); c++)
++				if (cols[c] == "gameName" && !t.at("rows").empty())
++					return t["rows"][0][c].get<string>();
++		}
++		catch (exception&) {}
++		return string();
++	}
++
++	// one try to hand a guest's profile to their PC; a last copy that doesn't get there is tried again for 10 minutes
++	// (their game may be restarting)
++	void SendResultMail(const string& steamID, const json& body, bool final, function<void(bool)> then, int tries)
++	{
++		Send(steamID, body, [steamID, body, final, then, tries](bool ok, const string& error)
++		{
++			bool again = !ok && final && tries + 1 < kResultRetries;
++			if (ok)
++				Logger().Info("GuestProfiles: Steam %s's PC took their profile back\n", steamID.c_str());
++			else
++				Logger().Warn("GuestProfiles: Steam %s's PC didn't take their profile (%s)%s\n", steamID.c_str(), error.c_str(), again ? ", trying again in 30 s" : "");
++			if (then)
++				then(ok);
++			if (again)
++			{
++				SendResultMail(steamID, body, final, nullptr, tries + 1);
++				g_Outbox.back().notBefore = time(NULL) + kResultRetryEvery;
++			}
++		});
++	}
++
++	// the host's server sends a guest's profile back home
++	void SendResult(int userID, bool final, function<void(bool)> then = nullptr)
++	{
++		auto g = g_Guests.find(userID);
++		json profile;
++		if (g == g_Guests.end() || !Export(userID, profile))
++		{
++			if (g != g_Guests.end())
++				Logger().Warn("GuestProfiles: couldn't read guest %d's profile to send it home\n", userID);
++			if (then)
++				then(false);
++			return;
++		}
++		Logger().Info("GuestProfiles: sending guest %d's profile back to their PC (Steam %s)%s\n", userID, g->second.steamID.c_str(), final ? ", their last copy" : "");
++		SendResultMail(g->second.steamID, { { "kind", "result" }, { "final", final }, { "profile", profile } }, final, then, 0);
++	}
++}
++// ------------------------------------------------------------ home side
++bool GuestProfiles::JoinRemote(IUser* user, const RemoteRoom_s& room, int port, const string& ticket)
++{
++	LoadCheckouts();
++	IExtendedSocket* socket = user->GetExtendedSocket();
++	if (room.hostID.empty())
++	{
++		g_PacketManager.SendUMsgNoticeMsgBoxToUuid(socket, room.host + "'s game is on an older version that can't take your profile.\nBoth of you need the latest version (the launcher's Update button).");
++		return false;
++	}
++	json profile;
++	if (!Export(user->GetID(), profile))
++	{
++		g_PacketManager.SendUMsgNoticeMsgBoxToUuid(socket, "Your profile couldn't be read, so you can't join other players' rooms right now.");
++		return false;
++	}
++	string gameName = user->GetCharacter(UFLAG_LOW_GAMENAME).gameName;
++	int userID = user->GetID();
++	string userName = user->GetUsername(), hostID = room.hostID, hostName = room.host;
++	g_PacketManager.SendUMsgNoticeMessageInChat(socket, "Sending your profile to " + hostName + "'s PC...");
++	Logger().Info("GuestProfiles: sending user %d's profile to %s (Steam %s) before joining their room\n", userID, hostName.c_str(), hostID.c_str());
++	Send(hostID, { { "kind", "profile" }, { "name", gameName }, { "profile", profile } },
++		[userID, userName, hostID, hostName, port, ticket, socket](bool ok, const string& error)
++	{
++		IUser* u = g_UserManager.GetUserById(userID);
++		if (!u || u->GetExtendedSocket() != socket || u->GetCurrentRoom())
++			return; // they left or did something else meanwhile
++		if (!ok)
++		{
++			Logger().Warn("GuestProfiles: %s's PC didn't take user %d's profile: %s\n", hostName.c_str(), userID, error.c_str());
++			g_PacketManager.SendUMsgNoticeMsgBoxToUuid(socket, "Your profile couldn't be sent to " + hostName + "'s PC (" + error + ").\nTry again in a moment.");
++			return;
++		}
++		g_Checkouts[userID] = { hostID, hostName, userName, time(NULL) };
++		SaveCheckouts();
++		Logger().Info("GuestProfiles: user %d plays on %s's server now; their profile comes back after every match\n", userID, hostName.c_str());
++		g_PacketManager.SendTransfer(socket, "127.0.0.1", port, ticket);
++	});
++	return true;
++}
++
++void GuestProfiles::OnLocalLogin(int userID)
++{
++	LoadCheckouts();
++	auto it = g_Checkouts.find(userID);
++	if (it == g_Checkouts.end())
++		return;
++	Logger().Info("GuestProfiles: user %d is back on this server; copies of their profile from %s that come later are ignored\n", userID, it->second.hostName.c_str());
++	g_Checkouts.erase(it);
++	SaveCheckouts();
++}
++
++bool GuestProfiles::AwayOnHost(string& hostName)
++{
++	LoadCheckouts();
++	if (g_Checkouts.empty())
++		return false;
++	hostName = g_Checkouts.begin()->second.hostName;
++	return true;
++}
++
++// ------------------------------------------------------------ host side
++bool GuestProfiles::LoadIncoming(const string& steamID, int userID)
++{
++	auto it = g_Incoming.find(steamID);
++	if (it == g_Incoming.end())
++		return false;
++	json profile = it->second.profile;
++	g_Incoming.erase(it);
++	if (!Import(userID, profile, true))
++	{
++		Logger().Warn("GuestProfiles: couldn't load Steam %s's profile into account %d\n", steamID.c_str(), userID);
++		return false;
++	}
++	// the character name must be free on this server
++	string name = CharacterName(profile);
++	if (!name.empty())
++	{
++		string use = name;
++		for (int i = 2; i < 30; i++)
++		{
++			int owner = g_UserDatabase.IsUserExists(use, false);
++			if (owner == 0 || owner == userID)
++				break;
++			use = name.substr(0, 13) + "_" + to_string(i);
++		}
++		if (use != name)
++		{
++			CUserCharacter character = {};
++			character.lowFlag = UFLAG_LOW_GAMENAME;
++			character.gameName = use;
++			g_UserDatabase.UpdateCharacter(userID, character);
++			Logger().Info("GuestProfiles: '%s' is taken here, Steam %s plays as '%s'\n", name.c_str(), steamID.c_str(), use.c_str());
++		}
++	}
++	Logger().Info("GuestProfiles: Steam %s plays here with their own profile (account %d)\n", steamID.c_str(), userID);
++	return true;
++}
++
++void GuestProfiles::OnGuestLogin(int userID, const string& steamID)
++{
++	g_Guests[userID] = { steamID, false };
++}
++
++bool GuestProfiles::IsGuest(int userID)
++{
++	return g_Guests.count(userID) != 0;
++}
++
++void GuestProfiles::OnMatchEnd(IRoom* room)
++{
++	if (!room || g_Guests.empty())
++		return;
++	for (auto u : room->GetUsers())
++		if (IsGuest(u->GetID()))
++			SendResult(u->GetID(), false);
++}
++
++bool GuestProfiles::GoHome(IUser* user, const string& back)
++{
++	auto g = g_Guests.find(user->GetID());
++	if (g == g_Guests.end())
++		return false;
++	g->second.finalSent = true;
++	int userID = user->GetID();
++	IExtendedSocket* socket = user->GetExtendedSocket();
++	g_PacketManager.SendUMsgNoticeMessageInChat(socket, "Sending your profile home...");
++	SendResult(userID, true, [userID, socket, back](bool ok)
++	{
++		IUser* u = g_UserManager.GetUserById(userID);
++		if (!u || u->GetExtendedSocket() != socket)
++			return;
++		if (!ok)
++			g_PacketManager.SendUMsgNoticeMessageInChat(socket, "Your PC didn't answer: this server keeps trying to send your profile home for 10 minutes.");
++		g_PacketManager.SendTransfer(socket, "127.0.0.1", 30002, back);
++	});
++	return true;
++}
++
++void GuestProfiles::Forget(int userID)
++{
++	g_Guests.erase(userID);
++}
++
++void GuestProfiles::OnGuestLeft(int userID)
++{
++	auto g = g_Guests.find(userID);
++	if (g == g_Guests.end())
++		return;
++	if (!g->second.finalSent)
++		SendResult(userID, true);
++	g_Guests.erase(userID);
++}
++
++// ------------------------------------------------------------ a test on one PC
++// Console: guesttest <userName> (the account logged out, the Steam bridge running with --loopback). The whole trip
++// through the bridge: the profile goes "away" to this same server's steam_<own Steam ID> guest account, the guest gets
++// 1000 points there, the profile comes back into the account. The log tells each step; Data/GuestBackups keeps the
++// account as it was.
++static void GuestTest(CCommand*, const vector<string>& args)
++{
++	if (args.size() < 2)
++	{
++		Logger().Info("guesttest <userName>\n");
++		return;
++	}
++	string userName = args[1], steamID, steamName;
++	int userID = g_UserDatabase.IsUserExists(userName, true);
++	if (userID <= 0 || g_UserManager.GetUserById(userID))
++	{
++		Logger().Info("guesttest: no account '%s', or it's logged in\n", userName.c_str());
++		return;
++	}
++	if (!ServerTransfer::LoadSteamIdentity(steamID, steamName))
++	{
++		Logger().Info("guesttest: the Steam bridge isn't running\n");
++		return;
++	}
++	json profile;
++	if (!Export(userID, profile))
++		return;
++	auto points = [](int id) { CUserCharacter c = {}; c.lowFlag = UFLAG_LOW_POINTS | UFLAG_LOW_GAMENAME; g_UserDatabase.GetCharacter(id, c); return c; };
++	Logger().Info("guesttest: '%s' has %d points; sending their profile to this PC's own Steam ID %s\n", userName.c_str(), points(userID).points, steamID.c_str());
++	Send(steamID, { { "kind", "profile" }, { "name", userName }, { "profile", profile } }, [=](bool ok, const string& error)
++	{
++		if (!ok)
++		{
++			Logger().Info("guesttest: the profile didn't go through: %s\n", error.c_str());
++			return;
++		}
++		string guestName = "steam_" + steamID;
++		int guestID = g_UserDatabase.IsUserExists(guestName, true);
++		if (guestID <= 0)
++			g_UserDatabase.Register(guestName, "ptest" + steamID.substr(steamID.size() - 6), "steam-" + steamID);
++		guestID = g_UserDatabase.IsUserExists(guestName, true);
++		if (guestID <= 0 || !GuestProfiles::LoadIncoming(steamID, guestID))
++		{
++			Logger().Info("guesttest: the guest account couldn't take the profile\n");
++			return;
++		}
++		CUserCharacter g = points(guestID);
++		Logger().Info("guesttest: guest account %d is '%s' with %d points; +1000 as a match reward\n", guestID, g.gameName.c_str(), g.points);
++		CUserCharacter add = {};
++		add.lowFlag = UFLAG_LOW_POINTS;
++		add.points = g.points + 1000;
++		g_UserDatabase.UpdateCharacter(guestID, add);
++		g_Checkouts[userID] = { steamID, "this PC (test)", userName, time(NULL) };
++		SaveCheckouts();
++		GuestProfiles::OnGuestLogin(guestID, steamID);
++		SendResult(guestID, true, [=](bool back)
++		{
++			g_Guests.erase(guestID);
++			CUserCharacter after = points(userID);
++			Logger().Info("guesttest: %s; '%s' (%s) has %d points now, checkout %s\n", back ? "the profile came back" : "the profile did NOT come back",
++				userName.c_str(), after.gameName.c_str(), after.points, g_Checkouts.count(userID) ? "still open" : "closed");
++		});
++	});
++}
++static CCommand guesttest("guesttest", "Test of carrying a profile to another server and back (Steam bridge with --loopback)", "guesttest <userName>", GuestTest);
++
++// ------------------------------------------------------------ the bridge's API
++json GuestProfiles::Outbox()
++{
++	LoadCheckouts();
++	time_t now = time(NULL);
++	Tick(now);
++	json mail = json::array();
++	for (auto& m : g_Outbox)
++		if (!m.taken && now >= m.notBefore)
++		{
++			m.taken = true;
++			m.takenAt = now;
++			mail.push_back({ { "id", m.id }, { "to", m.to }, { "text", m.body.dump() } }); // the bridge passes the text on as it is
++		}
++	// the bridge accepts P2P sessions from these PCs: the hosts this PC's players are away on, and this server's guests
++	json peers = json::array();
++	for (auto& [userID, c] : g_Checkouts)
++		peers.push_back(c.hostID);
++	for (auto& [userID, g] : g_Guests)
++		peers.push_back(g.steamID);
++	for (auto& m : g_Outbox)
++		peers.push_back(m.to);
++	return { { "mail", mail }, { "peers", peers } };
++}
++
++json GuestProfiles::Sent(const json& body)
++{
++	int id = body.value("id", 0);
++	bool ok = body.value("ok", false);
++	string error = body.value("error", string(ok ? "" : "no answer"));
++	for (auto it = g_Outbox.begin(); it != g_Outbox.end(); ++it)
++		if (it->id == id)
++		{
++			auto done = it->done;
++			g_Outbox.erase(it);
++			if (done)
++				done(ok, error);
++			return { { "ok", true } };
++		}
++	return { { "ok", false } };
++}
++
++json GuestProfiles::Inbox(const json& body)
++{
++	LoadCheckouts();
++	string from = body.value("from", string());
++	const json& mail = body.contains("body") ? body["body"] : json();
++	string kind = mail.is_object() ? mail.value("kind", string()) : string();
++	if (from.empty() || from.find_first_not_of("0123456789") != string::npos)
++		return { { "ok", false }, { "error", "bad sender" } };
++
++	if (kind == "profile")
++	{
++		// a player's server, just before their game transfers here
++		if (!mail.contains("profile") || !mail["profile"].is_object())
++			return { { "ok", false }, { "error", "no profile" } };
++		g_Incoming[from] = { mail["profile"], time(NULL) };
++		Logger().Info("GuestProfiles: Steam %s's profile came (%s), for their transfer to this server\n", from.c_str(), mail.value("name", string()).c_str());
++		return { { "ok", true } };
++	}
++	if (kind == "result")
++	{
++		// a host's server sends a player of this PC their profile back
++		for (auto& [userID, c] : g_Checkouts)
++		{
++			if (c.hostID != from)
++				continue;
++			if (g_UserManager.GetUserById(userID))
++			{
++				Logger().Info("GuestProfiles: ignored a profile from %s: user %d is playing on this server\n", c.hostName.c_str(), userID);
++				return { { "ok", true }, { "ignored", true } };
++			}
++			bool final = mail.value("final", false);
++			if (!Import(userID, mail.value("profile", json()), false))
++				return { { "ok", false }, { "error", "couldn't store the profile" } };
++			Logger().Info("GuestProfiles: user %d's profile came back from %s's server%s\n", userID, c.hostName.c_str(), final ? " (they left it)" : "");
++			if (final)
++			{
++				g_Checkouts.erase(userID);
++				SaveCheckouts();
++			}
++			return { { "ok", true } };
++		}
++		Logger().Info("GuestProfiles: ignored a profile from Steam %s: no player of this PC is away on their server\n", from.c_str());
++		return { { "ok", true }, { "ignored", true } };
++	}
++	return { { "ok", false }, { "error", "unknown mail" } };
++}
++
++void GuestProfiles::Tick(time_t now)
++{
++	// mail the bridge took but never answered for, or that no bridge picked up (online play isn't running), fails
++	for (size_t i = 0; i < g_Outbox.size(); )
++	{
++		Mail_s& m = g_Outbox[i];
++		time_t waiting = max(m.created, m.notBefore);
++		bool stale = m.taken ? now - m.takenAt > kMailTimeout : now >= m.notBefore && now - waiting > kMailTimeout;
++		if (!stale)
++		{
++			i++;
++			continue;
++		}
++		auto done = m.done;
++		bool taken = m.taken;
++		g_Outbox.erase(g_Outbox.begin() + i);
++		if (done)
++			done(false, taken ? "no answer from the other PC" : "online play isn't running");
++	}
++	for (auto it = g_Incoming.begin(); it != g_Incoming.end();)
++		it = now - it->second.at > kProfileLifetime ? g_Incoming.erase(it) : next(it);
++}
+diff --git a/src/manager/guestprofile.h b/src/manager/guestprofile.h
+new file mode 100644
+index 0000000..361d895
+--- /dev/null
++++ b/src/manager/guestprofile.h
+@@ -0,0 +1,46 @@
++#pragma once
++
++// offline build: a player's own profile travels with them to another PC's server (Steam online play) and back.
++//
++// The player's server ("home") sends their whole profile (every profile table of the database, bingo and Zombie
++// Disaster Zone state) to the room host's server before the transfer; the host loads it into the player's guest account
++// there (steam_<Steam ID>), so they play with their own level, inventory, loadouts, medals and missions. After every
++// match and when they leave, the host sends the profile back and home stores it in the player's account ("checkout":
++// home only takes it from that host while the player is away; once they log in at home again, late copies are ignored).
++//
++// The servers talk through their Steam bridges ("mail"): GET /api/guest/outbox gives the bridge what to send (and the
++// Steam IDs whose P2P sessions it should accept), POST /api/guest/sent says whether the other side took it, POST
++// /api/guest/inbox hands over what came from another PC. The bridge proves who sent what (the P2P sender's Steam ID).
++
++#include <string>
++#include "nlohmann/json.hpp"
++
++class IUser;
++class IRoom;
++struct RemoteRoom_s;
++
++namespace GuestProfiles
++{
++	// home: sends the profile to the room's host, then transfers the client there with the ticket
++	bool JoinRemote(IUser* user, const RemoteRoom_s& room, int port, const std::string& ticket);
++	// home: the player logged in here again: their checkout ends
++	void OnLocalLogin(int userID);
++	// home: a player of this PC is away on another PC's server (for the web pages' message); hostName gets its name
++	bool AwayOnHost(std::string& hostName);
++
++	// host: loads the profile a player's server sent into their guest account; false when none came
++	bool LoadIncoming(const std::string& steamID, int userID);
++	void OnGuestLogin(int userID, const std::string& steamID);
++	bool IsGuest(int userID);
++	// host: the profiles go back after every match and when the guest leaves
++	void OnMatchEnd(IRoom* room);
++	bool GoHome(IUser* user, const std::string& back); // /home: profile back first, then the transfer
++	void OnGuestLeft(int userID);
++	void Forget(int userID); // an old connection of a guest who is coming in again: nothing goes home from it
++
++	// the bridge's API
++	nlohmann::json Outbox();
++	nlohmann::json Sent(const nlohmann::json& body);
++	nlohmann::json Inbox(const nlohmann::json& body);
++	void Tick(time_t now);
++}
 diff --git a/src/manager/hostmanager.cpp b/src/manager/hostmanager.cpp
 index 24d1ccc..e4b37a8 100644
 --- a/src/manager/hostmanager.cpp
@@ -4512,10 +5132,10 @@ index 0000000..761853a
 +}
 diff --git a/src/manager/transfer.cpp b/src/manager/transfer.cpp
 new file mode 100644
-index 0000000..6908e06
+index 0000000..4aa532b
 --- /dev/null
 +++ b/src/manager/transfer.cpp
-@@ -0,0 +1,249 @@
+@@ -0,0 +1,250 @@
 +#include "transfer.h"
 +#include "main.h"
 +#include "net/sendpacket.h"
@@ -4593,6 +5213,7 @@ index 0000000..6908e06
 +			room.rid = r.value("rid", 0);
 +			room.port = r.value("port", 0);
 +			room.host = r.value("host", string());
++		room.hostID = r.value("hostID", string());
 +			room.entry = FromHex(r.value("entry", string()));
 +			// the client's patch only lets ports 30002-30199 through; an entry starts with a byte and the u32 room id
 +			if (room.vid < REMOTE_ROOM_FIRST_ID || room.vid > 65000 || room.port < 30003 || room.port > 30199 || room.entry.size() < 16)
@@ -4767,10 +5388,10 @@ index 0000000..6908e06
 +}
 diff --git a/src/manager/transfer.h b/src/manager/transfer.h
 new file mode 100644
-index 0000000..61a8b4b
+index 0000000..d31ead4
 --- /dev/null
 +++ b/src/manager/transfer.h
-@@ -0,0 +1,55 @@
+@@ -0,0 +1,56 @@
 +#pragma once
 +
 +// offline build: online play through Steam (the Steam bridge, mod/tools/steambridge).
@@ -4795,6 +5416,7 @@ index 0000000..61a8b4b
 +	int rid;                          // the room id on its own server
 +	int port;                         // 127.0.0.1:port = the bridge's tunnel to that server
 +	std::string host;                 // the host's Steam name
++	std::string hostID;               // the host's Steam ID (bridges from 1.1.8 on)
 +	std::vector<unsigned char> entry; // the room list entry, as that server writes it
 +};
 +
@@ -4827,10 +5449,10 @@ index 0000000..61a8b4b
 +	bool TakeTicket(const std::string& ticket, std::string& userName);
 +}
 diff --git a/src/manager/userdatabase.cpp b/src/manager/userdatabase.cpp
-index 0d23de4..52dbc67 100644
+index 0d23de4..757e94b 100644
 --- a/src/manager/userdatabase.cpp
 +++ b/src/manager/userdatabase.cpp
-@@ -626,6 +626,102 @@ int CUserDatabaseProxy::GetUsersAssociatedWithIP(const string& ip, vector<CUserD
+@@ -626,6 +626,118 @@ int CUserDatabaseProxy::GetUsersAssociatedWithIP(const string& ip, vector<CUserD
  	return result;
  }
  
@@ -4846,6 +5468,22 @@ index 0d23de4..52dbc67 100644
 +{
 +	ExecCalcStart();
 +	int result = m_pDatabase->DeleteLocalAccount(userName);
++	ExecCalcEnd(__FUNCTION__);
++	return result;
++}
++
++int CUserDatabaseProxy::ExportUserData(int userID, string& out)
++{
++	ExecCalcStart();
++	int result = m_pDatabase->ExportUserData(userID, out);
++	ExecCalcEnd(__FUNCTION__);
++	return result;
++}
++
++int CUserDatabaseProxy::ImportUserData(int userID, const string& data, bool clearMissing, bool keepGameName)
++{
++	ExecCalcStart();
++	int result = m_pDatabase->ImportUserData(userID, data, clearMissing, keepGameName);
 +	ExecCalcEnd(__FUNCTION__);
 +	return result;
 +}
@@ -4934,15 +5572,17 @@ index 0d23de4..52dbc67 100644
  {
  	ExecCalcStart();
 diff --git a/src/manager/userdatabase.h b/src/manager/userdatabase.h
-index ee72a34..af248ce 100644
+index ee72a34..6b6beac 100644
 --- a/src/manager/userdatabase.h
 +++ b/src/manager/userdatabase.h
-@@ -118,6 +118,18 @@ public:
+@@ -118,6 +118,20 @@ public:
  	virtual int SetAddons(int userID, std::vector<int>& addons);
  
  	virtual int GetUsersAssociatedWithIP(const std::string& ip, std::vector<CUserData>& userData);
 +	virtual int GetLocalAccounts(std::vector<LocalAccount_s>& accounts);
 +	virtual int DeleteLocalAccount(const std::string& userName);
++	virtual int ExportUserData(int userID, std::string& out);
++	virtual int ImportUserData(int userID, const std::string& data, bool clearMissing, bool keepGameName);
 +	virtual int GetWarbondUnlocks(int userID, std::vector<WarbondUnlock_s>& unlocks);
 +	virtual int AddWarbondUnlock(int userID, const WarbondUnlock_s& unlock);
 +	virtual int GetOrderProgress(int userID, std::vector<OrderProgress_s>& orders);
@@ -4957,10 +5597,19 @@ index ee72a34..af248ce 100644
  
  	// clan related
 diff --git a/src/manager/userdatabase_sqlite.cpp b/src/manager/userdatabase_sqlite.cpp
-index ed5fefb..5d6c74e 100644
+index ed5fefb..8d25b2b 100644
 --- a/src/manager/userdatabase_sqlite.cpp
 +++ b/src/manager/userdatabase_sqlite.cpp
-@@ -49,7 +49,7 @@ bool CUserDatabaseSQLite::Init()
+@@ -14,6 +14,8 @@
+ #include <direct.h>
+ #else
+ #include <sys/stat.h>
++#include <set>
++#include "nlohmann/json.hpp"
+ #endif
+ 
+ using namespace std;
+@@ -49,7 +51,7 @@ bool CUserDatabaseSQLite::Init()
  		m_Database.exec(OBFUSCATE("PRAGMA synchronous=OFF"));
  		m_Database.exec(OBFUSCATE("PRAGMA foreign_keys=ON"));
  
@@ -4969,7 +5618,7 @@ index ed5fefb..5d6c74e 100644
  			return false;
  
  		DropSessions();
-@@ -4101,6 +4101,326 @@ int CUserDatabaseSQLite::SetAddons(int userID, vector<int>& addons)
+@@ -4101,6 +4103,513 @@ int CUserDatabaseSQLite::SetAddons(int userID, vector<int>& addons)
  	return 1;
  }
  
@@ -5060,6 +5709,193 @@ index ed5fefb..5d6c74e 100644
 +		return 0;
 +	}
 +
++	return 1;
++}
++
++// Offline build: the tables that make up a player's profile (every table with a userID column but the login, session,
++// ban and clan ones). Used to carry a profile to another PC's server and back (guestprofile.cpp).
++static bool ProfileTable(const string& table)
++{
++	static const char* skip[] = { "User", "UserSession", "UserSessionHistory", "UserBan", "UserBanList", "UserRestore", "UserSurveyAnswer" };
++	for (auto s : skip)
++		if (table == s)
++			return false;
++	return table.rfind("Clan", 0) != 0;
++}
++
++static vector<string> ProfileTables(SQLite::Database& db)
++{
++	vector<string> tables;
++	SQLite::Statement list(db, "SELECT name FROM sqlite_master WHERE type = 'table'");
++	while (list.executeStep())
++	{
++		string table = list.getColumn(0).getString();
++		if (!ProfileTable(table))
++			continue;
++		SQLite::Statement columns(db, "SELECT 1 FROM pragma_table_info(?) WHERE name = 'userID'");
++		columns.bind(1, table);
++		if (columns.executeStep())
++			tables.push_back(table);
++	}
++	return tables;
++}
++
++/**
++ * Offline build: every profile row of an account as JSON text:
++ * {"tables": {"<table>": {"columns": [...], "rows": [[...], ...]}}}; blobs are {"hex": "..."}.
++ * @return 1 on success
++ */
++int CUserDatabaseSQLite::ExportUserData(int userID, string& out)
++{
++	try
++	{
++		nlohmann::json tables = nlohmann::json::object();
++		for (auto& table : ProfileTables(m_Database))
++		{
++			SQLite::Statement query(m_Database, "SELECT * FROM \"" + table + "\" WHERE userID = ?");
++			query.bind(1, userID);
++			nlohmann::json columns = nlohmann::json::array(), rows = nlohmann::json::array();
++			for (int c = 0; c < query.getColumnCount(); c++)
++				columns.push_back(query.getColumnName(c));
++			while (query.executeStep())
++			{
++				nlohmann::json row = nlohmann::json::array();
++				for (int c = 0; c < query.getColumnCount(); c++)
++				{
++					SQLite::Column col = query.getColumn(c);
++					if (col.isInteger())
++						row.push_back(col.getInt64());
++					else if (col.isFloat())
++						row.push_back(col.getDouble());
++					else if (col.isText())
++						row.push_back(col.getString());
++					else if (col.isBlob())
++					{
++						static const char digits[] = "0123456789abcdef";
++						const unsigned char* b = (const unsigned char*)col.getBlob();
++						string hex;
++						for (int i = 0; i < col.getBytes(); i++)
++						{
++							hex += digits[b[i] >> 4];
++							hex += digits[b[i] & 15];
++						}
++						row.push_back({ { "hex", hex } });
++					}
++					else
++						row.push_back(nullptr);
++				}
++				rows.push_back(row);
++			}
++			tables[table] = { { "columns", columns }, { "rows", rows } };
++		}
++		out = nlohmann::json({ { "tables", tables } }).dump();
++	}
++	catch (exception& e)
++	{
++		Logger().Error("CUserDatabaseSQLite::ExportUserData: database internal error: %s, %d\n", e.what(), m_Database.getErrorCode());
++		return 0;
++	}
++	return 1;
++}
++
++/**
++ * Offline build: replaces an account's profile rows with ExportUserData's JSON (from this or another PC). Columns this
++ * database doesn't have are left out, missing ones get their defaults. clearMissing: tables the JSON doesn't have are
++ * emptied for the account too (otherwise kept). keepGameName: the character keeps the name it has here.
++ * @return 1 on success (nothing is changed on failure)
++ */
++int CUserDatabaseSQLite::ImportUserData(int userID, const string& data, bool clearMissing, bool keepGameName)
++{
++	try
++	{
++		nlohmann::json j = nlohmann::json::parse(data);
++		const nlohmann::json& tables = j.at("tables");
++
++		string gameName;
++		if (keepGameName)
++		{
++			SQLite::Statement name(m_Database, "SELECT gameName FROM UserCharacter WHERE userID = ?");
++			name.bind(1, userID);
++			if (name.executeStep())
++				gameName = name.getColumn(0).getString();
++		}
++
++		SQLite::Transaction transaction(m_Database);
++		for (auto& table : ProfileTables(m_Database))
++		{
++			auto t = tables.find(table);
++			if (t == tables.end() && !clearMissing)
++				continue;
++			SQLite::Statement del(m_Database, "DELETE FROM \"" + table + "\" WHERE userID = ?");
++			del.bind(1, userID);
++			del.exec();
++			if (t == tables.end())
++				continue;
++
++			// the columns both sides have
++			set<string> here;
++			SQLite::Statement info(m_Database, "SELECT name FROM pragma_table_info(?)");
++			info.bind(1, table);
++			while (info.executeStep())
++				here.insert(info.getColumn(0).getString());
++			const nlohmann::json& columns = t->at("columns");
++			vector<int> use;
++			string names, marks;
++			for (int c = 0; c < (int)columns.size(); c++)
++			{
++				string name = columns[c].get<string>();
++				if (!here.count(name) || name.find('"') != string::npos)
++					continue;
++				use.push_back(c);
++				names += (names.empty() ? "\"" : ", \"") + name + "\"";
++				marks += marks.empty() ? "?" : ", ?";
++			}
++			if (use.empty())
++				continue;
++			for (auto& row : t->at("rows"))
++			{
++				SQLite::Statement ins(m_Database, "INSERT OR REPLACE INTO \"" + table + "\" (" + names + ") VALUES (" + marks + ")");
++				for (int k = 0; k < (int)use.size(); k++)
++				{
++					const nlohmann::json& v = row.at(use[k]);
++					if (columns[use[k]].get<string>() == "userID")
++						ins.bind(k + 1, userID);
++					else if (v.is_null())
++						ins.bind(k + 1);
++					else if (v.is_number_integer())
++						ins.bind(k + 1, (long long)v.get<int64_t>());
++					else if (v.is_number())
++						ins.bind(k + 1, v.get<double>());
++					else if (v.is_string())
++						ins.bind(k + 1, v.get<string>());
++					else if (v.is_object() && v.contains("hex"))
++					{
++						string hex = v["hex"].get<string>();
++						vector<unsigned char> blob;
++						for (size_t i = 0; i + 1 < hex.size(); i += 2)
++							blob.push_back((unsigned char)stoi(hex.substr(i, 2), nullptr, 16));
++						ins.bind(k + 1, blob.data(), (int)blob.size());
++					}
++					else
++						ins.bind(k + 1);
++				}
++				ins.exec();
++			}
++		}
++		if (keepGameName && !gameName.empty())
++		{
++			SQLite::Statement name(m_Database, "UPDATE UserCharacter SET gameName = ? WHERE userID = ?");
++			name.bind(1, gameName);
++			name.bind(2, userID);
++			name.exec();
++		}
++		transaction.commit();
++	}
++	catch (exception& e)
++	{
++		Logger().Error("CUserDatabaseSQLite::ImportUserData: %s, %d\n", e.what(), m_Database.getErrorCode());
++		return 0;
++	}
 +	return 1;
 +}
 +
@@ -5296,7 +6132,7 @@ index ed5fefb..5d6c74e 100644
  int CUserDatabaseSQLite::GetUsersAssociatedWithIP(const string& ip, vector<CUserData>& userData)
  {
  	try
-@@ -6437,7 +6757,7 @@ int CUserDatabaseSQLite::GetUserClassModLoadOut(int userID, int slot, ClassModIn
+@@ -6437,7 +6946,7 @@ int CUserDatabaseSQLite::GetUserClassModLoadOut(int userID, int slot, ClassModIn
  {
  	try
  	{
@@ -5306,15 +6142,17 @@ index ed5fefb..5d6c74e 100644
  				std::vector<int> data;
  				std::stringstream ss(column);
 diff --git a/src/manager/userdatabase_sqlite.h b/src/manager/userdatabase_sqlite.h
-index 0e1d7d2..a6efa65 100644
+index 0e1d7d2..b204040 100644
 --- a/src/manager/userdatabase_sqlite.h
 +++ b/src/manager/userdatabase_sqlite.h
-@@ -109,6 +109,19 @@ public:
+@@ -109,6 +109,21 @@ public:
  	int SetAddons(int userID, std::vector<int>& addons);
  
  	int GetUsersAssociatedWithIP(const std::string& ip, std::vector<CUserData>& userData);
 +	int GetLocalAccounts(std::vector<LocalAccount_s>& accounts);
 +	int DeleteLocalAccount(const std::string& userName);
++	int ExportUserData(int userID, std::string& out);
++	int ImportUserData(int userID, const std::string& data, bool clearMissing, bool keepGameName);
 +	int GetWarbondUnlocks(int userID, std::vector<WarbondUnlock_s>& unlocks);
 +	int AddWarbondUnlock(int userID, const WarbondUnlock_s& unlock);
 +	int GetOrderProgress(int userID, std::vector<OrderProgress_s>& orders);
@@ -5330,18 +6168,19 @@ index 0e1d7d2..a6efa65 100644
  
  	// clan related
 diff --git a/src/manager/usermanager.cpp b/src/manager/usermanager.cpp
-index b426874..4ad7830 100644
+index b426874..33ef1a1 100644
 --- a/src/manager/usermanager.cpp
 +++ b/src/manager/usermanager.cpp
-@@ -1,3 +1,7 @@
+@@ -1,3 +1,8 @@
 +#include "zsriftmanager.h"
++#include "guestprofile.h"
 +#include "transfer.h"
 +#include "medalmanager.h"
 +#include "missionmanager.h"
  #include "usermanager.h"
  #include "channelmanager.h"
  #include "userdatabase.h"
-@@ -16,6 +20,8 @@
+@@ -16,6 +21,8 @@
  #include "csvtable.h"
  #include "serverinstance.h"
  #include "serverconfig.h"
@@ -5350,7 +6189,7 @@ index b426874..4ad7830 100644
  
  using namespace std;
  
-@@ -157,6 +163,11 @@ bool CUserManager::OnLoginPacket(CReceivePacket* msg, IExtendedSocket* socket)
+@@ -157,6 +164,11 @@ bool CUserManager::OnLoginPacket(CReceivePacket* msg, IExtendedSocket* socket)
  
  	socket->SetHWID(hwid);
  
@@ -5362,7 +6201,7 @@ index b426874..4ad7830 100644
  	if (g_UserDatabase.IsHWIDBanned(hwid))
  	{
  		Logger().Info("Client (%s) disconnected from the server due to banned HWID\n", socket->GetIP().c_str());
-@@ -171,6 +182,188 @@ bool CUserManager::OnLoginPacket(CReceivePacket* msg, IExtendedSocket* socket)
+@@ -171,6 +183,217 @@ bool CUserManager::OnLoginPacket(CReceivePacket* msg, IExtendedSocket* socket)
  	return true;
  }
  
@@ -5393,10 +6232,24 @@ index b426874..4ad7830 100644
 +
 +	string userName, password, roomPassword, back, remoteSteamID;
 +	int joinRoom = 0, tunnelPort = 0;
++	bool guestProfile = false;
 +	if (ticket.rfind("r1|", 0) == 0)
 +	{
++		// a guest's earlier connection must be gone before their profile is loaded (and it sends nothing home)
++		if (ticket.find('|', 3) != string::npos)
++		{
++			string steamUser = "steam_" + ticket.substr(3, ticket.find('|', 3) - 3);
++			if (IUser* old = GetUserById(GetUserIdByName(steamUser)))
++				if (old->GetExtendedSocket() != socket)
++				{
++					GuestProfiles::Forget(old->GetID());
++					IExtendedSocket* oldSocket = old->GetExtendedSocket();
++					RemoveUser(old);
++					g_pServerInstance->DisconnectClient(oldSocket);
++				}
++		}
 +		// a player from another PC, through the Steam bridge
-+		if (!PrepareRemotePlayer(socket, ticket, userName, password, joinRoom, roomPassword, back, remoteSteamID, tunnelPort))
++		if (!PrepareRemotePlayer(socket, ticket, userName, password, joinRoom, roomPassword, back, remoteSteamID, tunnelPort, guestProfile))
 +		{
 +			g_pServerInstance->DisconnectClient(socket);
 +			return true;
@@ -5447,7 +6300,11 @@ index b426874..4ad7830 100644
 +	if (user && !back.empty())
 +		m_ReturnTickets[user->GetID()] = back;
 +	if (user && !remoteSteamID.empty())
++	{
 +		ServerTransfer::RegisterRemote(user->GetID(), remoteSteamID, tunnelPort);
++		if (guestProfile)
++			GuestProfiles::OnGuestLogin(user->GetID(), remoteSteamID);
++	}
 +	if (user && joinRoom)
 +	{
 +		Logger().Info("TransferLogin: '%s' enters room %d\n", userName.c_str(), joinRoom);
@@ -5460,7 +6317,7 @@ index b426874..4ad7830 100644
 +// "r1|<Steam ID>|<character name>|<room id>|<room password>|<return ticket>" (CChannelManager::JoinRemoteRoom on the
 +// player's own server): the player gets an account here of their own, steam_<Steam ID>, with their character's name
 +bool CUserManager::PrepareRemotePlayer(IExtendedSocket* socket, const string& ticket, string& userName, string& password,
-+	int& joinRoom, string& roomPassword, string& back, string& steamIDOut, int& tunnelPort)
++	int& joinRoom, string& roomPassword, string& back, string& steamIDOut, int& tunnelPort, bool& guestProfile)
 +{
 +	vector<string> f;
 +	size_t from = 0;
@@ -5511,6 +6368,17 @@ index b426874..4ad7830 100644
 +		existingName = account->gameName;
 +	}
 +
++	// the profile their own server sent: they play here with their own character, inventory and progress
++	int accountID = g_UserDatabase.IsUserExists(userName, true);
++	guestProfile = accountID > 0 && GuestProfiles::LoadIncoming(steamID, accountID);
++	if (guestProfile)
++	{
++		CUserCharacter character = {};
++		character.lowFlag = UFLAG_LOW_GAMENAME;
++		g_UserDatabase.GetCharacter(accountID, character);
++		existingName = character.gameName;
++	}
++
 +	if (existingName.empty())
 +	{
 +		UserBan ban = {};
@@ -5551,7 +6419,7 @@ index b426874..4ad7830 100644
  bool CUserManager::OnUdpPacket(CReceivePacket* msg, IExtendedSocket* socket)
  {
  	LOG_PACKET;
-@@ -316,7 +509,7 @@ bool CUserManager::OnVersionPacket(CReceivePacket* msg, IExtendedSocket* socket)
+@@ -316,7 +539,7 @@ bool CUserManager::OnVersionPacket(CReceivePacket* msg, IExtendedSocket* socket)
  		GuestData_s& data = socket->GetGuestData();
  		if (!data.isGuest)
  			g_PacketManager.SendVersion(socket, 0);
@@ -5560,7 +6428,7 @@ index b426874..4ad7830 100644
  			SendGuestUserPacket(socket);
  
  		data.isGuest = true;
-@@ -623,11 +816,267 @@ vector<CUserInventoryItem>& CUserManager::GetDefaultInventoryItems()
+@@ -623,11 +846,267 @@ vector<CUserInventoryItem>& CUserManager::GetDefaultInventoryItems()
  	return m_DefaultItems;
  }
  
@@ -5829,7 +6697,7 @@ index b426874..4ad7830 100644
  }
  
  void CUserManager::SendLoginPacket(IUser* user, const CUserCharacter& character)
-@@ -654,12 +1103,19 @@ void CUserManager::SendLoginPacket(IUser* user, const CUserCharacter& character)
+@@ -654,12 +1133,19 @@ void CUserManager::SendLoginPacket(IUser* user, const CUserCharacter& character)
  	g_PacketManager.SendGameMatchUnk(socket);
  	g_PacketManager.SendGameMatchUnk9(socket);
  
@@ -5852,7 +6720,7 @@ index b426874..4ad7830 100644
  
  	if (g_pServerConfig->activeMiniGamesFlag & kEventFlag_WeaponRelease)
  		g_MiniGameManager.SendWeaponReleaseUpdate(user);
-@@ -673,11 +1129,17 @@ void CUserManager::SendLoginPacket(IUser* user, const CUserCharacter& character)
+@@ -673,11 +1159,17 @@ void CUserManager::SendLoginPacket(IUser* user, const CUserCharacter& character)
  	g_PacketManager.SendShopPopularProducts(socket, g_ShopManager.GetPopularProducts());
  
  	// CN: 欢迎来到CSN服务器! 我们的服务器是非商业性的, 不要相信任何人说的售卖CSOL私服的信息.\n官方Discord: https://discord.gg/EvUAY6D \n
@@ -5862,19 +6730,19 @@ index b426874..4ad7830 100644
 +	{
 +		const char* text = OBFUSCATE("Welcome to Counter-Strike Nexon: Offline Revived!\n\nThe local server is CSNZ_Server, made by Jusic, Hardee, NekoMeow, Smilex_Gamer and xRiseless (based on Ochii's CSO2 server). Thank you for making it!\nOffline port and rework by ItsYuri: bot AI, game modes, items, shop, missions, gameplay, new features and quality of life.\n\nDiscord: https://discord.gg/fjxubwyhYv");
 +		g_PacketManager.SendUMsgNoticeMsgBoxToUuid(socket, text);
-+
-+		if (!g_pServerConfig->welcomeMessage.empty())
-+			g_PacketManager.SendUMsgNoticeMsgBoxToUuid(socket, g_pServerConfig->welcomeMessage);
  
 -	if (!g_pServerConfig->welcomeMessage.empty())
 -		g_PacketManager.SendUMsgNoticeMsgBoxToUuid(socket, g_pServerConfig->welcomeMessage);
++		if (!g_pServerConfig->welcomeMessage.empty())
++			g_PacketManager.SendUMsgNoticeMsgBoxToUuid(socket, g_pServerConfig->welcomeMessage);
++
 +		// offline build: the day's login reward (Data/DailyLogin.json), shown after the welcome box
 +		g_MissionManager.OnLogin(user); // Login Supplies: the calendar, and a chat line when today's is ready
 +	}
  
  	g_ChannelManager.JoinChannel(user, g_ChannelManager.channelServers[0]->GetID(), g_ChannelManager.channelServers[0]->GetChannels()[0]->GetID(), false);
  
-@@ -877,8 +1339,10 @@ bool CUserManager::OnCharacterPacket(CReceivePacket* msg, IExtendedSocket* socke
+@@ -877,8 +1369,10 @@ bool CUserManager::OnCharacterPacket(CReceivePacket* msg, IExtendedSocket* socke
  	g_ItemManager.OnUserLogin(user);
  	g_ClanManager.OnUserLogin(user);
  	g_QuestManager.OnUserLogin(user);
@@ -5885,7 +6753,7 @@ index b426874..4ad7830 100644
  
  	return true;
  }
-@@ -951,7 +1415,7 @@ bool CUserManager::OnUpdateInfoPacket(CReceivePacket* msg, IExtendedSocket* sock
+@@ -951,7 +1445,7 @@ bool CUserManager::OnUpdateInfoPacket(CReceivePacket* msg, IExtendedSocket* sock
  	case UpdateInfoPacketType::RequestUpdateTutorial:
  	{
  		int tutorial = msg->ReadUInt8();
@@ -5894,10 +6762,11 @@ index b426874..4ad7830 100644
  
  		break;
  	}
-@@ -989,6 +1453,15 @@ void CUserManager::OnSecondTick(time_t curTime)
+@@ -989,6 +1483,16 @@ void CUserManager::OnSecondTick(time_t curTime)
  {
  	for (auto u : m_Users)
  		u->OnTick();
++	GuestProfiles::Tick(curTime); // offline build: profile mail the Steam bridge didn't deliver
 +
 +	// offline build: show "Choose your character" again to guests who closed it without picking anyone
 +	for (auto socket : g_pServerInstance->GetClients())
@@ -5910,7 +6779,15 @@ index b426874..4ad7830 100644
  }
  
  void CUserManager::SendNoticeMessageToAll(const string& msg)
-@@ -1080,8 +1553,10 @@ int CUserManager::LoginUser(IExtendedSocket* socket, const string& userName, con
+@@ -1049,6 +1553,7 @@ int CUserManager::LoginUser(IExtendedSocket* socket, const string& userName, con
+ 	}
+ 
+ 	Logger().Info(OBFUSCATE("User logged in (IP: %s, UID: %d, Username: %s)\n"), newUser->GetNetworkConfig().m_szExternalIpAddress.c_str(), userID, userName.c_str());
++	GuestProfiles::OnLocalLogin(userID); // offline build: back from another PC's server
+ 
+ 	// Update last login time, last IP and last HWID
+ 	CUserData data = newUser->GetUser(UDATA_FLAG_FIRSTLOGONTIME);
+@@ -1080,8 +1585,10 @@ int CUserManager::LoginUser(IExtendedSocket* socket, const string& userName, con
  		g_ItemManager.OnUserLogin(newUser);
  		g_ClanManager.OnUserLogin(newUser);
  		g_QuestManager.OnUserLogin(newUser);
@@ -5921,16 +6798,17 @@ index b426874..4ad7830 100644
  	}
  
  	return LOGIN_OK;
-@@ -1197,6 +1672,8 @@ void CUserManager::RemoveUserBySocket(IExtendedSocket* socket)
+@@ -1197,6 +1704,9 @@ void CUserManager::RemoveUserBySocket(IExtendedSocket* socket)
  
  bool CUserManager::RemoveUserInternal(IUser* user)
  {
 +	ServerTransfer::UnregisterRemote(user->GetID()); // offline build: a player from another PC left
++	GuestProfiles::OnGuestLeft(user->GetID());       // ... and their profile goes home
 +	m_ReturnTickets.erase(user->GetID());
  	m_Users.erase(remove(begin(m_Users), end(m_Users), user), end(m_Users));
  
  	CleanUpUser(user);
-@@ -1285,7 +1762,7 @@ bool CUserManager::OnUserSurveyPacket(CReceivePacket* msg, IExtendedSocket* sock
+@@ -1285,7 +1795,7 @@ bool CUserManager::OnUserSurveyPacket(CReceivePacket* msg, IExtendedSocket* sock
  
  	IUser* user = GetUserBySocket(socket);
  	if (user == NULL)
@@ -5940,7 +6818,7 @@ index b426874..4ad7830 100644
  	int type = msg->ReadUInt8();
  	switch (type)
 diff --git a/src/manager/usermanager.h b/src/manager/usermanager.h
-index 3054001..f98d66b 100644
+index 3054001..2253f1d 100644
 --- a/src/manager/usermanager.h
 +++ b/src/manager/usermanager.h
 @@ -1,6 +1,7 @@
@@ -5958,7 +6836,7 @@ index 3054001..f98d66b 100644
 +	bool OnTransferLoginPacket(CReceivePacket* msg, IExtendedSocket* socket);
 +	int GetUserIdByName(const std::string& userName);
 +	bool PrepareRemotePlayer(IExtendedSocket* socket, const std::string& ticket, std::string& userName, std::string& password,
-+		int& joinRoom, std::string& roomPassword, std::string& back, std::string& steamIDOut, int& tunnelPort);
++		int& joinRoom, std::string& roomPassword, std::string& back, std::string& steamIDOut, int& tunnelPort, bool& guestProfile);
 +	std::string GetReturnTicket(int userID);
  	bool OnUdpPacket(CReceivePacket* msg, IExtendedSocket* socket);
  	bool OnOptionPacket(CReceivePacket* msg, IExtendedSocket* socket);
@@ -6116,11 +6994,12 @@ index c7d2bdb..836e257 100644
 +extern CVoxelManager g_VoxelManager;
 diff --git a/src/manager/warbondmanager.cpp b/src/manager/warbondmanager.cpp
 new file mode 100644
-index 0000000..4af1b13
+index 0000000..64bdab1
 --- /dev/null
 +++ b/src/manager/warbondmanager.cpp
-@@ -0,0 +1,997 @@
+@@ -0,0 +1,1016 @@
 +#include "channelmanager.h"
++#include "guestprofile.h"
 +#include "transfer.h"
 +#include "warbondmanager.h"
 +#include "usermanager.h"
@@ -6330,10 +7209,28 @@ index 0000000..4af1b13
 +		// for the Steam bridge: this PC's game ports and the remote players' match ports
 +		result = json::parse(ServerTransfer::UdpJson());
 +	}
++	else if (req.method == "GET" && req.path == "/api/guest/outbox")
++	{
++		// for the Steam bridge: profiles to send to other PCs' servers (guestprofile.h)
++		result = GuestProfiles::Outbox();
++	}
++	else if (req.method == "POST" && req.path == "/api/guest/sent")
++	{
++		result = GuestProfiles::Sent(json::parse(req.body));
++	}
++	else if (req.method == "POST" && req.path == "/api/guest/inbox")
++	{
++		result = GuestProfiles::Inbox(json::parse(req.body));
++	}
 +	else if (!user)
 +	{
 +		resp.status = 403;
-+		result = { { "error", "No logged in character for this computer." } };
++		string host;
++		if (GuestProfiles::AwayOnHost(host))
++			result = { { "error", "You're playing on " + host + "'s server right now. Your shop, missions and profile pages open "
++				"on your own server: what you earn over there is added to your account after every match. Type /home in the lobby chat to come back." } };
++		else
++			result = { { "error", "No logged in character for this computer." } };
 +	}
 +	else if (req.method == "POST" && req.path == "/api/cheats")
 +	{
@@ -7837,10 +8734,10 @@ index 0000000..a9c58b6
 +}
 diff --git a/src/manager/zsriftmanager.h b/src/manager/zsriftmanager.h
 new file mode 100644
-index 0000000..33c3156
+index 0000000..7215c2e
 --- /dev/null
 +++ b/src/manager/zsriftmanager.h
-@@ -0,0 +1,92 @@
+@@ -0,0 +1,95 @@
 +#pragma once
 +
 +#include <string>
@@ -7889,6 +8786,9 @@ index 0000000..33c3156
 +class CZSRiftManager : public CBaseManager<IZSRiftManager>
 +{
 +public:
++	// offline build: one player's state, carried with their profile to another PC's server and back (guestprofile.cpp)
++	nlohmann::json ExportUser(int userID) { auto it = m_State.find(std::to_string(userID)); return it == m_State.end() ? nlohmann::json() : *it; }
++	void ImportUser(int userID, const nlohmann::json& state) { if (state.is_object()) m_State[std::to_string(userID)] = state; else m_State.erase(std::to_string(userID)); Save(); }
 +	CZSRiftManager();
 +
 +	virtual bool Init();
@@ -8029,10 +8929,10 @@ index d35947b..d6445d7 100644
  	}
 diff --git a/src/net/webserver.cpp b/src/net/webserver.cpp
 new file mode 100644
-index 0000000..f0b1f8f
+index 0000000..0df6610
 --- /dev/null
 +++ b/src/net/webserver.cpp
-@@ -0,0 +1,250 @@
+@@ -0,0 +1,251 @@
 +#include "webserver.h"
 +
 +#include <winsock2.h>
@@ -8186,7 +9086,8 @@ index 0000000..f0b1f8f
 +	}
 +
 +	// Studio maps are uploaded whole (up to 64 MB); everything else stays small
-+	size_t maxBody = IsStudioPath(req.path) ? 64 * 1024 * 1024 : 1024 * 1024;
++	// ... and so do the profiles the Steam bridge brings (/api/guest/, guestprofile.h)
++	size_t maxBody = IsStudioPath(req.path) || req.path.rfind("/api/guest/", 0) == 0 ? 64 * 1024 * 1024 : 1024 * 1024;
 +	req.body = data.substr(headerEnd + 4);
 +	while (req.body.size() < contentLength && contentLength <= maxBody)
 +	{
@@ -8618,10 +9519,16 @@ index 68a4dc7..5c924cb 100644
  	int m_nTerWinCount;
  	int m_nFirstPlaceUserId;
 diff --git a/src/room/room.cpp b/src/room/room.cpp
-index 616959e..d9f861f 100644
+index 616959e..d97c676 100644
 --- a/src/room/room.cpp
 +++ b/src/room/room.cpp
-@@ -57,11 +57,10 @@ void CRoom::Shutdown()
+@@ -1,4 +1,5 @@
+ #include "room.h"
++#include "manager/guestprofile.h"
+ #include "manager/channelmanager.h"
+ #include "manager/packetmanager.h"
+ #include "manager/dedicatedservermanager.h"
+@@ -57,11 +58,10 @@ void CRoom::Shutdown()
  
  int CRoom::GetNumOfPlayers()
  {
@@ -8635,7 +9542,7 @@ index 616959e..d9f861f 100644
  }
  
  int CRoom::GetFreeSlots()
-@@ -239,6 +238,241 @@ void CRoom::SetStatus(RoomStatus newStatus)
+@@ -239,6 +239,241 @@ void CRoom::SetStatus(RoomStatus newStatus)
  void CRoom::SendJoinNewRoom(IUser* user)
  {
  	g_PacketManager.SendRoomCreateAndJoin(user->GetExtendedSocket(), this);
@@ -8877,7 +9784,7 @@ index 616959e..d9f861f 100644
  }
  
  void CRoom::UpdateSettings(CRoomSettings& newSettings)
-@@ -575,6 +809,9 @@ void CRoom::OnUserMessage(CReceivePacket* msg, IUser* user)
+@@ -575,6 +810,9 @@ void CRoom::OnUserMessage(CReceivePacket* msg, IUser* user)
  
  	Logger().Info("User '%s' write to room chat: '%s'\n", senderName.c_str(), message.c_str());
  
@@ -8887,7 +9794,7 @@ index 616959e..d9f861f 100644
  	CUserCharacterExtended characterExtended = user->GetCharacterExtended(EXT_UFLAG_GAMEMASTER);
  	if (characterExtended.gameMaster && m_pHostUser == user)
  	{
-@@ -1052,6 +1289,8 @@ void CRoom::HostStartGame()
+@@ -1052,6 +1290,8 @@ void CRoom::HostStartGame()
  		return;
  	}
  
@@ -8896,7 +9803,13 @@ index 616959e..d9f861f 100644
  	SendStartMatch(m_pHostUser);
  
  	OnGameStart();
-@@ -1096,6 +1335,10 @@ void CRoom::EndGame(bool forcedEnd)
+@@ -1092,10 +1332,16 @@ void CRoom::UserGameJoin(IUser* user)
+ void CRoom::EndGame(bool forcedEnd)
+ {
+ 	m_pGameMatch->OnGameMatchEnd();
++	// offline build: players from other PCs get this match's rewards in their own profile at home
++	GuestProfiles::OnMatchEnd(this);
+ 
  	SetStatus(RoomStatus::STATUS_WAITING);
  	ResetStatusIngameUsers();
  
