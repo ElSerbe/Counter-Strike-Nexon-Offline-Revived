@@ -48,6 +48,21 @@ while you're online. **Publish online** on that page lists the map for every pla
 in the game's Studio browser and in the page's Online maps tab. A map someone downloaded can be passed on by their PC
 too, and a Studio room on another player's server downloads its map by itself.
 
+### What each mode gives
+
+Every finished match gives EXP and medals, and advances orders, bingo and Zombie Disaster Zone traits. On top of that
+(`mod\server\CSNZ_Server\bin\Data\ModeRewards.json`, from the game's own item texts and the
+[CSO wiki](https://cso.fandom.com/wiki/Item)):
+
+- **Zombie Scenario**: a clear gives a Daily Reward Box by difficulty (a harder clear upgrades it while it's unopened;
+  once opened, the next comes after midnight), and each season 1 to 4 map gives its clue. Rift Tickets as before.
+- **Human Scenario**: Desert Storm, Hellfire and Blaze each give their data item, Sidewinder one of the three, and
+  Mosque an EXP Medal to the top 3. Rift Tickets as before.
+- **Challenge**: an EXP Medal to the top 3. **Zombie File**: a 1-Day or 2-3 Day Durable. Rift Tickets as before.
+- **Dr. A's bags**: holding every clue of a set, the clues become his bag, with one of his items for 30 days.
+- **Any mode**: a 15% chance of a Parts Reward Box for a finished match with a kill (the sources don't list this per
+  mode; it's the game's "Game Result Reward", and the chance is in that file).
+
 ### Antivirus warnings
 
 The launcher and the mod's programs are new, unsigned and downloaded by few people, which is what makes antivirus

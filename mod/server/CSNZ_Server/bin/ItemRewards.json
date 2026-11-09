@@ -1155,5 +1155,3327 @@
 	},
 	"3021": { // Oberon
 		"Points": [ 3000 ] 
-	}
+	},
+	// >>> gen_mode_rewards.py (begin)
+		"1009": {
+			"Title": "Dr. A's Bag",
+			"Description": "You obtained the following item:",
+			"RandomItems": [
+				{
+					"100": {
+						"285": {
+							"Count": 1,
+							"Duration": 30
+						},
+						"286": {
+							"Count": 1,
+							"Duration": 30
+						},
+						"287": {
+							"Count": 1,
+							"Duration": 30
+						},
+						"288": {
+							"Count": 1,
+							"Duration": 30
+						},
+						"464": {
+							"Count": 1,
+							"Duration": 30
+						}
+					}
+				}
+			]
+		},
+		"1012": {
+			"Title": "ExpCoupon_TITLE",
+			"Description": "ExpCoupon_MSG",
+			"Localized": true,
+			"Exp": [
+				4000
+			]
+		},
+		"1013": {
+			"Title": "ExpCoupon_TITLE",
+			"Description": "ExpCoupon_MSG",
+			"Localized": true,
+			"Exp": [
+				2000
+			]
+		},
+		"1014": {
+			"Title": "ExpCoupon_TITLE",
+			"Description": "ExpCoupon_MSG",
+			"Localized": true,
+			"Exp": [
+				1000
+			]
+		},
+		"1015": {
+			"Title": "Dr. A's Bag (Human)",
+			"Description": "You obtained the following item:",
+			"RandomItems": [
+				{
+					"100": {
+						"350": {
+							"Count": 1,
+							"Duration": 30
+						},
+						"351": {
+							"Count": 1,
+							"Duration": 30
+						},
+						"352": {
+							"Count": 1,
+							"Duration": 30
+						},
+						"353": {
+							"Count": 1,
+							"Duration": 30
+						}
+					}
+				}
+			]
+		},
+		"1036": {
+			"Title": "Dr. A's Bag",
+			"Description": "You obtained the following item:",
+			"RandomItems": [
+				{
+					"100": {
+						"285": {
+							"Count": 1,
+							"Duration": 30
+						},
+						"286": {
+							"Count": 1,
+							"Duration": 30
+						},
+						"287": {
+							"Count": 1,
+							"Duration": 30
+						},
+						"288": {
+							"Count": 1,
+							"Duration": 30
+						},
+						"465": {
+							"Count": 1,
+							"Duration": 30
+						}
+					}
+				}
+			]
+		},
+		"1038": {
+			"Title": "Dr. A's Bag",
+			"Description": "You obtained the following item:",
+			"RandomItems": [
+				{
+					"100": {
+						"285": {
+							"Count": 1,
+							"Duration": 30
+						},
+						"286": {
+							"Count": 1,
+							"Duration": 30
+						},
+						"287": {
+							"Count": 1,
+							"Duration": 30
+						},
+						"288": {
+							"Count": 1,
+							"Duration": 30
+						},
+						"547": {
+							"Count": 1,
+							"Duration": 30
+						}
+					}
+				}
+			]
+		},
+		"2180": {
+			"Title": "Parts Reward Box",
+			"Description": "You obtained the following part:",
+			"RandomItems": [
+				{
+					"100": {
+						"4003": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4008": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4013": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4018": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4023": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4028": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4033": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4038": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4043": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4048": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4053": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4058": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4068": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4073": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4078": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4083": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4088": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4093": {
+							"Count": 1,
+							"Duration": 0
+						}
+					}
+				}
+			]
+		},
+		"2181": {
+			"Title": "Parts Reward Box",
+			"Description": "You obtained the following part:",
+			"RandomItems": [
+				{
+					"100": {
+						"4004": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4009": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4014": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4019": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4024": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4029": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4034": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4039": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4044": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4049": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4054": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4059": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4069": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4074": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4079": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4084": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4089": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4094": {
+							"Count": 1,
+							"Duration": 0
+						}
+					}
+				}
+			]
+		},
+		"2182": {
+			"Title": "Parts Reward Box",
+			"Description": "You obtained the following part:",
+			"RandomItems": [
+				{
+					"100": {
+						"4005": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4010": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4015": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4020": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4025": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4030": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4035": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4040": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4045": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4050": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4055": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4060": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4070": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4075": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4080": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4085": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4090": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4095": {
+							"Count": 1,
+							"Duration": 0
+						}
+					}
+				}
+			]
+		},
+		"2183": {
+			"Title": "Parts Reward Box",
+			"Description": "You obtained the following part:",
+			"RandomItems": [
+				{
+					"100": {
+						"4002": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4007": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4012": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4017": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4022": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4027": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4032": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4037": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4042": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4047": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4052": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4057": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4067": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4072": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4077": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4082": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4087": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4092": {
+							"Count": 1,
+							"Duration": 0
+						}
+					}
+				}
+			]
+		},
+		"2184": {
+			"Title": "Parts Reward Box",
+			"Description": "You obtained the following part:",
+			"RandomItems": [
+				{
+					"100": {
+						"4601": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4602": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4603": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4604": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4605": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4606": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4607": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4608": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4609": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4610": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4611": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4612": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4613": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4614": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4615": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4616": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4617": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4618": {
+							"Count": 1,
+							"Duration": 0
+						}
+					}
+				}
+			]
+		},
+		"2191": {
+			"Title": "Parts Reward Box",
+			"Description": "You obtained the following part:",
+			"RandomItems": [
+				{
+					"100": {
+						"4001": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4006": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4011": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4016": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4021": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4026": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4031": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4036": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4041": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4046": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4051": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4056": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4066": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4071": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4076": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4081": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4086": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4091": {
+							"Count": 1,
+							"Duration": 0
+						}
+					}
+				}
+			]
+		},
+		"3809": {
+			"Title": "Parts Reward Box",
+			"Description": "You obtained the following part:",
+			"RandomItems": [
+				{
+					"100": {
+						"4001": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4002": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4006": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4007": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4011": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4012": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4016": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4017": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4021": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4022": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4026": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4027": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4031": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4032": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4036": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4037": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4041": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4042": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4046": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4047": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4051": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4052": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4056": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4057": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4066": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4067": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4071": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4072": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4076": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4077": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4081": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4082": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4086": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4087": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4091": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4092": {
+							"Count": 1,
+							"Duration": 0
+						}
+					}
+				}
+			]
+		},
+		"3810": {
+			"Title": "Parts Reward Box",
+			"Description": "You obtained the following part:",
+			"RandomItems": [
+				{
+					"100": {
+						"4001": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4002": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4003": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4006": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4007": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4008": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4011": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4012": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4013": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4016": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4017": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4018": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4021": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4022": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4023": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4026": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4027": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4028": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4031": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4032": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4033": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4036": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4037": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4038": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4041": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4042": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4043": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4046": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4047": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4048": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4051": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4052": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4053": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4056": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4057": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4058": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4066": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4067": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4068": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4071": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4072": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4073": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4076": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4077": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4078": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4081": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4082": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4083": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4086": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4087": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4088": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4091": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4092": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4093": {
+							"Count": 1,
+							"Duration": 0
+						}
+					}
+				}
+			]
+		},
+		"3811": {
+			"Title": "Parts Reward Box",
+			"Description": "You obtained the following part:",
+			"RandomItems": [
+				{
+					"100": {
+						"4002": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4003": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4007": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4008": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4012": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4013": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4017": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4018": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4022": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4023": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4027": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4028": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4032": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4033": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4037": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4038": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4042": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4043": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4047": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4048": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4052": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4053": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4057": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4058": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4067": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4068": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4072": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4073": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4077": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4078": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4082": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4083": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4087": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4088": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4092": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4093": {
+							"Count": 1,
+							"Duration": 0
+						}
+					}
+				}
+			]
+		},
+		"3812": {
+			"Title": "Parts Reward Box",
+			"Description": "You obtained the following part:",
+			"RandomItems": [
+				{
+					"100": {
+						"4002": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4003": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4004": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4007": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4008": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4009": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4012": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4013": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4014": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4017": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4018": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4019": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4022": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4023": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4024": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4027": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4028": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4029": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4032": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4033": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4034": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4037": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4038": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4039": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4042": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4043": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4044": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4047": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4048": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4049": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4052": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4053": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4054": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4057": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4058": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4059": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4067": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4068": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4069": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4072": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4073": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4074": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4077": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4078": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4079": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4082": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4083": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4084": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4087": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4088": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4089": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4092": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4093": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4094": {
+							"Count": 1,
+							"Duration": 0
+						}
+					}
+				}
+			]
+		},
+		"3813": {
+			"Title": "Parts Reward Box",
+			"Description": "You obtained the following part:",
+			"RandomItems": [
+				{
+					"100": {
+						"4002": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4003": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4004": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4005": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4007": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4008": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4009": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4010": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4012": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4013": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4014": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4015": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4017": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4018": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4019": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4020": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4022": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4023": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4024": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4025": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4027": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4028": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4029": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4030": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4032": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4033": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4034": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4035": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4037": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4038": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4039": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4040": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4042": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4043": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4044": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4045": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4047": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4048": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4049": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4050": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4052": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4053": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4054": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4055": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4057": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4058": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4059": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4060": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4067": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4068": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4069": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4070": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4072": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4073": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4074": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4075": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4077": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4078": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4079": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4080": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4082": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4083": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4084": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4085": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4087": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4088": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4089": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4090": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4092": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4093": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4094": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4095": {
+							"Count": 1,
+							"Duration": 0
+						}
+					}
+				}
+			]
+		},
+		"3950": {
+			"Title": "Daily Reward Box",
+			"Description": "You obtained the following items:",
+			"Items": {
+				"258": {
+					"Count": 5,
+					"Duration": 0
+				},
+				"259": {
+					"Count": 5,
+					"Duration": 0
+				},
+				"260": {
+					"Count": 5,
+					"Duration": 0
+				},
+				"300": {
+					"Count": 5,
+					"Duration": 0
+				}
+			}
+		},
+		"3951": {
+			"Title": "Daily Reward Box",
+			"Description": "You obtained the following items:",
+			"Items": {
+				"258": {
+					"Count": 5,
+					"Duration": 0
+				},
+				"259": {
+					"Count": 5,
+					"Duration": 0
+				},
+				"260": {
+					"Count": 5,
+					"Duration": 0
+				},
+				"300": {
+					"Count": 5,
+					"Duration": 0
+				}
+			},
+			"RandomItems": [
+				{
+					"100": {
+						"4001": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4002": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4003": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4006": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4007": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4008": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4011": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4012": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4013": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4016": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4017": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4018": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4021": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4022": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4023": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4026": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4027": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4028": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4031": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4032": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4033": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4036": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4037": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4038": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4041": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4042": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4043": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4046": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4047": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4048": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4051": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4052": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4053": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4056": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4057": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4058": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4066": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4067": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4068": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4071": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4072": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4073": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4076": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4077": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4078": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4081": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4082": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4083": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4086": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4087": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4088": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4091": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4092": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4093": {
+							"Count": 1,
+							"Duration": 0
+						}
+					}
+				}
+			]
+		},
+		"3952": {
+			"Title": "Daily Reward Box",
+			"Description": "You obtained the following items:",
+			"Items": {
+				"258": {
+					"Count": 5,
+					"Duration": 0
+				},
+				"259": {
+					"Count": 5,
+					"Duration": 0
+				},
+				"260": {
+					"Count": 5,
+					"Duration": 0
+				},
+				"300": {
+					"Count": 5,
+					"Duration": 0
+				}
+			},
+			"RandomItems": [
+				{
+					"100": {
+						"4001": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4002": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4003": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4006": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4007": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4008": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4011": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4012": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4013": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4016": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4017": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4018": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4021": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4022": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4023": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4026": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4027": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4028": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4031": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4032": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4033": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4036": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4037": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4038": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4041": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4042": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4043": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4046": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4047": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4048": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4051": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4052": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4053": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4056": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4057": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4058": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4066": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4067": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4068": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4071": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4072": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4073": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4076": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4077": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4078": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4081": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4082": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4083": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4086": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4087": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4088": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4091": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4092": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4093": {
+							"Count": 1,
+							"Duration": 0
+						}
+					}
+				},
+				{
+					"100": {
+						"4002": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4003": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4004": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4005": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4007": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4008": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4009": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4010": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4012": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4013": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4014": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4015": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4017": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4018": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4019": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4020": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4022": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4023": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4024": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4025": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4027": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4028": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4029": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4030": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4032": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4033": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4034": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4035": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4037": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4038": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4039": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4040": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4042": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4043": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4044": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4045": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4047": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4048": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4049": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4050": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4052": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4053": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4054": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4055": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4057": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4058": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4059": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4060": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4067": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4068": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4069": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4070": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4072": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4073": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4074": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4075": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4077": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4078": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4079": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4080": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4082": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4083": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4084": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4085": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4087": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4088": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4089": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4090": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4092": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4093": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4094": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4095": {
+							"Count": 1,
+							"Duration": 0
+						}
+					}
+				}
+			]
+		},
+		"3953": {
+			"Title": "Daily Reward Box",
+			"Description": "You obtained the following items:",
+			"Items": {
+				"258": {
+					"Count": 5,
+					"Duration": 0
+				},
+				"259": {
+					"Count": 5,
+					"Duration": 0
+				},
+				"260": {
+					"Count": 5,
+					"Duration": 0
+				},
+				"300": {
+					"Count": 5,
+					"Duration": 0
+				}
+			},
+			"RandomItems": [
+				{
+					"100": {
+						"4001": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4002": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4003": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4006": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4007": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4008": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4011": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4012": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4013": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4016": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4017": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4018": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4021": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4022": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4023": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4026": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4027": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4028": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4031": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4032": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4033": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4036": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4037": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4038": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4041": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4042": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4043": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4046": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4047": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4048": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4051": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4052": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4053": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4056": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4057": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4058": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4066": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4067": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4068": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4071": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4072": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4073": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4076": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4077": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4078": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4081": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4082": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4083": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4086": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4087": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4088": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4091": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4092": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4093": {
+							"Count": 1,
+							"Duration": 0
+						}
+					}
+				},
+				{
+					"100": {
+						"4002": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4003": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4004": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4005": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4007": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4008": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4009": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4010": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4012": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4013": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4014": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4015": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4017": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4018": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4019": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4020": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4022": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4023": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4024": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4025": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4027": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4028": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4029": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4030": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4032": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4033": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4034": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4035": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4037": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4038": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4039": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4040": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4042": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4043": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4044": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4045": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4047": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4048": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4049": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4050": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4052": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4053": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4054": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4055": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4057": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4058": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4059": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4060": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4067": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4068": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4069": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4070": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4072": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4073": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4074": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4075": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4077": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4078": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4079": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4080": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4082": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4083": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4084": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4085": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4087": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4088": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4089": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4090": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4092": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4093": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4094": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4095": {
+							"Count": 1,
+							"Duration": 0
+						}
+					}
+				},
+				{
+					"100": {
+						"4003": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4004": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4005": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4008": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4009": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4010": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4013": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4014": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4015": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4018": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4019": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4020": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4023": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4024": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4025": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4028": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4029": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4030": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4033": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4034": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4035": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4038": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4039": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4040": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4043": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4044": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4045": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4048": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4049": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4050": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4053": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4054": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4055": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4058": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4059": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4060": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4068": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4069": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4070": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4073": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4074": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4075": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4078": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4079": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4080": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4083": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4084": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4085": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4088": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4089": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4090": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4093": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4094": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4095": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4601": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4602": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4603": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4604": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4605": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4606": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4607": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4608": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4609": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4610": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4611": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4612": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4613": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4614": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4615": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4616": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4617": {
+							"Count": 1,
+							"Duration": 0
+						},
+						"4618": {
+							"Count": 1,
+							"Duration": 0
+						}
+					}
+				}
+			]
+		}
+	// <<< gen_mode_rewards.py (end)
 }

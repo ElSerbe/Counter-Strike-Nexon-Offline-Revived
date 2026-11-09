@@ -472,17 +472,24 @@ def run_nartool(paths, out_dir, only=None):
     paths = [p for p in paths if p and "\n" not in p]
     if not paths:
         return
-    p = _server(only)
-    try:
-        p.stdin.write(f"get\t{os.path.abspath(out_dir)}\t{len(paths)}\n" + "".join(x + "\n" for x in paths))
-        p.stdin.flush()
-        answer = p.stdout.readline()
-    except OSError:
-        answer = ""
-    if not answer.startswith("done"):
+    answer, code = "", None
+    # twice: it once closed by itself right after starting, and worked when started again
+    for _ in range(2):
+        p = _server(only)
+        try:
+            p.stdin.write(f"get\t{os.path.abspath(out_dir)}\t{len(paths)}\n" + "".join(x + "\n" for x in paths))
+            p.stdin.flush()
+            answer = p.stdout.readline()
+        except OSError:
+            answer = ""
+        if answer.startswith("done"):
+            return
         _SERVERS.pop(only, None)
-        code = p.poll()
-        raise RuntimeError(f"{BLOCKED} (answer {answer.strip()!r}, exit code {code})")
+        try:
+            code = p.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            p.kill()
+    raise RuntimeError(f"{BLOCKED} (answer {answer.strip()!r}, exit code {code})")
 
 
 def tga_to_png(data):

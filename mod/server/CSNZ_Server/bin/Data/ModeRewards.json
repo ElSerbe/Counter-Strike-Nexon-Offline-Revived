@@ -1,0 +1,70 @@
+// What each mode gives for completing it, on top of EXP and medals (src/manager/moderewards.cpp).
+// Clear: these items for winning; ClearOneOf: one of these for winning; Top3: 1st, 2nd, 3rd place of a finished match.
+// "Maps" adds rules for one map (its id in MapList.csv). Sources: the game's own item texts and cso.fandom.com/wiki/Item.
+{
+	"Version": 1,
+	"Modes": [
+		{
+			"Mode": 15,
+			"Name": "Zombie Scenario",
+			// the game's text: a clear gives a Daily Reward Box of its difficulty, a harder clear upgrades it while it's
+			// unopened, opened it comes again after midnight. Poor, Basic, Intermediate, Advanced
+			"ClearBox": { "Items": [ 3950, 3951, 3952, 3953 ], "MinDifficulty": [ 0, 3, 4, 7 ] },
+			"Maps": {
+				// season 1: the four clues, then the Siege Type samples
+				"74": { "Clear": [ 275 ] }, // Lost City: Operational Map
+				"75": { "Clear": [ 276 ] }, // Double Gate: Damaged Equipment
+				"76": { "Clear": [ 277 ] }, // Trap: Andrey's Diary
+				"77": { "Clear": [ 278 ] }, // Last Clue: Phobos' DNA
+				"85": { "Clear": [ 326 ] }, // Chaos: Siege Type's Blood
+				"98": { "ClearOneOf": [ 368, 369 ] }, // Dead End: Siege Type's Frame or DNA
+				// season 2: Dione Pursuit Diary 1 to 4
+				"106": { "Clear": [ 409 ] }, // Toxicity
+				"112": { "Clear": [ 410 ] }, // Culvert
+				"113": { "Clear": [ 411 ] }, // Decoy
+				"117": { "Clear": [ 412 ] }, // Angra Nest
+				// season 3: Confidential Weapons Document 1 to 4
+				"121": { "Clear": [ 485 ] }, // Contact
+				"123": { "Clear": [ 507 ] }, // Behind
+				"126": { "Clear": [ 514 ] }, // Threat
+				"128": { "Clear": [ 546 ] }, // Panic Room
+				// season 4: the specimen bosses
+				"131": { "Clear": [ 578 ] }, // Encounter: Frozen Terror's Mane
+				"133": { "Clear": [ 586 ] } // Conspiracy: Gluttony's Tongue
+			}
+		},
+		{
+			"Mode": 17,
+			"Name": "Human Scenario",
+			"Maps": {
+				"88": { "Clear": [ 338 ] }, // Desert Storm: Comanche Record Device
+				"90": { "Clear": [ 340 ] }, // Hellfire: Pilot Tag
+				"93": { "Clear": [ 349 ] }, // Blaze: Drone Control Chip
+				"108": { "ClearOneOf": [ 338, 340, 349 ] }, // Sidewinder: one of the three
+				"91": { "Top3": [ 1012, 1013, 1014 ] } // Mosque: Gold, Silver, Bronze EXP Medal
+			}
+		},
+		{
+			"Mode": 12,
+			"Name": "Challenge",
+			"Top3": [ 1012, 1013, 1014 ]
+		},
+		{
+			"Mode": 33,
+			"Name": "Zombie File",
+			"ClearOneOf": [ 5101, 5102 ] // 1-Day or 2-3 Day Durable
+		}
+	],
+	// Dr. A: all the clues of a set in the inventory become his bag
+	"Sets": [
+		{ "Items": [ 275, 276, 277, 278 ], "Bag": 1009, "Text": "The mysterious scientist, Dr. A, appeared out of nowhere to give you this bag as a reward for collecting the four clues." },
+		{ "Items": [ 326, 368, 369 ], "Bag": 1009, "Text": "The mysterious scientist, Dr. A, appeared out of nowhere to give you this bag as a reward for collecting three Siege Type samples." },
+		{ "Items": [ 338, 340, 349 ], "Bag": 1015, "Text": "The mysterious scientist, Dr. A, appeared out of nowhere to give you this bag as a reward for collecting the three data items." },
+		{ "Items": [ 409, 410, 411, 412 ], "Bag": 1036, "Text": "The mysterious scientist, Dr. A, appeared out of nowhere to give you this bag as a reward for collecting the four tracking logs." },
+		{ "Items": [ 485, 507, 514, 546 ], "Bag": 1038, "Text": "The mysterious scientist, Dr. A, appeared out of nowhere to give you this bag as a reward for collecting the four confidential documents." },
+		{ "Items": [ 578, 586 ], "Bag": 1038, "Text": "The mysterious scientist, Dr. A, appeared out of nowhere to give you this bag as a reward for collecting remnants from the secret experiment specimen bosses." }
+	],
+	// the game's "Game Result Reward": a chance of a Parts Reward Box (rank 1-2) for a finished match with a kill.
+	// Not per mode in the sources: this is the part to tune. The Studio editor and the Playrooms stay out
+	"AnyMode": { "Chance": 15, "OneOf": [ 3700 ], "ExcludeModes": [ 38, 41, 48, 55 ] }
+}

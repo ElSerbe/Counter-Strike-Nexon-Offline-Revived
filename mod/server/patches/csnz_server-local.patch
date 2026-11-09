@@ -1,8 +1,8 @@
 diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
-index b5e72be..6ee22ef 100644
+index b5e72be..2fa5d62 100644
 --- a/src/CMakeLists.txt
 +++ b/src/CMakeLists.txt
-@@ -38,6 +38,13 @@ endif()
+@@ -38,6 +38,14 @@ endif()
  target_sources(PROJECTNAME PRIVATE "main.cpp")
  target_sources(PROJECTNAME PRIVATE "serverinstance.cpp")
  target_sources(PROJECTNAME PRIVATE "serverconfig.cpp")
@@ -12,11 +12,12 @@ index b5e72be..6ee22ef 100644
 +target_sources(PROJECTNAME PRIVATE "manager/medalmanager.cpp")
 +target_sources(PROJECTNAME PRIVATE "manager/missionmanager.cpp")
 +target_sources(PROJECTNAME PRIVATE "manager/loginsupplies.cpp")
++target_sources(PROJECTNAME PRIVATE "manager/moderewards.cpp")
 +target_sources(PROJECTNAME PRIVATE "net/webserver.cpp")
  target_sources(PROJECTNAME PRIVATE "command.cpp")
  target_sources(PROJECTNAME PRIVATE "common/buffer.cpp")
  target_sources(PROJECTNAME PRIVATE "common/buildnum.cpp")
-@@ -56,6 +63,8 @@ target_sources(PROJECTNAME PRIVATE "command.cpp")
+@@ -56,6 +64,8 @@ target_sources(PROJECTNAME PRIVATE "command.cpp")
  
  target_sources(PROJECTNAME PRIVATE "manager/manager.cpp")
  target_sources(PROJECTNAME PRIVATE "manager/usermanager.cpp")
@@ -25,7 +26,7 @@ index b5e72be..6ee22ef 100644
  if (SERVER_DB_PROXY)
  	target_sources(PROJECTNAME PRIVATE "manager/userdatabase.cpp")
  endif()
-@@ -74,6 +83,8 @@ target_sources(PROJECTNAME PRIVATE "manager/minigamemanager.cpp")
+@@ -74,6 +84,8 @@ target_sources(PROJECTNAME PRIVATE "manager/minigamemanager.cpp")
  target_sources(PROJECTNAME PRIVATE "manager/clanmanager.cpp")
  target_sources(PROJECTNAME PRIVATE "manager/rankmanager.cpp")
  target_sources(PROJECTNAME PRIVATE "manager/voxelmanager.cpp")
@@ -34,7 +35,7 @@ index b5e72be..6ee22ef 100644
  target_sources(PROJECTNAME PRIVATE "manager/classmodmanager.cpp")
  
  target_sources(PROJECTNAME PRIVATE "packet/packethelper_fulluserinfo.cpp")
-@@ -148,6 +159,8 @@ if (MSVC)
+@@ -148,6 +160,8 @@ if (MSVC)
  else()
  	# don't treat some warnings as errors
  	target_compile_options(PROJECTNAME PRIVATE -Wno-error=sign-compare -Wno-error=unused-variable -Wno-error=delete-non-virtual-dtor -Wno-error=unused-parameter -Wno-error=conversion-null -Wno-error=register -Wno-error=unused-value -Wno-error=reorder -Wno-error=attributes)
@@ -3875,6 +3876,328 @@ index 0000000..f7d9e86
 +};
 +
 +extern CMissionManager g_MissionManager;
+diff --git a/src/manager/moderewards.cpp b/src/manager/moderewards.cpp
+new file mode 100644
+index 0000000..45071a5
+--- /dev/null
++++ b/src/manager/moderewards.cpp
+@@ -0,0 +1,298 @@
++// Offline build: what each mode gives for completing it, on top of EXP and medals (Data/ModeRewards.json):
++// - rules per mode and per map: items for a clear, one item of a list for a clear, items for the top 3;
++// - Zombie Scenario's Daily Reward Box: one box a day by difficulty, upgraded while it's kept unopened;
++// - Dr. A's sets: when a player holds every clue of a set, Dr. A takes them and leaves his bag;
++// - any mode: a chance of a Game Result Reward.
++#include "moderewards.h"
++#include "itemmanager.h"
++#include "medalmanager.h"
++#include "packetmanager.h"
++#include "userdatabase.h"
++#include "warbondmanager.h"
++#include "common/logger.h"
++#include "common/utils.h"
++#include "interface/iuser.h"
++#include "user/userinventoryitem.h"
++#include "definitions.h"
++#include "nlohmann/json.hpp"
++
++#include <ctime>
++#include <fstream>
++#include <map>
++#include <string>
++#include <vector>
++
++using namespace std;
++using json = nlohmann::json;
++
++namespace
++{
++	struct Rule
++	{
++		vector<int> clear;    // every one of these for a clear
++		vector<int> oneOf;    // one of these for a clear
++		vector<int> top3;     // 1st, 2nd and 3rd place (the match has to be finished, not won)
++	};
++
++	struct ClearBox
++	{
++		vector<int> items;         // lowest grade first
++		vector<int> minDifficulty; // the room's difficulty each grade starts at
++	};
++
++	struct ModeRule
++	{
++		string name;
++		Rule rule;
++		map<int, Rule> maps;
++		ClearBox box;
++	};
++
++	struct ItemSet
++	{
++		vector<int> items;
++		int bag = 0;
++		string text;
++	};
++
++	bool g_Loaded = false;
++	map<int, ModeRule> g_Modes;
++	vector<ItemSet> g_Sets;
++	int g_AnyChance = 0;
++	vector<int> g_AnyItems, g_AnyExclude;
++
++	vector<int> Ints(const json& j, const char* key)
++	{
++		vector<int> out;
++		if (j.contains(key) && j[key].is_array())
++			for (auto& v : j[key])
++				if (v.is_number_integer())
++					out.push_back(v.get<int>());
++		return out;
++	}
++
++	Rule ReadRule(const json& j)
++	{
++		Rule r;
++		r.clear = Ints(j, "Clear");
++		r.oneOf = Ints(j, "ClearOneOf");
++		r.top3 = Ints(j, "Top3");
++		return r;
++	}
++
++	int DayNumber()
++	{
++		time_t now = time(NULL);
++		tm midnight = *localtime(&now);
++		midnight.tm_hour = midnight.tm_min = midnight.tm_sec = 0;
++		return (int)((mktime(&midnight) + 43200) / 86400); // noon of that day: safe against DST
++	}
++
++	long long ReadCounter(IUser* user, const char* name)
++	{
++		vector<UserCounter_s> counters;
++		g_UserDatabase.GetCounters(user->GetID(), counters);
++		for (auto& c : counters)
++			if (c.mode == -1 && c.name == name)
++				return c.value;
++		return 0;
++	}
++
++	bool Holds(IUser* user, int itemID, CUserInventoryItem* out = NULL)
++	{
++		CUserInventoryItem item;
++		if (g_UserDatabase.GetFirstItemByItemID(user->GetID(), itemID, item) <= 0 || item.m_nCount <= 0)
++			return false;
++		if (out)
++			*out = item;
++		return true;
++	}
++
++	void Give(IUser* user, int itemID, int duration, RewardNotice& notice)
++	{
++		g_ItemManager.AddItem(user->GetID(), user, itemID, 1, duration);
++		RewardItem got = {};
++		got.itemID = itemID;
++		got.count = 1;
++		got.duration = duration;
++		notice.items.push_back(got);
++	}
++
++	void GiveRule(IUser* user, const Rule& rule, bool won, int place, RewardNotice& notice)
++	{
++		if (won)
++		{
++			for (int id : rule.clear)
++				Give(user, id, 0, notice);
++			if (!rule.oneOf.empty())
++				Give(user, rule.oneOf[rand() % rule.oneOf.size()], 0, notice);
++		}
++		if (place >= 1 && place <= (int)rule.top3.size())
++			Give(user, rule.top3[place - 1], 0, notice);
++	}
++
++	// One box a day: a clear gives the box of its difficulty; a harder clear upgrades a box still unopened; once it's
++	// been opened, the next one comes after midnight.
++	void GiveClearBox(IUser* user, const ClearBox& box, int difficulty, RewardNotice& notice)
++	{
++		if (box.items.empty())
++			return;
++		int grade = 0;
++		for (size_t i = 0; i < box.items.size() && i < box.minDifficulty.size(); i++)
++			if (difficulty >= box.minDifficulty[i])
++				grade = (int)i;
++
++		int held = -1;
++		CUserInventoryItem heldItem;
++		for (size_t i = 0; i < box.items.size(); i++)
++		{
++			CUserInventoryItem item;
++			if (Holds(user, box.items[i], &item))
++			{
++				held = (int)i;
++				heldItem = item;
++			}
++		}
++
++		IExtendedSocket* socket = user->GetExtendedSocket();
++		if (held >= grade)
++		{
++			g_PacketManager.SendUMsgNoticeMessageInChat(socket, "Daily Reward Box: a harder difficulty upgrades the box you hold. Open it to get a new one tomorrow.");
++			return;
++		}
++		if (held >= 0)
++		{
++			g_ItemManager.RemoveItem(user->GetID(), user, heldItem);
++			Give(user, box.items[grade], 0, notice);
++			g_PacketManager.SendUMsgNoticeMessageInChat(socket, "Daily Reward Box upgraded.");
++			return;
++		}
++		int today = DayNumber();
++		if (ReadCounter(user, "ZbsBoxDay") == today)
++		{
++			g_PacketManager.SendUMsgNoticeMessageInChat(socket, "Today's Daily Reward Box is already collected: the next one comes after midnight.");
++			return;
++		}
++		g_UserDatabase.SetCounter(user->GetID(), { -1, "ZbsBoxDay", (long long)today });
++		Give(user, box.items[grade], 0, notice);
++	}
++
++	// every clue of a set in the inventory: one of each goes to Dr. A, who leaves his bag
++	void CheckSets(IUser* user)
++	{
++		for (auto& set : g_Sets)
++		{
++			bool all = !set.items.empty();
++			for (int id : set.items)
++				all = all && Holds(user, id);
++			if (!all)
++				continue;
++			for (int id : set.items)
++			{
++				CUserInventoryItem item;
++				if (Holds(user, id, &item))
++					g_ItemManager.OnItemUse(user, item, 1);
++			}
++			RewardNotice notice = {};
++			notice.status = true;
++			Give(user, set.bag, 0, notice);
++			g_PacketManager.SendUMsgRewardNotice(user->GetExtendedSocket(), notice, "Meeting with Dr. A", set.text, false);
++			Logger().Info("ModeRewards: user %d completed a set of clues -> item %d\n", user->GetID(), set.bag);
++		}
++	}
++}
++
++void ModeRewards::Load()
++{
++	g_Loaded = true;
++	g_Modes.clear();
++	g_Sets.clear();
++	g_AnyChance = 0;
++	g_AnyItems.clear();
++	g_AnyExclude.clear();
++
++	ifstream f("Data/ModeRewards.json");
++	json cfg = json::parse(f, nullptr, false, true);
++	if (!cfg.is_object())
++	{
++		Logger().Warn("ModeRewards: Data/ModeRewards.json is missing or broken: modes give only EXP and medals\n");
++		return;
++	}
++	int maps = 0;
++	for (auto& jm : cfg.value("Modes", json::array()))
++	{
++		ModeRule m;
++		m.name = jm.value("Name", "");
++		m.rule = ReadRule(jm);
++		if (jm.contains("Maps"))
++			for (auto& it : jm["Maps"].items())
++			{
++				m.maps[atoi(it.key().c_str())] = ReadRule(it.value());
++				maps++;
++			}
++		if (jm.contains("ClearBox"))
++		{
++			m.box.items = Ints(jm["ClearBox"], "Items");
++			m.box.minDifficulty = Ints(jm["ClearBox"], "MinDifficulty");
++		}
++		g_Modes[jm.value("Mode", -1)] = m;
++	}
++	for (auto& js : cfg.value("Sets", json::array()))
++	{
++		ItemSet s;
++		s.items = Ints(js, "Items");
++		s.bag = js.value("Bag", 0);
++		s.text = js.value("Text", "");
++		if (s.bag && !s.items.empty())
++			g_Sets.push_back(s);
++	}
++	if (cfg.contains("AnyMode"))
++	{
++		g_AnyChance = cfg["AnyMode"].value("Chance", 0);
++		g_AnyItems = Ints(cfg["AnyMode"], "OneOf");
++		g_AnyExclude = Ints(cfg["AnyMode"], "ExcludeModes");
++	}
++	Logger().Info("ModeRewards: %d modes, %d maps, %d sets of clues, any mode %d%%\n", (int)g_Modes.size(), maps, (int)g_Sets.size(), g_AnyChance);
++}
++
++void ModeRewards::OnMatchEnd(IUser* user, int gameMode, int mapID, int difficulty, bool won, int place, int kills)
++{
++	if (!g_Loaded)
++		Load();
++
++	// sv_cheats: Penalized gives what is left of 100, here the chance of getting anything at all
++	if (rand() % 100 >= g_WarbondManager.Penalized(user, 100))
++	{
++		g_PacketManager.SendUMsgNoticeMessageInChat(user->GetExtendedSocket(), "sv_cheats was on in this match: no mode reward this time.");
++		return;
++	}
++
++	RewardNotice notice = {};
++	notice.status = true;
++	string name;
++	auto mode = g_Modes.find(gameMode);
++	if (mode != g_Modes.end())
++	{
++		name = mode->second.name;
++		GiveRule(user, mode->second.rule, won, place, notice);
++		auto onMap = mode->second.maps.find(mapID);
++		if (onMap != mode->second.maps.end())
++			GiveRule(user, onMap->second, won, place, notice);
++		if (won)
++			GiveClearBox(user, mode->second.box, difficulty, notice);
++	}
++
++	bool excluded = false;
++	for (int m : g_AnyExclude)
++		excluded = excluded || m == gameMode;
++	if (!excluded && kills > 0 && !g_AnyItems.empty() && rand() % 100 < g_AnyChance)
++		Give(user, g_AnyItems[rand() % g_AnyItems.size()], 0, notice);
++
++	Logger().Info("ModeRewards: user %d, mode %d, map %d, difficulty %d, won %d, place %d, kills %d -> %d items\n",
++		user->GetID(), gameMode, mapID, difficulty, won, place, kills, (int)notice.items.size());
++
++	if (!notice.items.empty())
++		g_PacketManager.SendUMsgRewardNotice(user->GetExtendedSocket(), notice, name.empty() ? "Game Result Reward" : name + " reward",
++			"You received the following item(s) as a reward:", false);
++	CheckSets(user);
++}
+diff --git a/src/manager/moderewards.h b/src/manager/moderewards.h
+new file mode 100644
+index 0000000..4de865d
+--- /dev/null
++++ b/src/manager/moderewards.h
+@@ -0,0 +1,12 @@
++#pragma once
++
++class IUser;
++
++// Offline build: the items each mode gives for completing it (Data/ModeRewards.json).
++namespace ModeRewards
++{
++	void Load();
++	// a finished match. won: the player's team won; place: 1 for the top player (0: alone in no ranking); difficulty:
++	// the room's Zombie Scenario difficulty
++	void OnMatchEnd(IUser* user, int gameMode, int mapID, int difficulty, bool won, int place, int kills);
++}
 diff --git a/src/manager/packetmanager.cpp b/src/manager/packetmanager.cpp
 index 0defb02..e7b9aa4 100644
 --- a/src/manager/packetmanager.cpp
@@ -7906,14 +8229,15 @@ index c7d2bdb..75d0ee9 100644
 +extern CVoxelManager g_VoxelManager;
 diff --git a/src/manager/warbondmanager.cpp b/src/manager/warbondmanager.cpp
 new file mode 100644
-index 0000000..f7d522b
+index 0000000..81849d5
 --- /dev/null
 +++ b/src/manager/warbondmanager.cpp
-@@ -0,0 +1,1021 @@
+@@ -0,0 +1,1023 @@
 +#include "channelmanager.h"
 +#include "guestprofile.h"
 +#include "transfer.h"
 +#include "warbondmanager.h"
++#include "moderewards.h"
 +#include "usermanager.h"
 +#include "userdatabase.h"
 +#include "itemmanager.h"
@@ -7949,6 +8273,7 @@ index 0000000..f7d522b
 +{
 +	if (!LoadConfig())
 +		return false;
++	ModeRewards::Load();
 +
 +	// offline Studio: the voxel REST API (VoxelConfigList.json points the game here)
 +	m_WebServer.SetStudioHandler([](const WebRequest& req) { return g_VoxelManager.OnHttp(req); });
@@ -10254,19 +10579,20 @@ index 4c688f4..c1e0b2a 100644
 +	bool m_bWouldBlock; // last read hit WOLFSSL_ERROR_WANT_READ/WRITE (non-blocking SSL, retry on next poll)
  };
 diff --git a/src/room/gamematch.cpp b/src/room/gamematch.cpp
-index 65418d8..ea9f7d4 100644
+index 65418d8..044af94 100644
 --- a/src/room/gamematch.cpp
 +++ b/src/room/gamematch.cpp
-@@ -6,6 +6,8 @@
+@@ -6,6 +6,9 @@
  #include "manager/itemmanager.h"
  #include "manager/hostmanager.h"
  #include "manager/userdatabase.h"
 +#include "manager/warbondmanager.h"
 +#include "manager/medalmanager.h"
++#include "manager/moderewards.h"
  
  #include "user/userinventoryitem.h"
  
-@@ -19,6 +21,7 @@ CGameMatchUserStat::CGameMatchUserStat()
+@@ -19,6 +22,7 @@ CGameMatchUserStat::CGameMatchUserStat()
  	m_nDeaths = 0;
  	m_nPointsEarned = 0;
  	m_nBonusPointsEarned = 0;
@@ -10274,7 +10600,7 @@ index 65418d8..ea9f7d4 100644
  	m_nExpEarned = 0;
  	m_nBonusExpEarned = 0;
  	m_nItemBonusPoints = 0;
-@@ -209,6 +212,7 @@ void CGameMatch::Connect(IUser* user)
+@@ -209,6 +213,7 @@ void CGameMatch::Connect(IUser* user)
  	{
  		CGameMatchUserStat* userStat = new CGameMatchUserStat();
  		userStat->m_pUser = user;
@@ -10282,7 +10608,7 @@ index 65418d8..ea9f7d4 100644
  
  		m_UserStats.push_back(userStat);
  	}
-@@ -220,6 +224,7 @@ void CGameMatch::Disconnect(IUser* user)
+@@ -220,6 +225,7 @@ void CGameMatch::Disconnect(IUser* user)
  	if (stat)
  	{
  		g_QuestManager.OnGameMatchLeave(user, stat->m_TempQuestProgress, stat->m_TempQuestEventProgress);
@@ -10290,7 +10616,7 @@ index 65418d8..ea9f7d4 100644
  
  		delete stat;
  		m_UserStats.erase(remove(begin(m_UserStats), end(m_UserStats), stat), end(m_UserStats));
-@@ -271,6 +276,8 @@ void CGameMatch::OnUpdateKillCounter(IUser* user, int kills)
+@@ -271,6 +277,8 @@ void CGameMatch::OnUpdateKillCounter(IUser* user, int kills)
  	if (stat)
  	{
  		stat->UpdateKillsCount(kills);
@@ -10299,7 +10625,7 @@ index 65418d8..ea9f7d4 100644
  	}
  }
  
-@@ -292,7 +299,14 @@ void CGameMatch::OnKillEvent(IUser* user, GameMatch_KillEvent& killEvent)
+@@ -292,7 +300,14 @@ void CGameMatch::OnKillEvent(IUser* user, GameMatch_KillEvent& killEvent)
  
  	// don't count player suicide
  	if (killEvent.killerUserID != killEvent.victimUserID)
@@ -10314,7 +10640,7 @@ index 65418d8..ea9f7d4 100644
  
  	g_QuestManager.OnKillEvent(stat, this, killEvent);
  
-@@ -356,6 +370,7 @@ void CGameMatch::OnBombExplode(IUser* user)
+@@ -356,6 +371,7 @@ void CGameMatch::OnBombExplode(IUser* user)
  	if (!stat)
  		return;
  
@@ -10322,7 +10648,7 @@ index 65418d8..ea9f7d4 100644
  	g_QuestManager.OnBombExplode(stat, this);
  }
  
-@@ -365,6 +380,7 @@ void CGameMatch::OnBombDefuse(IUser* user)
+@@ -365,6 +381,7 @@ void CGameMatch::OnBombDefuse(IUser* user)
  	if (!stat)
  		return;
  
@@ -10330,7 +10656,7 @@ index 65418d8..ea9f7d4 100644
  	g_QuestManager.OnBombDefuse(stat, this);
  }
  
-@@ -374,6 +390,7 @@ void CGameMatch::OnHostageEscape(IUser* user)
+@@ -374,6 +391,7 @@ void CGameMatch::OnHostageEscape(IUser* user)
  	if (!stat)
  		return;
  
@@ -10338,7 +10664,7 @@ index 65418d8..ea9f7d4 100644
  	g_QuestManager.OnHostageEscape(stat, this);
  }
  
-@@ -383,6 +400,7 @@ void CGameMatch::OnMonsterKill(IUser* user, int monsterType)
+@@ -383,6 +401,7 @@ void CGameMatch::OnMonsterKill(IUser* user, int monsterType)
  	if (!stat)
  		return;	
  
@@ -10346,7 +10672,7 @@ index 65418d8..ea9f7d4 100644
  	g_QuestManager.OnMonsterKill(stat, this, monsterType);
  }
  
-@@ -391,6 +409,7 @@ void CGameMatch::OnDropBoxPickup(IUser* user, int rewardID)
+@@ -391,6 +410,7 @@ void CGameMatch::OnDropBoxPickup(IUser* user, int rewardID)
  	CGameMatchUserStat* stat = GetGameUserStat(user);
  	if (!stat)
  		return;
@@ -10354,7 +10680,7 @@ index 65418d8..ea9f7d4 100644
  
  #ifndef PUBLIC_RELEASE
  	if (m_nGameMode != 15 && m_nGameMode != 17 && m_nGameMode != 26 && m_nGameMode != 28)
-@@ -430,8 +449,22 @@ void CGameMatch::OnKiteKill(IUser* user)
+@@ -430,8 +450,36 @@ void CGameMatch::OnKiteKill(IUser* user)
  
  void CGameMatch::OnGameMatchEnd()
  {
@@ -10367,6 +10693,20 @@ index 65418d8..ea9f7d4 100644
  	ApplyGameResult();
 +	g_MedalManager.OnMatchEnd(this); // statistics and medals
 +
++	// offline build: the items of the mode (Data/ModeRewards.json); m_UserStats is sorted by CalculateFirstPlace
++	{
++		int place = 0;
++		for (auto stat : m_UserStats)
++		{
++			place++;
++			IUser* user = stat->m_pUser;
++			RoomTeamNum team = m_pParentRoom->GetUserTeam(user);
++			bool won = (team == RoomTeamNum::Terrorist && m_nTerWinCount > m_nCtWinCount) ||
++				(team == RoomTeamNum::CounterTerrorist && m_nCtWinCount > m_nTerWinCount);
++			ModeRewards::OnMatchEnd(user, m_nGameMode, m_nMapID, m_pParentRoom->GetSettings()->zsDifficulty, won, place, stat->m_nKills);
++		}
++	}
++
 +	if (m_bCheats)
 +		for (auto stat : m_UserStats)
 +		{
@@ -10377,7 +10717,7 @@ index 65418d8..ea9f7d4 100644
  
  	Logger().Info("CGameMatch::OnGameMatchEnd: gamemode: %d, CT rounds win count: %d, T rounds win count: %d\n", m_nGameMode, m_nCtWinCount, m_nTerWinCount);
  }
-@@ -532,7 +565,6 @@ void CGameMatch::CalculateGameResult()
+@@ -532,7 +580,6 @@ void CGameMatch::CalculateGameResult()
  	CalculateFirstPlace();
  
  	int expCoef = GetExpCoefficient();
@@ -10385,7 +10725,7 @@ index 65418d8..ea9f7d4 100644
  
  	for (auto stat : m_UserStats)
  	{
-@@ -541,8 +573,23 @@ void CGameMatch::CalculateGameResult()
+@@ -541,8 +588,23 @@ void CGameMatch::CalculateGameResult()
  		// calc exp
  		stat->m_nExpEarned = stat->m_nKills > 0 ? expCoef * stat->m_nKills : expCoef;
  
@@ -10411,7 +10751,7 @@ index 65418d8..ea9f7d4 100644
  
  		// calc bonus exp/points
  		auto bonusPercentageClass = find_if(g_pServerConfig->gameMatch.bonusPercentageClasses.begin(), g_pServerConfig->gameMatch.bonusPercentageClasses.end(),
-@@ -601,6 +648,10 @@ void CGameMatch::CalculateGameResult()
+@@ -601,6 +663,10 @@ void CGameMatch::CalculateGameResult()
  			}
  		}
  
@@ -10422,7 +10762,7 @@ index 65418d8..ea9f7d4 100644
  		if (stat->m_nExpEarned > 9999)
  		{
  			stat->m_nExpEarned = 9999;
-@@ -623,6 +674,9 @@ void CGameMatch::ApplyGameResult()
+@@ -623,6 +689,9 @@ void CGameMatch::ApplyGameResult()
  
  		int totalPoints = stat->m_nPointsEarned + stat->m_nBonusPointsEarned;
  		user->UpdatePoints(totalPoints);
