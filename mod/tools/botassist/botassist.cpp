@@ -79,6 +79,7 @@ typedef void (*MessageBeginFn)(int dest, int type, const float* origin, void* ed
 typedef void (*MessageEndFn)();
 typedef void (*WriteIntFn)(int value);
 typedef void (*WriteCoordFn)(float value);
+typedef void (*WriteStringFn)(const char* value);
 static const DWORD MP_BEAM_SPRITE = 0x12183278; // short: a sprite index mp.dll uses for its own TE_BEAMPOINTS
 typedef void (*RunPlayerMoveFn)(void* fakeclient, const float* angles, float fwd, float side, float up,
                                 unsigned short buttons, unsigned char impulse, unsigned char msec);
@@ -89,6 +90,7 @@ static MessageBeginFn g_MessageBegin;
 static MessageEndFn g_MessageEnd;
 static WriteIntFn g_WriteByte, g_WriteShort;
 static WriteCoordFn g_WriteCoord;
+static WriteStringFn g_WriteString;
 static TraceLineFn g_TraceLine;
 static TraceHullFn g_TraceHull;
 static CmdArgvFn g_CmdArgv;
@@ -367,6 +369,9 @@ static bool ShelterLook(void* bot, BotState& st, V3 eye, float& yaw, float& pitc
 static bool ShelterSwing(void* bot, BotState& st, float yaw, float pitch);
 static void ShelterBotThink(void* bot, BotState& st);
 static void ShelterWatch();
+static bool ShelterHoldFire(void* bot, BotState& st);
+static void* ShelterTarget(void* bot, V3 eye, void* best);
+static bool ShelterPlayerCommand(void* player, const std::string& c);
 
 static bool IsIgnored(const char* classname)
 {
@@ -1171,6 +1176,7 @@ static void ScanMonsters(void* bot, BotState& st, V3 eye)
         best = obj;
     }
     best = HsMissileFirst(bot, eye, best);
+    best = ShelterTarget(bot, eye, best); // Zombie Shelter Team Match: the other team
     st.target = best;
     st.threat = nearestDist < cfg.awareness ? nearest : (best && IsLivingMonster(best) ? best : nullptr);
     if (best)
@@ -2149,12 +2155,15 @@ static void Drive(void* bot, BotState& st, Command& cmd, float dt)
     }
     bool firing = false;
     bool hold = HoldsTrigger(bot, st, now);
+    bool meleeTooFar = ShelterHoldFire(bot, st); // Zombie Shelter: the axe doesn't reach from afar
+    if (meleeTooFar)
+        onTarget = false;
     if (onTarget)
         st.lastOnTarget = now;
     // spraying: an automatic weapon keeps firing a moment after the line leaves the target (it moves, the
     // next one is next to it), unless a wall or a teammate is right in front
     bool keepFiring = false;
-    if (!onTarget && hold && st.wasFiring && st.target && now - st.lastOnTarget < 0.35f)
+    if (!onTarget && !meleeTooFar && hold && st.wasFiring && st.target && now - st.lastOnTarget < 0.35f)
     {
         TraceResult tr;
         float td = Len(AimPoint(st.target) - eye);
@@ -2785,6 +2794,7 @@ static void SetCvar(const char* name, const char* value)
 }
 
 static bool CoopMode();
+static bool CoopOneTeam();
 
 static void UpdateTeams(void* anyPlayer)
 {
@@ -2806,7 +2816,7 @@ static void UpdateTeams(void* anyPlayer)
         g_teamsMap = map;
         g_wrongTeamChecks = 0;
     }
-    if (!cfg.sameTeam || !CoopMode())
+    if (!cfg.sameTeam || !CoopOneTeam())
         return;
     if (g_savedMaxBotTeam.empty())
     {
@@ -2890,6 +2900,20 @@ static bool CoopMode()
         if (m == mode)
             return true;
     return false;
+}
+
+// a co-op mode played by one team: not Zombie Shelter's Team Match maps (*_pvp), where both teams have bots
+static bool CoopOneTeam()
+{
+    if (!CoopMode())
+        return false;
+    if (GameMode() == 28)
+    {
+        std::string map = String(*(int*)((DWORD)*g_pGlobals + GV_MAPNAME));
+        if (map.size() >= 4 && map.compare(map.size() - 4, 4, "_pvp") == 0)
+            return false;
+    }
+    return true;
 }
 
 // Scenario maps only have CT spawns (the T ones are outside the map). A bot the game puts on T in a co-op
@@ -3655,12 +3679,12 @@ static int RoomBotQuota(int team, const char* which)
     // Manhunt starts when everyone in the room is in (humans on CT, the zombie is drawn from them); the game asks
     // for its bots as terrorists to balance the teams
     bool oneTeam = GameMode() == MODE_ZOMBIE_GIANT || GameMode() == MODE_ZHE;
-    if (CoopMode() || oneTeam)
+    if (CoopOneTeam() || oneTeam)
     {
         want[2] += want[1]; // co-op, Zombie Giant (the giant comes from the CT players), Manhunt: everyone on CT
         want[1] = 0;
     }
-    if (CoopMode() && team == 0)
+    if (CoopOneTeam() && team == 0)
         team = 2; // Zombie Disaster Zone asks for its bots as terrorists: they join CT like the others
     if (oneTeam)
         team = 1; // Zombie Giant's soldier bots, Manhunt's players (asked for as T or CT): the room's AI players
@@ -3694,7 +3718,7 @@ static int __fastcall HookedAddBot(void* self, void* edx, int team)
     team = RoomBotQuota(team, "new manager");
     if (team < 0)
         return 0;
-    if (cfg.enabled && cfg.sameTeam && CoopMode())
+    if (cfg.enabled && cfg.sameTeam && CoopOneTeam())
     {
         static int reports = 0;
         if (team == 0)
@@ -3723,7 +3747,7 @@ static int HookedBotAddCommand(int team, int fromConsole)
     team = RoomBotQuota(team, "old manager");
     if (team < 0)
         return 0;
-    if (cfg.enabled && cfg.sameTeam && CoopMode())
+    if (cfg.enabled && cfg.sameTeam && CoopOneTeam())
     {
         static int reports = 0;
         if (team == 0)
@@ -5099,7 +5123,7 @@ static void HookedRunPlayerMove(void* fakeclient, const float* angles, float fwd
                     ApplyTeamCharacter(fakeclient, bs);
                 }
                 ApplyRoomSkill(fakeclient, bs);
-                if (cfg.sameTeam && CoopMode())
+                if (cfg.sameTeam && CoopOneTeam())
                     FixCoopTeam(fakeclient, bs);
                 UpdateBuying(fakeclient, bs);
                 ShelterBotThink(fakeclient, bs);
@@ -5362,14 +5386,17 @@ static void GiveOrder(Order order, void* by)
         FakeCommand(answer, "roger");
 }
 
-static void OnPlayerCommand(void* player)
+// true: the command stops here (botassist's own menu took it)
+static bool OnPlayerCommand(void* player)
 {
     const char* cmd = g_CmdArgv(0);
     if (!cmd || !*cmd)
-        return;
+        return false;
     std::string c = cmd;
     for (auto& ch : c)
         ch = (char)tolower(ch);
+    if (ShelterPlayerCommand(player, c)) // Zombie Shelter: the orders menu
+        return true;
     if (c == "joinclass")
     {
         // what a player's character choice looks like, next to what botassist gives the bots
@@ -5399,7 +5426,7 @@ static void OnPlayerCommand(void* player)
     {
         if (GameMode() != MODE_PTN) // there they are the partner's orders
             g_openMenu = c[5] - '0';
-        return;
+        return false;
     }
     // chat orders: "/follow", "/hold", "/cover", "/free" (also without the slash, in any case)
     if (c == "say" || c == "say_team")
@@ -5420,7 +5447,7 @@ static void OnPlayerCommand(void* player)
             GiveOrder(ORDER_HOLD, player);
         else if (t == "free" || t == "go" || t == "takepoint")
             GiveOrder(ORDER_INDEPENDENT, player);
-        return;
+        return false;
     }
     int pick = -1;
     if (c == "menuselect")
@@ -5434,7 +5461,7 @@ static void OnPlayerCommand(void* player)
         else if (menu == 2)
             c = pick == 1 ? "go" : pick == 2 ? "fallback" : pick == 3 ? "sticktog" : pick == 4 ? "getinpos" : pick == 5 ? "stormfront" : "";
         else
-            return;
+            return false;
     }
     if (c == "followme" || c == "regroup" || c == "sticktog" || c == "fallback")
         GiveOrder(ORDER_FOLLOW, player);
@@ -5444,6 +5471,7 @@ static void OnPlayerCommand(void* player)
         GiveOrder(ORDER_HOLD, player);
     else if (c == "takepoint" || c == "stormfront" || c == "go")
         GiveOrder(ORDER_INDEPENDENT, player);
+    return false;
 }
 
 static void HookedClientCommand(void* player)
@@ -5451,7 +5479,10 @@ static void HookedClientCommand(void* player)
     __try
     {
         if (cfg.enabled && player && g_edictToVars >= 0 && IsHuman(player))
-            OnPlayerCommand(player);
+        {
+            if (OnPlayerCommand(player))
+                return; // botassist's own menu took it
+        }
         else if (cfg.enabled && player && g_edictToVars >= 0 && (F<int>(Vars(player), EV_FLAGS) & FL_FAKECLIENT))
         {
             if (OnBotCommand(player))
@@ -5569,6 +5600,7 @@ static bool Install(HMODULE mp)
     g_WriteByte = (WriteIntFn)table[ENG_WRITEBYTE];
     g_WriteShort = (WriteIntFn)table[ENG_WRITESHORT];
     g_WriteCoord = (WriteCoordFn)table[ENG_WRITECOORD];
+    g_WriteString = (WriteStringFn)table[59]; // pfnWriteString (mp.dll's ShowMenu writes its text with it)
     if (table[ENG_RUNPLAYERMOVE] != (void*)CalibratingRunPlayerMove)
         g_RunPlayerMove = (RunPlayerMoveFn)table[ENG_RUNPLAYERMOVE];
     g_pGlobals = (DWORD**)(MP_GLOBALS + delta);

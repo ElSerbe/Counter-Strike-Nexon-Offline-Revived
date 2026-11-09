@@ -786,13 +786,26 @@ shelters (+0x16b0, player +0x31be), skill points (player +0x32ee). Wood piles (`
 from weapon id 29 (the shelter axe); a teammate's axe hit repairs a building (0x10894e40). The menus' client commands go to rules vfunc 0x24
 (0x108396b0), which reads its arguments from the engine directly, so `ShelterCommand` points g_engfuncs' Cmd_Args/Argv/Argc (slots 87-89) at
 its own for the call: `zsht_warehouse <type> <put 0..5> <take 0..5>` (no distance check) and `zsht_RequestSkillup <0..32>`.
+Building (the B menu's commands, read from 0x108396b0): `zsht_StaticBuildConfirm <row> <spot>` on the map's fixed spots,
+`zsht_BuildConfirm <row> <x> <y> <z> <angle>` anywhere in the build zones, `zsht_upgradeshelter <row>` (rows 25, 26, 29: tiers 2-4).
+The rows are `resource/shelterteam/zsht_building.cso` (`kBuild`: tier, skill and building needed, cost, from the storage or from what the builder
+carries); the fixed spots come from the game's tables object (`*(0x121d3ec4) + 0x1f0`, vfunc 0x318; vfunc 0x310 a row), what stands on a spot
+is rules +0x26a4 + spot*4, a building's row at +0xd4, the shelter's row at +0x100. The skill tree is `resource/shelterteam/zsht_skilltree.cso`.
 Bots are driven by the shared monster AI (`Drive`), always on in this mode (`ShelterActive`), with hooks for the mode: `ShelterGoal` (where to
-go when no player ordered them), `ShelterLook` (at what they hit) and `ShelterSwing` (the axe, tapped). By day: gather with the axe, home when
-full, low on sanity (40%) or 45 s before the night, deposit everything, rest to 95% sanity, buy at a `shelter_team_buyzone` with 3500+ money
-(once a day: the shared buying runs there; at spawn only pistols sell), repair team buildings under 80% (one bot in three, or any close by),
-go after the boss (a monster with 20000+ health or taller than 150 units). At night: around the shelter, shooting, repairing what drops under 90%.
-Skill points are spent on random skills the game accepts. The shelter's own entities (`shelter_*`, `zsht_*`) are never targets (`IsIgnored`).
-botassist.log "Shelter:" (state every 15 s, each bot's task every 20 s, deposits, skills, buys, repairs, unreachable resources).
+go), `ShelterLook` (at what they hit), `ShelterSwing` (the axe, tapped), `ShelterHoldFire` (a melee tool never "fires" beyond 110 units: the bot
+switches to a gun, or after four tries without one closes in only on zombies within 380 units for 30 s) and `ShelterTarget` (Team Match: the
+other team's players and, raiding, its shelter). Each bot has a job by its place: builder (engineer skills: Beginner Engineer opens the
+worktable), gatherer (survival) or fighter (combat: Beginner Gun Mastery opens submachine guns and shotguns). By day: gather, home when full,
+low on mental gauge or 45 s before the night (rules +0x228 is a float), deposit, rest, buy at a `shelter_team_buyzone` with 3500+ money, repair;
+the builder builds: the shelter's next tier, the fixed spots (worktable, generators, communication tower, posts, refinery), turrets (two per
+tier), a storage when the storage is full, a recovery bed, then works on what it built. Fighters with a gun go after the boss (20000+ health)
+and, on Team Match from day 3, the other team's shelter (both teams get bots there: `CoopOneTeam`). At night: in the shelter, shooting,
+repairing. A player asking for the rescue makes the team's bots ask too.
+The player's orders: radio3 (the C key) or "/orders" opens a menu (mp.dll's ShowMenu, 0x113f8940): 1 gather, 2 defend the shelter, 3 repair,
+4 build, 5 follow me, 6 free (each its job); the chat words /gather, /defend, /repair, /build, /free do the same. The radio's follow and hold
+still work.
+botassist.log "Shelter:" (state every 15 s with the shelter tier, each bot's job, order and task every 20 s, deposits, skills, buys, repairs,
+fixed spots, builds planned, sent, done or refused, unreachable resources, orders).
 
 ## Navigation tools (console)
 
