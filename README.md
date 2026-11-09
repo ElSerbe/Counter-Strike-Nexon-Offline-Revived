@@ -15,7 +15,9 @@ launcher patches *your* copy of the game, keeps a backup of every file it change
    copy of the same Steam version kept on the Internet Archive
    ([csnz-1362486462562801379](https://archive.org/details/csnz-1362486462562801379), Steam depot manifest
    1362486462562801379): 12.9 GB, resumable, checked against archive.org's MD5 and unpacked into the folder you
-   choose (about 27 GB free needed while installing). The repository doesn't host the game.
+   choose (about 27 GB free needed while installing). The repository doesn't host the game. A copy that isn't a
+   Steam library install gets the Goldberg Steam Emulator's `steam_api.dll` in its `Bin` on Play, so it starts without
+   the game on your Steam account (`mod\tools\goldberg`, LGPL v3; Valve's is kept for online play).
 2. Download `CSNZ-Offline-Revived-Launcher.exe` from the latest release and put it in an empty folder of its own
    (the mod is installed next to it, in `mod\`). Don't open it from the browser's downloads bar: the browser runs a new temporary
    copy each time, and the launcher would ask to install everything again (it now offers to move itself to
@@ -44,6 +46,7 @@ launcher patches *your* copy of the game, keeps a backup of every file it change
 Online play goes through the real Steam client, with Spacewar, so Steam has to be open and any Steam account works. The
 Steam bridge always uses Valve's own `steam_api.dll`: if the game's `Bin` has another one (a Steam emulator), the bridge
 uses a copy kept in `mod\tools\steambridge\out`, or downloads that one file from the archive.org copy of the game.
+Leaving a room on another player's server takes you back to your own (as `/home` in the lobby chat does).
 
 ### Studio maps
 

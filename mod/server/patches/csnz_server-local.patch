@@ -1300,7 +1300,7 @@ index 0000000..5c99d8e
 +
 +extern CBingoManager g_BingoManager;
 diff --git a/src/manager/channelmanager.cpp b/src/manager/channelmanager.cpp
-index 35561e8..e21c09e 100644
+index 35561e8..27927aa 100644
 --- a/src/manager/channelmanager.cpp
 +++ b/src/manager/channelmanager.cpp
 @@ -1,4 +1,6 @@
@@ -1345,7 +1345,7 @@ index 35561e8..e21c09e 100644
  		{
  			if (args.size() == 3)
  			{
-@@ -443,6 +463,42 @@ bool CChannelManager::OnCommandHandler(IExtendedSocket* socket, IUser* user, con
+@@ -443,6 +463,31 @@ bool CChannelManager::OnCommandHandler(IExtendedSocket* socket, IUser* user, con
  	}
  	else
  	{
@@ -1353,19 +1353,8 @@ index 35561e8..e21c09e 100644
 +		// their PC) with the return ticket their server gave them
 +		if (args[0] == "/home")
 +		{
-+			string back = g_UserManager.GetReturnTicket(user->GetID());
-+			if (back.empty())
-+			{
++			if (!SendUserHome(user, "/home"))
 +				g_PacketManager.SendUMsgNoticeMessageInChat(socket, "You're already on your own server.");
-+				return true;
-+			}
-+			if (user->GetCurrentRoom())
-+				user->GetCurrentRoom()->RemoveUser(user);
-+			Logger().Info("User '%s' goes back to their own server (/home)\n", user->GetLogName());
-+			// a guest with their own profile: it goes home first, then the transfer
-+			if (GuestProfiles::GoHome(user, back))
-+				return true;
-+			g_PacketManager.SendTransfer(socket, "127.0.0.1", 30002, back);
 +			return true;
 +		}
 +
@@ -1388,7 +1377,7 @@ index 35561e8..e21c09e 100644
  		CUserCharacterExtended characterExtended = user->GetCharacterExtended(EXT_UFLAG_GAMEMASTER);
  		if (characterExtended.gameMaster)
  		{
-@@ -1270,10 +1326,50 @@ bool CChannelManager::OnNewRoomRequest(CReceivePacket* msg, IUser* user)
+@@ -1270,10 +1315,50 @@ bool CChannelManager::OnNewRoomRequest(CReceivePacket* msg, IUser* user)
  
  bool CChannelManager::OnJoinRoomRequest(CReceivePacket* msg, IUser* user)
  {
@@ -1440,7 +1429,41 @@ index 35561e8..e21c09e 100644
  	CChannel* channel = user->GetCurrentChannel();
  	if (channel == NULL)
  	{
-@@ -1705,13 +1801,43 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
+@@ -1450,6 +1535,22 @@ bool CChannelManager::OnSetTeamRequest(CReceivePacket* msg, IUser* user)
+ 	return true;
+ }
+ 
++// offline build: a player who came through the Steam bridge goes back to their own server (127.0.0.1:30002 on their PC)
++// with the return ticket their server gave them; their profile goes home first. False for this server's own players.
++bool CChannelManager::SendUserHome(IUser* user, const char* why)
++{
++	string back = g_UserManager.GetReturnTicket(user->GetID());
++	if (back.empty())
++		return false;
++	if (user->GetCurrentRoom())
++		user->GetCurrentRoom()->RemoveUser(user);
++	Logger().Info("User '%s' goes back to their own server (%s)\n", user->GetLogName(), why);
++	if (GuestProfiles::GoHome(user, back))
++		return true;
++	g_PacketManager.SendTransfer(user->GetExtendedSocket(), "127.0.0.1", 30002, back);
++	return true;
++}
++
+ bool CChannelManager::OnLeaveRoomRequest(IUser* user)
+ {
+ 	IRoom* currentRoom = user->GetCurrentRoom();
+@@ -1501,6 +1602,10 @@ bool CChannelManager::OnLeaveRoomRequest(IUser* user)
+ 		}
+ 
+ 		currentRoom->RemoveUser(user);
++
++		// offline build: a player from another PC came for this room: leaving it takes them back to their own server
++		if (SendUserHome(user, "left the room"))
++			return true;
+ 	}
+ 
+ 	currentChannel->SendFullUpdateRoomList(user);
+@@ -1705,13 +1810,43 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
  		return false;
  	}
  
@@ -1484,7 +1507,7 @@ index 35561e8..e21c09e 100644
  	if (newSettings.familyBattle)
  	{
  		CUserCharacter character = user->GetCharacter(UFLAG_LOW_CLAN);
-@@ -1921,7 +2047,12 @@ bool CChannelManager::OnRoomKickRequest(CReceivePacket* msg, IUser* user)
+@@ -1921,7 +2056,12 @@ bool CChannelManager::OnRoomKickRequest(CReceivePacket* msg, IUser* user)
  		return false;
  	}
  
@@ -1498,7 +1521,7 @@ index 35561e8..e21c09e 100644
  	if (destUser == NULL)
  	{
  		Logger().Warn("User '%s' tried to kick a user from a room, although destUser == NULL (RID: %d)\n", user->GetLogName(), currentRoom->GetID());
-@@ -2089,7 +2220,7 @@ bool CChannelManager::OnVoxelRoomListRequest(CReceivePacket* msg, IUser* user)
+@@ -2089,7 +2229,7 @@ bool CChannelManager::OnVoxelRoomListRequest(CReceivePacket* msg, IUser* user)
  {
  	string voxel_id = msg->ReadString();
  
@@ -1508,14 +1531,15 @@ index 35561e8..e21c09e 100644
  	rooms.erase(
  		remove_if(
 diff --git a/src/manager/channelmanager.h b/src/manager/channelmanager.h
-index ab4039d..5a2ce45 100644
+index ab4039d..decfebb 100644
 --- a/src/manager/channelmanager.h
 +++ b/src/manager/channelmanager.h
-@@ -27,6 +27,8 @@ public:
+@@ -27,6 +27,9 @@ public:
  
  	class CChannelServer* GetServerByIndex(int index);
  	void JoinChannel(IUser* user, int channelServerID, int channelID, bool transfer);
 +	bool JoinRoom(IUser* user, int roomID, const std::string& password); // offline build: also after a TransferLogin
++	bool SendUserHome(IUser* user, const char* why); // offline build: a player from another PC back to their server
 +	bool JoinRemoteRoom(IUser* user, int roomID, const std::string& password);
  	void EndAllGames();
  
@@ -7379,7 +7403,7 @@ index 0e1d7d2..b204040 100644
  
  	// clan related
 diff --git a/src/manager/usermanager.cpp b/src/manager/usermanager.cpp
-index b426874..33ef1a1 100644
+index b426874..dacf20f 100644
 --- a/src/manager/usermanager.cpp
 +++ b/src/manager/usermanager.cpp
 @@ -1,3 +1,8 @@
@@ -7908,14 +7932,25 @@ index b426874..33ef1a1 100644
  }
  
  void CUserManager::SendLoginPacket(IUser* user, const CUserCharacter& character)
-@@ -654,12 +1133,19 @@ void CUserManager::SendLoginPacket(IUser* user, const CUserCharacter& character)
- 	g_PacketManager.SendGameMatchUnk(socket);
- 	g_PacketManager.SendGameMatchUnk9(socket);
+@@ -650,16 +1129,26 @@ void CUserManager::SendLoginPacket(IUser* user, const CUserCharacter& character)
  
+ 	SendMetadata(socket);
+ 
+-	g_PacketManager.SendGameMatchInfo(socket);
+-	g_PacketManager.SendGameMatchUnk(socket);
+-	g_PacketManager.SendGameMatchUnk9(socket);
+-
 -	if (g_pServerConfig->mainMenuSkinEvent > 0)
-+	// offline build: after a server transfer the client keeps its home screen; these packets add to it (a second
-+	// "Training Ground" card), so they're only sent on the first login
++	// offline build: after a server transfer the client keeps its home screen; these packets add to it (one more
++	// "Training Ground" card and more main menu entries each time, until the menu's lobby button no longer shows), so
++	// they're only sent on the first login
 +	bool transfer = m_bTransferLogin;
++	if (!transfer)
++	{
++		g_PacketManager.SendGameMatchInfo(socket);
++		g_PacketManager.SendGameMatchUnk(socket);
++		g_PacketManager.SendGameMatchUnk9(socket);
++	}
 +	if (!transfer && g_pServerConfig->mainMenuSkinEvent > 0)
  		g_PacketManager.SendEventMainMenuSkin(socket, g_pServerConfig->mainMenuSkinEvent);
  
@@ -7931,7 +7966,7 @@ index b426874..33ef1a1 100644
  
  	if (g_pServerConfig->activeMiniGamesFlag & kEventFlag_WeaponRelease)
  		g_MiniGameManager.SendWeaponReleaseUpdate(user);
-@@ -673,11 +1159,17 @@ void CUserManager::SendLoginPacket(IUser* user, const CUserCharacter& character)
+@@ -673,11 +1162,17 @@ void CUserManager::SendLoginPacket(IUser* user, const CUserCharacter& character)
  	g_PacketManager.SendShopPopularProducts(socket, g_ShopManager.GetPopularProducts());
  
  	// CN: 欢迎来到CSN服务器! 我们的服务器是非商业性的, 不要相信任何人说的售卖CSOL私服的信息.\n官方Discord: https://discord.gg/EvUAY6D \n
@@ -7953,7 +7988,7 @@ index b426874..33ef1a1 100644
  
  	g_ChannelManager.JoinChannel(user, g_ChannelManager.channelServers[0]->GetID(), g_ChannelManager.channelServers[0]->GetChannels()[0]->GetID(), false);
  
-@@ -877,8 +1369,10 @@ bool CUserManager::OnCharacterPacket(CReceivePacket* msg, IExtendedSocket* socke
+@@ -877,8 +1372,10 @@ bool CUserManager::OnCharacterPacket(CReceivePacket* msg, IExtendedSocket* socke
  	g_ItemManager.OnUserLogin(user);
  	g_ClanManager.OnUserLogin(user);
  	g_QuestManager.OnUserLogin(user);
@@ -7964,7 +7999,7 @@ index b426874..33ef1a1 100644
  
  	return true;
  }
-@@ -951,7 +1445,7 @@ bool CUserManager::OnUpdateInfoPacket(CReceivePacket* msg, IExtendedSocket* sock
+@@ -951,7 +1448,7 @@ bool CUserManager::OnUpdateInfoPacket(CReceivePacket* msg, IExtendedSocket* sock
  	case UpdateInfoPacketType::RequestUpdateTutorial:
  	{
  		int tutorial = msg->ReadUInt8();
@@ -7973,7 +8008,7 @@ index b426874..33ef1a1 100644
  
  		break;
  	}
-@@ -989,6 +1483,16 @@ void CUserManager::OnSecondTick(time_t curTime)
+@@ -989,6 +1486,16 @@ void CUserManager::OnSecondTick(time_t curTime)
  {
  	for (auto u : m_Users)
  		u->OnTick();
@@ -7990,7 +8025,7 @@ index b426874..33ef1a1 100644
  }
  
  void CUserManager::SendNoticeMessageToAll(const string& msg)
-@@ -1049,6 +1553,7 @@ int CUserManager::LoginUser(IExtendedSocket* socket, const string& userName, con
+@@ -1049,6 +1556,7 @@ int CUserManager::LoginUser(IExtendedSocket* socket, const string& userName, con
  	}
  
  	Logger().Info(OBFUSCATE("User logged in (IP: %s, UID: %d, Username: %s)\n"), newUser->GetNetworkConfig().m_szExternalIpAddress.c_str(), userID, userName.c_str());
@@ -7998,7 +8033,7 @@ index b426874..33ef1a1 100644
  
  	// Update last login time, last IP and last HWID
  	CUserData data = newUser->GetUser(UDATA_FLAG_FIRSTLOGONTIME);
-@@ -1080,8 +1585,10 @@ int CUserManager::LoginUser(IExtendedSocket* socket, const string& userName, con
+@@ -1080,8 +1588,10 @@ int CUserManager::LoginUser(IExtendedSocket* socket, const string& userName, con
  		g_ItemManager.OnUserLogin(newUser);
  		g_ClanManager.OnUserLogin(newUser);
  		g_QuestManager.OnUserLogin(newUser);
@@ -8009,7 +8044,7 @@ index b426874..33ef1a1 100644
  	}
  
  	return LOGIN_OK;
-@@ -1197,6 +1704,9 @@ void CUserManager::RemoveUserBySocket(IExtendedSocket* socket)
+@@ -1197,6 +1707,9 @@ void CUserManager::RemoveUserBySocket(IExtendedSocket* socket)
  
  bool CUserManager::RemoveUserInternal(IUser* user)
  {
@@ -8019,7 +8054,7 @@ index b426874..33ef1a1 100644
  	m_Users.erase(remove(begin(m_Users), end(m_Users), user), end(m_Users));
  
  	CleanUpUser(user);
-@@ -1285,7 +1795,7 @@ bool CUserManager::OnUserSurveyPacket(CReceivePacket* msg, IExtendedSocket* sock
+@@ -1285,7 +1798,7 @@ bool CUserManager::OnUserSurveyPacket(CReceivePacket* msg, IExtendedSocket* sock
  
  	IUser* user = GetUserBySocket(socket);
  	if (user == NULL)

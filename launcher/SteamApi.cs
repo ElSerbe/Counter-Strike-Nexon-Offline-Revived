@@ -74,6 +74,58 @@ namespace CsnzLauncher
             }
         }
 
+        // the Goldberg Steam Emulator's DLL shipped with the mod (mod\tools\goldberg, LGPL)
+        public static string Emulator => Path.Combine(Paths.Mod, "tools", "goldberg", "steam_api.dll");
+
+        static bool SameFile(string a, string b)
+        {
+            try
+            {
+                if (new FileInfo(a).Length != new FileInfo(b).Length)
+                    return false;
+                byte[] x = File.ReadAllBytes(a), y = File.ReadAllBytes(b);
+                if (x.Length != y.Length)
+                    return false;
+                for (int i = 0; i < x.Length; i++)
+                    if (x[i] != y[i])
+                        return false;
+                return true;
+            }
+            catch { return false; }
+        }
+
+        // A game that isn't a Steam library install (the archive.org copy) closes at startup when the Steam account
+        // doesn't own it: its Bin gets the emulator's DLL instead of Valve's. Valve's is kept for the Steam bridge first.
+        // A Steam install, or another DLL someone put there on purpose, is left alone.
+        public static void UseEmulatorIfNotSteam(string game, Logger log)
+        {
+            if (!GameLocator.IsGame(game) || !string.IsNullOrEmpty(GameLocator.BuildId(game)) || !File.Exists(Emulator))
+                return;
+            var inGame = InGame(game);
+            if (File.Exists(inGame) && SameFile(inGame, Emulator))
+                return;
+            if (File.Exists(inGame) && !IsValves(inGame))
+            {
+                log("The game's steam_api.dll isn't Valve's nor the mod's emulator: left as it is.");
+                return;
+            }
+            try
+            {
+                if (File.Exists(inGame) && !IsValves(Kept))
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(Kept));
+                    File.Copy(inGame, Kept, true);
+                }
+                File.Copy(Emulator, inGame, true);
+                log("This copy of the game isn't from a Steam library: its steam_api.dll is now the Goldberg Steam Emulator's, so it " +
+                    "starts without the game on your Steam account (Valve's is kept for online play).");
+            }
+            catch (Exception ex)
+            {
+                log("Couldn't put the Steam emulator's steam_api.dll in the game: " + ex.Message);
+            }
+        }
+
         // the DLL for the bridge, or null when there's no way to get Valve's
         public static string ForBridge(string game, Logger log)
         {

@@ -16,6 +16,8 @@ mod/tools/cheatengine-mcp-bridge/
 *.asi
 *.exe
 *.dll
+# the Steam emulator for archive.org copies of the game (mod/tools/goldberg/README.md)
+!mod/tools/goldberg/steam_api.dll
 *.pdb
 *.lib
 *.exp

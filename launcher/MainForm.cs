@@ -732,6 +732,7 @@ namespace CsnzLauncher
             {
                 Certificates.Ensure(Log);
                 Patcher.Apply(game, Log);
+                SteamApi.UseEmulatorIfNotSteam(game, Log); // the archive.org copy: starts without the game on the Steam account
                 if (verbose)
                     Log("Game state after patching: " + Patcher.Check(game) + ", Steam build " + GameLocator.BuildId(game) + ", hosts block " + (Hosts.HasBlock() ? "yes" : "no"));
                 if (Runner.Listening(Runner.ServerPort))
@@ -951,6 +952,13 @@ namespace CsnzLauncher
                     // --steam-api <dll>...: is each one Valve's; --bridge-dll <game>: which one the bridge would get
                     for (int i = sa + 1; i < args.Length && !args[i].StartsWith("--"); i++)
                         lines.Add($"steam api {args[i]}: Valve's {SteamApi.IsValves(args[i])}");
+                }
+                int ue = Array.IndexOf(args, "--use-emulator");
+                if (ue > 0 && ue + 1 < args.Length)
+                {
+                    // --use-emulator <game>: what Play does to a game that isn't a Steam library install
+                    SteamApi.UseEmulatorIfNotSteam(args[ue + 1], l => lines.Add(l));
+                    lines.Add("game's dll now: Valve's " + SteamApi.IsValves(SteamApi.InGame(args[ue + 1])) + ", kept copy Valve's " + SteamApi.IsValves(SteamApi.Kept));
                 }
                 int bd = Array.IndexOf(args, "--bridge-dll");
                 if (bd > 0 && bd + 1 < args.Length)

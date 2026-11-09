@@ -24,6 +24,7 @@ namespace CsnzLauncher
             @"server\CSNZ_Server\bin\libwinpthread-1.dll",
             @"tools\steambridge\out\CSNZ-SteamBridge.exe",
             @"tools\nartool\nartool.exe",
+            @"tools\goldberg\steam_api.dll",
         };
 
         // installed programs that aren't there any more (most likely quarantined)
