@@ -843,9 +843,12 @@ namespace CsnzLauncher
                 log("Online play: the Steam bridge isn't installed.");
                 return null;
             }
+            var steamApi = SteamApi.ForBridge(game, log);
+            if (steamApi == null)
+                return null;
             var data = Path.Combine(Paths.ServerBin, "Data");
             try { File.Delete(Path.Combine(data, "SteamBridge.stop")); } catch { }
-            var args = $"--steam-api \"{Path.Combine(game, "Bin", "steam_api.dll")}\" --data \"{data}\" --log \"{Path.Combine(Paths.LogDir, "steambridge.log")}\"" + (verbose ? " --verbose" : "");
+            var args = $"--steam-api \"{steamApi}\" --data \"{data}\" --log \"{Path.Combine(Paths.LogDir, "steambridge.log")}\"" + (verbose ? " --verbose" : "");
             try
             {
                 var p = Process.Start(new ProcessStartInfo(Paths.BridgeExe, args) { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = Path.GetDirectoryName(Paths.BridgeExe) });
@@ -957,6 +960,7 @@ namespace CsnzLauncher
             sb.AppendLine("game: " + (hasGame ? game + ", Steam build " + GameLocator.BuildId(game) : "not found"));
             try { if (hasGame && File.Exists(Paths.PatchList)) sb.AppendLine("game state: " + Patcher.Check(game)); } catch (Exception ex) { sb.AppendLine("game state: " + ex.Message); }
             try { sb.AppendLine("hosts block: " + (Hosts.HasBlock() ? "yes" : "no")); } catch { }
+            try { if (hasGame) sb.AppendLine("game's steam_api.dll: " + (SteamApi.IsValves(SteamApi.InGame(game)) ? "Valve's" : "not Valve's (an emulator?)") + ", kept copy for the Steam bridge: " + (SteamApi.IsValves(SteamApi.Kept) ? "yes" : "no")); } catch { }
             sb.AppendLine("online play: " + (settings.OnlinePlay ? "on" : "off") + ", detailed logs: " + (settings.DetailedLogs ? "on" : "off"));
 
             Section(sb, "Launcher", Path.Combine(Paths.LogDir, "launcher.log"), 600, PlayMark);

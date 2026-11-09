@@ -945,6 +945,16 @@ namespace CsnzLauncher
                     File.Copy(f, f + ".added", true);
                     lines.Add("hosts remove: " + Hosts.Edit("remove", f) + ", blocks " + (File.ReadAllText(f).Split(new[] { "CSNZ offline mod (begin)" }, StringSplitOptions.None).Length - 1));
                 }
+                int sa = Array.IndexOf(args, "--steam-api");
+                if (sa > 0)
+                {
+                    // --steam-api <dll>...: is each one Valve's; --bridge-dll <game>: which one the bridge would get
+                    for (int i = sa + 1; i < args.Length && !args[i].StartsWith("--"); i++)
+                        lines.Add($"steam api {args[i]}: Valve's {SteamApi.IsValves(args[i])}");
+                }
+                int bd = Array.IndexOf(args, "--bridge-dll");
+                if (bd > 0 && bd + 1 < args.Length)
+                    lines.Add("bridge dll: " + SteamApi.ForBridge(args[bd + 1], l => lines.Add(l)));
                 if (args.Contains("--logs"))
                     try { lines.Add($"logs: {LogBundle.Build(Settings.Load()).Length} characters in {LogBundle.FilePath}"); }
                     catch (Exception ex) { lines.Add("logs: " + ex); }

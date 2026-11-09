@@ -39,6 +39,12 @@ launcher patches *your* copy of the game, keeps a backup of every file it change
    Foundation) and installs it for your Windows user only, without administrator rights. It then adds the `pefile`
    package with pip.
 
+### Online play
+
+Online play goes through the real Steam client, with Spacewar, so Steam has to be open and any Steam account works. The
+Steam bridge always uses Valve's own `steam_api.dll`: if the game's `Bin` has another one (a Steam emulator), the bridge
+uses a copy kept in `mod\tools\steambridge\out`, or downloads that one file from the archive.org copy of the game.
+
 ### Studio maps
 
 Studio (Create, the editor and its game rooms) works offline. Every map has a **share code** (like `ZQAH-Y6Y9`),
