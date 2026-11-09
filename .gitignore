@@ -79,3 +79,6 @@ mod/server/CSNZ_Server/bin/Data/Studio/*
 !mod/server/CSNZ_Server/bin/Data/Studio/resources/
 mod/server/CSNZ_Server/bin/Data/Studio/resources/*
 !mod/server/CSNZ_Server/bin/Data/Studio/resources/tmpl_*.vxl
+
+# Claude Code settings of this PC
+.claude/
