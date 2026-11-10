@@ -68,7 +68,10 @@ def global_data():
 
 
 # The world is 24 x 24 x 12 chunks (z is up) of 16^3 blocks. A chunk blob: u16 0, u16 size, u8 x, y, z,
-# u8 encoding (7 = raw: 4096 x u16, index x*256 + y*16 + z, block id in the low 12 bits; 0 = air).
+# u8 encoding (0 = all air, 7 = raw: 4096 x u16, index z*256 + y*16 + x (the height is the slow index: blocks a player
+# put on the floor show it), block id in the low 12 bits, 0 = air; 9 = runs: [u32 air count][u16 n][n x u16 blocks]...
+# ending with an air count, as the game saves sparse chunks; 8 = another packed form). The game saves every chunk, with
+# z the fastest of the chunk coordinates.
 CHUNKS_X, CHUNKS_Y, CHUNKS_Z = 24, 24, 12
 
 
@@ -100,9 +103,9 @@ def empty_world():
 def flat_world(block=1, chunks=CHUNKS_X):
     """A one-block floor over the middle chunks x chunks area, at the bottom of the world."""
     layer = [0] * 4096
-    for x in range(16):
-        for y in range(16):
-            layer[x * 256 + y * 16 + 0] = block
+    for y in range(16):
+        for x in range(16):
+            layer[0 * 256 + y * 16 + x] = block  # z = 0: the bottom layer of each chunk
     lo = (CHUNKS_X - chunks) // 2
     return world([chunk(cx, cy, 0, layer) for cx in range(lo, lo + chunks) for cy in range(lo, lo + chunks)])
 

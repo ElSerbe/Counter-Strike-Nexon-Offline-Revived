@@ -98,7 +98,7 @@ index c342dd1..e1994a9 100644
  #ifdef WIN32
  #include <winsock2.h>
 diff --git a/src/definitions.h b/src/definitions.h
-index e96eb5f..a862342 100644
+index e96eb5f..1e5cecf 100644
 --- a/src/definitions.h
 +++ b/src/definitions.h
 @@ -355,6 +355,18 @@ struct RewardItem
@@ -120,7 +120,15 @@ index e96eb5f..a862342 100644
  struct RewardItemRandomDuration
  {
  	int chance;
-@@ -1441,6 +1453,70 @@ enum UserSurveyAnswerResult
+@@ -442,6 +454,7 @@ struct DefaultUser
+ 	int mileagePoints;
+ 	std::vector<int> defaultItems;
+ 	std::vector<int> pseudoDefaultItems;
++	std::vector<int> alwaysOwnedItems; // offline build: every account owns these, permanently (given at login when missing)
+ 	std::vector<CUserLoadout> loadouts;
+ 	std::vector<CUserBuyMenu> buyMenu;
+ };
+@@ -1441,6 +1454,70 @@ enum UserSurveyAnswerResult
  	ANSWER_DB_ERROR,
  };
  
@@ -191,7 +199,7 @@ index e96eb5f..a862342 100644
  // ROOM LOW FLAGS
  #define	ROOM_LOW_ROOMNAME				(1<<0)
  #define	ROOM_LOW_UNK					(1<<1)
-@@ -1720,6 +1796,7 @@ struct RandomWeapon
+@@ -1720,6 +1797,7 @@ struct RandomWeapon
  };
  
  // Studio mode flags
@@ -2181,7 +2189,7 @@ index 24d1ccc..e4b37a8 100644
  		if (destRoom->GetSettings()->gameModeId == 15)
  		{
 diff --git a/src/manager/itemmanager.cpp b/src/manager/itemmanager.cpp
-index ad8d88a..6c7eb24 100644
+index ad8d88a..e5fca6f 100644
 --- a/src/manager/itemmanager.cpp
 +++ b/src/manager/itemmanager.cpp
 @@ -1,9 +1,11 @@
@@ -2237,6 +2245,30 @@ index ad8d88a..6c7eb24 100644
  
  	return true;
  }
+@@ -2859,6 +2853,23 @@ bool CItemManager::OnLockItemRequest(IUser* user, CReceivePacket* msg)
+ 
+ void CItemManager::OnUserLogin(IUser* user)
+ {
++	// offline build: the items every account owns for good (ServerConfig DefaultUser.AlwaysOwnedItems: the Studio's tool
++	// licences and block themes); a missing one, or one only owned for a time, is added permanently. Before the login
++	// packet, so the inventory sent with it has them (no packet to the client here).
++	for (int itemID : g_pServerConfig->defUser.alwaysOwnedItems)
++	{
++		vector<CUserInventoryItem> owned;
++		g_UserDatabase.GetInventoryItemsByID(user->GetID(), itemID, owned);
++		bool forever = false;
++		for (auto& item : owned)
++			forever |= item.m_nExpiryDate == 0;
++		if (forever)
++			continue;
++		int status = AddItem(user->GetID(), NULL, itemID, 1, 0);
++		Logger().Info("Always-owned item %d for %s: %s\n", itemID, user->GetUsername().c_str(),
++			status == ITEM_ADD_SUCCESS ? "given" : "couldn't be given");
++	}
++
+ 	vector<int> rewardsNotices;
+ 	g_UserDatabase.GetRewardNotices(user->GetID(), rewardsNotices);
+ 
 diff --git a/src/manager/loginsupplies.cpp b/src/manager/loginsupplies.cpp
 new file mode 100644
 index 0000000..b5024a4
@@ -4726,10 +4758,10 @@ index 223166a..9b3a5a0 100644
  	user->UpdateTitles(slot, titleID);
 diff --git a/src/manager/studio.cpp b/src/manager/studio.cpp
 new file mode 100644
-index 0000000..e5b85e1
+index 0000000..7ca282e
 --- /dev/null
 +++ b/src/manager/studio.cpp
-@@ -0,0 +1,833 @@
+@@ -0,0 +1,835 @@
 +// Offline Studio: the voxel REST API the game's client (hw.dll VoxelHTTP, cpprestsdk) used to reach on Nexon's
 +// servers, now served by our own web server. Maps live in Data/Studio:
 +//   slots.json            every slot (map) with its details
@@ -5539,12 +5571,14 @@ index 0000000..e5b85e1
 +		if (SafeId(old) && old.rfind("tmpl_", 0) != 0)
 +			remove((string(STUDIO_DIR) + "/resources/" + old + ".vxl").c_str());
 +		Logger().Info("Studio: map %s saved (resource %s)\n", s->value("id", "").c_str(), location.c_str());
-+		g_PacketManager.SendUMsgNoticeMessageInChat(socket, "Map saved. Share code: " + ShareCode(s->value("id", "")) +
-+			(s->value("published", false) ? " (it's in the online list: other players get the new version)" :
-+			" - other players type it in the Studio search. Shop > Studio maps publishes it for everyone online."));
 +		reply->WriteUInt8(0);
 +		WriteSlotInfo(reply, ClientSlot(*s));
 +		socket->Send(reply);
++		// after the reply: a packet takes its sequence number when it's built (BuildHeader), and one sent before an
++		// older one makes the game drop the connection ("Socket:ReadPacket ... bad sequence")
++		g_PacketManager.SendUMsgNoticeMessageInChat(socket, "Map saved. Share code: " + ShareCode(s->value("id", "")) +
++			(s->value("published", false) ? " (it's in the online list: other players get the new version)" :
++			" - other players type it in the Studio search. Shop > Studio maps publishes it for everyone online."));
 +		return true;
 +	}
 +	case 0x31:
@@ -11535,7 +11569,7 @@ index 69a1cd9..8700ec3 100644
  	std::string voxel_id;
  	std::string voxel_resource_id;
 diff --git a/src/serverconfig.cpp b/src/serverconfig.cpp
-index d2a28c1..6dd8b0b 100644
+index d2a28c1..4a0c21a 100644
 --- a/src/serverconfig.cpp
 +++ b/src/serverconfig.cpp
 @@ -53,7 +53,7 @@ const char* defaultServerConfig = R"(
@@ -11556,6 +11590,14 @@ index d2a28c1..6dd8b0b 100644
  			"StartDate": 0,
  			"EndDate": 0
  		}
+@@ -1108,6 +1108,7 @@ bool CServerConfig::Load()
+ 			defUser.mileagePoints = jDefUser.value("MileagePoints", 0);
+ 			defUser.defaultItems = jDefUser.value("DefaultItems", defUser.defaultItems);
+ 			defUser.pseudoDefaultItems = jDefUser.value("PseudoDefaultItems", defUser.pseudoDefaultItems);
++			defUser.alwaysOwnedItems = jDefUser.value("AlwaysOwnedItems", defUser.alwaysOwnedItems);
+ 
+ 			if (jDefUser.contains("Loadouts"))
+ 			{
 diff --git a/src/serverinstance.cpp b/src/serverinstance.cpp
 index b7b0aaa..7ae9fc5 100644
 --- a/src/serverinstance.cpp
