@@ -783,7 +783,12 @@ buildings and resources 0x10886000-0x10898000). Maps: zsh_deadcity_pve, zsh_dust
 zsh_deadcity_pvp, two teams). The whole mode runs in mp.dll; the server has nothing for it. The file's header lists the facts: phases and night
 (rules +0x214 / +0x218 / +0x228), the team storage (+0x27c), what each player carries (+0x14d0) and its limit (+0x1590), sanity (+0x16bc), the
 shelters (+0x16b0, player +0x31be), skill points (player +0x32ee). Wood piles (`zsht_resource`) and rocks (`shelter_team_mineral`) only take hits
-from weapon id 29 (the shelter axe); a teammate's axe hit repairs a building (0x10894e40). The menus' client commands go to rules vfunc 0x24
+from weapon id 29 (the shelter axe); a teammate's axe hit repairs a building (0x10894e40). The minerals are the map's scrap (cars, ATMs,
+walls; type 1 iron or wood, type 0 money) and give nothing without Advanced Harvest Mastery (skill 10: TakeDamage 0x10894350 checks player
++0x32ba), so a bot without it leaves them alone, gatherers learn it early, and anything hit for 7 s with no change (hit count, what it carries,
+money) is left alone for 4 minutes. The day is a clock (rules think 0x10838490): +0x21c the hour, +0x224 the state (1 hours going up a tick
+at a time to the top hour, 0 going down to the night hour, 2 night until +0x228), settings read through pointers 0x11e58338 / 0x11e57b58
+(seconds per tick), 0x11e58068 (top hour), 0x11e582a8 (night hour), 0x11e58e30 (night length). The menus' client commands go to rules vfunc 0x24
 (0x108396b0), which reads its arguments from the engine directly, so `ShelterCommand` points g_engfuncs' Cmd_Args/Argv/Argc (slots 87-89) at
 its own for the call: `zsht_warehouse <type> <put 0..5> <take 0..5>` (no distance check) and `zsht_RequestSkillup <0..32>`.
 Building (the B menu's commands, read from 0x108396b0): `zsht_StaticBuildConfirm <row> <spot>` on the map's fixed spots,
@@ -796,7 +801,7 @@ go), `ShelterLook` (at what they hit), `ShelterSwing` (the axe, tapped), `Shelte
 switches to a gun, or after four tries without one closes in only on zombies within 380 units for 30 s) and `ShelterTarget` (Team Match: the
 other team's players and, raiding, its shelter). Each bot has a job by its place: builder (engineer skills: Beginner Engineer opens the
 worktable), gatherer (survival) or fighter (combat: Beginner Gun Mastery opens submachine guns and shotguns). By day: gather, home when full,
-low on mental gauge or 45 s before the night (rules +0x228 is a float), deposit, rest, buy at a `shelter_team_buyzone` with 3500+ money, repair;
+low on mental gauge or 45 s before the night (from the clock), deposit, rest, buy at a `shelter_team_buyzone` with 3500+ money, repair;
 the builder builds: the shelter's next tier, the fixed spots (worktable, generators, communication tower, posts, refinery), turrets (two per
 tier), a storage when the storage is full, a recovery bed, then works on what it built. Fighters with a gun go after the boss (20000+ health)
 and, on Team Match from day 3, the other team's shelter (both teams get bots there: `CoopOneTeam`). At night: in the shelter, shooting,

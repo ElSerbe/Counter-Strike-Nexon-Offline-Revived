@@ -24,7 +24,11 @@
 //   the tables: *(0x121d3ec4) + 0x1f0, vfunc 0x310(id) a building row (+4 tier, +0xc skill, +0x10 building needed,
 //     +0x24 fixed-spot building, +0x8c its spot type), vfunc 0x318(spot) a fixed spot (+8 type, +0xc x, +0x10 y, +0x14 angle)
 //   A resource takes "damage" only from the knife slot (weapon id 29 = the shelter axe): zsht_resource +0xdc hits left;
-//   a mineral +0xec is up. A building takes a teammate's axe hit as a repair or as construction work (0x10894e40).
+//   a mineral +0xec is up, +0xe4 hits taken of +0xe8. The minerals are the map's scrap (cars, ATMs, walls: type 1 gives
+//   iron or wood, type 0 money) and give nothing without Advanced Harvest Mastery (skill 10; TakeDamage 0x10894350 checks
+//   player +0x32ba); the wood and iron piles (zsht_resource, TakeDamage 0x10895970) need only the axe.
+//   A building takes a teammate's axe hit as a repair or as construction work (0x10894e40).
+//   The day is a clock, not a timer: see ShPhaseLeft (rules +0x21c hour, +0x224 state, +0x228 next tick / end of night).
 //   The menus send client commands to rules vfunc 0x24 (0x108396b0), which reads its arguments straight from the engine,
 //   so ShelterCommand swaps the engine's Cmd_Args/Argv/Argc for its own around the call:
 //     zsht_warehouse <type> <put 0..5> <take 0..5>   carried <-> storage (no distance check)
@@ -48,6 +52,10 @@ static const DWORD MP_SHT_RULES_VT = 0x117a1ba8, MP_SHT_EVENT_RULES_VT = 0x117a2
 static const DWORD MP_SHT_TABLES = 0x121d3ec4, MP_SHOWMENU = 0x113f8940, MP_GMSG_TEXTMSG = 0x121d28b8;
 static const int SH_RULES_SIZE = 0x2914;
 static const int SH_PHASE = 0x214, SH_NIGHT = 0x218, SH_PHASE_END = 0x228, SH_STORAGE = 0x27c, SH_STORAGE_MAX = 0x2a0;
+static const int SH_CLOCK_HOUR = 0x21c, SH_CLOCK_STATE = 0x224;
+static const DWORD MP_SHT_SET_TICK = 0x11e58338, MP_SHT_SET_TICK_DIV = 0x11e57b58, MP_SHT_SET_TOP = 0x11e58068;
+static const DWORD MP_SHT_SET_NIGHT_AT = 0x11e582a8, MP_SHT_SET_NIGHT_LEN = 0x11e58e30;
+static const int SH_SKILL_SCAVENGE = 10; // Advanced Harvest Mastery: the map's scrap (cars, ATMs, walls: shelter_team_mineral) gives nothing without it
 static const int SH_CARRIED = 0x14d0, SH_CARRY_MAX = 0x1590, SH_SHELTERS = 0x16b0, SH_SANITY = 0x16bc, SH_SPOTS = 0x26a4;
 static const int SHP_SHELTER = 0x31be, SHP_SKILL_POINTS = 0x32ee, SHP_SKILLS = 0x32a6, SHP_MONEY = 0xca8, SHP_ACTIVE_ITEM = 0x101c, SH_WEAPON_ID = 0xe4;
 static const int SH_BUILDING_ROW = 0xd4, SH_SHELTER_ROW = 0x100, SH_TABLE_OBJECT = 0x1f0, SH_TABLE_BUILDING = 0x310, SH_TABLE_SPOT = 0x318;
@@ -185,6 +193,10 @@ struct ShBot
     ShPlan plan;
     float planSince = 0, nextPlan = 0, sentAt = 0;
     bool sent = false;
+    // gathering: since when it hits its resource in reach, and what it had then; what gave nothing is left alone
+    float gatherNear = 0;
+    int gatherHits = 0, gatherCarried = 0, gatherMoney = 0;
+    std::map<void*, float> useless;
 };
 static std::map<void*, ShBot> g_shBots;
 static std::map<void*, float> g_shBanned;  // resources a bot couldn't reach: left alone until then
@@ -258,10 +270,43 @@ static bool ShNight(unsigned char* rules)
 }
 
 // seconds left in this day or night, or -1 if the rules' end time doesn't look like one (a float, the game's clock)
+// one of the mode's settings (the rules' think reads them through lazily made objects; the value's pointer at these)
+static bool ShSetting(DWORD at, float& value)
+{
+    float** pp = (float**)(at + g_mpDelta);
+    if (!Readable(pp, 4) || !*pp || !Readable(*pp, 4))
+        return false;
+    value = **pp;
+    return value == value && value > -100000.0f && value < 100000.0f;
+}
+
+// seconds to the night (by day) or to the morning (at night); -1 unknown. The day is a clock (rules think 0x10838490):
+// state +0x224 1 = the hours go up one per tick (a tick every setting 0x11e58338 / 0x11e57b58 seconds, the next at +0x228)
+// to above the top hour (setting 0x11e58068), state 0 = they go down to below the night hour (setting 0x11e582a8), then
+// state 2 = night until +0x228 (the night lasts setting 0x11e58e30), and the hours go up again
 static float ShPhaseLeft(unsigned char* rules)
 {
-    float left = *(float*)(rules + SH_PHASE_END) - Now();
-    return left > -5.0f && left < 3600.0f ? left : -1.0f;
+    int state = *(int*)(rules + SH_CLOCK_STATE), hour = *(int*)(rules + SH_CLOCK_HOUR);
+    float toNextTick = *(float*)(rules + SH_PHASE_END) - Now();
+    if (toNextTick < 0)
+        toNextTick = 0;
+    if (state == 2)
+        return toNextTick < 3600.0f ? toNextTick : -1.0f;
+    float tick, per, top, bottom;
+    if (!ShSetting(MP_SHT_SET_TICK, tick) || !ShSetting(MP_SHT_SET_TICK_DIV, per) || per <= 0 || !ShSetting(MP_SHT_SET_TOP, top) ||
+        !ShSetting(MP_SHT_SET_NIGHT_AT, bottom))
+        return -1.0f;
+    float interval = tick / per, ticks;
+    if (state == 1)
+        ticks = (floorf(top) + 1 - hour) + (floorf(top) + 1 - ceilf(bottom) + 1);
+    else if (state == 0)
+        ticks = hour - ceilf(bottom) + 1;
+    else
+        return -1.0f;
+    if (ticks < 0)
+        ticks = 0;
+    float left = ticks * interval + toNextTick;
+    return left < 3600.0f ? left : -1.0f;
 }
 
 static int ShWeaponId(void* bot)
@@ -353,7 +398,25 @@ static bool ShInBox(V3 at, void* e, float margin)
            at.z >= lo.z - 72.0f - margin && at.z <= hi.z + margin;
 }
 
-// a resource that can still be hit
+// a resource that can still be hit (by anyone)
+static bool ShResourceUp(void* e);
+
+// how far along a resource is: zsht_resource hits left (+0xdc), shelter_team_mineral hits taken (+0xe4); changes with each
+// hit the game takes
+static int ShResourceHits(void* e)
+{
+    const char* cls = ClassName(e);
+    unsigned char* p = (unsigned char*)PrivateOf(e);
+    if (!cls || !p || !Readable(p, 0x110))
+        return 0;
+    return !strcmp(cls, "zsht_resource") ? *(int*)(p + 0xdc) : *(int*)(p + 0xe4);
+}
+
+// a resource this bot gets something from: the map's scrap (shelter_team_mineral: cars, ATMs, walls) only gives with Advanced
+// Harvest Mastery (its TakeDamage 0x10894350 checks the skill level, player +0x32ba); the wood and iron piles (zsht_resource)
+// give to anyone with the axe; and nothing it already hit for a while without getting anything
+static bool ShResourceFor(void* bot, void* e, float now);
+
 static bool ShResourceUp(void* e)
 {
     const char* cls = ClassName(e);
@@ -365,6 +428,25 @@ static bool ShResourceUp(void* e)
     if (!strcmp(cls, "shelter_team_mineral"))
         return p[0xec] != 0;
     return false;
+}
+
+static int ShSkillLevel(void* bot, int id);
+
+static bool ShResourceFor(void* bot, void* e, float now)
+{
+    if (!ShResourceUp(e))
+        return false;
+    const char* cls = ClassName(e);
+    if (cls && !strcmp(cls, "shelter_team_mineral") && ShSkillLevel(bot, SH_SKILL_SCAVENGE) <= 0)
+        return false;
+    auto it = g_shBots.find(bot);
+    if (it != g_shBots.end())
+    {
+        auto u = it->second.useless.find(e);
+        if (u != it->second.useless.end() && now < u->second)
+            return false;
+    }
+    return true;
 }
 
 static int ShTeamOfEntity(void* e)
@@ -491,7 +573,8 @@ static void ShSpendSkill(void* bot, BotState& st)
     if (!p || !Readable(p + SHP_SKILL_POINTS, 2) || *(short*)(p + SHP_SKILL_POINTS) <= 0)
         return;
     static const int builder[] = { 18, 24, 21, 18, 19, 22, 24, 21, 20, 26, 29, 18, 19, 20, 25, 32, 23, 5, 0 };
-    static const int gatherer[] = { 9, 13, 15, 9, 10, 16, 13, 9, 10, 12, 28, 11, 14, 31, 17, 5, 0 };
+    // (Advanced Harvest Mastery, 10, as soon as the tree lets it: the map's scrap gives nothing without it)
+    static const int gatherer[] = { 9, 10, 13, 15, 10, 9, 10, 16, 13, 9, 12, 28, 11, 14, 31, 17, 5, 0 };
     static const int fighter[] = { 0, 5, 4, 0, 1, 5, 6, 0, 1, 2, 7, 3, 27, 6, 2, 30, 8, 13 };
     ShRole role = ShRoleOf(st);
     const int* list = role == SHR_BUILDER ? builder : role == SHR_GATHERER ? gatherer : fighter;
@@ -968,14 +1051,41 @@ static void ShDecide(unsigned char* rules, void* bot, BotState& st, ShBot& b, V3
         }
         object = zone;
     }
+    if (task == SH_GATHER && b.task == SH_GATHER && b.object && ShResourceUp(b.object))
+    {
+        // hitting it in reach: something must come of it (the resource's hit count, what it carries or its money); after
+        // a while of nothing (a skill it lacks, a hit the game doesn't take) it leaves it alone for a few minutes
+        unsigned char* p = (unsigned char*)PrivateOf(bot);
+        int hits = ShResourceHits(b.object), carried = ShCarried(rules, bot, 0) + ShCarried(rules, bot, 1);
+        int money = p && Readable(p + SHP_MONEY, 4) ? *(int*)(p + SHP_MONEY) : 0;
+        bool inReach = Len(ShClosest(Eye(bot), b.object) - Eye(bot)) < SH_REACH + 16.0f && !st.target && ShWeaponId(bot) == SH_KNIFE_ID;
+        if (!inReach || !b.gatherNear || hits != b.gatherHits || carried != b.gatherCarried || money != b.gatherMoney)
+        {
+            b.gatherNear = inReach ? now : 0;
+            b.gatherHits = hits;
+            b.gatherCarried = carried;
+            b.gatherMoney = money;
+        }
+        else if (now - b.gatherNear > 7.0f)
+        {
+            b.useless[b.object] = now + 240.0f;
+            b.gatherNear = 0;
+            static int reports = 0;
+            if (reports++ < 40)
+                Log("Shelter: '%s' hit a %s for 7 s and got nothing: leaves it alone (Advanced Harvest Mastery %d)",
+                    String(F<int>(Vars(bot), EV_NETNAME)), ClassName(b.object), ShSkillLevel(bot, SH_SKILL_SCAVENGE));
+        }
+    }
+    else
+        b.gatherNear = 0;
     if (task == SH_GATHER)
     {
         // keep its resource while it is up and reachable, else the closest free one
-        if (b.task == SH_GATHER && b.object && ShResourceUp(b.object) && now - b.objectSince < SH_GIVE_UP)
+        if (b.task == SH_GATHER && b.object && ShResourceFor(bot, b.object, now) && now - b.objectSince < SH_GIVE_UP)
             object = b.object;
         else
         {
-            if (b.object && b.task == SH_GATHER && ShResourceUp(b.object))
+            if (b.object && b.task == SH_GATHER && ShResourceFor(bot, b.object, now))
             {
                 g_shBanned[b.object] = now + 60.0f; // not reached in time
                 static int reports = 0;
@@ -988,7 +1098,7 @@ static void ShDecide(unsigned char* rules, void* bot, BotState& st, ShBot& b, V3
                     taken.insert(kv.second.object);
             float best = 1e9f;
             ForEntitiesNear(home, SH_GATHER_RANGE, [&](void* e) {
-                if (!ShResourceUp(e) || taken.count(e))
+                if (!ShResourceFor(bot, e, now) || taken.count(e))
                     return;
                 auto ban = g_shBanned.find(e);
                 if (ban != g_shBanned.end() && now < ban->second)
@@ -1153,9 +1263,12 @@ static void ShelterBotThink(void* bot, BotState& st)
             static int reports = 0;
             unsigned char* p = (unsigned char*)PrivateOf(bot);
             int team = TeamOf(bot);
+            V3 home = me;
+            ShHome(rules, bot, home);
             if (reports++ < 400)
-                Log("Shelter: '%s' (%s, order %s) %s%s, sanity %.0f/%.0f, carries %d/%d wood %d/%d iron, money %d, weapon %d%s, skill points %d",
+                Log("Shelter: '%s' (%s, order %s) at %.0f %.0f %.0f (%.0f u from home): %s%s, sanity %.0f/%.0f, carries %d/%d wood %d/%d iron, money %d, weapon %d%s, skill points %d",
                     String(F<int>(Vars(bot), EV_NETNAME)), g_shRoleNames[ShRoleOf(st)], g_shOrderNames[team >= 0 && team < 4 ? g_shOrder[team] : 0],
+                    me.x, me.y, me.z, Len2D(me - home),
                     orderedAway ? "under radio orders" : g_shTaskNames[b.task], b.object ? (std::string(" ") + ClassName(b.object)).c_str() : "",
                     ShSanity(rules, bot), b.maxSanity, ShCarried(rules, bot, 0), ShCarryMax(rules, bot, 0), ShCarried(rules, bot, 1),
                     ShCarryMax(rules, bot, 1), p ? *(int*)(p + SHP_MONEY) : -1, ShWeaponId(bot), now < b.noGunUntil ? " (no gun)" : "",
@@ -1478,6 +1591,15 @@ static void ShelterWatch()
         }
     });
     int t = 2;
+    static int clockReports = 0;
+    float tick = -1, per = -1, top = -1, bottom = -1, nightLen = -1;
+    if (clockReports++ < 12)
+    {
+        ShSetting(MP_SHT_SET_TICK, tick), ShSetting(MP_SHT_SET_TICK_DIV, per), ShSetting(MP_SHT_SET_TOP, top);
+        ShSetting(MP_SHT_SET_NIGHT_AT, bottom), ShSetting(MP_SHT_SET_NIGHT_LEN, nightLen);
+        Log("Shelter: clock state %d hour %d, next tick in %.1f s; settings tick %.2f / %.2f s, top hour %.1f, night below %.1f, night %.0f s",
+            *(int*)(rules + SH_CLOCK_STATE), *(int*)(rules + SH_CLOCK_HOUR), *(float*)(rules + SH_PHASE_END) - now, tick, per, top, bottom, nightLen);
+    }
     Log("Shelter: day %d %s (phase %d, %.0f s left); shelter tier %d; storage wood %d/%d iron %d/%d power %d/%d; %d monsters, %d wood piles, "
         "%d rocks up, %d buildings (%d damaged)", ShDay(rules), ShNight(rules) ? "night" : "day", *(int*)(rules + SH_PHASE), ShPhaseLeft(rules),
         ShShelterTier(rules, 0), ShStorage(rules, t, 0), ShStorageMax(rules, t, 0), ShStorage(rules, t, 1), ShStorageMax(rules, t, 1),
