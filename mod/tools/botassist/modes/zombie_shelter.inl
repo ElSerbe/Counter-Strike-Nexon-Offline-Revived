@@ -3838,6 +3838,47 @@ static void ShelterRespawnBots(float now)
         it = seen.count(it->first) ? std::next(it) : g_shDead.erase(it);
 }
 
+// A tip each morning, like the game's own tips at dawn (they come from the game's data, not from code botassist could add
+// to): to the players whose team has bots, in the middle of the screen, 10 s after the day starts so it doesn't cover the
+// game's tip.
+static void ShDayTip(unsigned char* rules, float now)
+{
+    static int shownDay = -1, level = -1;
+    static float showAt = -1;
+    if (level != g_nav.level)
+    {
+        level = g_nav.level;
+        shownDay = -1;
+        showAt = -1;
+    }
+    int day = ShDay(rules);
+    if (ShNight(rules) || day < 1)
+        return;
+    if (day != shownDay)
+    {
+        shownDay = day;
+        showAt = now + 10.0f;
+        return;
+    }
+    if (showAt < 0 || now < showAt || now > showAt + 30.0f)
+        return;
+    showAt = -1;
+    int shown = 0;
+    ForEntitiesNear(V3{ 0, 0, 0 }, 1e6f, [&](void* e) {
+        if (!IsHuman(e))
+            return;
+        bool bots = false;
+        for (auto& s : g_bots)
+            bots |= s.edict && (F<int>(Vars(s.edict), EV_FLAGS) & FL_FAKECLIENT) && TeamOf(s.edict) == TeamOf(e);
+        if (!bots)
+            return;
+        ShPrint(e, "TIP: Playing with bots? Press C to set their priorities and plan their upgrades.");
+        shown++;
+    });
+    if (shown)
+        Log("Shelter: day %d tip shown to %d players", day, shown);
+}
+
 // the mode's state every 15 s (log)
 static void ShelterWatch()
 {
@@ -3849,6 +3890,7 @@ static void ShelterWatch()
     ShOpenCrafts();
     ShGrantCrafts(now);
     ShelterRespawnBots(now);
+    ShDayTip(rules, now);
     if (now >= next - 60.0f && now < next)
         return;
     next = now + 15.0f;
