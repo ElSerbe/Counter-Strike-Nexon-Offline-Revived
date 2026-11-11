@@ -43,7 +43,9 @@
 // (combat). By day they gather, go home when full, low on mental gauge or when the night is near, put everything in the
 // storage, rest, buy at the black market, repair, build (the builder: the shelter's tiers, the fixed spots, turrets and
 // storage with the team's resources) and go after a boss with a gun. At night they stay in the shelter, shoot and repair.
-// With the axe in hand they never "shoot" from afar: they switch to a gun, or close in only on a zombie that is near.
+// With the axe in hand they never "shoot" from afar: they draw their gun, or close in only on a zombie that is near.
+// Hurt, they heal where something heals (ShHealPlace: not the shelter itself). Skills: the team's bots' skills menu (orders
+// 7, "/skills") and auto level-up by job (ShSpendSkill), see "skills".
 // On Team Match maps they also fight the other team and, from day 3, the fighters go for the other team's shelter.
 // A player's orders: the shelter orders menu (radio3, the C key, or "/orders" in the chat) or the chat words /gather,
 // /defend, /repair, /build, /free; the radio's follow / hold still work as everywhere.
@@ -145,9 +147,10 @@ enum ShTask
     SH_RAID,    // Team Match: at the other team's shelter
     SH_BREAK,   // breaking a barricade (zbsbreak): heavy axe hits, or its gun when it has a better one
     SH_HUNT,    // nothing to gather by day: after the zombies around the shelter (money for a gun)
+    SH_HEAL,    // hurt: at a place that heals (an Emergency Medical Facility, a campfire, the shelter from tier 3)
 };
 static const char* const g_shTaskNames[] = { "none", "gather", "home", "rest", "repair", "buy", "boss", "defend", "build", "raid",
-                                             "break", "hunt" };
+                                             "break", "hunt", "heal" };
 
 // what a player told the team's bots (the orders menu, the chat)
 enum ShOrder
@@ -211,6 +214,12 @@ struct ShBot
     float breakHp = -1, breakProgressAt = 0;
     // why it found nothing to gather (logged now and then)
     float whyAt = -100;
+    // a gun with ammo in its primary or pistol slot (each think)
+    bool gunOwned = false;
+    int gunReports = 0;
+    // healing: its health when it last went up at the place, and when; places seen not to heal, left out until then
+    float healHp = -1, healSince = 0;
+    std::map<void*, float> noHeal;
 };
 static std::map<void*, int> g_shBanCount; // resources a bot couldn't reach: how often (each time banned longer)
 static std::map<void*, bool> g_shReachable; // resources: whether a bot can stand where its axe reaches them (by level)
@@ -341,24 +350,47 @@ static bool ShMeleeHeld(void* bot)
     return m && (strstr(m, "knife") || strstr(m, "axe") || strstr(m, "machete") || strstr(m, "crowbar") || strstr(m, "hammer"));
 }
 
-// a gun that breaks a barricade faster than the axe's heavy hits: a primary weapon (slot 1: rifles, shotguns, machine guns
-// from the black market) with ammo in it or in reserve. The pistols bought at spawn do less than the heavy hits.
-static bool ShGunBeatsAxeRaw(void* bot)
+// a gun the bot can fire in an inventory slot (1 primary, 2 pistol): its class ("weapon_..."), with ammo in it or in
+// reserve; null when the slot is empty or out of ammo. "weapon_<class>" draws it (the client's slot1/slot2 never reach the
+// server: the bots tried those for days and kept the axe)
+static const char* ShGunInSlotRaw(void* bot, int slot, int* clipOut = nullptr, int* reserveOut = nullptr)
 {
     __try
     {
         unsigned char* pl = (unsigned char*)PrivateOf(bot);
-        unsigned char* it = pl ? ItemHandle(pl + PLAYER_ITEMS + 16 * 1) : nullptr;
+        unsigned char* it = pl ? ItemHandle(pl + PLAYER_ITEMS + 16 * slot) : nullptr;
         if (!it)
-            return false;
+            return nullptr;
         int type = *(int*)(it + 0x158), clip = *(int*)(it + 0x160);
         int reserve = type > 0 && type < 0x102 ? *(int*)(pl + PLAYER_AMMO + 4 * type) : 0;
-        return clip > 0 || reserve > 0;
+        if (clipOut)
+            *clipOut = clip;
+        if (reserveOut)
+            *reserveOut = reserve;
+        if (clip <= 0 && reserve <= 0)
+            return nullptr;
+        unsigned char* pev = *(unsigned char**)(it + 8);
+        const char* cls = pev && Readable(pev, 4) ? String(*(int*)pev) : nullptr;
+        return cls && !strncmp(cls, "weapon_", 7) ? cls : nullptr;
     }
     __except (EXCEPTION_EXECUTE_HANDLER)
     {
-        return false;
+        return nullptr;
     }
+}
+
+// a gun that breaks a barricade faster than the axe's heavy hits: a primary weapon (slot 1: rifles, shotguns, machine guns
+// from the black market) with ammo in it or in reserve. The pistols do less than the heavy hits.
+static bool ShGunBeatsAxeRaw(void* bot)
+{
+    return ShGunInSlotRaw(bot, 1) != nullptr;
+}
+
+// the gun it fights with: the primary, else the pistol (null: none with ammo)
+static const char* ShBestGun(void* bot)
+{
+    const char* g = ShGunInSlotRaw(bot, 1);
+    return g ? g : ShGunInSlotRaw(bot, 2);
 }
 
 static int ShSkillLevel(void* bot, int id)
@@ -640,7 +672,8 @@ static bool ShelterCommand(void* bot, const char* a0, const char* a1 = nullptr, 
 enum ShSayKey
 {
     SAY_FULL, SAY_HURT, SAY_SANITY, SAY_NIGHT, SAY_GATHER, SAY_BUILD, SAY_UPGRADE, SAY_REPAIR, SAY_BUY, SAY_BOSS, SAY_RAID,
-    SAY_DEPOSIT, SAY_STORAGE_FULL, SAY_NO_GUN, SAY_DEFEND, SAY_REST, SAY_FIGHT, SAY_BREAK, SAY_HUNT
+    SAY_DEPOSIT, SAY_STORAGE_FULL, SAY_NO_GUN, SAY_DEFEND, SAY_REST, SAY_FIGHT, SAY_BREAK, SAY_HUNT, SAY_HEAL, SAY_NO_MEDIC,
+    SAY_GUN
 };
 static float g_shLastSay = -100;
 
@@ -745,36 +778,277 @@ static ShRole ShRoleOf(BotState& st)
     return k == 0 ? SHR_BUILDER : k == 1 ? SHR_GATHERER : SHR_FIGHTER;
 }
 
-// a skill point, by job: engineer for the builder (the worktable needs Beginner Engineer), survival for gatherers, combat
-// for fighters (Beginner Gun Mastery lets them use submachine guns and shotguns); the game checks the tree, the levels and
-// the exclusive picks, so it tries the job's list in order, then random ones
-static void ShSpendSkill(void* bot, BotState& st)
+// ---------------------------------------------------------------- skills
+// resource/shelterteam/zsht_skilltree.cso: 33 skills in 3 categories (0 battle, 1 survival, 2 tech), each with its max level,
+// its tier and the skill before it in the tree (the table's "depend" column names the skill each one leads to: 0 -> 1 -> 2 ->
+// 8, 5 -> 6 -> 7, 9 -> 10, 15 -> 12 -> 14 -> 17, 18 -> 19 -> 20 -> 25, 21 -> 22 -> 26). Names from resource/cso_na_en.txt.
+// The game's skill-up (zsht_RequestSkillup, 0x10844830) checks the points, the max level and the exclusive picks (one of
+// 8/17/25, one of 30/31/32, one craft of 27/28/29); the tree's order is the client's, and the bots follow it too.
+// Each player gets 3 points at the start and one more each day (the game). The bots spend theirs: first what a player
+// planned for them (the skills menu, "/skills"), then, with auto level-up on (the default), by their job.
+struct ShSkill
+{
+    int id, cat, maxLv, tier, parent;
+    const char *name, *brief, *what;
+};
+static const ShSkill kSkills[33] = {
+    { 0, 0, 3, 1, -1, "Beginner Weapon Mastery", "Weapons I", "SMGs and shotguns, more gun damage" },
+    { 1, 0, 3, 2, 0, "Intermediate Weapon Mastery", "Weapons II", "assault and sniper rifles, more gun damage" },
+    { 2, 0, 3, 3, 1, "Advanced Weapon Mastery", "Weapons III", "machine guns and equipment weapons" },
+    { 3, 0, 3, 3, -1, "Special Weapon Mastery", "Special Wpn", "grenades +25%, melee damage x2 at Lv 3" },
+    { 4, 0, 1, 1, -1, "Support Soldier", "Support", "ammo +50%" },
+    { 5, 0, 3, 1, -1, "HP Enhancement", "HP", "more max HP every day" },
+    { 6, 0, 3, 2, 5, "Kevlar Enhancement", "Kevlar", "armor +30/50/100%" },
+    { 7, 0, 2, 3, 6, "Combat Master", "Combat Master", "invulnerable a few seconds at low HP" },
+    { 8, 0, 1, 4, 2, "Air Strike Request", "Air Strike", "special: an air strike on your mark" },
+    { 9, 1, 3, 1, -1, "Beginner Harvest Mastery", "Harvest I", "+1/2/3 wood and iron per hit, carry more" },
+    { 10, 1, 3, 2, 9, "Advanced Harvest Mastery", "Harvest II", "cars and scrap give resources and money" },
+    { 11, 1, 3, 3, -1, "Loot", "Loot", "killed zombies drop resources or money" },
+    { 12, 1, 1, 2, 15, "Build Camp", "Camp", "campfire: mental gauge and HP" },
+    { 13, 1, 3, 1, -1, "DEX Enhancement", "DEX", "run 5/10/20% faster" },
+    { 14, 1, 3, 3, 12, "Hunter", "Hunter", "traps last longer and hit harder" },
+    { 15, 1, 3, 1, -1, "Adventurer", "Adventurer", "finds wood, iron and enemies" },
+    { 16, 1, 1, 3, -1, "Strong Patience", "Patience", "mental gauge drops half as fast: longer outside" },
+    { 17, 1, 1, 4, 14, "Hide", "Hide", "special: hidden 15 s" },
+    { 18, 2, 3, 1, -1, "Rookie Engineer", "Engineer I", "workroom; tier 1 builds faster and sturdier" },
+    { 19, 2, 3, 2, 18, "Intermediate Engineer", "Engineer II", "communication tower; tier 2 builds" },
+    { 20, 2, 3, 3, 19, "Advanced Engineer", "Engineer III", "concrete refinery; tier 3 builds" },
+    { 21, 2, 3, 1, -1, "Blueprint Upgrade", "Blueprint", "buildings cost 1/2/3 less" },
+    { 22, 2, 3, 2, 21, "Electric Engineering", "Electric", "buildings use less power" },
+    { 23, 2, 1, 3, -1, "Demolition Skill", "Demolition", "more back from demolished buildings" },
+    { 24, 2, 3, 1, -1, "Battlefield Repair", "Repair", "armor and turrets repair themselves" },
+    { 25, 2, 1, 4, 20, "Wrecking Team", "Wrecking", "special: C4 against objects" },
+    { 26, 2, 1, 3, 22, "Construction Expert", "Construction", "builds faster with a high mental gauge" },
+    { 27, 0, 1, 2, -1, "Combat Craft", "Combat Craft", "crafts at the worktable (one craft skill)" },
+    { 28, 1, 1, 2, -1, "Survival Craft", "Survival Craft", "crafts at the worktable (one craft skill)" },
+    { 29, 2, 1, 2, -1, "Tech Craft", "Tech Craft", "crafts at the worktable (one craft skill)" },
+    { 30, 0, 1, 4, -1, "Power Shoot", "Power Shoot", "special: HP, armor, damage and ammo up" },
+    { 31, 1, 1, 4, -1, "Transport Resources", "Transport", "special: full pockets go to the storage" },
+    { 32, 2, 1, 4, -1, "Moving Tower", "Moving Tower", "special: move built turrets" },
+};
+static const char* const g_shCatNames[] = { "Battle", "Survival", "Tech" };
+// the skills of each category in the tree's order (tier, then id), as the menu lists them
+static const int kSkillsByCat[3][11] = {
+    { 0, 4, 5, 1, 6, 27, 2, 3, 7, 8, 30 },
+    { 9, 13, 15, 10, 12, 28, 11, 14, 16, 17, 31 },
+    { 18, 21, 24, 19, 22, 29, 20, 23, 26, 25, 32 },
+};
+static const int kSkillExclusive[3][3] = { { 8, 17, 25 }, { 30, 31, 32 }, { 27, 28, 29 } };
+
+static int ShPoints(void* bot)
 {
     unsigned char* p = (unsigned char*)PrivateOf(bot);
-    if (!p || !Readable(p + SHP_SKILL_POINTS, 2) || *(short*)(p + SHP_SKILL_POINTS) <= 0)
-        return;
-    static const int builder[] = { 18, 24, 21, 18, 19, 22, 24, 21, 20, 26, 29, 18, 19, 20, 25, 32, 23, 5, 0 };
-    // (Advanced Harvest Mastery, 10, as soon as the tree lets it: the map's scrap gives nothing without it)
-    static const int gatherer[] = { 9, 10, 13, 15, 10, 9, 10, 16, 13, 9, 12, 28, 11, 14, 31, 17, 5, 0 };
-    static const int fighter[] = { 0, 5, 4, 0, 1, 5, 6, 0, 1, 2, 7, 3, 27, 6, 2, 30, 8, 13 };
-    ShRole role = ShRoleOf(st);
-    const int* list = role == SHR_BUILDER ? builder : role == SHR_GATHERER ? gatherer : fighter;
-    int n = role == SHR_BUILDER ? (int)(sizeof(builder) / 4) : role == SHR_GATHERER ? (int)(sizeof(gatherer) / 4) : (int)(sizeof(fighter) / 4);
-    short before = *(short*)(p + SHP_SKILL_POINTS);
-    for (int i = 0; i < n + 8; i++)
+    return p && Readable(p + SHP_SKILL_POINTS, 2) ? *(short*)(p + SHP_SKILL_POINTS) : 0;
+}
+
+static std::string ShBotName(void* bot)
+{
+    const char* n = String(F<int>(Vars(bot), EV_NETNAME));
+    return n ? n : "";
+}
+
+// why the bot can't learn this skill now ("max", "needs ...", "has ..."), null when it can
+static const char* ShSkillBlock(void* bot, int id)
+{
+    const ShSkill& s = kSkills[id];
+    if (ShSkillLevel(bot, id) >= s.maxLv)
+        return "max";
+    if (s.parent >= 0 && ShSkillLevel(bot, s.parent) <= 0)
+        return ShFmt("needs %s", kSkills[s.parent].brief);
+    for (auto& g : kSkillExclusive)
     {
-        char id[8];
-        snprintf(id, sizeof(id), "%d", i < n ? list[i] : rand() % 33);
-        ShelterCommand(bot, "zsht_RequestSkillup", id);
-        if (*(short*)(p + SHP_SKILL_POINTS) < before)
+        if (g[0] != id && g[1] != id && g[2] != id)
+            continue;
+        for (int o : g)
+            if (o != id && ShSkillLevel(bot, o) > 0)
+                return ShFmt("has %s", kSkills[o].brief);
+    }
+    return nullptr;
+}
+
+// one point into a skill, the way the skill tree's button does it; true when the game took it
+static bool ShLearn(void* bot, int id)
+{
+    int before = ShPoints(bot);
+    if (before <= 0 || id < 0 || id >= 33)
+        return false;
+    char a[8];
+    snprintf(a, sizeof(a), "%d", id);
+    ShelterCommand(bot, "zsht_RequestSkillup", a);
+    return ShPoints(bot) < before;
+}
+
+// what a player set for a bot (by its name, so it lasts through deaths, rounds and games): auto level-up, and the skills
+// planned for it (one level each, learned in order as its points come); kept in botassist_shelter_skills.txt
+struct ShSkillPlan
+{
+    bool manual = false;
+    std::vector<int> queue;
+};
+static std::map<std::string, ShSkillPlan> g_shPlans;
+static bool g_shPlansLoaded = false;
+
+static void ShPlansLoad()
+{
+    if (g_shPlansLoaded)
+        return;
+    g_shPlansLoaded = true;
+    char path[MAX_PATH];
+    snprintf(path, sizeof(path), "%sbotassist_shelter_skills.txt", g_dir);
+    FILE* f = fopen(path, "r");
+    if (!f)
+        return;
+    char line[512];
+    while (fgets(line, sizeof(line), f))
+    {
+        // name <tab> auto|manual <tab> id,id,...
+        char* t1 = strchr(line, '\t');
+        if (!t1 || line[0] == '#')
+            continue;
+        *t1++ = 0;
+        char* t2 = strchr(t1, '\t');
+        if (t2)
+            *t2++ = 0;
+        ShSkillPlan& p = g_shPlans[line];
+        p.manual = !strncmp(t1, "manual", 6);
+        p.queue.clear();
+        for (char* s = t2; s && *s;)
         {
-            static int reports = 0;
-            if (reports++ < 80)
-                Log("Shelter: '%s' (%s) learns skill %s (%d points left)", String(F<int>(Vars(bot), EV_NETNAME)), g_shRoleNames[role], id,
-                    *(short*)(p + SHP_SKILL_POINTS));
+            int id = atoi(s);
+            if (id >= 0 && id < 33 && isdigit((unsigned char)*s))
+                p.queue.push_back(id);
+            s = strchr(s, ',');
+            if (s)
+                s++;
+        }
+    }
+    fclose(f);
+    Log("Shelter: %d bots' skill settings loaded from botassist_shelter_skills.txt", (int)g_shPlans.size());
+}
+
+static void ShPlansSave()
+{
+    char path[MAX_PATH];
+    snprintf(path, sizeof(path), "%sbotassist_shelter_skills.txt", g_dir);
+    FILE* f = fopen(path, "w");
+    if (!f)
+        return;
+    fprintf(f, "# Zombie Shelter: each bot's skills (the in-game skills menu writes this): name, auto|manual, planned skill ids\n");
+    for (auto& kv : g_shPlans)
+    {
+        if (kv.first.empty() || (!kv.second.manual && kv.second.queue.empty()))
+            continue;
+        fprintf(f, "%s\t%s\t", kv.first.c_str(), kv.second.manual ? "manual" : "auto");
+        for (size_t i = 0; i < kv.second.queue.size(); i++)
+            fprintf(f, "%s%d", i ? "," : "", kv.second.queue[i]);
+        fprintf(f, "\n");
+    }
+    fclose(f);
+}
+
+static ShSkillPlan& ShPlanOf(void* bot)
+{
+    ShPlansLoad();
+    return g_shPlans[ShBotName(bot)];
+}
+
+// how many levels of a skill the plan already holds
+static int ShPlanned(const ShSkillPlan& p, int id)
+{
+    int n = 0;
+    for (int q : p.queue)
+        n += q == id;
+    return n;
+}
+
+// plans one more level of a skill for later, with the skills before it in the tree that it lacks first
+static void ShPlanAdd(void* bot, ShSkillPlan& p, int id)
+{
+    int chain[8], n = 0;
+    for (int at = kSkills[id].parent; at >= 0 && n < 8; at = kSkills[at].parent)
+        if (ShSkillLevel(bot, at) <= 0 && !ShPlanned(p, at))
+            chain[n++] = at;
+    while (n > 0)
+        p.queue.push_back(chain[--n]);
+    p.queue.push_back(id);
+}
+
+// the job's order of skill levels with auto level-up (the k-th time a skill comes up is its level k). Everyone starts with
+// Beginner Harvest Mastery (more wood and iron per hit) and soon takes Strong Patience (the mental gauge lasts twice as
+// long outside); the builder then Rookie Engineer (the worktable) and the cheaper blueprints, gatherers Advanced Harvest
+// Mastery (cars and scrap) and speed, fighters the weapon masteries (SMGs and shotguns need the first) and HP.
+static const int kAutoBuilder[] = { 18, 9, 21, 16, 18, 21, 19, 24, 21, 9, 22, 13, 20, 26, 19, 18, 5, 9, 24, 22, 20, 24, 15, 23, 29, 22, 19, 20, 32 };
+static const int kAutoGatherer[] = { 9, 10, 9, 16, 9, 13, 10, 15, 10, 13, 5, 15, 11, 15, 13, 11, 12, 14, 11, 14, 28, 14, 31, 5, 5 };
+static const int kAutoFighter[] = { 9, 0, 5, 16, 0, 13, 1, 5, 6, 4, 0, 1, 3, 5, 6, 13, 1, 7, 3, 2, 6, 7, 3, 2, 2, 30, 13 };
+
+static void ShSkillLog(void* bot, int id, const char* how)
+{
+    static int reports = 0;
+    if (reports++ < 120)
+        Log("Shelter: '%s' learns %s (skill %d, now %d/%d; %s; %d points left)", ShBotName(bot).c_str(), kSkills[id].name, id,
+            ShSkillLevel(bot, id), kSkills[id].maxLv, how, ShPoints(bot));
+}
+
+// a skill point: the player's plan first, then (auto level-up) the job's order, then any skill of the job's category, then any
+static void ShSpendSkill(void* bot, BotState& st)
+{
+    if (ShPoints(bot) <= 0)
+        return;
+    ShSkillPlan& plan = ShPlanOf(bot);
+    bool changed = false;
+    for (size_t i = 0; i < plan.queue.size();)
+    {
+        int id = plan.queue[i];
+        const char* why = id >= 0 && id < 33 ? ShSkillBlock(bot, id) : "max";
+        if (why && (!strcmp(why, "max") || !strncmp(why, "has ", 4)))
+        {
+            plan.queue.erase(plan.queue.begin() + i); // done already, or it can't be had any more
+            changed = true;
+            continue;
+        }
+        if (!why && ShLearn(bot, id))
+        {
+            plan.queue.erase(plan.queue.begin() + i);
+            ShPlansSave();
+            ShSkillLog(bot, id, "planned by a player");
+            return;
+        }
+        i++; // waits for the one before it
+    }
+    if (changed)
+        ShPlansSave();
+    if (plan.manual)
+        return;
+    ShRole role = ShRoleOf(st);
+    const int* list = role == SHR_BUILDER ? kAutoBuilder : role == SHR_GATHERER ? kAutoGatherer : kAutoFighter;
+    int n = role == SHR_BUILDER ? (int)(sizeof(kAutoBuilder) / 4) : role == SHR_GATHERER ? (int)(sizeof(kAutoGatherer) / 4)
+                                                                                          : (int)(sizeof(kAutoFighter) / 4);
+    int seen[33] = {};
+    for (int i = 0; i < n; i++)
+    {
+        int id = list[i];
+        int want = ++seen[id];
+        if (ShSkillLevel(bot, id) >= want || ShSkillBlock(bot, id))
+            continue;
+        if (ShLearn(bot, id))
+        {
+            ShSkillLog(bot, id, ShFmt("auto, %s", g_shRoleNames[role]));
             return;
         }
     }
+    int cat = role == SHR_BUILDER ? 2 : role == SHR_GATHERER ? 1 : 0;
+    for (int pass = 0; pass < 2; pass++)
+        for (int c = 0; c < 3; c++)
+        {
+            if ((pass == 0) != (c == cat))
+                continue;
+            for (int id : kSkillsByCat[c])
+                if (!ShSkillBlock(bot, id) && ShLearn(bot, id))
+                {
+                    ShSkillLog(bot, id, "auto, anything left");
+                    return;
+                }
+        }
 }
 
 // ---------------------------------------------------------------- building
@@ -979,12 +1253,13 @@ static bool ShPlanBuild(unsigned char* rules, void* bot, V3 home, float now, ShP
     if (turrets < 2 * tier)
         for (int id : { 32, 31, 28, 14, 13, 12 })
             wanted.push_back(id);
-    // a storage when the storage is full (up to three), a recovery bed
+    // the Emergency Medical Facility before the turrets (the only thing that heals at the start), a storage first when the
+    // storage is full (up to three)
+    if (byClass["shelter_team_field_bed"] == 0)
+        wanted.insert(wanted.begin(), 22);
     bool full = ShStorage(rules, team, 0) >= ShStorageMax(rules, team, 0) || ShStorage(rules, team, 1) >= ShStorageMax(rules, team, 1);
     if (full && byClass["shelter_team_warehouse"] < 3)
         wanted.insert(wanted.begin(), 18);
-    if (byClass["shelter_team_field_bed"] == 0)
-        wanted.push_back(22);
     for (int id : wanted)
     {
         const ShBuildRow* r = ShRow(id);
@@ -1223,6 +1498,87 @@ static void* ShPrey(void* bot, ShBot& b, V3 home, V3 me)
     return found;
 }
 
+// ---------------------------------------------------------------- healing
+// The shelter itself doesn't heal. What does (mp.dll): the Emergency Medical Facility (shelter_team_field_bed, row 22;
+// FieldBedThink 0x1088abb0: once built, entity +0xe0 == setting 0x11e57840 and +0xe4 == 0, it gives each living player of
+// its team within setting 0x11e579a8 units +setting 0x11e58a88 health per think, every setting 0x11e584e8 s), the campfire
+// (shelter_team_campfire, CampfireThink 0x10889390: mental gauge to the team within setting 0x11e58a40, health only to those
+// with Build Camp, skill 12, via "zsht_healthrestore"), and, the player says, a zone in the shelter from tier 3 (not found
+// in the code: tried, and checked). Every place is checked: 8 s there without health going up and it's left out 2 minutes.
+static const DWORD MP_SHT_SET_BED_STATE = 0x11e57840, MP_SHT_SET_BED_RANGE = 0x11e579a8, MP_SHT_SET_BED_HEAL = 0x11e58a88,
+                   MP_SHT_SET_BED_TICK = 0x11e584e8, MP_SHT_SET_FIRE_RANGE = 0x11e58a40;
+static const int SH_SKILL_CAMP = 12;
+
+// a medical facility that heals now: built (its state is the setting's) and not switched off
+static bool ShBedWorks(void* e)
+{
+    unsigned char* p = (unsigned char*)PrivateOf(e);
+    if (!p || !Readable(p + 0xe4, 4))
+        return false;
+    float built;
+    if (ShSetting(MP_SHT_SET_BED_STATE, built) && (float)*(int*)(p + 0xe0) != built)
+        return false;
+    return p[0xe4] == 0;
+}
+
+// where the bot heals: the closest working medical facility of its team, a campfire of its team when it has Build Camp,
+// else the shelter from tier 3; null: nothing heals here. `range`: how close it must stand (to the place's origin)
+static void* ShHealPlace(unsigned char* rules, void* bot, ShBot& b, V3 home, V3 me, float now, V3& at, float& range)
+{
+    static int settingReports = 0;
+    if (settingReports++ < 1)
+    {
+        float s[5] = { -1, -1, -1, -1, -1 };
+        ShSetting(MP_SHT_SET_BED_STATE, s[0]), ShSetting(MP_SHT_SET_BED_RANGE, s[1]), ShSetting(MP_SHT_SET_BED_HEAL, s[2]);
+        ShSetting(MP_SHT_SET_BED_TICK, s[3]), ShSetting(MP_SHT_SET_FIRE_RANGE, s[4]);
+        Log("Shelter: medical facility settings: built state %.0f, range %.0f, +%.1f health every %.2f s; campfire range %.0f", s[0], s[1],
+            s[2], s[3], s[4]);
+    }
+    int team = TeamOf(bot);
+    bool camp = ShSkillLevel(bot, SH_SKILL_CAMP) > 0;
+    void* best = nullptr;
+    float bestD = 1e9f;
+    ForEntitiesNear(me, 16384.0f, [&](void* e) {
+        const char* cls = ClassName(e);
+        if (!cls)
+            return;
+        bool bed = !strcmp(cls, "shelter_team_field_bed"), fire = camp && !strcmp(cls, "shelter_team_campfire");
+        if ((!bed && !fire) || ShTeamOfEntity(e) != team || (bed && !ShBedWorks(e)))
+            return;
+        auto n = b.noHeal.find(e);
+        if (n != b.noHeal.end() && now < n->second)
+            return;
+        float d = Len(Origin(e) - me);
+        if (d < bestD)
+        {
+            bestD = d;
+            best = e;
+        }
+    });
+    if (best)
+    {
+        float r = 0;
+        bool bed = !strcmp(ClassName(best), "shelter_team_field_bed");
+        if (!ShSetting(bed ? MP_SHT_SET_BED_RANGE : MP_SHT_SET_FIRE_RANGE, r) || r < 40.0f)
+            r = 100.0f;
+        at = Origin(best);
+        range = r * 0.75f;
+        return best;
+    }
+    unsigned char* shelter = ShShelterEntity(rules, ShShelterOf(bot));
+    if (shelter && ShShelterTier(rules, ShShelterOf(bot)) >= 3)
+    {
+        auto n = b.noHeal.find(shelter);
+        if (n == b.noHeal.end() || now >= n->second)
+        {
+            at = home;
+            range = SH_HOME_RADIUS * 0.6f;
+            return shelter;
+        }
+    }
+    return nullptr;
+}
+
 static void ShDecide(unsigned char* rules, void* bot, BotState& st, ShBot& b, V3 me, float now)
 {
     V3 home;
@@ -1274,13 +1630,50 @@ static void ShDecide(unsigned char* rules, void* bot, BotState& st, ShBot& b, V3
     }
     bool hasGun = now >= b.noGunUntil;
     ShDanger danger = ShDangers(team);
-    float maxHp = F<float>(Vars(bot), EV_MAX_HEALTH);
-    bool hurt = maxHp > 0.0f && F<float>(Vars(bot), EV_HEALTH) < maxHp * 0.35f;
-    if (!hurt)
-        b.hurtRestUntil = 0;
-    else if (atHome && b.hurtRestUntil == 0)
-        b.hurtRestUntil = now + 20.0f;
-    bool goHurt = hurt && b.hurtRestUntil == 0 && !night, restHurt = hurt && atHome && now < b.hurtRestUntil && !night;
+    // hurt (below half its health by day, a third at night): to a place that heals until 90% (the shelter itself doesn't:
+    // the bots stood in it hurt, doing nothing); with none it keeps working away from the fights and asks for one
+    float maxHp = F<float>(Vars(bot), EV_MAX_HEALTH), hp = F<float>(Vars(bot), EV_HEALTH);
+    float hpFrac = maxHp > 0.0f ? hp / maxHp : 1.0f;
+    bool hurt = hpFrac < (night ? 0.35f : 0.5f) || (b.task == SH_HEAL && hpFrac < 0.9f);
+    V3 healAt{};
+    float healRange = 0;
+    void* healPlace = hurt ? ShHealPlace(rules, bot, b, home, me, now, healAt, healRange) : nullptr;
+    if (healPlace && night && Len2D(healAt - home) > 900.0f)
+        healPlace = nullptr; // not out of the shelter at night
+    if (healPlace)
+    {
+        // at the place: its health must go up (else it doesn't heal: left out for 2 minutes, logged)
+        bool there = Len2D(me - healAt) < healRange && fabsf(me.z - healAt.z) < 120.0f;
+        if (b.task != SH_HEAL || b.object != healPlace || !there)
+        {
+            b.healHp = hp;
+            b.healSince = there ? now : 0;
+        }
+        else if (hp > b.healHp + 0.5f)
+        {
+            b.healHp = hp;
+            b.healSince = now;
+        }
+        else
+        {
+            if (hp < b.healHp)
+                b.healHp = hp;
+            if (b.healSince == 0)
+                b.healSince = now;
+            if (now - b.healSince > 8.0f)
+            {
+                b.noHeal[healPlace] = now + 120.0f;
+                static int reports = 0;
+                if (reports++ < 30)
+                    Log("Shelter: '%s' stood 8 s at the %s (%.0f u away) and its health didn't go up (%.0f/%.0f): leaves it for 2 min",
+                        ShBotName(bot).c_str(), healPlace == ShShelterEntity(rules, ShShelterOf(bot)) ? "shelter (tier 3)" : ClassName(healPlace),
+                        Len2D(me - healAt), hp, maxHp);
+                healPlace = nullptr;
+            }
+        }
+    }
+    if (hurt && !healPlace && hpFrac < 0.5f)
+        ShSay(bot, b, SAY_NO_MEDIC, 150.0f, "I'm hurt (%.0f HP) and nothing here heals. We need an Emergency Medical Facility!", hp);
 
     float damagedDist = 1e9f;
     void* damaged = ShFindDamaged(team, home, me, order == SHO_REPAIR ? SH_REPAIR_RANGE * 1.5f : SH_REPAIR_RANGE,
@@ -1313,10 +1706,10 @@ static void ShDecide(unsigned char* rules, void* bot, BotState& st, ShBot& b, V3
         b.plan.kind = 0;
     }
 
-    if ((sane < SH_SANITY_BOSS || goHurt) && !atHome)
-        task = SH_HOME; // (badly hurt: back to the shelter, where the zombies don't come by day)
-    else if (restHurt && order != SHO_DEFEND && order != SHO_REPAIR)
-        task = SH_REST;
+    if (healPlace)
+        task = SH_HEAL;
+    else if (sane < SH_SANITY_BOSS && !atHome)
+        task = SH_HOME;
     else if (order == SHO_DEFEND)
         task = damaged && damagedDist < 700.0f && !st.target ? SH_REPAIR : SH_DEFEND;
     else if (order == SHO_REPAIR)
@@ -1345,7 +1738,9 @@ static void ShDecide(unsigned char* rules, void* bot, BotState& st, ShBot& b, V3
         if (money >= SH_BUY_MONEY && b.boughtDay != ShDay(rules))
             task = SH_BUY;
     }
-    if (task == SH_REPAIR)
+    if (task == SH_HEAL)
+        object = healPlace;
+    else if (task == SH_REPAIR)
         object = damaged;
     else if (task == SH_BOSS)
         object = boss;
@@ -1548,8 +1943,6 @@ static void ShDecide(unsigned char* rules, void* bot, BotState& st, ShBot& b, V3
         case SH_HOME:
             if (full)
                 ShSay(bot, b, SAY_FULL, 45.0f, "I can't carry any more (wood %d, iron %d). Heading back to the shelter.", carried[0], carried[1]);
-            else if (goHurt)
-                ShSay(bot, b, SAY_HURT, 45.0f, "I'm badly hurt, falling back to the shelter.");
             else if (sane < SH_SANITY_HOME)
                 ShSay(bot, b, SAY_SANITY, 60.0f, "My mental gauge is low, going back to the shelter to rest.");
             else if (left >= 0 && left < SH_NIGHT_NEAR)
@@ -1588,7 +1981,13 @@ static void ShDecide(unsigned char* rules, void* bot, BotState& st, ShBot& b, V3
                 ShSay(bot, b, SAY_DEFEND, 120.0f, "Holding the shelter tonight.");
             break;
         case SH_REST:
-            ShSay(bot, b, SAY_REST, 90.0f, restHurt ? "Patching myself up in the shelter." : "Resting in the shelter for a moment.");
+            ShSay(bot, b, SAY_REST, 90.0f, "Resting in the shelter for a moment.");
+            break;
+        case SH_HEAL:
+            if (object == ShShelterEntity(rules, ShShelterOf(bot)))
+                ShSay(bot, b, SAY_HEAL, 60.0f, "I'm hurt (%.0f HP), healing in the shelter.", hp);
+            else
+                ShSay(bot, b, SAY_HEAL, 60.0f, "I'm hurt (%.0f HP), going to heal at the %s.", hp, ShPretty(ClassName(object)));
             break;
         default:
             break;
@@ -1648,6 +2047,20 @@ static void ShDecide(unsigned char* rules, void* bot, BotState& st, ShBot& b, V3
     case SH_HOME:
         b.goal = home;
         b.arrive = SH_HOME_RADIUS * 0.5f;
+        break;
+    case SH_HEAL:
+        if (object == ShShelterEntity(rules, ShShelterOf(bot)))
+        {
+            b.goal = home;
+            b.arrive = SH_HOME_RADIUS * 0.4f;
+        }
+        else
+        {
+            // right next to it (it's solid): its closest point, well inside its range
+            V3 c = ShClosest(me, object);
+            b.goal = V3{ c.x, c.y, me.z };
+            b.arrive = 24.0f;
+        }
         break;
     default: // rest, defend: somewhere in the shelter, another spot now and then
         if (now >= b.roamAt || Len2D(b.roam - home) > SH_HOME_RADIUS || st.navStuck >= 2)
@@ -1727,6 +2140,20 @@ static void ShelterBotThink(void* bot, BotState& st)
         bool hitting = (b.task == SH_GATHER || b.task == SH_REPAIR || (b.task == SH_BREAK && !ShGunBeatsAxeRaw(bot))) && b.object &&
                        Len(ShClosest(me, b.object) - me) < 300.0f && !st.target;
         bool melee = ShMeleeHeld(bot);
+        // its gun: the primary, else the pistol, with ammo; none: axe only (ShelterTarget, the axe fights) until it has one
+        const char* gun = ShBestGun(bot);
+        b.gunOwned = gun != nullptr;
+        if (!gun)
+            b.noGunUntil = now + 1.0f;
+        if (b.gunReports < 3 && (gun || b.gunReports == 0))
+        {
+            b.gunReports++;
+            int c1 = 0, r1 = 0, c2 = 0, r2 = 0;
+            ShGunInSlotRaw(bot, 1, &c1, &r1);
+            ShGunInSlotRaw(bot, 2, &c2, &r2);
+            Log("Shelter: '%s' weapons: primary '%s' (clip %d, reserve %d), pistol '%s' (clip %d, reserve %d): fights with %s",
+                ShBotName(bot).c_str(), SlotClass(bot, 1).c_str(), c1, r1, SlotClass(bot, 2).c_str(), c2, r2, gun ? gun : "the axe");
+        }
         if (now >= b.switchAt)
         {
             if (hitting && !melee)
@@ -1734,27 +2161,39 @@ static void ShelterBotThink(void* bot, BotState& st)
                 FakeCommand(bot, "weapon_knife");
                 b.switchAt = now + 1.0f;
             }
-            else if (!hitting && melee && (st.target || st.threat || ShNight(rules)) && now >= b.noGunUntil)
+            else if (!hitting && melee && (st.target || st.threat || ShNight(rules)))
             {
-                if (b.gunTries >= 4)
+                if (!gun)
                 {
-                    b.noGunUntil = now + 30.0f;
-                    b.gunTries = 0;
                     unsigned char* pp = (unsigned char*)PrivateOf(bot);
                     int money = pp && Readable(pp + SHP_MONEY, 4) ? *(int*)(pp + SHP_MONEY) : 0;
-                    if (money < SH_BUY_MONEY)
-                        ShSay(bot, b, SAY_NO_GUN, 120.0f, "I only have my axe and %d$. Getting money to buy a gun.", money);
-                    else
-                        ShSay(bot, b, SAY_NO_GUN, 120.0f, "Out of ammo, axe only. I'll buy a gun with my %d$.", money);
-                    static int reports = 0;
-                    if (reports++ < 40)
-                        Log("Shelter: '%s' has no gun to use (or no ammo): melee only for 30 s", String(F<int>(Vars(bot), EV_NETNAME)));
+                    if (st.target)
+                    {
+                        if (money < SH_BUY_MONEY)
+                            ShSay(bot, b, SAY_NO_GUN, 120.0f, "I only have my axe and %d$. Getting money to buy a gun.", money);
+                        else
+                            ShSay(bot, b, SAY_NO_GUN, 120.0f, "Out of ammo, axe only. I'll buy a gun with my %d$.", money);
+                    }
                 }
-                else
+                else if (now >= b.noGunUntil)
                 {
-                    FakeCommand(bot, b.slotTry++ % 2 ? "slot2" : "slot1");
-                    b.gunTries++;
-                    b.switchAt = now + 0.6f;
+                    if (b.gunTries >= 3)
+                    {
+                        // the game didn't put it in its hands: the axe for half a minute (logged)
+                        b.noGunUntil = now + 30.0f;
+                        b.gunTries = 0;
+                        static int reports = 0;
+                        if (reports++ < 40)
+                            Log("Shelter: '%s' couldn't draw its %s (3 tries): melee only for 30 s", ShBotName(bot).c_str(), gun);
+                    }
+                    else
+                    {
+                        FakeCommand(bot, gun);
+                        b.gunTries++;
+                        b.switchAt = now + 0.8f;
+                        if (st.target && IsLivingMonster(st.target))
+                            ShSay(bot, b, SAY_GUN, 60.0f, "Zombie! Drawing my gun.");
+                    }
                 }
             }
             else if (!melee)
@@ -1796,8 +2235,9 @@ static bool ShelterGoal(void* bot, BotState& st, V3 pos, V3& goal, float& arrive
     float now = Now();
     if (b.fight && (!IsLivingMonster(b.fight) || Len(Center(b.fight) - pos) > 500.0f || now > b.fightUntil || !ShMeleeHeld(bot)))
         b.fight = nullptr;
-    if (!b.fight && st.target && ShMeleeHeld(bot) && IsLivingMonster(st.target) && Len(Center(st.target) - pos) < SH_MELEE_CHASE &&
-        b.task != SH_BUILD && b.task != SH_HOME)
+    // (only without a gun to draw: with one it shoots instead of running up to the zombie with the axe)
+    if (!b.fight && st.target && ShMeleeHeld(bot) && now < b.noGunUntil && IsLivingMonster(st.target) &&
+        Len(Center(st.target) - pos) < SH_MELEE_CHASE && b.task != SH_BUILD && b.task != SH_HOME && b.task != SH_HEAL)
     {
         b.fight = st.target;
         b.fightUntil = now + 8.0f;
@@ -1995,10 +2435,28 @@ static int ShelterSwing(void* bot, BotState& st, float yaw, float pitch)
     return IN_ATTACK;
 }
 
-// ---------------------------------------------------------------- the player's orders
-static bool g_shMenuOpen = false;
+// ---------------------------------------------------------------- the player's menus: orders and the bots' skills
+// Text menus (the game's ShowMenu message, one per 175 characters: mp's helper 0x113f8940 sends one message as it is; the
+// client joins the parts while "more" is set). The keys come back as "menuselect <n>". Pages: the orders, the team's
+// bots, one bot (its skills, auto level-up, its plan), a category of skills (two pages of 8).
+enum ShMenuPage
+{
+    SHM_NONE,
+    SHM_ORDERS,
+    SHM_BOTS,
+    SHM_BOT,
+    SHM_CAT,
+};
+struct ShMenu
+{
+    ShMenuPage page = SHM_NONE;
+    std::vector<void*> bots; // the bots page's list, by key
+    void* bot = nullptr;
+    int cat = 0, sub = 0;
+};
+static std::map<void*, ShMenu> g_shMenus; // by player
 
-static void ShPrint(void* player, const char* text)
+static void ShPrintAs(void* player, int dest, const char* text)
 {
     if (!g_MessageBegin || !g_WriteString)
         return;
@@ -2006,36 +2464,170 @@ static void ShPrint(void* player, const char* text)
     if (msg <= 0)
         return;
     g_MessageBegin(1 /* MSG_ONE */, msg, nullptr, player);
-    g_WriteByte(4); // HUD_PRINTCENTER
+    g_WriteByte(dest);
     g_WriteString(text);
     g_MessageEnd();
 }
 
-static void ShShowMenu(void* player)
+static void ShPrint(void* player, const char* text)
+{
+    ShPrintAs(player, 4 /* HUD_PRINTCENTER */, text);
+}
+
+static void ShMenuText(void* player, int keys, const char* text)
 {
     void* p = PrivateOf(player);
     if (!p)
         return;
-    static const char* text =
-        "Shelter orders for the bots\n\n"
-        "1. Gather resources\n"
-        "2. Defend the shelter\n"
-        "3. Repair buildings\n"
-        "4. Build\n"
-        "5. Follow me\n"
-        "6. Free: each does its job\n\n"
-        "0. Close";
-    int keys = (1 << 0) | (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4) | (1 << 5) | (1 << 9);
     __try
     {
         typedef void(__cdecl * ShowMenuFn)(void* player, int keys, int time, int more, const char* text);
-        ((ShowMenuFn)(MP_SHOWMENU + g_mpDelta))(p, keys, -1, 0, text);
-        g_shMenuOpen = true;
+        ShowMenuFn fn = (ShowMenuFn)(MP_SHOWMENU + g_mpDelta);
+        size_t n = strlen(text), at = 0;
+        char part[180];
+        do
+        {
+            size_t len = n - at < 175 ? n - at : 175;
+            memcpy(part, text + at, len);
+            part[len] = 0;
+            at += len;
+            fn(p, keys, -1, at < n ? 1 : 0, part);
+        } while (at < n);
     }
     __except (EXCEPTION_EXECUTE_HANDLER)
     {
-        Log("Shelter: the orders menu couldn't be shown (exception 0x%08lX)", GetExceptionCode());
+        Log("Shelter: a menu couldn't be shown (exception 0x%08lX)", GetExceptionCode());
     }
+}
+
+// the team's bots (in the room's order)
+static std::vector<void*> ShTeamBots(void* player)
+{
+    std::vector<void*> out;
+    int team = TeamOf(player);
+    for (auto& b : g_bots)
+        if (b.edict && (F<int>(Vars(b.edict), EV_FLAGS) & FL_FAKECLIENT) && TeamOf(b.edict) == team)
+            out.push_back(b.edict);
+    return out;
+}
+
+static BotState* ShStateOf(void* bot)
+{
+    for (auto& b : g_bots)
+        if (b.edict == bot)
+            return &b;
+    return nullptr;
+}
+
+static bool ShIsTeamBot(void* player, void* bot)
+{
+    for (void* b : ShTeamBots(player))
+        if (b == bot)
+            return true;
+    return false;
+}
+
+static void ShShowPage(void* player)
+{
+    ShMenu& m = g_shMenus[player];
+    char text[1024];
+    int keys = 1 << 9; // 0
+    size_t n = 0;
+    auto add = [&](const char* fmt, ...) {
+        va_list ap;
+        va_start(ap, fmt);
+        int w = vsnprintf(text + n, sizeof(text) - n, fmt, ap);
+        va_end(ap);
+        if (w > 0)
+            n = n + (size_t)w < sizeof(text) ? n + (size_t)w : sizeof(text) - 1;
+    };
+    if ((m.page == SHM_BOT || m.page == SHM_CAT) && !ShIsTeamBot(player, m.bot))
+        m.page = SHM_BOTS; // the bot left
+    if (m.page == SHM_ORDERS)
+    {
+        add("Shelter orders for the bots\n\n1. Gather resources\n2. Defend the shelter\n3. Repair buildings\n4. Build\n5. Follow me\n"
+            "6. Free: each does its job\n7. Bots' skills\n\n0. Close");
+        keys |= 0x7f;
+    }
+    else if (m.page == SHM_BOTS)
+    {
+        m.bots = ShTeamBots(player);
+        if (m.bots.size() > 8)
+            m.bots.resize(8);
+        add("Bots' skills: pick a bot\n\n");
+        for (size_t i = 0; i < m.bots.size(); i++)
+        {
+            void* bot = m.bots[i];
+            BotState* st = ShStateOf(bot);
+            add("%d. %s - %s - %d points - %s\n", (int)i + 1, ShBotName(bot).c_str(), st ? g_shRoleNames[ShRoleOf(*st)] : "?", ShPoints(bot),
+                ShPlanOf(bot).manual ? "manual" : "auto");
+            keys |= 1 << i;
+        }
+        if (m.bots.empty())
+            add("(no bots in your team)\n");
+        add("\n9. Back to the orders\n0. Close");
+        keys |= 1 << 8;
+    }
+    else if (m.page == SHM_BOT)
+    {
+        void* bot = m.bot;
+        BotState* st = ShStateOf(bot);
+        ShSkillPlan& plan = ShPlanOf(bot);
+        add("%s (%s): %d skill points\n", ShBotName(bot).c_str(), st ? g_shRoleNames[ShRoleOf(*st)] : "?", ShPoints(bot));
+        for (int c = 0; c < 3; c++)
+        {
+            add("%s:", g_shCatNames[c]);
+            int k = 0;
+            for (int id : kSkillsByCat[c])
+                if (int lv = ShSkillLevel(bot, id))
+                    add("%s %s %d", k++ ? "," : "", kSkills[id].brief, lv);
+            add(k ? "\n" : " -\n");
+        }
+        add("Plan:");
+        for (size_t i = 0; i < plan.queue.size() && i < 6; i++)
+            add("%s %s", i ? "," : "", kSkills[plan.queue[i]].brief);
+        add(plan.queue.empty() ? " -\n" : plan.queue.size() > 6 ? "...\n" : "\n");
+        add("\n1. Battle skills\n2. Survival skills\n3. Tech skills\n4. Auto level-up: %s\n5. Clear the plan\n\n9. Back\n0. Close",
+            plan.manual ? "OFF (turn on)" : "ON (turn off)");
+        keys |= 0x1f | (1 << 8);
+    }
+    else if (m.page == SHM_CAT)
+    {
+        void* bot = m.bot;
+        ShSkillPlan& plan = ShPlanOf(bot);
+        int points = ShPoints(bot);
+        add("%s - %s skills (%d points)\n%s\n\n", ShBotName(bot).c_str(), g_shCatNames[m.cat], points,
+            points > 0 ? "Pick one to learn it now" : "Pick one to plan it for its next points");
+        for (int i = 0; i < 8; i++)
+        {
+            int at = m.sub * 8 + i;
+            if (at >= 11)
+                break;
+            int id = kSkillsByCat[m.cat][at];
+            const char* why = ShSkillBlock(bot, id);
+            int planned = ShPlanned(plan, id);
+            add("%d. %s %d/%d", i + 1, kSkills[id].name, ShSkillLevel(bot, id), kSkills[id].maxLv);
+            if (why && !strcmp(why, "max"))
+                add(" (max)");
+            else if (why)
+                add(" (%s)", why);
+            if (planned)
+                add(" [planned x%d]", planned);
+            add("\n");
+            keys |= 1 << i;
+        }
+        add("\n9. %s\n0. Back", m.sub ? "First page" : "More skills");
+        keys |= 1 << 8;
+    }
+    else
+        return;
+    ShMenuText(player, keys, text);
+}
+
+static void ShOpenMenu(void* player, ShMenuPage page)
+{
+    g_shMenus[player].page = page;
+    ShShowPage(player);
 }
 
 static void GiveOrder(Order order, void* by);
@@ -2072,45 +2664,161 @@ static void ShGiveOrder(void* player, ShOrder order)
         FakeCommand(answer, "roger");
 }
 
-// a player's command in this mode: the orders menu (radio3 / the C key, "/orders"), its keys, the chat words, the rescue.
-// True: the command stops here (the game's own radio3 menu, a key of our menu).
-static bool ShelterPlayerCommand(void* player, const std::string& c)
+// a skill picked in the menu: learned now when the bot has a point (and the tree allows it), else planned for later
+static void ShPickSkill(void* player, void* bot, int id)
 {
-    if (!ShRules())
+    ShSkillPlan& plan = ShPlanOf(bot);
+    std::string name = ShBotName(bot);
+    const char* why = ShSkillBlock(bot, id);
+    char msg[160];
+    if (why && !strcmp(why, "max"))
+        snprintf(msg, sizeof(msg), "%s: %s is already at its max level", name.c_str(), kSkills[id].name);
+    else if (why && !strncmp(why, "has ", 4))
+        snprintf(msg, sizeof(msg), "%s %s: only one of these can be learned", name.c_str(), why);
+    else if (ShSkillLevel(bot, id) + ShPlanned(plan, id) >= kSkills[id].maxLv)
+        snprintf(msg, sizeof(msg), "%s: %s is already planned up to its max level", name.c_str(), kSkills[id].name);
+    else if (!why && ShLearn(bot, id))
     {
-        g_shMenuOpen = false;
-        return false;
+        snprintf(msg, sizeof(msg), "%s learned %s (%d/%d): %s", name.c_str(), kSkills[id].name, ShSkillLevel(bot, id), kSkills[id].maxLv,
+                 kSkills[id].what);
+        ShSkillLog(bot, id, "picked by a player");
     }
-    if (c == "radio3")
+    else
     {
-        ShShowMenu(player);
-        return true;
+        ShPlanAdd(bot, plan, id);
+        ShPlansSave();
+        snprintf(msg, sizeof(msg), "%s will learn %s with the next skill points%s: %s", name.c_str(), kSkills[id].name,
+                 why ? ShFmt(" (after %s)", why + 6) : "", kSkills[id].what);
+        Log("Shelter: a player plans %s for '%s' (%d planned)", kSkills[id].name, name.c_str(), (int)plan.queue.size());
     }
-    if (c == "menuselect" && g_shMenuOpen)
+    ShPrint(player, msg);
+    ShPrintAs(player, 2 /* HUD_PRINTCONSOLE */, ShFmt("%s\n", msg));
+}
+
+static void ShMenuKey(void* player, int key)
+{
+    ShMenu& m = g_shMenus[player];
+    ShMenuPage page = m.page;
+    m.page = SHM_NONE;
+    if (key == 10)
+        key = 0;
+    switch (page)
     {
-        g_shMenuOpen = false;
-        const char* a = g_CmdArgv(1);
-        int pick = a ? atoi(a) : 0;
-        if (pick == 1)
+    case SHM_ORDERS:
+        if (key == 1)
             ShGiveOrder(player, SHO_GATHER);
-        else if (pick == 2)
+        else if (key == 2)
             ShGiveOrder(player, SHO_DEFEND);
-        else if (pick == 3)
+        else if (key == 3)
             ShGiveOrder(player, SHO_REPAIR);
-        else if (pick == 4)
+        else if (key == 4)
             ShGiveOrder(player, SHO_BUILD);
-        else if (pick == 5)
+        else if (key == 5)
         {
             ShGiveOrder(player, SHO_FREE);
             GiveOrder(ORDER_FOLLOW, player);
             ShPrint(player, "Bots: following you");
         }
-        else if (pick == 6)
+        else if (key == 6)
             ShGiveOrder(player, SHO_FREE);
+        else if (key == 7)
+            ShOpenMenu(player, SHM_BOTS);
+        break;
+    case SHM_BOTS:
+        if (key >= 1 && key <= (int)m.bots.size())
+        {
+            m.bot = m.bots[key - 1];
+            ShOpenMenu(player, SHM_BOT);
+        }
+        else if (key == 9)
+            ShOpenMenu(player, SHM_ORDERS);
+        break;
+    case SHM_BOT:
+        if (key >= 1 && key <= 3)
+        {
+            m.cat = key - 1;
+            m.sub = 0;
+            ShOpenMenu(player, SHM_CAT);
+        }
+        else if (key == 4)
+        {
+            ShSkillPlan& plan = ShPlanOf(m.bot);
+            plan.manual = !plan.manual;
+            ShPlansSave();
+            ShPrint(player, ShFmt("%s: auto level-up %s", ShBotName(m.bot).c_str(), plan.manual ? "off (only your picks)" : "on"));
+            Log("Shelter: a player turns auto level-up %s for '%s'", plan.manual ? "off" : "on", ShBotName(m.bot).c_str());
+            ShOpenMenu(player, SHM_BOT);
+        }
+        else if (key == 5)
+        {
+            ShPlanOf(m.bot).queue.clear();
+            ShPlansSave();
+            ShPrint(player, ShFmt("%s: plan cleared", ShBotName(m.bot).c_str()));
+            ShOpenMenu(player, SHM_BOT);
+        }
+        else if (key == 9)
+            ShOpenMenu(player, SHM_BOTS);
+        break;
+    case SHM_CAT:
+        if (key >= 1 && key <= 8 && m.sub * 8 + key - 1 < 11)
+        {
+            if (ShIsTeamBot(player, m.bot))
+                ShPickSkill(player, m.bot, kSkillsByCat[m.cat][m.sub * 8 + key - 1]);
+            ShOpenMenu(player, SHM_CAT);
+        }
+        else if (key == 9)
+        {
+            m.sub = !m.sub;
+            ShOpenMenu(player, SHM_CAT);
+        }
+        else if (key == 0)
+            ShOpenMenu(player, SHM_BOT);
+        break;
+    default:
+        break;
+    }
+}
+
+// the bots' skills in the console (the "/skills" chat word also prints them)
+static void ShPrintSkills(void* player)
+{
+    for (void* bot : ShTeamBots(player))
+    {
+        std::string line = ShBotName(bot) + ShFmt(" (%d points, %s):", ShPoints(bot), ShPlanOf(bot).manual ? "manual" : "auto");
+        int k = 0;
+        for (int id = 0; id < 33; id++)
+            if (int lv = ShSkillLevel(bot, id))
+                line += ShFmt("%s %s %d", k++ ? "," : "", kSkills[id].brief, lv);
+        if (!k)
+            line += " none";
+        ShPrintAs(player, 2 /* HUD_PRINTCONSOLE */, (line + "\n").c_str());
+    }
+}
+
+// a player's command in this mode: the orders menu (radio3 / the C key, "/orders"), the skills menu ("/skills"), their
+// keys, the chat words, the rescue. True: the command stops here (the game's own radio3 menu, a key of our menus).
+static bool ShelterPlayerCommand(void* player, const std::string& c)
+{
+    if (!ShRules())
+    {
+        g_shMenus.clear();
+        return false;
+    }
+    if (c == "radio3")
+    {
+        ShOpenMenu(player, SHM_ORDERS);
         return true;
     }
-    if (c == "menuselect" || c.compare(0, 5, "radio") == 0)
-        g_shMenuOpen = false;
+    auto menu = g_shMenus.find(player);
+    bool open = menu != g_shMenus.end() && menu->second.page != SHM_NONE;
+    if (c == "menuselect" && open)
+    {
+        const char* a = g_CmdArgv(1);
+        ShMenuKey(player, a ? atoi(a) : 0);
+        return true;
+    }
+    if ((c == "menuselect" || c.compare(0, 5, "radio") == 0) && open)
+        menu->second.page = SHM_NONE;
     if (c == "say" || c == "say_team")
     {
         const char* a = g_CmdArgv(1);
@@ -2122,7 +2830,19 @@ static bool ShelterPlayerCommand(void* player, const std::string& c)
         while (!t.empty() && (t.back() == ' ' || t.back() == '"'))
             t.pop_back();
         if (t == "orders" || t == "menu" || t == "bots")
-            ShShowMenu(player);
+            ShOpenMenu(player, SHM_ORDERS);
+        else if (t == "skills" || t == "skill")
+        {
+            ShPrintSkills(player);
+            ShOpenMenu(player, SHM_BOTS);
+        }
+        else if (t == "autoskills on" || t == "autoskills off")
+        {
+            for (void* bot : ShTeamBots(player))
+                ShPlanOf(bot).manual = t == "autoskills off";
+            ShPlansSave();
+            ShPrint(player, t == "autoskills on" ? "Bots: auto level-up on" : "Bots: auto level-up off (only your picks)");
+        }
         else if (t == "gather" || t == "collect")
             ShGiveOrder(player, SHO_GATHER);
         else if (t == "defend" || t == "base" || t == "home")

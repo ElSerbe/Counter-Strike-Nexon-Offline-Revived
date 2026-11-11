@@ -798,7 +798,8 @@ carries); the fixed spots come from the game's tables object (`*(0x121d3ec4) + 0
 is rules +0x26a4 + spot*4, a building's row at +0xd4, the shelter's row at +0x100. The skill tree is `resource/shelterteam/zsht_skilltree.cso`.
 Bots are driven by the shared monster AI (`Drive`), always on in this mode (`ShelterActive`), with hooks for the mode: `ShelterGoal` (where to
 go), `ShelterLook` (at what they hit), `ShelterSwing` (the axe, tapped), `ShelterHoldFire` (a melee tool never "fires" beyond 110 units: the bot
-switches to a gun, or after four tries without one closes in only on zombies within 380 units for 30 s) and `ShelterTarget` (Team Match: the
+draws its gun with "weapon_<class>" of its primary, else its pistol, with ammo (inventory +0xfb8; the client's slot1/slot2 never reach
+the server, so for days they kept the axe); without one it closes in only on zombies within 380 units) and `ShelterTarget` (Team Match: the
 other team's players and, raiding, its shelter). Each bot has a job by its place: builder (engineer skills: Beginner Engineer opens the
 worktable), gatherer (survival) or fighter (combat: Beginner Gun Mastery opens submachine guns and shotguns). By day: gather, home when full,
 low on mental gauge or 45 s before the night (from the clock), deposit, rest, buy at a `shelter_team_buyzone` with 3500+ money, repair;
@@ -810,7 +811,12 @@ Targets (`ShelterTarget`): no zombie beyond 1200; with only the axe none beyond 
 building none beyond 250 (far targets turned its head away and it never swung); a zombie it went for with the axe stays
 its target until it dies, gets 500 away or 8 s pass. Gathering skips resources it can't stand next to (no nav floor
 within 48 units from which the box is 0-100 above: scrap on rooftops), within 900 of a hostile turret or with 3 zombies
-(6 with a gun) within 450. Below 35% health it goes home once and rests 20 s. Room kicks and engine drops of bots are
+(6 with a gun) within 450. Hurt (below 50% by day, 35% at night) it heals until 90% where something heals: the shelter
+doesn't. `ShHealPlace`: a built Emergency Medical Facility of its team (`shelter_team_field_bed`, FieldBedThink 0x1088abb0: +0xe0 ==
+setting 0x11e57840, +0xe4 == 0, range setting 0x11e579a8, health setting 0x11e58a88), a campfire of its team when it has Build Camp
+(skill 12: CampfireThink 0x10889390 heals only those), the shelter from tier 3 (the player's word; not found in the code). 8 s there
+with no health gained: that place is left out 2 min (logged). With none it keeps working and asks for one; the builder builds the
+facility (row 22) before turrets. Room kicks and engine drops of bots are
 refused in this mode as in Zombie Disaster Zone (`modes/zombie_giant.inl`): of the room's three bots only the last stayed.
 Chat (`ShSay`): the bots tell the team what they do (say_team through their ClientCommand with the engine's argument
 functions swapped, like `ShelterCommand`): pack full / hurt / mental gauge / night coming (home), going for wood, iron or
@@ -821,9 +827,16 @@ In the shelter they stand on `ShRoamPoint`s (nav areas 90-230 u from its centre,
 pick fell back to the centre area, inside the building, and they stood stuck). A type of resource the storage has no room
 for isn't deposited (it was tried every think) nor gathered; a full pack only sends a bot home when the storage takes it.
 Crowded resources (5 zombies, 8 with a gun, within 450) come after the others instead of never.
-The player's orders: radio3 (the C key) or "/orders" opens a menu (mp.dll's ShowMenu, 0x113f8940): 1 gather, 2 defend the shelter, 3 repair,
-4 build, 5 follow me, 6 free (each its job); the chat words /gather, /defend, /repair, /build, /free do the same. The radio's follow and hold
-still work.
+The player's orders: radio3 (the C key) or "/orders" opens a menu (mp.dll's ShowMenu, 0x113f8940, sent in 175-character parts with
+"more" set: it sends one message as given): 1 gather, 2 defend the shelter, 3 repair, 4 build, 5 follow me, 6 free (each its job),
+7 the bots' skills; the chat words /gather, /defend, /repair, /build, /free do the same. The radio's follow and hold still work.
+Skills (`kSkills`, from `zsht_skilltree.cso` and `cso_na_en.txt`): 3 points at the start, one a day (the game). The game's skill-up
+(0x10844830) checks only points, max level and the exclusive picks (one of 8/17/25, of 30/31/32, of the crafts 27/28/29); the tree's
+order (the table's "depend" column: the skill each leads to) is followed here. "/skills" (or orders 7) lists the team's bots: each
+bot's skills, auto level-up on/off, its plan; a category page learns a skill now when it has points, else plans it (with the skills
+before it). A bot spends its points on its plan first, then (auto) by its job's order (`kAutoBuilder/Gatherer/Fighter`: Beginner
+Harvest Mastery and Strong Patience early for all). Plans and the auto switch are kept by bot name in Bin/botassist_shelter_skills.txt.
+"/autoskills on|off" sets it for the whole team.
 botassist.log "Shelter:" (state every 15 s with the shelter tier, each bot's job, order and task every 20 s, deposits, skills, buys, repairs,
 fixed spots, builds planned, sent, done or refused, unreachable resources, orders).
 
