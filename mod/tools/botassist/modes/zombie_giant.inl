@@ -1729,6 +1729,9 @@ static bool ZgKeepClient(void* cl, const char* fmt, DWORD ret)
 // Giant's fake players (gone only on a level change, at the end of the session or when they leave the room).
 // Manhunt did the same (3 of 4 bots gone at once, the round waiting for them forever): same treatment.
 static const int MODE_ZSRIFT = 59;
+// Zombie Shelter: of the room's three bots only the last one stayed (the game then asked for more, refused): the others
+// are kept like in Zombie Disaster Zone (the rest of the mode is in modes/zombie_shelter.inl, included later)
+static const int MODE_SHELTER_ROOM = 28;
 static void* BotWhere(std::function<bool(void*)> match)
 {
     void* found = nullptr;
@@ -1766,8 +1769,8 @@ static void HookedDropClient(void* cl, int crash, const char* fmt, DWORD a1, DWO
     __try
     {
         int mode = GameMode();
-        if (!keep && cl && (mode == MODE_ZSRIFT || mode == MODE_ZHE))
-            keep = ZsrKeepBot(cl, fmt, ret, mode == MODE_ZHE ? "Manhunt" : "ZSRift");
+        if (!keep && cl && (mode == MODE_ZSRIFT || mode == MODE_ZHE || mode == MODE_SHELTER_ROOM))
+            keep = ZsrKeepBot(cl, fmt, ret, mode == MODE_ZHE ? "Manhunt" : mode == MODE_SHELTER_ROOM ? "Shelter" : "ZSRift");
     }
     __except (EXCEPTION_EXECUTE_HANDLER) {}
     if (!keep)
@@ -1826,8 +1829,8 @@ static void __fastcall HookedRoomKick(void* self, void* edx, int index)
     __try
     {
         int mode = GameMode();
-        if (!blocked && (mode == MODE_ZSRIFT || mode == MODE_ZHE))
-            blocked = BotRoomKickBlocked(index, ret, mode == MODE_ZHE ? "Manhunt" : "ZSRift");
+        if (!blocked && (mode == MODE_ZSRIFT || mode == MODE_ZHE || mode == MODE_SHELTER_ROOM))
+            blocked = BotRoomKickBlocked(index, ret, mode == MODE_ZHE ? "Manhunt" : mode == MODE_SHELTER_ROOM ? "Shelter" : "ZSRift");
     }
     __except (EXCEPTION_EXECUTE_HANDLER) {}
     if (!blocked)

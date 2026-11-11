@@ -197,7 +197,13 @@ struct ShBot
     float gatherNear = 0;
     int gatherHits = 0, gatherCarried = 0, gatherMoney = 0;
     std::map<void*, float> useless;
+    // a zombie it went for with the axe: it finishes the fight instead of turning to the next thing
+    void* fight = nullptr;
+    float fightUntil = 0;
+    // badly hurt: home once, a rest there (20 s), then back to work until it heals
+    float hurtRestUntil = 0;
 };
+static std::map<void*, bool> g_shReachable; // resources: whether a bot can stand where its axe reaches them (by level)
 static std::map<void*, ShBot> g_shBots;
 static std::map<void*, float> g_shBanned;  // resources a bot couldn't reach: left alone until then
 static std::map<long long, float> g_shBuildBan; // building*1000+spot that failed: not tried again until then
@@ -432,9 +438,69 @@ static bool ShResourceUp(void* e)
 
 static int ShSkillLevel(void* bot, int id);
 
+// a resource a bot can hit: some floor of the navigation mesh next to it (within 48 units of its box) from which the
+// axe reaches it (its box between the floor and 100 above); the map's scrap on rooftops (z 192+) has none
+static bool ShReachable(void* e)
+{
+    auto it = g_shReachable.find(e);
+    if (it != g_shReachable.end())
+        return it->second;
+    unsigned char* v = Vars(e);
+    V3 lo = Vec((float*)(v + EV_ABSMIN)), hi = Vec((float*)(v + EV_ABSMAX));
+    bool ok = g_nav.areas.empty(); // no navigation mesh: don't guess
+    for (size_t i = 0; !ok && i < g_nav.areas.size(); i++)
+    {
+        const NavArea& a = g_nav.areas[i];
+        if (a.hi[0] < lo.x - 48.0f || a.lo[0] > hi.x + 48.0f || a.hi[1] < lo.y - 48.0f || a.lo[1] > hi.y + 48.0f)
+            continue;
+        float x = lo.x < a.lo[0] ? a.lo[0] : lo.x > a.hi[0] ? a.hi[0] : lo.x;
+        float y = lo.y < a.lo[1] ? a.lo[1] : lo.y > a.hi[1] ? a.hi[1] : lo.y;
+        float floor = AreaZ(a, x, y);
+        ok = lo.z <= floor + 100.0f && hi.z >= floor - 8.0f;
+    }
+    g_shReachable[e] = ok;
+    return ok;
+}
+
+static int ShTeamOfEntity(void* e);
+
+// where the zombies are: the map's zombie turrets (hostile turrets) and the living monsters, gathered once per decision
+struct ShDanger
+{
+    std::vector<V3> turrets, monsters;
+};
+
+static ShDanger ShDangers(int team)
+{
+    ShDanger d;
+    ForEntitiesNear(V3{ 0, 0, 0 }, 1e6f, [&](void* e) {
+        const char* cls = ClassName(e);
+        if (!cls)
+            return;
+        if (IsLivingMonster(e))
+            d.monsters.push_back(Center(e));
+        else if (strstr(cls, "turret") && !strstr(cls, "missile") && !strstr(cls, "ammo") && ShTeamOfEntity(e) != team &&
+                 F<float>(Vars(e), EV_HEALTH) > 0.0f)
+            d.turrets.push_back(Center(e));
+    });
+    return d;
+}
+
+// too dangerous to gather there: within 900 of a zombie turret, or 3 zombies (6 with a gun) within 450
+static bool ShDangerous(const ShDanger& d, V3 at, bool hasGun)
+{
+    for (auto& t : d.turrets)
+        if (Len(t - at) < 900.0f)
+            return true;
+    int n = 0;
+    for (auto& m : d.monsters)
+        n += Len(m - at) < 450.0f;
+    return n >= (hasGun ? 6 : 3);
+}
+
 static bool ShResourceFor(void* bot, void* e, float now)
 {
-    if (!ShResourceUp(e))
+    if (!ShResourceUp(e) || !ShReachable(e))
         return false;
     const char* cls = ClassName(e);
     if (cls && !strcmp(cls, "shelter_team_mineral") && ShSkillLevel(bot, SH_SKILL_SCAVENGE) <= 0)
@@ -967,6 +1033,14 @@ static void ShDecide(unsigned char* rules, void* bot, BotState& st, ShBot& b, V3
     if (atHome && carries && !building)
         ShDeposit(rules, bot);
     bool hasGun = now >= b.noGunUntil;
+    ShDanger danger = ShDangers(team);
+    float maxHp = F<float>(Vars(bot), EV_MAX_HEALTH);
+    bool hurt = maxHp > 0.0f && F<float>(Vars(bot), EV_HEALTH) < maxHp * 0.35f;
+    if (!hurt)
+        b.hurtRestUntil = 0;
+    else if (atHome && b.hurtRestUntil == 0)
+        b.hurtRestUntil = now + 20.0f;
+    bool goHurt = hurt && b.hurtRestUntil == 0 && !night, restHurt = hurt && atHome && now < b.hurtRestUntil && !night;
 
     float damagedDist = 1e9f;
     void* damaged = ShFindDamaged(team, home, me, order == SHO_REPAIR ? SH_REPAIR_RANGE * 1.5f : SH_REPAIR_RANGE,
@@ -995,8 +1069,10 @@ static void ShDecide(unsigned char* rules, void* bot, BotState& st, ShBot& b, V3
         b.plan.kind = 0;
     }
 
-    if (sane < SH_SANITY_BOSS && !atHome)
-        task = SH_HOME;
+    if ((sane < SH_SANITY_BOSS || goHurt) && !atHome)
+        task = SH_HOME; // (badly hurt: back to the shelter, where the zombies don't come by day)
+    else if (restHurt && order != SHO_DEFEND && order != SHO_REPAIR)
+        task = SH_REST;
     else if (order == SHO_DEFEND)
         task = damaged && damagedDist < 700.0f && !st.target ? SH_REPAIR : SH_DEFEND;
     else if (order == SHO_REPAIR)
@@ -1081,7 +1157,8 @@ static void ShDecide(unsigned char* rules, void* bot, BotState& st, ShBot& b, V3
     if (task == SH_GATHER)
     {
         // keep its resource while it is up and reachable, else the closest free one
-        if (b.task == SH_GATHER && b.object && ShResourceFor(bot, b.object, now) && now - b.objectSince < SH_GIVE_UP)
+        if (b.task == SH_GATHER && b.object && ShResourceFor(bot, b.object, now) && now - b.objectSince < SH_GIVE_UP &&
+            !ShDangerous(danger, Center(b.object), hasGun))
             object = b.object;
         else
         {
@@ -1098,7 +1175,7 @@ static void ShDecide(unsigned char* rules, void* bot, BotState& st, ShBot& b, V3
                     taken.insert(kv.second.object);
             float best = 1e9f;
             ForEntitiesNear(home, SH_GATHER_RANGE, [&](void* e) {
-                if (!ShResourceFor(bot, e, now) || taken.count(e))
+                if (!ShResourceFor(bot, e, now) || taken.count(e) || ShDangerous(danger, Center(e), hasGun))
                     return;
                 auto ban = g_shBanned.find(e);
                 if (ban != g_shBanned.end() && now < ban->second)
@@ -1180,6 +1257,7 @@ static void ShelterBotThink(void* bot, BotState& st)
         g_shBots.clear();
         g_shBanned.clear();
         g_shBuildBan.clear();
+        g_shReachable.clear();
         for (auto& o : g_shOrder)
             o = SHO_FREE;
     }
@@ -1288,11 +1366,20 @@ static bool ShelterGoal(void* bot, BotState& st, V3 pos, V3& goal, float& arrive
     ShBot& b = it->second;
     goal = b.goal;
     arrive = b.arrive;
-    // the axe in hand and a zombie close by: right up to it, the axe only reaches that far
-    if (st.target && ShMeleeHeld(bot) && IsLivingMonster(st.target) && Len(Center(st.target) - pos) < SH_MELEE_CHASE &&
-        b.task != SH_BUILD)
+    // the axe in hand and a zombie close by: right up to it, the axe only reaches that far; once it goes for one it
+    // finishes it (ShelterTarget keeps it the target) unless it dies, gets 500 away or 8 s pass
+    float now = Now();
+    if (b.fight && (!IsLivingMonster(b.fight) || Len(Center(b.fight) - pos) > 500.0f || now > b.fightUntil || !ShMeleeHeld(bot)))
+        b.fight = nullptr;
+    if (!b.fight && st.target && ShMeleeHeld(bot) && IsLivingMonster(st.target) && Len(Center(st.target) - pos) < SH_MELEE_CHASE &&
+        b.task != SH_BUILD && b.task != SH_HOME)
     {
-        goal = Origin(st.target);
+        b.fight = st.target;
+        b.fightUntil = now + 8.0f;
+    }
+    if (b.fight)
+    {
+        goal = Origin(b.fight);
         arrive = 40.0f;
     }
     wantMove = Len2D(goal - pos) >= arrive || fabsf(goal.z - pos.z) >= 64.0f;
@@ -1309,7 +1396,37 @@ static bool ShelterHoldFire(void* bot, BotState& st)
 
 // ShelterTarget: Team Match: the other team's players, and its shelter when the bot raids it (after the monsters: a
 // monster in sight comes first unless the enemy is much closer)
+static void* ShelterTargetTeams(void* bot, V3 eye, void* best);
+
+// ShelterTarget: which target the shared combat gets. A fight the bot started with the axe stays its target. Zombies far
+// away aren't targets: with the axe they only turned its head away from what it was hitting (it never swung), and across
+// the map they pulled it from its task. So: none beyond 1200; with only the axe (no gun for now) none beyond the reach of
+// a chase; while hitting its resource or a building none beyond 250. Then Team Match's enemies (ShelterTargetTeams).
 static void* ShelterTarget(void* bot, V3 eye, void* best)
+{
+    unsigned char* rules = ShRules();
+    if (!rules)
+        return best;
+    auto it = g_shBots.find(bot);
+    if (it != g_shBots.end())
+    {
+        ShBot& b = it->second;
+        float now = Now();
+        if (b.fight && IsLivingMonster(b.fight) && now < b.fightUntil && Len(Center(b.fight) - eye) < 500.0f)
+            return b.fight;
+        if (best && IsLivingMonster(best))
+        {
+            float d = Len(ShClosest(eye, best) - eye);
+            bool hitting = (b.task == SH_GATHER || b.task == SH_REPAIR || b.task == SH_BUILD) && b.object &&
+                           Len(ShClosest(eye, b.object) - eye) < 300.0f;
+            if (d > 1200.0f || (now < b.noGunUntil && d > SH_MELEE_CHASE) || (hitting && d > 250.0f))
+                best = nullptr;
+        }
+    }
+    return ShelterTargetTeams(bot, eye, best);
+}
+
+static void* ShelterTargetTeams(void* bot, V3 eye, void* best)
 {
     unsigned char* rules = ShRules();
     if (!rules || !ShEnemyShelter(rules, bot))

@@ -806,6 +806,12 @@ the builder builds: the shelter's next tier, the fixed spots (worktable, generat
 tier), a storage when the storage is full, a recovery bed, then works on what it built. Fighters with a gun go after the boss (20000+ health)
 and, on Team Match from day 3, the other team's shelter (both teams get bots there: `CoopOneTeam`). At night: in the shelter, shooting,
 repairing. A player asking for the rescue makes the team's bots ask too.
+Targets (`ShelterTarget`): no zombie beyond 1200; with only the axe none beyond 380; while hitting its resource or a
+building none beyond 250 (far targets turned its head away and it never swung); a zombie it went for with the axe stays
+its target until it dies, gets 500 away or 8 s pass. Gathering skips resources it can't stand next to (no nav floor
+within 48 units from which the box is 0-100 above: scrap on rooftops), within 900 of a hostile turret or with 3 zombies
+(6 with a gun) within 450. Below 35% health it goes home once and rests 20 s. Room kicks and engine drops of bots are
+refused in this mode as in Zombie Disaster Zone (`modes/zombie_giant.inl`): of the room's three bots only the last stayed.
 The player's orders: radio3 (the C key) or "/orders" opens a menu (mp.dll's ShowMenu, 0x113f8940): 1 gather, 2 defend the shelter, 3 repair,
 4 build, 5 follow me, 6 free (each its job); the chat words /gather, /defend, /repair, /build, /free do the same. The radio's follow and hold
 still work.
