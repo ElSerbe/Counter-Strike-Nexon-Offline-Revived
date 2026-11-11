@@ -202,6 +202,8 @@ struct ShBot
     float fightUntil = 0;
     // badly hurt: home once, a rest there (20 s), then back to work until it heals
     float hurtRestUntil = 0;
+    // what it told its team in the chat, by kind of message: when (ShSay)
+    std::map<int, float> saidAt;
 };
 static std::map<void*, bool> g_shReachable; // resources: whether a bot can stand where its axe reaches them (by level)
 static std::map<void*, ShBot> g_shBots;
@@ -486,16 +488,32 @@ static ShDanger ShDangers(int team)
     return d;
 }
 
-// too dangerous to gather there: within 900 of a zombie turret, or 3 zombies (6 with a gun) within 450
-static bool ShDangerous(const ShDanger& d, V3 at, bool hasGun)
+// too dangerous to gather there: within 900 of a zombie turret, or (crowd) 5 zombies (8 with a gun) within 450. The bots
+// fight zombies that come close now, so a crowd only puts a resource after the others (gathering looks with the crowds
+// left out first); a turret always rules it out
+static bool ShDangerous(const ShDanger& d, V3 at, bool hasGun, bool crowd = true)
 {
     for (auto& t : d.turrets)
         if (Len(t - at) < 900.0f)
             return true;
+    if (!crowd)
+        return false;
     int n = 0;
     for (auto& m : d.monsters)
         n += Len(m - at) < 450.0f;
-    return n >= (hasGun ? 6 : 3);
+    return n >= (hasGun ? 8 : 5);
+}
+
+// what a resource gives: 0 wood, 1 iron (the piles: zsht_resource +0xd8; the scrap mostly iron), -1 money (scrap type 0)
+static int ShResourceType(void* e)
+{
+    const char* cls = ClassName(e);
+    unsigned char* p = (unsigned char*)PrivateOf(e);
+    if (!cls || !p || !Readable(p, 0x110))
+        return -1;
+    if (!strcmp(cls, "zsht_resource"))
+        return *(int*)(p + 0xd8) == 1 ? 1 : 0;
+    return *(int*)(p + 0xe0) ? 1 : -1;
 }
 
 static bool ShResourceFor(void* bot, void* e, float now)
@@ -588,12 +606,81 @@ static bool ShelterCommand(void* bot, const char* a0, const char* a1 = nullptr, 
     return done;
 }
 
-// everything the bot carries into the storage, 5 at a time as the warehouse menu does
+// The bot tells its team what it's doing, in the chat (say_team), the game's own way: its ClientCommand with the engine's
+// argument functions pointing at ours (like ShelterCommand). Each kind of message (key) at most once per `cooldown` s per
+// bot, and 2.5 s between any two bots' messages, so the chat doesn't fill up.
+enum ShSayKey
+{
+    SAY_FULL, SAY_HURT, SAY_SANITY, SAY_NIGHT, SAY_GATHER, SAY_BUILD, SAY_UPGRADE, SAY_REPAIR, SAY_BUY, SAY_BOSS, SAY_RAID,
+    SAY_DEPOSIT, SAY_STORAGE_FULL, SAY_NO_GUN, SAY_DEFEND, SAY_REST, SAY_FIGHT
+};
+static float g_shLastSay = -100;
+
+static void ShSay(void* bot, ShBot& b, int key, float cooldown, const char* fmt, ...)
+{
+    float now = Now();
+    auto it = b.saidAt.find(key);
+    if (it != b.saidAt.end() && now - it->second < cooldown && now >= it->second)
+        return;
+    if (now - g_shLastSay < 2.5f && now >= g_shLastSay)
+        return;
+    char text[112];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(text, sizeof(text), fmt, ap);
+    va_end(ap);
+    b.saidAt[key] = now;
+    g_shLastSay = now;
+    g_shArgc = 2;
+    g_shArgv[0] = "say_team";
+    g_shArgv[1] = text;
+    snprintf(g_shArgs, sizeof(g_shArgs), "\"%s\"", text);
+    void** table = (void**)(MP_ENGFUNCS + g_mpDelta);
+    void* saved[3] = { table[ENG_CMD_ARGS], table[ENG_CMD_ARGV], table[ENG_CMD_ARGC] };
+    table[ENG_CMD_ARGS] = (void*)ShCmdArgs;
+    table[ENG_CMD_ARGV] = (void*)ShCmdArgv;
+    table[ENG_CMD_ARGC] = (void*)ShCmdArgc;
+    __try
+    {
+        g_ClientCommandTrampoline(bot);
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        static int faults = 0;
+        if (faults++ < 5)
+            Log("Shelter: exception 0x%08lX in a bot's chat line", GetExceptionCode());
+    }
+    table[ENG_CMD_ARGS] = saved[0];
+    table[ENG_CMD_ARGV] = saved[1];
+    table[ENG_CMD_ARGC] = saved[2];
+    static int reports = 0;
+    if (reports++ < 200)
+        Log("Shelter: '%s' says: %s", String(F<int>(Vars(bot), EV_NETNAME)), text);
+}
+
+// a building's name for the chat: its class without "shelter_team_", underscores as spaces
+static const char* ShPretty(const char* cls)
+{
+    static char out[64];
+    if (!cls)
+        return "building";
+    if (!strncmp(cls, "shelter_team_", 13))
+        cls += 13;
+    snprintf(out, sizeof(out), "%s", cls);
+    for (char* c = out; *c; c++)
+        if (*c == '_')
+            *c = ' ';
+    return out;
+}
+
+// everything the bot carries into the storage, 5 at a time as the warehouse menu does (a type the storage has no room for
+// isn't tried: that was tried every think, 20 times in a row)
 static void ShDeposit(unsigned char* rules, void* bot)
 {
     int before[2] = { ShCarried(rules, bot, 0), ShCarried(rules, bot, 1) };
+    int team = TeamOf(bot);
     for (int type = 0; type < 2; type++)
-        for (int guard = 0; guard < 40 && ShCarried(rules, bot, type) > 0; guard++)
+        for (int guard = 0; guard < 40 && ShCarried(rules, bot, type) > 0 && ShStorage(rules, team, type) < ShStorageMax(rules, team, type); guard++)
         {
             int had = ShCarried(rules, bot, type);
             ShelterCommand(bot, "zsht_warehouse", type ? "1" : "0", "5", "0");
@@ -1006,6 +1093,36 @@ static void* ShFindDamaged(int team, V3 from, V3 me, float range, float below, f
 }
 
 // what the bot does now; sets b.task, b.object and where to go
+// a place to stand in the shelter: the navigation areas 90 to 230 units from its centre, at its height, outside the
+// shelter building itself (PtnNavPoint drew 40 random areas of the whole map, none near enough, and gave the area at the
+// centre: inside the building, where the bots stood stuck). Listed again every 30 s (the building grows with its tier).
+static std::vector<V3> g_shRoam;
+static float g_shRoamAt = -100;
+static V3 g_shRoamHome{};
+
+static V3 ShRoamPoint(unsigned char* rules, void* bot, V3 home)
+{
+    float now = Now();
+    if (now >= g_shRoamAt + 30.0f || now < g_shRoamAt || Len2D(home - g_shRoamHome) > 50.0f)
+    {
+        g_shRoamAt = now;
+        g_shRoamHome = home;
+        g_shRoam.clear();
+        void* shelter = ShEdictOf(ShShelterEntity(rules, ShShelterOf(bot)));
+        for (auto& a : g_nav.areas)
+        {
+            float d = Len2D(a.center - home);
+            V3 p = a.center + V3{ 0, 0, 36 };
+            if (d < 90.0f || d > SH_HOME_RADIUS * 0.9f || fabsf(a.center.z - home.z) > 120.0f || (shelter && ShInBox(p, shelter, 32.0f)))
+                continue;
+            g_shRoam.push_back(p);
+        }
+    }
+    if (g_shRoam.empty())
+        return PtnNavPoint(home, SH_HOME_RADIUS * 0.8f);
+    return g_shRoam[rand() % g_shRoam.size()];
+}
+
 static void ShDecide(unsigned char* rules, void* bot, BotState& st, ShBot& b, V3 me, float now)
 {
     V3 home;
@@ -1022,16 +1139,34 @@ static void ShDecide(unsigned char* rules, void* bot, BotState& st, ShBot& b, V3
     bool night = ShNight(rules);
     float left = ShPhaseLeft(rules);
     bool atHome = Len2D(me - home) < SH_HOME_RADIUS;
-    bool full = false, carries = false;
+    // full: of a type the storage still has room for (or of both): going home for it makes sense; a type it can't put
+    // away isn't gathered any more
+    bool full = false, carries = false, fullT[2] = { false, false }, room[2] = { false, false };
+    int carried[2] = { 0, 0 };
     for (int t = 0; t < 2; t++)
     {
         int c = ShCarried(rules, bot, t), m = ShCarryMax(rules, bot, t);
-        full |= m > 0 && c >= m;
+        carried[t] = c;
+        fullT[t] = m > 0 && c >= m;
+        room[t] = ShStorage(rules, team, t) < ShStorageMax(rules, team, t);
         carries |= c > 0;
     }
+    full = (fullT[0] && room[0]) || (fullT[1] && room[1]) || (fullT[0] && fullT[1]);
     bool building = b.plan.kind != 0 && (b.task == SH_BUILD || b.sent);
     if (atHome && carries && !building)
-        ShDeposit(rules, bot);
+    {
+        if ((carried[0] && room[0]) || (carried[1] && room[1]))
+        {
+            ShDeposit(rules, bot);
+            int put0 = carried[0] - ShCarried(rules, bot, 0), put1 = carried[1] - ShCarried(rules, bot, 1);
+            if (put0 + put1 > 0)
+                ShSay(bot, b, SAY_DEPOSIT, 25.0f, "Dropped off %d wood and %d iron. Storage: wood %d/%d, iron %d/%d.", put0, put1,
+                      ShStorage(rules, team, 0), ShStorageMax(rules, team, 0), ShStorage(rules, team, 1), ShStorageMax(rules, team, 1));
+        }
+        else
+            ShSay(bot, b, SAY_STORAGE_FULL, 90.0f, "The storage is full (wood %d/%d, iron %d/%d). We need another storage!",
+                  ShStorage(rules, team, 0), ShStorageMax(rules, team, 0), ShStorage(rules, team, 1), ShStorageMax(rules, team, 1));
+    }
     bool hasGun = now >= b.noGunUntil;
     ShDanger danger = ShDangers(team);
     float maxHp = F<float>(Vars(bot), EV_MAX_HEALTH);
@@ -1061,6 +1196,10 @@ static void ShDecide(unsigned char* rules, void* bot, BotState& st, ShBot& b, V3
             if (reports++ < 120)
                 Log("Shelter: '%s' plans row %d (%s)%s", String(F<int>(Vars(bot), EV_NETNAME)), b.plan.building,
                     b.plan.kind == 3 ? "shelter tier" : ShRow(b.plan.building)->cls, b.plan.spot > 0 ? ShFmt(" on spot %d", b.plan.spot) : "");
+            if (b.plan.kind == 3)
+                ShSay(bot, b, SAY_UPGRADE, 60.0f, "We have enough resources to upgrade the shelter. I'm on it!");
+            else
+                ShSay(bot, b, SAY_BUILD, 40.0f, "We have enough for a %s. Building it.", ShPretty(ShRow(b.plan.building)->cls));
         }
     }
     if (b.plan.kind && now - b.planSince > 45.0f && !b.sent)
@@ -1157,8 +1296,12 @@ static void ShDecide(unsigned char* rules, void* bot, BotState& st, ShBot& b, V3
     if (task == SH_GATHER)
     {
         // keep its resource while it is up and reachable, else the closest free one
+        auto typeFull = [&](void* e) {
+            int t = ShResourceType(e);
+            return t >= 0 && fullT[t];
+        };
         if (b.task == SH_GATHER && b.object && ShResourceFor(bot, b.object, now) && now - b.objectSince < SH_GIVE_UP &&
-            !ShDangerous(danger, Center(b.object), hasGun))
+            !ShDangerous(danger, Center(b.object), hasGun) && !typeFull(b.object))
             object = b.object;
         else
         {
@@ -1173,22 +1316,79 @@ static void ShDecide(unsigned char* rules, void* bot, BotState& st, ShBot& b, V3
             for (auto& kv : g_shBots)
                 if (kv.first != bot && kv.second.task == SH_GATHER && kv.second.object)
                     taken.insert(kv.second.object);
-            float best = 1e9f;
+            float best = 1e9f, bestCrowded = 1e9f;
+            void* crowded = nullptr;
             ForEntitiesNear(home, SH_GATHER_RANGE, [&](void* e) {
-                if (!ShResourceFor(bot, e, now) || taken.count(e) || ShDangerous(danger, Center(e), hasGun))
+                if (!ShResourceFor(bot, e, now) || taken.count(e) || typeFull(e) || ShDangerous(danger, Center(e), hasGun, false))
                     return;
                 auto ban = g_shBanned.find(e);
                 if (ban != g_shBanned.end() && now < ban->second)
                     return;
                 float d = Len(Center(e) - me);
-                if (d < best)
+                bool crowd = ShDangerous(danger, Center(e), hasGun);
+                if (!crowd && d < best)
                 {
                     best = d;
                     object = e;
                 }
+                else if (crowd && d < bestCrowded)
+                {
+                    bestCrowded = d;
+                    crowded = e;
+                }
             });
             if (!object)
+                object = crowded; // only crowded ones: the closest of them
+            if (!object)
                 task = carries ? SH_HOME : SH_DEFEND;
+        }
+    }
+    if (task != b.task)
+    {
+        unsigned char* pp = (unsigned char*)PrivateOf(bot);
+        int money = pp && Readable(pp + SHP_MONEY, 4) ? *(int*)(pp + SHP_MONEY) : 0;
+        switch (task)
+        {
+        case SH_HOME:
+            if (full)
+                ShSay(bot, b, SAY_FULL, 45.0f, "I can't carry any more (wood %d, iron %d). Heading back to the shelter.", carried[0], carried[1]);
+            else if (goHurt)
+                ShSay(bot, b, SAY_HURT, 45.0f, "I'm badly hurt, falling back to the shelter.");
+            else if (sane < SH_SANITY_HOME)
+                ShSay(bot, b, SAY_SANITY, 60.0f, "My mental gauge is low, going back to the shelter to rest.");
+            else if (left >= 0 && left < SH_NIGHT_NEAR)
+                ShSay(bot, b, SAY_NIGHT, 90.0f, "Night is coming! Back to the shelter.");
+            break;
+        case SH_GATHER:
+            if (object)
+            {
+                int t = ShResourceType(object);
+                ShSay(bot, b, SAY_GATHER, 60.0f, t == 0 ? "Going to get wood (%d carried)." : t == 1 ? "Going to get iron (%d carried)." :
+                      "Breaking scrap for money (%d$).", t == 0 ? carried[0] : t == 1 ? carried[1] : money);
+            }
+            break;
+        case SH_REPAIR:
+            if (object)
+                ShSay(bot, b, SAY_REPAIR, 45.0f, "The %s is damaged, repairing it.", ShPretty(ClassName(object)));
+            break;
+        case SH_BUY:
+            ShSay(bot, b, SAY_BUY, 90.0f, "I have %d$, going to the black market to buy a gun.", money);
+            break;
+        case SH_BOSS:
+            ShSay(bot, b, SAY_BOSS, 60.0f, "A boss is out there, going after it!");
+            break;
+        case SH_RAID:
+            ShSay(bot, b, SAY_RAID, 90.0f, "Going to hit the enemy shelter!");
+            break;
+        case SH_DEFEND:
+            if (night)
+                ShSay(bot, b, SAY_DEFEND, 120.0f, "Holding the shelter tonight.");
+            break;
+        case SH_REST:
+            ShSay(bot, b, SAY_REST, 90.0f, restHurt ? "Patching myself up in the shelter." : "Resting in the shelter for a moment.");
+            break;
+        default:
+            break;
         }
     }
     if (task != b.task || object != b.object)
@@ -1233,10 +1433,11 @@ static void ShDecide(unsigned char* rules, void* bot, BotState& st, ShBot& b, V3
         b.arrive = SH_HOME_RADIUS * 0.5f;
         break;
     default: // rest, defend: somewhere in the shelter, another spot now and then
-        if (now >= b.roamAt || Len2D(b.roam - home) > SH_HOME_RADIUS)
+        if (now >= b.roamAt || Len2D(b.roam - home) > SH_HOME_RADIUS || st.navStuck >= 2)
         {
             b.roamAt = now + 6.0f + Rnd() * 8.0f;
-            b.roam = PtnNavPoint(home, SH_HOME_RADIUS * 0.8f);
+            b.roam = ShRoamPoint(rules, bot, home);
+            st.navStuck = 0;
         }
         b.goal = b.roam;
         b.arrive = 50.0f;
@@ -1321,6 +1522,12 @@ static void ShelterBotThink(void* bot, BotState& st)
                 {
                     b.noGunUntil = now + 30.0f;
                     b.gunTries = 0;
+                    unsigned char* pp = (unsigned char*)PrivateOf(bot);
+                    int money = pp && Readable(pp + SHP_MONEY, 4) ? *(int*)(pp + SHP_MONEY) : 0;
+                    if (money < SH_BUY_MONEY)
+                        ShSay(bot, b, SAY_NO_GUN, 120.0f, "I only have my axe and %d$. Getting money to buy a gun.", money);
+                    else
+                        ShSay(bot, b, SAY_NO_GUN, 120.0f, "Out of ammo, axe only. I'll buy a gun with my %d$.", money);
                     static int reports = 0;
                     if (reports++ < 40)
                         Log("Shelter: '%s' has no gun to use (or no ammo): melee only for 30 s", String(F<int>(Vars(bot), EV_NETNAME)));
@@ -1384,6 +1591,14 @@ static bool ShelterGoal(void* bot, BotState& st, V3 pos, V3& goal, float& arrive
     }
     wantMove = Len2D(goal - pos) >= arrive || fabsf(goal.z - pos.z) >= 64.0f;
     return true;
+}
+
+// ShelterStandGround: true when the bot must not back off from a zombie (the shared combat steps away from monsters that
+// come close): with the axe it has to get close to hit, and at night the shelter is held, not left
+static bool ShelterStandGround(void* bot)
+{
+    unsigned char* rules = ShRules();
+    return rules && (ShMeleeHeld(bot) || ShNight(rules));
 }
 
 // ShelterHoldFire: true when the bot must not "fire": a melee tool in hand and the target out of its reach

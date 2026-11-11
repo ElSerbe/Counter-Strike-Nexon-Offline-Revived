@@ -226,5 +226,32 @@ def main():
     print("ItemBox.json: %d decoders" % (len(parts)))
 
 
+# The Decoder window lists only decoders with a 3D model (Item.csv "mdl"). The server sends its Data/Item.csv to the game
+# (metadata Item), so the decoders without one (the Code Decoders, Mileage, Premium... 23 of 44) get the Transcendence
+# Decoder's there: basicmatrix.
+SERVER_ITEMS = os.path.join(ROOT, "server", "CSNZ_Server", "bin", "Data", "Item.csv")
+
+
+def give_models():
+    data = open(SERVER_ITEMS, "rb").read()
+    lines = data.split(b"\n")
+    header = next(l for l in lines if l.startswith(b";ID")).rstrip(b"\r").split(b",")
+    mdl, cls = header.index(b"mdl"), header.index(b"ClassName")
+    changed = 0
+    for n, line in enumerate(lines):
+        if not line[:1].isdigit() or b'"' in line:
+            continue
+        cr = line.endswith(b"\r")
+        f = line.rstrip(b"\r").split(b",")
+        if len(f) > mdl and f[cls] == b"LotteryKeyItem" and not f[mdl]:
+            f[mdl] = b"basicmatrix"
+            lines[n] = b",".join(f) + (b"\r" if cr else b"")
+            changed += 1
+    if changed:
+        open(SERVER_ITEMS, "wb").write(b"\n".join(lines))
+    print("Item.csv: %d decoders got the decoder model" % changed)
+
+
 if __name__ == "__main__":
     main()
+    give_models()

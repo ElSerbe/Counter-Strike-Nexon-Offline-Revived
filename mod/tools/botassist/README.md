@@ -812,6 +812,15 @@ its target until it dies, gets 500 away or 8 s pass. Gathering skips resources i
 within 48 units from which the box is 0-100 above: scrap on rooftops), within 900 of a hostile turret or with 3 zombies
 (6 with a gun) within 450. Below 35% health it goes home once and rests 20 s. Room kicks and engine drops of bots are
 refused in this mode as in Zombie Disaster Zone (`modes/zombie_giant.inl`): of the room's three bots only the last stayed.
+Chat (`ShSay`): the bots tell the team what they do (say_team through their ClientCommand with the engine's argument
+functions swapped, like `ShelterCommand`): pack full / hurt / mental gauge / night coming (home), going for wood, iron or
+scrap money, repairing, building or upgrading the shelter (when the plan is made), buying a gun, boss, raid, deposits with
+the storage totals, storage full, no gun (getting money). Each kind once per 25-120 s per bot, 2.5 s between any two.
+Standing: `ShelterStandGround` stops the shared combat's backing off from zombies with the axe in hand or at night.
+In the shelter they stand on `ShRoamPoint`s (nav areas 90-230 u from its centre, outside the shelter building; the old
+pick fell back to the centre area, inside the building, and they stood stuck). A type of resource the storage has no room
+for isn't deposited (it was tried every think) nor gathered; a full pack only sends a bot home when the storage takes it.
+Crowded resources (5 zombies, 8 with a gun, within 450) come after the others instead of never.
 The player's orders: radio3 (the C key) or "/orders" opens a menu (mp.dll's ShowMenu, 0x113f8940): 1 gather, 2 defend the shelter, 3 repair,
 4 build, 5 follow me, 6 free (each its job); the chat words /gather, /defend, /repair, /build, /free do the same. The radio's follow and hold
 still work.

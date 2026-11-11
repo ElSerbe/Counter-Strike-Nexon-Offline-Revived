@@ -371,6 +371,7 @@ static void ShelterBotThink(void* bot, BotState& st);
 static void ShelterWatch();
 static bool ShelterHoldFire(void* bot, BotState& st);
 static void* ShelterTarget(void* bot, V3 eye, void* best);
+static bool ShelterStandGround(void* bot); // Zombie Shelter: no backing off with the axe or at night
 static bool ShelterPlayerCommand(void* player, const std::string& c);
 
 static bool IsIgnored(const char* classname)
@@ -2183,7 +2184,7 @@ static void Drive(void* bot, BotState& st, Command& cmd, float dt)
     if (danger)
     {
         float d = Len2D(Center(danger) - pos);
-        if (d < cfg.fleeDistance && !HsFlying(danger))
+        if (d < cfg.fleeDistance && !HsFlying(danger) && !ShelterStandGround(bot))
         {
             float away = YawOf(pos - Center(danger));
             // back off towards the leader's side rather than straight away from them
@@ -2208,7 +2209,7 @@ static void Drive(void* bot, BotState& st, Command& cmd, float dt)
             moving = true;
         }
     }
-    if (moving && !(danger && !HsFlying(danger) && Len2D(Center(danger) - pos) < cfg.fleeDistance))
+    if (moving && !(danger && !HsFlying(danger) && Len2D(Center(danger) - pos) < cfg.fleeDistance && !ShelterStandGround(bot)))
     {
         moveYaw = WalkYaw(bot, pos, moveYaw, 40.0f); // walk around obstacles
         // a low ledge or a crate ahead: over it, crouching in the air to clear it

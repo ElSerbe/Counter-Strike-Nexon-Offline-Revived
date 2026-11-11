@@ -3324,10 +3324,10 @@ index 0000000..1a0e4c5
 +bool IsZombieModeOffline(int mode);
 diff --git a/src/manager/missionmanager.cpp b/src/manager/missionmanager.cpp
 new file mode 100644
-index 0000000..7cd3162
+index 0000000..4838778
 --- /dev/null
 +++ b/src/manager/missionmanager.cpp
-@@ -0,0 +1,503 @@
+@@ -0,0 +1,505 @@
 +#include "missionmanager.h"
 +#include "medalmanager.h"
 +#include "warbondmanager.h"
@@ -3361,12 +3361,13 @@ index 0000000..7cd3162
 +		json d = json::parse(f, nullptr, false, true);
 +		if (!d.is_discarded() && d.is_object())
 +		{
-+			m_DailyDecoderChance = d.value("Chance", 0.0);
++			m_DailyDecoderChance = d.value("OrderChance", d.value("Chance", 0.0));
++			m_RequestDecoderChance = d.value("RequestChance", m_DailyDecoderChance);
 +			for (auto& e : d.value("Decoders", json::array()))
 +				if (e.value("Item", 0) > 0 && e.value("Weight", 0) > 0)
 +					m_DailyDecoders.push_back({ e.value("Item", 0), e.value("Weight", 0), e.value("Name", string("a decoder")) });
-+			Logger().Info("MissionManager: dailies give a decoder %.0f%% of the time (%d kinds)\n", m_DailyDecoderChance,
-+				(int)m_DailyDecoders.size());
++			Logger().Info("MissionManager: a decoder for %.0f%% of daily orders and %.0f%% of mission requests (%d kinds)\n",
++				m_DailyDecoderChance, m_RequestDecoderChance, (int)m_DailyDecoders.size());
 +		}
 +	}
 +	LoadLoginSupplies();
@@ -3550,12 +3551,13 @@ index 0000000..7cd3162
 +	return rows;
 +}
 +
-+string CMissionManager::DailyDecoder(IUser* user)
++string CMissionManager::DailyDecoder(IUser* user, bool request)
 +{
-+	if (!user || m_DailyDecoders.empty() || m_DailyDecoderChance <= 0)
++	double chance = request ? m_RequestDecoderChance : m_DailyDecoderChance;
++	if (!user || m_DailyDecoders.empty() || chance <= 0)
 +		return "";
 +	static mt19937 rng(random_device{}());
-+	if (uniform_real_distribution<double>(0, 100)(rng) >= m_DailyDecoderChance)
++	if (uniform_real_distribution<double>(0, 100)(rng) >= chance)
 +		return "";
 +	int total = 0;
 +	for (auto& d : m_DailyDecoders)
@@ -3753,7 +3755,7 @@ index 0000000..7cd3162
 +			g_UserDatabase.DeleteMissions(userID, key + ".");
 +			g_UserDatabase.SetMissions(userID, { { key, 0, 2, day } });
 +			Reward(user, req->badges, req->medals, ("Request \"" + req->title + "\"").c_str());
-+			string decoder = DailyDecoder(user);
++			string decoder = DailyDecoder(user, true);
 +			if (!decoder.empty())
 +				g_PacketManager.SendUMsgNoticeMessageInChat(user->GetExtendedSocket(), "Bonus: a " + decoder + " (Inventory > Decoder)");
 +			g_MedalManager.AddCounter(user, "RequestsDone", 1);
@@ -3833,7 +3835,7 @@ index 0000000..7cd3162
 +}
 diff --git a/src/manager/missionmanager.h b/src/manager/missionmanager.h
 new file mode 100644
-index 0000000..1b30be3
+index 0000000..a217752
 --- /dev/null
 +++ b/src/manager/missionmanager.h
 @@ -0,0 +1,149 @@
@@ -3938,9 +3940,9 @@ index 0000000..1b30be3
 +	// game texts botassist replaces (GET /api/questtexts, Data/GameTexts.json): the tutorial's reward list, the Point Coupon
 +	nlohmann::json TextOverrides();
 +
-+	// now and then a decoder for a daily (a daily order, a mission request): Data/DailyDecoders.json, Chance % then one
-+	// drawn by Weight. Returns its name for the chat message ("" when none came)
-+	std::string DailyDecoder(IUser* user);
++	// now and then a decoder for a daily: Data/DailyDecoders.json, OrderChance % for a daily order, RequestChance % for a
++	// mission request, then one drawn by Weight. Returns its name for the chat message ("" when none came)
++	std::string DailyDecoder(IUser* user, bool request = false);
 +
 +private:
 +	bool LoadConfig();
@@ -3981,7 +3983,7 @@ index 0000000..1b30be3
 +		int weight;
 +		std::string name;
 +	};
-+	double m_DailyDecoderChance = 0;
++	double m_DailyDecoderChance = 0, m_RequestDecoderChance = 0;
 +	std::vector<DailyDecoder_s> m_DailyDecoders;
 +};
 +
