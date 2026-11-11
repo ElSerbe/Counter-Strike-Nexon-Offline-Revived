@@ -58,6 +58,8 @@
   const medal = (small) => '<span class="medal-icon' + (small ? " small" : "") + '"></span>';
   // Bingo Tickets an order gives besides its medals (the game's own ticket picture)
   const pct = (a, b) => (b ? Math.min(100, Math.round(a * 100 / b)) : 0);
+  // a rotating pass's time until its new stock: "5h 20m", "12m"
+  const restock = s => { const h = Math.floor(s / 3600), m = Math.max(1, Math.floor(s % 3600 / 60)); return h ? h + "h " + m + "m" : m + "m"; };
 
   // Real item picture exported from the game files (tools/export_shop_assets.py), silhouette if missing.
   const itemImage = it =>
@@ -168,7 +170,7 @@
         passArt(w) +
         '<div class="info"><div class="name">' + esc(w.name) + '</div>' +
         '<div class="meta"><span class="badge ' + esc(w.type.toLowerCase()) + '">' + esc(w.type) + "</span>" + passTag(w) +
-        '<span>' + (w.total ? w.owned + " / " + w.total : "Supplies") + '</span></div>' +
+        '<span>' + (w.resetsIn !== undefined ? "New in " + restock(w.resetsIn) : w.total ? w.owned + " / " + w.total : "Supplies") + '</span></div>' +
         '<div class="progress mini-progress"><span style="width:' + pct(w.owned, w.total) + '%"></span></div></div>' +
       "</button>").join("");
 
@@ -179,6 +181,7 @@
           '<div class="caption"><span class="badge ' + esc(pass.type.toLowerCase()) + '">' + esc(pass.type) + "</span>" +
           "<h2>" + esc(pass.name) + "</h2></div></div>" +
         '<p class="desc">' + esc(pass.description) + "</p>" +
+        (pass.resetsIn !== undefined ? '<p class="restock">New weapons in ' + restock(pass.resetsIn) + "</p>" : "") +
         '<div class="stats">' +
           '<div class="stat grow"><div class="label">Unlocked</div><div class="value">' + pass.owned + " / " + pass.total + "</div>" +
             '<div class="progress" style="margin-top:8px"><span style="width:' + pct(pass.owned, pass.total) + '%"></span></div></div>' +
@@ -250,7 +253,8 @@
       '<div class="pass-hero">' + passArt(pass) +
         '<div class="caption"><span class="badge ' + esc(pass.type.toLowerCase()) + '">' + esc(pass.type) + "</span>" +
         '<p>' + esc(pass.description) + "</p>" +
-        '<div class="hero-stats"><span>' + (pass.total ? pass.owned + " / " + pass.total + " unlocked" : "Buy as many as you want") + "</span><span>" +
+        '<div class="hero-stats">' + (pass.resetsIn !== undefined ? "<span>New weapons in " + restock(pass.resetsIn) + "</span>" : "") +
+          "<span>" + (pass.total ? pass.owned + " / " + pass.total + " unlocked" : "Buy as many as you want") + "</span><span>" +
           pass.pages.filter(p => p.unlocked).length + " / " + pass.pages.length + " pages open</span><span>" + medal(true) + pass.spent + " spent</span></div>" +
       "</div></div>";
 

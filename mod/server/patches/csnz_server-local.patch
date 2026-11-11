@@ -8388,10 +8388,10 @@ index c7d2bdb..75d0ee9 100644
 +extern CVoxelManager g_VoxelManager;
 diff --git a/src/manager/warbondmanager.cpp b/src/manager/warbondmanager.cpp
 new file mode 100644
-index 0000000..894646d
+index 0000000..651ac8f
 --- /dev/null
 +++ b/src/manager/warbondmanager.cpp
-@@ -0,0 +1,1029 @@
+@@ -0,0 +1,1099 @@
 +#include "channelmanager.h"
 +#include "guestprofile.h"
 +#include "transfer.h"
@@ -8416,6 +8416,9 @@ index 0000000..894646d
 +#include <set>
 +#include <map>
 +#include <ctime>
++#include <cmath>
++#include <random>
++#include <algorithm>
 +
 +using namespace std;
 +using json = nlohmann::json;
@@ -8503,6 +8506,11 @@ index 0000000..894646d
 +			warbond.description = w.value("Description", "");
 +			warbond.image = w.value("Image", "");
 +			warbond.cost = w.value("Cost", 0);
++			if (w.contains("Rotation") && w["Rotation"].is_object())
++			{
++				warbond.rotateCount = max(0, w["Rotation"].value("Count", 6));
++				warbond.priceFactor = max(0.1, w["Rotation"].value("PriceFactor", 1.5));
++			}
 +			if (w.contains("Theme") && w["Theme"].is_array())
 +				for (auto& colour : w["Theme"])
 +					if (colour.is_string())
@@ -8525,6 +8533,7 @@ index 0000000..894646d
 +		Logger().Error("CWarbondManager::LoadConfig: Data/Warbonds.json: %s\n", e.what());
 +		return false;
 +	}
++	m_Rotations.clear();
 +
 +	// optional: written by mod/tools/export_shop_assets.py
 +	m_ItemNames.clear();
@@ -9016,6 +9025,62 @@ index 0000000..894646d
 +	return owned;
 +}
 +
++// A rotating pass ("Rotation" in Warbonds.json): its one page holds Count weapons picked at random from the other
++// passes' items (weapons, melee and equipment; no characters, costumes or supplies), at PriceFactor x their price there,
++// rounded up to 5. The pick is made from the day only, so it's the same for everyone all day and a purchase never
++// changes it; at local midnight a new one is made.
++const Warbond& CWarbondManager::Today(const Warbond& w)
++{
++	if (w.rotateCount <= 0)
++		return w;
++	int day = CurrentPeriodStart("Daily");
++	auto& cached = m_Rotations[w.id];
++	if (cached.first == day && !cached.second.pages.empty())
++		return cached.second;
++
++	vector<WarbondItem> pool;
++	set<int> seen;
++	for (auto& other : m_Warbonds)
++	{
++		if (other.rotateCount > 0)
++			continue;
++		for (auto& page : other.pages)
++			for (auto& item : page.items)
++			{
++				if (item.repeatable || !item.itemID || item.cost <= 0 || ItemCell(item.itemID, "ClassName") != "Equipment")
++					continue;
++				string category = CategoryName(item.itemID);
++				if (category == "Characters" || category == "Costumes" || category == "Items")
++					continue;
++				if (seen.insert(item.itemID).second)
++					pool.push_back(item);
++			}
++	}
++	sort(pool.begin(), pool.end(), [](const WarbondItem& a, const WarbondItem& b) { return a.itemID < b.itemID; });
++	mt19937 rng((unsigned)(day / 86400) * 2654435761u + (unsigned)w.id);
++	shuffle(pool.begin(), pool.end(), rng);
++
++	Warbond today = w;
++	today.pages.clear();
++	WarbondPage page;
++	page.unlockSpent = 0;
++	page.title = "Today's weapons";
++	for (int i = 0; i < w.rotateCount && i < (int)pool.size(); i++)
++	{
++		WarbondItem item = pool[i];
++		item.cost = ((int)ceil(item.cost * w.priceFactor) + 4) / 5 * 5;
++		page.items.push_back(item);
++	}
++	today.pages.push_back(page);
++	cached = { day, today };
++
++	string list;
++	for (auto& item : page.items)
++		list += " " + to_string(item.itemID) + "(" + to_string(item.cost) + ")";
++	Logger().Info("WarbondManager: %s today (%d weapons in the pool):%s\n", w.name.c_str(), (int)pool.size(), list.c_str());
++	return cached.second;
++}
++
 +json CWarbondManager::BuildState(IUser* user)
 +{
 +	// a page asked for by the game (once)
@@ -9057,12 +9122,15 @@ index 0000000..894646d
 +	state["characterItem"] = user->GetCharacterExtended(EXT_UFLAG_CHARACTERID).characterID;
 +
 +	state["warbonds"] = json::array();
-+	for (auto& w : m_Warbonds)
++	for (auto& passAsLoaded : m_Warbonds)
 +	{
++		const Warbond& w = Today(passAsLoaded);
 +		json jw = { { "id", w.id }, { "name", w.name }, { "type", w.type }, { "description", w.description },
 +			{ "image", w.image }, { "spent", spent[w.id] }, { "cost", w.cost }, { "purchased", w.cost <= 0 || passes.count(w.id) > 0 } };
 +		if (w.theme.size() == 2)
 +			jw["theme"] = w.theme;
++		if (w.rotateCount > 0)
++			jw["resetsIn"] = max(0, CurrentPeriodStart("Daily") + 86400 - (int)time(NULL)); // new stock at midnight
 +		int total = 0, have = 0;
 +		jw["pages"] = json::array();
 +		for (size_t p = 0; p < w.pages.size(); p++)
@@ -9120,7 +9188,7 @@ index 0000000..894646d
 +	const Warbond* warbond = NULL;
 +	for (auto& w : m_Warbonds)
 +		if (w.id == warbondID)
-+			warbond = &w;
++			warbond = &Today(w);
 +	if (!warbond)
 +		return fail(400, "Unknown battle pass.");
 +
@@ -9361,6 +9429,8 @@ index 0000000..894646d
 +	int completed = 0;
 +	for (auto& wb : m_Warbonds)
 +	{
++		if (wb.rotateCount > 0)
++			continue; // its stock changes every day: never "completed"
 +		bool any = false, all = true;
 +		for (auto& page : wb.pages)
 +			for (auto& item : page.items)
@@ -9423,10 +9493,10 @@ index 0000000..894646d
 +}
 diff --git a/src/manager/warbondmanager.h b/src/manager/warbondmanager.h
 new file mode 100644
-index 0000000..b05bc06
+index 0000000..1329e12
 --- /dev/null
 +++ b/src/manager/warbondmanager.h
-@@ -0,0 +1,123 @@
+@@ -0,0 +1,130 @@
 +#pragma once
 +
 +#include <string>
@@ -9465,6 +9535,10 @@ index 0000000..b05bc06
 +	int cost; // medals to unlock the pass itself (0 = free)
 +	std::vector<std::string> theme; // optional [dark, light] colours of the pass page
 +	std::vector<WarbondPage> pages;
++	// "Rotation": a pass whose one page is rotateCount random weapons of the other passes, new every day,
++	// at priceFactor x their price there (0: a normal pass)
++	int rotateCount = 0;
++	double priceFactor = 1.0;
 +};
 +
 +struct WarbondOrder
@@ -9536,6 +9610,9 @@ index 0000000..b05bc06
 +	void AdvanceOrders(IUser* user, int gameMode, const std::map<std::string, int>& events);
 +	int CountItemUnlocks(IUser* user);
 +	int PenalizedMedals(IUser* user, int medals) const;
++	// the pass as it is today: a rotating pass gets today's stock, any other comes back as it is
++	const Warbond& Today(const Warbond& w);
++	std::map<int, std::pair<int, Warbond>> m_Rotations; // rotating pass -> (day it was made, that day's pass)
 +	std::set<int> m_CheatUsers; // users whose match result is applied with the cheat penalty
 +
 +	std::vector<Warbond> m_Warbonds;

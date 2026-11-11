@@ -258,3 +258,5 @@ main { height: calc(100% - 56px); }
 .qty button:hover { border-color: var(--theme, var(--accent)); }
 .qty .n { min-width: 34px; text-align: center; font-size: 18px; font-weight: 600; }
 .badge.supply { color: #3fd0c9; }
+.badge.daily { color: #ffd34f; }
+.restock { margin: 6px 0 0; font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; color: #ffd34f; }

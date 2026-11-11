@@ -165,6 +165,14 @@
 			]
 		},
 		{
+			"ID": 22, "Name": "Daily Armory", "Type": "Daily", "Cost": 0,
+			"Description": "Free for everyone. Six random weapons from all the battle passes, new every day at midnight. You don't need their battle pass or its pages, but they cost 1.5 times as much.",
+			"Image": "", "Theme": ["#1f1a08", "#ffd34f"],
+			// Rotation: Count random weapons of the other passes each day, at PriceFactor x their price (rounded up to 5)
+			"Rotation": { "Count": 6, "PriceFactor": 1.5 },
+			"Pages": []
+		},
+		{
 			"ID": 21, "Name": "Supply Depot", "Type": "Supply", "Cost": 0,
 			"Description": "Boosters, tools and supplies you can buy again and again. Pick how many you want.",
 			"Image": "", "Theme": ["#0c1a1c", "#3fd0c9"],
@@ -261,6 +269,211 @@
 				] },
 				{ "Unlock": 100, "Items": [
 					{ "ItemID": 233, "Cost": 75 }
+				] }
+			]
+		},
+		{
+			"ID": 23, "Name": "Angel vs Devil", "Type": "Faction", "Cost": 10,
+			"Description": "Criss and Yuri, two agents dressed as an angel and a devil, with an ether rifle and a pair of infernal swords.",
+			"Image": "shop/promo/warbond-23.png", "Art": "gfx/vgui/criss.tga", "Theme": ["#150f22", "#d4b6ff"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 150, "Cost": 90 }, { "ItemID": 155, "Cost": 90 }
+				] },
+				{ "Unlock": 90, "Items": [
+					{ "ItemID": 457, "Cost": 100 }, { "ItemID": 8164, "Cost": 300 }
+				] }
+			]
+		},
+		{
+			"ID": 24, "Name": "Double Agent", "Type": "Faction", "Cost": 10,
+			"Description": "Ji Yoon Choi and Ritsuka work both sides. They carry twin Uzis and a gunslinger's pair of Berettas.",
+			"Image": "shop/promo/warbond-24.png", "Art": "gfx/vgui/choijiyoon.tga", "Theme": ["#1a0f16", "#ff7fb8"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 152, "Cost": 90 }, { "ItemID": 154, "Cost": 90 }
+				] },
+				{ "Unlock": 90, "Items": [
+					{ "ItemID": 814, "Cost": 75 }, { "ItemID": 8108, "Cost": 450 }
+				] }
+			]
+		},
+		{
+			"ID": 25, "Name": "Master of Disguise", "Type": "Faction", "Cost": 10,
+			"Description": "Mei and Erica blend into any crowd. Their throwing knives come in sets of one, two and three.",
+			"Image": "shop/promo/warbond-25.png", "Art": "gfx/vgui/jpngirl01.tga", "Theme": ["#10161a", "#7fd6ff"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 328, "Cost": 90 }, { "ItemID": 329, "Cost": 90 }
+				] },
+				{ "Unlock": 90, "Items": [
+					{ "ItemID": 579, "Cost": 65 }, { "ItemID": 580, "Cost": 75 }, { "ItemID": 581, "Cost": 90 }
+				] }
+			]
+		},
+		{
+			"ID": 26, "Name": "Exorcism Legends", "Type": "Faction", "Cost": 10,
+			"Description": "Fernando and Blair hunt what hides in the dark, with refined holy water and a sword of the Divine Order.",
+			"Image": "shop/promo/warbond-26.png", "Art": "gfx/vgui/fernando.tga", "Theme": ["#1a1508", "#ffe08a"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 392, "Cost": 90 }, { "ItemID": 393, "Cost": 90 }
+				] },
+				{ "Unlock": 90, "Items": [
+					{ "ItemID": 8136, "Cost": 100 }, { "ItemID": 8133, "Cost": 450 }
+				] }
+			]
+		},
+		{
+			"ID": 27, "Name": "Marine Force", "Type": "Faction", "Cost": 10,
+			"Description": "Enzo and Lucia of the marine corps, Lucia's special operations kit, and weapons made for the water.",
+			"Image": "shop/promo/warbond-27.png", "Art": "gfx/vgui/marinegirl.tga", "Theme": ["#081a22", "#4fd2ff"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 418, "Cost": 90 }, { "ItemID": 419, "Cost": 90 }
+				] },
+				{ "Unlock": 90, "Items": [
+					{ "ItemID": 8179, "Cost": 120 }, { "ItemID": 609, "Cost": 125 }, { "ItemID": 556, "Cost": 100 }, { "ItemID": 8220, "Cost": 300 }
+				] }
+			]
+		},
+		{
+			"ID": 28, "Name": "Double Casual", "Type": "Faction", "Cost": 10,
+			"Description": "Natasha in casual clothes and Jennifer in uniform, off duty but never unarmed.",
+			"Image": "shop/promo/warbond-28.png", "Art": "gfx/vgui/natasha2.tga", "Theme": ["#1c1214", "#ffa3a3"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 425, "Cost": 90 }, { "ItemID": 426, "Cost": 90 }
+				] },
+				{ "Unlock": 90, "Items": [
+					{ "ItemID": 347, "Cost": 90 }, { "ItemID": 364, "Cost": 80 }
+				] }
+			]
+		},
+		{
+			"ID": 29, "Name": "Pirate Union", "Type": "Faction", "Cost": 10,
+			"Description": "Raven and Michaela sail under one flag, with a flintlock, a shark-jawed shotgun and Michaela's captain outfit.",
+			"Image": "shop/promo/warbond-29.png", "Art": "gfx/vgui/pirategirl.tga", "Theme": ["#1d1209", "#e0a85a"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 432, "Cost": 90 }, { "ItemID": 433, "Cost": 90 }
+				] },
+				{ "Unlock": 90, "Items": [
+					{ "ItemID": 8180, "Cost": 120 }, { "ItemID": 399, "Cost": 100 }, { "ItemID": 8247, "Cost": 300 }
+				] }
+			]
+		},
+		{
+			"ID": 30, "Name": "Soccer Uniforms", "Type": "Faction", "Cost": 10,
+			"Description": "Max Thacker, the Asian Red Army, Ji Yoon Choi and Yuri in their soccer kits.",
+			"Image": "shop/promo/warbond-30.png", "Art": "gfx/vgui/sccjy.tga", "Theme": ["#0b1a10", "#7ee08a"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 316, "Cost": 90 }, { "ItemID": 317, "Cost": 90 }, { "ItemID": 318, "Cost": 90 }, { "ItemID": 319, "Cost": 90 }
+				] }
+			]
+		},
+		{
+			"ID": 31, "Name": "Limited Editions", "Type": "Faction", "Cost": 10,
+			"Description": "The limited edition looks of Michaela, Ji Yoon Choi, Yuri and Alice.",
+			"Image": "shop/promo/warbond-31.png", "Art": "gfx/vgui/pirategirl2.tga", "Theme": ["#1f0c12", "#ff6b8b"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 669, "Cost": 120 }, { "ItemID": 668, "Cost": 120 }
+				] },
+				{ "Unlock": 90, "Items": [
+					{ "ItemID": 510, "Cost": 120 }, { "ItemID": 511, "Cost": 120 }
+				] }
+			]
+		},
+		{
+			"ID": 32, "Name": "Vietnamese Classes", "Type": "Faction", "Cost": 10,
+			"Description": "Hari and Kyrix, the Vietnamese classes, with a sawed-off M79, an M16A1 and a nata knife for the jungle.",
+			"Image": "shop/promo/warbond-32.png", "Art": "gfx/vgui/vngirl.tga", "Theme": ["#0f1a0c", "#b6d96a"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 777, "Cost": 90 }, { "ItemID": 778, "Cost": 90 }
+				] },
+				{ "Unlock": 90, "Items": [
+					{ "ItemID": 261, "Cost": 70 }, { "ItemID": 486, "Cost": 65 }, { "ItemID": 164, "Cost": 60 }
+				] }
+			]
+		},
+		{
+			"ID": 33, "Name": "Taiwanese Thunder Squad", "Type": "Faction", "Cost": 10,
+			"Description": "Taiwan's Thunder Squad and its own VICTORY machine gun.",
+			"Image": "shop/promo/warbond-33.png", "Art": "gfx/vgui/sozo.tga", "Theme": ["#0d1422", "#6fa8ff"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 55, "Cost": 90 }
+				] },
+				{ "Unlock": 90, "Items": [
+					{ "ItemID": 903, "Cost": 100 }
+				] }
+			]
+		},
+		{
+			"ID": 34, "Name": "Nat'l Lib. Campaign", "Type": "Faction", "Cost": 10,
+			"Description": "A separatist cell with a customised AK-47 and a Sterling submachine gun with a bayonet.",
+			"Image": "shop/promo/warbond-34.png", "Art": "gfx/vgui/eta.tga", "Theme": ["#1a0e0e", "#ff8a5c"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 47, "Cost": 90 }
+				] },
+				{ "Unlock": 90, "Items": [
+					{ "ItemID": 408, "Cost": 90 }, { "ItemID": 960, "Cost": 75 }
+				] }
+			]
+		},
+		{
+			"ID": 35, "Name": "Idol Stage", "Type": "Faction", "Cost": 10,
+			"Description": "Ling Ling and both Alices on stage, with the Lightning instruments: guitar, violin, camera, rainbow and water guns.",
+			"Image": "shop/promo/warbond-35.png", "Art": "gfx/vgui/idolgirl.tga", "Theme": ["#1d0c22", "#ff8ef0"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 678, "Cost": 90 }, { "ItemID": 360, "Cost": 90 }, { "ItemID": 361, "Cost": 90 }
+				] },
+				{ "Unlock": 90, "Items": [
+					{ "ItemID": 222, "Cost": 100 }, { "ItemID": 458, "Cost": 100 }, { "ItemID": 832, "Cost": 100 }, { "ItemID": 398, "Cost": 100 }, { "ItemID": 243, "Cost": 100 }
+				] }
+			]
+		},
+		{
+			"ID": 36, "Name": "Street Fighters", "Type": "Faction", "Cost": 10,
+			"Description": "Isabella the boxer, Spade and the SAF scout, with a Power Falcon and a Python Desperado.",
+			"Image": "shop/promo/warbond-36.png", "Art": "gfx/vgui/boxxergirl.tga", "Theme": ["#1c1408", "#ffc24a"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 692, "Cost": 90 }, { "ItemID": 377, "Cost": 90 }, { "ItemID": 362, "Cost": 90 }
+				] },
+				{ "Unlock": 90, "Items": [
+					{ "ItemID": 892, "Cost": 125 }, { "ItemID": 978, "Cost": 300 }
+				] }
+			]
+		},
+		{
+			"ID": 37, "Name": "Dr. Han's Lab", "Type": "Faction", "Cost": 10,
+			"Description": "Dr. Han and Jenny, with a grenade launcher and a sniper rifle that fires grenades too.",
+			"Image": "shop/promo/warbond-37.png", "Art": "gfx/vgui/nojinct.tga", "Theme": ["#0c1a1a", "#5fe0d0"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 801, "Cost": 90 }, { "ItemID": 802, "Cost": 90 }
+				] },
+				{ "Unlock": 90, "Items": [
+					{ "ItemID": 463, "Cost": 100 }, { "ItemID": 250, "Cost": 100 }
+				] }
+			]
+		},
+		{
+			"ID": 38, "Name": "Weekend Off", "Type": "Faction", "Cost": 10,
+			"Description": "Alin and Dominique on their day off, with a firework launcher and a slingshot.",
+			"Image": "shop/promo/warbond-38.png", "Art": "gfx/vgui/alin.tga", "Theme": ["#0c1620", "#8fd0ff"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 729, "Cost": 90 }, { "ItemID": 735, "Cost": 90 }
+				] },
+				{ "Unlock": 90, "Items": [
+					{ "ItemID": 440, "Cost": 75 }, { "ItemID": 421, "Cost": 75 }
 				] }
 			]
 		},
