@@ -6625,6 +6625,101 @@ static DWORD WINAPI ReportSteam(LPVOID)
     }
 }
 
+// The lobby's Decoder window (GameUI CGachaponDecoderDlg) lists a decoder when the name in its item row (ItemBoxName,
+// item vfunc 0x74) is in hw's item box registry (0x2e2adc0: a vector of boxes at +4/+8, each with its name as a
+// std::string at +4), which the server's Metadata ItemBox fills (one box per decoder id, hw 0x255fb40), and, for the ones
+// the player owns, when the item's vfunc 0x78 is true (and its id was over 954: patched, apply_patches.py). Logged once
+// per change of the registry, with each decoder's name and vfunc 0x78, so the next test tells which condition still fails.
+static const DWORD HW_ITEMBOX_REGISTRY = 0x2e2adc0, HW_ITEM_TABLE = 0x3f24638, HW_ITEM_TABLE_LOADED = 0x3f24628;
+static const char* StdStringAt(unsigned char* s)
+{
+    unsigned size = *(unsigned*)(s + 0x10), cap = *(unsigned*)(s + 0x14);
+    const char* p = cap > 15 ? *(const char**)s : (const char*)s;
+    return size < 256 && Readable(p, size + 1) ? p : "?";
+}
+// appends to a fixed buffer (no C++ objects: the caller runs under __try)
+static void Cat(char* out, size_t cap, const char* fmt, ...)
+{
+    size_t len = strlen(out);
+    if (len + 1 >= cap)
+        return;
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(out + len, cap - len, fmt, ap);
+    va_end(ap);
+}
+static int DecoderDiagRaw(char* out, size_t cap)
+{
+    __try
+    {
+        unsigned char* reg = (unsigned char*)(g_hwLo + HW_ITEMBOX_REGISTRY - HW_BASE);
+        unsigned char** b = *(unsigned char***)(reg + 4);
+        unsigned char** e = *(unsigned char***)(reg + 8);
+        int n = b && e > b && e - b < 4096 ? (int)(e - b) : 0;
+        for (int i = 0; i < n && i < 120; i++)
+            if (Readable(b[i], 0x24))
+                Cat(out, cap, "%s%s", i ? ", " : "", StdStringAt(b[i] + 4));
+        unsigned char* loaded = (unsigned char*)(g_hwLo + HW_ITEM_TABLE_LOADED - HW_BASE);
+        if (!n || (!*(int*)loaded && !*(int*)(loaded + 4)))
+            return n;
+        static const int ids[] = { 165,  173,  396,  533,  552,  555,  576,  774,  803,  806,  871,  872,  886,  955,  956,
+                                   957,  958,  975,  976,  985,  2198, 2599, 8097, 8261, 8292, 8293, 8308, 8309, 8310, 8311,
+                                   8312, 8453, 8616, 8617, 8898, 9053, 9084, 9116, 9144, 9184, 9330, 9633, 9706, 9707 };
+        typedef void*(__thiscall * GetFn)(void*, int);
+        typedef const char*(__thiscall * NameFn)(void*);
+        typedef char(__thiscall * FlagFn)(void*);
+        void* table = (void*)(g_hwLo + HW_ITEM_TABLE - HW_BASE);
+        GetFn get = (GetFn)(*(void***)table)[0xc / 4];
+        Cat(out, cap, " | decoders (id name vfunc78):");
+        for (int id : ids)
+        {
+            void* item = get(table, id);
+            if (!item)
+            {
+                Cat(out, cap, " %d -;", id);
+                continue;
+            }
+            void** vt = *(void***)item;
+            const char* name = ((NameFn)vt[0x74 / 4])(item);
+            char flag = ((FlagFn)vt[0x78 / 4])(item);
+            Cat(out, cap, " %d %s %d;", id, name && Readable(name, 1) ? name : "?", (int)flag);
+        }
+        return n;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        Cat(out, cap, " (exception)");
+        return -1;
+    }
+}
+static void DecoderDiag()
+{
+    static int last = 0, reports = 0;
+    if (!g_hwLo)
+        ModuleRange("hw.dll", g_hwLo, g_hwHi);
+    if (!g_hwLo || reports >= 6)
+        return;
+    __try
+    {
+        unsigned char* reg = (unsigned char*)(g_hwLo + HW_ITEMBOX_REGISTRY - HW_BASE);
+        unsigned char** b = *(unsigned char***)(reg + 4);
+        unsigned char** e = *(unsigned char***)(reg + 8);
+        int n = b && e > b ? (int)(e - b) : 0;
+        if (n == last)
+            return;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        return;
+    }
+    static char text[6000];
+    text[0] = 0;
+    int n = DecoderDiagRaw(text, sizeof(text));
+    last = n;
+    reports++;
+    Log("decoder window: %d item boxes registered: %s", n, text);
+}
+
 static DWORD WINAPI Watcher(LPVOID)
 {
     HMODULE hooked = NULL;
@@ -6664,6 +6759,8 @@ static DWORD WINAPI Watcher(LPVOID)
             hooked = NULL;
         if (mp && mp == hooked)
             CheckClock();
+        if (cfg.enabled)
+            DecoderDiag();
         Sleep(500);
     }
 }

@@ -576,6 +576,16 @@ PATCHES += [
 ]
 
 
+# Decoder window (CGachaponDecoderDlg): the decoders the player owns are listed, and its Open 1 / Open 10 buttons work, only
+# for item ids over 954 (the official game's gachapon decoders: 955 topdecoderC on). The Code, Code A, Advanced and the other
+# older decoders the offline game hands out (level gift boxes, dailies) are below it. Both checks (the inventory filter
+# 0x102a05a0 and 0x102a6750) now take any id over 0; the item box registry (Metadata ItemBox) still decides what is a decoder.
+PATCHES += [
+    ("GameUI.dll", 0x102A05FD, bytes.fromhex("3dbb030000"), bytes.fromhex("3d01000000"), "Decoder window: owned decoders of any id"),
+    ("GameUI.dll", 0x102A678A, bytes.fromhex("3dbb030000"), bytes.fromhex("3d01000000"), "Decoder window: Open buttons for any decoder id"),
+]
+
+
 # what older releases wrote at a place whose patch changed since: replaced by the current bytes, not an abort
 PREVIOUS = {
     ("hw.dll", 0x2754F80): [bytes.fromhex("52ff7104c7410c7f00000166c7410a753290")],  # 1.0.x: port always 30002
