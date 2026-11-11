@@ -63,6 +63,69 @@ static LoadFileFn g_LoadFileGame;
 static FreeFileFn g_FreeFileGame;
 static std::set<void*> g_navBuffers;
 
+// A mesh shipped as text (<map>.navtxt, tools/botassist/gen_nav.py: the maps whose own .nav is wrong) turned into the game's
+// version 5 file: "# comment", "version 5 bspsize N areas N", then one area per line: id attr lo.x lo.y lo.z hi.x hi.y hi.z
+// neZ swZ and the four lists of linked area ids (north east south west), comma separated or "-".
+static bool NavFromText(const std::string& path, std::vector<unsigned char>& out)
+{
+    FILE* f = fopen(path.c_str(), "r");
+    if (!f)
+        return false;
+    out.clear();
+    auto put = [&](const void* p, size_t n) { out.insert(out.end(), (const unsigned char*)p, (const unsigned char*)p + n); };
+    auto u32 = [&](unsigned v) { put(&v, 4); };
+    char line[8192];
+    unsigned bspSize = 0, count = 0, written = 0;
+    bool header = false;
+    while (fgets(line, sizeof(line), f))
+    {
+        if (line[0] == '#' || line[0] == '\n' || line[0] == '\r')
+            continue;
+        if (!header)
+        {
+            if (sscanf(line, "version 5 bspsize %u areas %u", &bspSize, &count) != 2)
+                break;
+            header = true;
+            u32(0xFEEDFACE);
+            u32(5);
+            u32(bspSize);
+            unsigned short places = 0;
+            put(&places, 2);
+            u32(count);
+            continue;
+        }
+        unsigned id, attr;
+        float v[10];
+        char lists[4][4096];
+        if (sscanf(line, "%u %u %f %f %f %f %f %f %f %f %4095s %4095s %4095s %4095s", &id, &attr, &v[0], &v[1], &v[2], &v[3], &v[4],
+                   &v[5], &v[6], &v[7], lists[0], lists[1], lists[2], lists[3]) != 14)
+            break;
+        u32(id);
+        unsigned char a = (unsigned char)attr;
+        put(&a, 1);
+        put(v, 8 * 4);
+        for (auto& l : lists)
+        {
+            std::vector<unsigned> ids;
+            if (strcmp(l, "-"))
+                for (char* tok = strtok(l, ","); tok; tok = strtok(nullptr, ","))
+                    ids.push_back((unsigned)strtoul(tok, nullptr, 10));
+            u32((unsigned)ids.size());
+            for (unsigned x : ids)
+                u32(x);
+        }
+        unsigned char zero = 0;
+        put(&zero, 1); // hiding spots
+        put(&zero, 1); // approach areas
+        u32(0);        // encounter paths
+        unsigned short place = 0;
+        put(&place, 2);
+        written++;
+    }
+    fclose(f);
+    return header && written == count && count > 0;
+}
+
 static unsigned char* HookedLoadFile(const char* name, int* length)
 {
     const char* dot = name ? strrchr(name, '.') : nullptr;
@@ -97,6 +160,27 @@ static unsigned char* HookedLoadFile(const char* name, int* length)
             }
             free(data);
             Log("%s: couldn't read botassist_nav's copy, using the game's", name);
+        }
+        std::vector<unsigned char> mesh;
+        std::string text = NavToolsDir() + map + ".navtxt";
+        if (FileThere(text))
+        {
+            if (NavFromText(text, mesh))
+            {
+                unsigned char* data = (unsigned char*)malloc(mesh.size() + 1);
+                if (data)
+                {
+                    memcpy(data, mesh.data(), mesh.size());
+                    data[mesh.size()] = 0;
+                    g_navBuffers.insert(data);
+                    if (length)
+                        *length = (int)mesh.size();
+                    Log("%s: built from botassist_nav\\%s.navtxt (%u bytes)", name, map.c_str(), (unsigned)mesh.size());
+                    return data;
+                }
+            }
+            else
+                Log("%s: botassist_nav\\%s.navtxt couldn't be read, using the game's", name, map.c_str());
         }
     }
     return g_LoadFileGame(name, length);

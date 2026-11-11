@@ -4968,6 +4968,8 @@ static void CommandFile()
 
 #include "modes/zombie_war.inl"
 
+#include "modes/zombie_escape.inl"
+
 #include "modes/gun_deathmatch.inl"
 
 #include "modes/super_soldier.inl"
@@ -5583,6 +5585,32 @@ static void HookedRunPlayerMove(void* fakeclient, const float* angles, float fwd
                         ang[0] = aim[0] / -3.0f;
                         ang[1] = aim[1];
                         ang[2] = 0;
+                    }
+                }
+                if (!scenario && GameMode() == MODE_ZE)
+                {
+                    float y = aim[1], p = aim[0], f = fwd, sd = side;
+                    unsigned short bt = buttons;
+                    bool setView = false;
+                    if (ZeMove(fakeclient, st, y, p, setView, f, sd, bt))
+                    {
+                        fwd = f;
+                        side = sd;
+                        buttons = bt;
+                        if (setView)
+                        {
+                            aim[0] = p < -89.0f ? -89.0f : p > 89.0f ? 89.0f : p;
+                            aim[1] = AngleDiff(y, 0.0f);
+                            st.driven = true;
+                            float* va = (float*)(v + EV_VANGLE); // fixangle: see below
+                            float* ang = (float*)(v + EV_ANGLES);
+                            va[0] = aim[0];
+                            va[1] = aim[1];
+                            va[2] = 0;
+                            ang[0] = aim[0] / -3.0f;
+                            ang[1] = aim[1];
+                            ang[2] = 0;
+                        }
                     }
                 }
                 if (!scenario && (GameMode() == MODE_ZTAG || GameMode() == MODE_SOCCER))

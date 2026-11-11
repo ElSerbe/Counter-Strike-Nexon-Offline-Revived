@@ -50,6 +50,13 @@ EXTRA_FILES += [
     for f in sorted((MOD / "tools" / "botassist" / "tables" / "resource" / "zombi" / "ZombieSkillProperty_Dedi").glob("*.csv"))
 ]
 
+# navigation meshes for the maps whose own .nav is wrong (botassist/gen_nav.py; the Zombie Escape maps), as text:
+# botassist builds the .nav from them when the map loads (nav_tools.inl NavFromText)
+EXTRA_FILES += [
+    (f, "botassist_nav/" + f.name, True)
+    for f in sorted((MOD / "tools" / "botassist" / "nav").glob("*.navtxt"))
+]
+
 # (file, va, expected original bytes, patched bytes, note)
 def _rel32(src_next: int, dst: int) -> bytes:
     return (dst - src_next).to_bytes(4, "little", signed=True)

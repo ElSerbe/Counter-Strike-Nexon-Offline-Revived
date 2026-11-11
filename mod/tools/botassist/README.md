@@ -30,7 +30,7 @@ Source layout: `botassist.cpp` holds what every mode shares (settings, entities,
 room AI players, buying, teams, console, hooks, the create-room UI). Each mode with its own bot behaviour lives in
 `modes/`, included by botassist.cpp where it was (one translation unit, so a mode file uses the shared helpers
 defined before it): `zombie_giant.inl` (mode 30), `manhunt.inl` (51), `zombie_disaster_zone.inl` (59),
-`zombie4_darkness.inl` (29), `zombie2_mutation.inl` (9), `zombie_conquest.inl` (56), `zombie_humans.inl` (human bots in every PvP zombie mode). A mode file only runs in its mode (each entry point checks `GameMode()`); a change
+`zombie4_darkness.inl` (29), `zombie2_mutation.inl` (9), `zombie_conquest.inl` (56), `zombie_escape.inl` (20), `zombie_humans.inl` (human bots in every PvP zombie mode). A mode file only runs in its mode (each entry point checks `GameMode()`); a change
 for one mode goes in its file, so the other modes' AI stays as it was. The shared code calls into them only from
 the hooks (`HookedRunPlayerMove` per bot, `HookedStartFrame` per frame) and a few mode checks in buying and teams.
 
@@ -960,6 +960,36 @@ table: N rows" (96 expected: 32 skills x 3 evolution levels).
 
 The earlier guard stays as a fallback: FUN_10948aa0 and FUN_10948f90 are detoured (thiscall obj, player) and skipped
 while their row is missing ("zombie class N skill ... skipped" in botassist.log).
+
+## Zombie Escape (mode 20) with room bots
+
+`modes/zombie_escape.inl`, meshes from `gen_nav.py` (`nav/*.navtxt`, copied to `Binotassist_nav`).
+
+- The mode's entities (from the maps' .bsp): `ze_status` id 1..20 are the route's boxes in order (the game's progress bar),
+  `ze_exit` the escape zone (Venice: three, with `ze_hotspot` and the radio `ze_button`), `ze_counter` the defence countdowns
+  (`#CSO_ZE_DEFENSE<n>`, seconds before a door opens), `ze_breakable` the barriers, `zombiespawn` where zombies come back.
+  Buttons (`func_button`, `func_rot_button`, `ze_button`) fire `multi_manager`s that open doors, start lifts and the vehicle.
+- The shipped `maps/ze_*.nav` are all one 30461-byte file, another map's mesh (bsp size 163436): the game's bots and
+  botassist walked on the wrong map. `gen_nav.py` builds a version 5 mesh from the clip hulls (hull 1 standing, hull 3
+  crouching, traced like `SV_RecursiveHullCheck`): a flood fill on a 16 u grid from the spawns and the mode's places;
+  steps up to 18, crouch jumps up to 56 (`NAV_JUMP`), drops up to 220 (any depth into a `func_water`), slopes to 45 degrees;
+  walls are the world and the brush entities that stay (`func_wall`, solid conveyors and rotators); doors, breakables,
+  trains and toggled walls don't block but can be stood on where the map starts them. Blocks of cells on one plane become
+  areas (at most 16 x 16 cells). Ladders stay out of the file: `BuildLadders` links them from `func_ladder`, as on every map.
+- Kept as text (`.navtxt`, one area per line) so Git has no binaries; `nav_tools.inl` `NavFromText` builds the .nav in
+  memory when the game asks for `maps/<map>.nav` and botassist_nav has no `.nav` of the map (a mesh saved with the game's
+  editor wins).
+- Where the route needs something the mesh can't hold (a lift, a train, the scripted bridges and crates of a defence), the
+  boxes fall into separate parts of the mesh: Blood Castle 1-9 / 10-14 / 15-18 / 19-20 and exit, Skyline 1-16 / 17-20,
+  Hitchhiking 1-13 / 14-20 (the trains), Rising 1-5 / 6-13 / 14-20, Rhyzome several (the waterfall). There a human bot
+  follows the human furthest along the route.
+- `ZeMove` (human): the next box after the highest it reached (`g_zeZone`, per life), then the nearest exit, where it waits.
+  A button within 350 u of this box or the next, not pressed (its entity still has the bounds the map gave it), is pressed
+  by one bot (aim, `+use`). A breakable ahead within 140 u is shot when no zombie is in sight. Pushing on a closed door it
+  holds 4 s and tries again. Aim and fire stay the stock AI's while a zombie is in sight.
+- `ZeMove` (zombie): a human seen or within 600 u, else where the leading human is.
+- botassist.log: `ZE: <map>: N route boxes...` at load, `ZE: N humans, N zombies; the leading human is on route box N`
+  every 15 s, `ZE: the func_button at ... was pressed`, `ZE: human 'x' stuck at ...`.
 
 ## Zombie 2: Mutation (mode 9) with room bots
 
