@@ -143,8 +143,11 @@ enum ShTask
     SH_DEFEND,  // around the shelter (night, or nothing to do)
     SH_BUILD,   // to where it builds something
     SH_RAID,    // Team Match: at the other team's shelter
+    SH_BREAK,   // breaking a barricade (zbsbreak): heavy axe hits, or its gun when it has a better one
+    SH_HUNT,    // nothing to gather by day: after the zombies around the shelter (money for a gun)
 };
-static const char* const g_shTaskNames[] = { "none", "gather", "home", "rest", "repair", "buy", "boss", "defend", "build", "raid" };
+static const char* const g_shTaskNames[] = { "none", "gather", "home", "rest", "repair", "buy", "boss", "defend", "build", "raid",
+                                             "break", "hunt" };
 
 // what a player told the team's bots (the orders menu, the chat)
 enum ShOrder
@@ -204,7 +207,12 @@ struct ShBot
     float hurtRestUntil = 0;
     // what it told its team in the chat, by kind of message: when (ShSay)
     std::map<int, float> saidAt;
+    // a barricade it breaks: its health when it last went down, and when (no progress for a while: given up)
+    float breakHp = -1, breakProgressAt = 0;
+    // why it found nothing to gather (logged now and then)
+    float whyAt = -100;
 };
+static std::map<void*, int> g_shBanCount; // resources a bot couldn't reach: how often (each time banned longer)
 static std::map<void*, bool> g_shReachable; // resources: whether a bot can stand where its axe reaches them (by level)
 static std::map<void*, ShBot> g_shBots;
 static std::map<void*, float> g_shBanned;  // resources a bot couldn't reach: left alone until then
@@ -331,6 +339,26 @@ static bool ShMeleeHeld(void* bot)
         return true;
     const char* m = String(F<int>(Vars(bot), EV_WEAPONMODEL));
     return m && (strstr(m, "knife") || strstr(m, "axe") || strstr(m, "machete") || strstr(m, "crowbar") || strstr(m, "hammer"));
+}
+
+// a gun that breaks a barricade faster than the axe's heavy hits: a primary weapon (slot 1: rifles, shotguns, machine guns
+// from the black market) with ammo in it or in reserve. The pistols bought at spawn do less than the heavy hits.
+static bool ShGunBeatsAxeRaw(void* bot)
+{
+    __try
+    {
+        unsigned char* pl = (unsigned char*)PrivateOf(bot);
+        unsigned char* it = pl ? ItemHandle(pl + PLAYER_ITEMS + 16 * 1) : nullptr;
+        if (!it)
+            return false;
+        int type = *(int*)(it + 0x158), clip = *(int*)(it + 0x160);
+        int reserve = type > 0 && type < 0x102 ? *(int*)(pl + PLAYER_AMMO + 4 * type) : 0;
+        return clip > 0 || reserve > 0;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        return false;
+    }
 }
 
 static int ShSkillLevel(void* bot, int id)
@@ -612,7 +640,7 @@ static bool ShelterCommand(void* bot, const char* a0, const char* a1 = nullptr, 
 enum ShSayKey
 {
     SAY_FULL, SAY_HURT, SAY_SANITY, SAY_NIGHT, SAY_GATHER, SAY_BUILD, SAY_UPGRADE, SAY_REPAIR, SAY_BUY, SAY_BOSS, SAY_RAID,
-    SAY_DEPOSIT, SAY_STORAGE_FULL, SAY_NO_GUN, SAY_DEFEND, SAY_REST, SAY_FIGHT
+    SAY_DEPOSIT, SAY_STORAGE_FULL, SAY_NO_GUN, SAY_DEFEND, SAY_REST, SAY_FIGHT, SAY_BREAK, SAY_HUNT
 };
 static float g_shLastSay = -100;
 
@@ -1108,18 +1136,43 @@ static V3 ShRoamPoint(unsigned char* rules, void* bot, V3 home)
         g_shRoamAt = now;
         g_shRoamHome = home;
         g_shRoam.clear();
-        void* shelter = ShEdictOf(ShShelterEntity(rules, ShShelterOf(bot)));
-        for (auto& a : g_nav.areas)
-        {
-            float d = Len2D(a.center - home);
-            V3 p = a.center + V3{ 0, 0, 36 };
-            if (d < 90.0f || d > SH_HOME_RADIUS * 0.9f || fabsf(a.center.z - home.z) > 120.0f || (shelter && ShInBox(p, shelter, 32.0f)))
-                continue;
-            g_shRoam.push_back(p);
-        }
+        // points on the floor of the navigation mesh every 40 units (not the areas' centers: the yard is a few big areas
+        // whose centers were all outside the ring, and the fallback was the shelter's middle, where the bots stood still),
+        // where a player's body fits (a hull there isn't in something solid)
+        for (float ring = SH_HOME_RADIUS * 0.95f; g_shRoam.empty() && ring <= 600.0f; ring += 180.0f)
+            for (auto& a : g_nav.areas)
+            {
+                if (a.hi[0] < home.x - ring || a.lo[0] > home.x + ring || a.hi[1] < home.y - ring || a.lo[1] > home.y + ring)
+                    continue;
+                for (float x = a.lo[0] + 16.0f; x <= a.hi[0] - 16.0f || x == a.lo[0] + 16.0f; x += 40.0f)
+                    for (float y = a.lo[1] + 16.0f; y <= a.hi[1] - 16.0f || y == a.lo[1] + 16.0f; y += 40.0f)
+                    {
+                        V3 p{ x, y, AreaZ(a, x, y) + 36.0f };
+                        float d = Len2D(p - home);
+                        if (d < 80.0f || d > ring || fabsf(p.z - home.z) > 140.0f)
+                            continue;
+                        if (g_TraceHull)
+                        {
+                            TraceResult tr;
+                            HullLine(p + V3{ 0, 0, BODY_LIFT }, p + V3{ 0, 0, BODY_LIFT + 1.0f }, 1, bot, tr);
+                            if (tr.fStartSolid || tr.fAllSolid)
+                                continue;
+                        }
+                        if (g_shRoam.size() < 600)
+                            g_shRoam.push_back(p);
+                        else
+                            g_shRoam[rand() % g_shRoam.size()] = p;
+                    }
+            }
+        static int reports = 0;
+        if (reports++ < 20)
+            Log("Shelter: %d places to stand around the shelter at %.0f %.0f %.0f", (int)g_shRoam.size(), home.x, home.y, home.z);
     }
     if (g_shRoam.empty())
-        return PtnNavPoint(home, SH_HOME_RADIUS * 0.8f);
+    {
+        float yaw = Rnd() * 360.0f;
+        return PtnNavPoint(home + YawDir(yaw) * 180.0f, 150.0f);
+    }
     return g_shRoam[rand() % g_shRoam.size()];
 }
 
@@ -1629,6 +1682,15 @@ static void* ShelterTarget(void* bot, V3 eye, void* best)
         float now = Now();
         if (b.fight && IsLivingMonster(b.fight) && now < b.fightUntil && Len(Center(b.fight) - eye) < 500.0f)
             return b.fight;
+        // the map's barricades (zbsbreak) were the shared combat's "objectives" up to 1500 away: with the axe the bot stared
+        // at one and never swung at the resource right in front of it. Only with a real gun, close, and not while hitting.
+        if (best && !IsLivingMonster(best) && IsObjective(best))
+        {
+            bool hittingNow = (b.task == SH_GATHER || b.task == SH_REPAIR || b.task == SH_BUILD) && b.object &&
+                              Len(ShClosest(eye, b.object) - eye) < 300.0f;
+            if (hittingNow || !ShGunBeatsAxeRaw(bot) || Len(ShClosest(eye, best) - eye) > 600.0f)
+                best = nullptr;
+        }
         if (best && IsLivingMonster(best))
         {
             float d = Len(ShClosest(eye, best) - eye);
