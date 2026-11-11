@@ -28,6 +28,7 @@ struct ZfBot
     bool has = false, onPath = false;
     float goalUntil = 0, nextJump = 0, nextLog = 0, nextDropLog = 0, cloakSince = 0, cloakLast = 0;
     int cloakShots = 0;
+    float nextGroupLog = 0;
 };
 static std::map<void*, ZfBot> g_zf;
 
@@ -37,8 +38,23 @@ static bool ZombieFleeMode()
     return cfg.zombieFlee && !CoopMode() && m != MODE_ZOMBIE_GIANT && m != MODE_ZHE && m != MODE_ZCON && m != MODE_ZWAR;
 }
 
-// a nav area 250 to 900 u away in the direction away from the zombies (dir: unit, 2D), farthest from them
-static bool ZfRetreatSpot(V3 me, V3 dir, const std::vector<V3>& zombies, V3& out)
+// the living humans of the bot's side (not zombies), other than the bot, within `range`
+static std::vector<void*> ZfHumans(void* bot, float range)
+{
+    std::vector<void*> out;
+    ForEntitiesNear(Origin(bot), range, [&](void* e) {
+        if (e == bot || !(F<int>(Vars(e), EV_FLAGS) & FL_CLIENT) || !Alive(e))
+            return;
+        unsigned char* q = (unsigned char*)PrivateOf(e);
+        if (q && Readable(q, 0x2170) && !q[0x2166] && F<int>(Vars(e), EV_DEADFLAG) == 0)
+            out.push_back(e);
+    });
+    return out;
+}
+
+// a nav area 250 to 900 u away in the direction away from the zombies (dir: unit, 2D), farthest from them, and toward
+// the other humans (alone, a bot died alone: the user asked them to stay in groups)
+static bool ZfRetreatSpot(V3 me, V3 dir, const std::vector<V3>& zombies, V3& out, const std::vector<V3>& friends = {})
 {
     if (!g_nav.ok || g_nav.areas.empty())
         return false;
@@ -60,6 +76,13 @@ static bool ZfRetreatSpot(V3 me, V3 dir, const std::vector<V3>& zombies, V3& out
         for (auto& z : zombies)
             zd = min(zd, Len2D(a.center - z));
         float score = dot * 400.0f + min(zd, 1200.0f) - 0.3f * d;
+        if (!friends.empty())
+        {
+            float fd = 1e9f;
+            for (auto& f : friends)
+                fd = min(fd, Len2D(a.center - f));
+            score -= 0.5f * min(fd, 1500.0f);
+        }
         if (score > best)
         {
             best = score;
@@ -116,7 +139,10 @@ static bool ZombieFleeMove(void* bot, BotState& st, float viewYaw, float range, 
     if (stale)
     {
         z.has = true;
-        z.onPath = ZfRetreatSpot(me, dir, zombies, z.goal);
+        std::vector<V3> friends;
+        for (void* h : ZfHumans(bot, 2000.0f))
+            friends.push_back(Origin(h));
+        z.onPath = ZfRetreatSpot(me, dir, zombies, z.goal, friends);
         if (!z.onPath)
             z.goal = me + dir * 300.0f;
         z.goalUntil = now + 1.5f + Rnd();
@@ -200,9 +226,86 @@ static bool ZombieFleeMove(void* bot, BotState& st, float viewYaw, float range, 
     return true;
 }
 
+// No zombie close: a human bot far from the others walks back to them (the stock AI sent them off alone, and they died
+// alone). The group is around the human with the most humans within 400 units; within 350 of it, or with a zombie in
+// sight within 700 (the stock AI fights it), the stock AI moves the bot again. Not under a player's orders.
+static bool ZombieGroupMove(void* bot, BotState& st, float viewYaw, float& fwd, float& side, unsigned short& buttons)
+{
+    unsigned char* p = (unsigned char*)PrivateOf(bot);
+    if (!p || !Readable(p, 0x2170) || p[0x2166] || st.ordered)
+        return false;
+    std::vector<void*> humans = ZfHumans(bot, 6000.0f);
+    if (humans.empty())
+        return false;
+    V3 me = Origin(bot), eye = Eye(bot);
+    void* anchor = nullptr;
+    int bestN = -1;
+    float bestD = 1e9f;
+    for (void* h : humans)
+    {
+        int n = 0;
+        for (void* o : humans)
+            n += o != h && Len(Origin(o) - Origin(h)) < 400.0f;
+        float d = Len(Origin(h) - me);
+        if (n > bestN || (n == bestN && d < bestD))
+        {
+            bestN = n;
+            bestD = d;
+            anchor = h;
+        }
+    }
+    if (!anchor || bestD < 350.0f)
+        return false;
+    bool zombieSeen = false;
+    ForEntitiesNear(me, 700.0f, [&](void* e) {
+        if (zombieSeen || !(F<int>(Vars(e), EV_FLAGS) & FL_CLIENT) || !Alive(e))
+            return;
+        unsigned char* q = (unsigned char*)PrivateOf(e);
+        if (q && Readable(q, 0x2170) && q[0x2166] && CanSee(bot, eye, e))
+            zombieSeen = true;
+    });
+    if (zombieSeen)
+        return false;
+    float now = Now();
+    V3 goal = Origin(anchor), wp;
+    if (!NextWaypoint(bot, st, me, goal, 40.0f, wp))
+        wp = goal;
+    float moveYaw = WalkYaw(bot, me, YawOf(wp - me), 40.0f);
+    if (DropAhead(bot, me, moveYaw, 72.0f, HURT_DROP_MAX))
+        return false; // (the stock AI knows its way better than a fall)
+    if (LedgeAhead(bot, me, moveYaw) && !DropAhead(bot, me, moveYaw, 120.0f, FLEE_FREE_DROP))
+        buttons |= IN_JUMP;
+    if (Len2D(me - st.lastPos) > 24.0f)
+    {
+        st.lastPos = me;
+        st.lastProgress = now;
+    }
+    else if (now - st.lastProgress > 1.5f)
+    {
+        st.lastProgress = now;
+        st.nextRepath = 0;
+        buttons |= IN_JUMP;
+    }
+    float rel = (moveYaw - viewYaw) / RAD;
+    fwd = cosf(rel) * 250.0f;
+    side = -sinf(rel) * 250.0f;
+    ZfBot& z = g_zf[bot];
+    if (now >= z.nextGroupLog)
+    {
+        z.nextGroupLog = now + 10.0f;
+        static int reports = 0;
+        if (reports++ < 100)
+            Log("zombie modes: bot '%s' alone, %.0f u from the group around '%s' (%d humans with it): goes back to it",
+                String(F<int>(Vars(bot), EV_NETNAME)), bestD, String(F<int>(Vars(anchor), EV_NETNAME)), bestN + 1);
+    }
+    return true;
+}
+
 static bool ZombieFlee(void* bot, BotState& st, float viewYaw, float& fwd, float& side, unsigned short& buttons)
 {
-    return ZombieFleeMode() && ZombieFleeMove(bot, st, viewYaw, cfg.zombieFleeDistance, fwd, side, buttons);
+    if (!ZombieFleeMode())
+        return false;
+    return ZombieFleeMove(bot, st, viewYaw, cfg.zombieFleeDistance, fwd, side, buttons) || ZombieGroupMove(bot, st, viewYaw, fwd, side, buttons);
 }
 
 static bool ZombieCloaked(void* e, unsigned char* q)

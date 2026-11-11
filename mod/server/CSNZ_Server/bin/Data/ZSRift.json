@@ -27,7 +27,8 @@
 	"ScenarioTickets": [
 		{ "Mode": 15, "Name": "Zombie Scenario", "Clear": 4, "Play": 1 },
 		{ "Mode": 17, "Name": "Human Scenario", "Clear": 4, "Play": 1 },
-		{ "Mode": 33, "Name": "Zombie Files", "Clear": 3, "Play": 1 }
+		{ "Mode": 33, "Name": "Zombie Files", "Clear": 3, "Play": 1 },
+		{ "Mode": 28, "Name": "Zombie Shelter", "Clear": 5, "Play": 1 }
 	],
 	// the Rift Exchange (Missions page): ExchangeStock cosmetics a day for each player (items in Data/RiftExchange.json,
 	// tools/gen_rift_exchange.py). Holding one keeps it one more day for HoldCostPercent % of its price (at least
