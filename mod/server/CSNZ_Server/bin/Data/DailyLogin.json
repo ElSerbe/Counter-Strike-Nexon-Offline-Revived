@@ -5,39 +5,40 @@
 	// toward the bonuses (5 at most, "After" days collected).
 	// A day: "Item" (Item.csv id, shown in the window), "Count", "Days" (0 = permanent), "Name" (chat line and the
 	// Missions page), and currencies given with it: "Medals", "BlackBadges", "RiftTickets", "BingoTickets".
-	// 396 Code A Decoder (ItemBox.json), 8292 Transcendence Decoder, 1030 100 Point Coupon, 2179 Bingo Ticket.
+	// Decoders (contents in ItemBox.json, tools/gen_decoders.py): 8310 Rare, 8308 Unique, 8311 Class, 8312 Premium Class,
+	// 9084 Paint, 8453 Event, 396 Code A, 806 Supreme, 2599 Epic, 8292 Transcendence; 1030 100 Point Coupon, 2179 Bingo Ticket.
 	"Enabled": true,
 	"Days": [
-		{ "Item": 396, "Count": 2, "Name": "Code A Decoder" },
+		{ "Item": 8310, "Count": 2, "Name": "Rare Decoder" },
 		{ "Item": 1030, "Count": 1, "Name": "100 Point Coupon" },
-		{ "Item": 396, "Count": 3, "Name": "Code A Decoder" },
+		{ "Item": 8311, "Count": 1, "Name": "Class Decoder" },
 		{ "Item": 2179, "Count": 1, "Name": "Bingo Ticket" },
 		{ "Item": 1030, "Count": 2, "Name": "100 Point Coupon" },
-		{ "Item": 396, "Count": 4, "Name": "Code A Decoder" },
+		{ "Item": 396, "Count": 2, "Name": "Code A Decoder" },
 		{ "Item": 8292, "Count": 1, "Name": "Transcendence Decoder", "RiftTickets": 5, "BlackBadges": 5 },
 
-		{ "Item": 396, "Count": 2, "Name": "Code A Decoder" },
+		{ "Item": 8308, "Count": 2, "Name": "Unique Decoder" },
 		{ "Item": 1030, "Count": 2, "Name": "100 Point Coupon" },
-		{ "Item": 396, "Count": 3, "Name": "Code A Decoder" },
+		{ "Item": 9084, "Count": 1, "Name": "Paint Decoder" },
 		{ "Item": 2179, "Count": 1, "Name": "Bingo Ticket" },
 		{ "Item": 1030, "Count": 2, "Name": "100 Point Coupon" },
-		{ "Item": 396, "Count": 5, "Name": "Code A Decoder" },
+		{ "Item": 396, "Count": 3, "Name": "Code A Decoder" },
 		{ "Item": 8292, "Count": 2, "Name": "Transcendence Decoder", "RiftTickets": 6, "BlackBadges": 6 },
 
-		{ "Item": 396, "Count": 3, "Name": "Code A Decoder" },
+		{ "Item": 8310, "Count": 3, "Name": "Rare Decoder" },
 		{ "Item": 1030, "Count": 2, "Name": "100 Point Coupon" },
-		{ "Item": 396, "Count": 3, "Name": "Code A Decoder" },
+		{ "Item": 8453, "Count": 2, "Name": "Event Decoder" },
 		{ "Item": 2179, "Count": 2, "Name": "Bingo Ticket" },
 		{ "Item": 1030, "Count": 3, "Name": "100 Point Coupon" },
-		{ "Item": 396, "Count": 5, "Name": "Code A Decoder" },
+		{ "Item": 8308, "Count": 2, "Name": "Unique Decoder" },
 		{ "Item": 8292, "Count": 2, "Name": "Transcendence Decoder", "RiftTickets": 8, "BlackBadges": 8 },
 
-		{ "Item": 396, "Count": 3, "Name": "Code A Decoder" },
+		{ "Item": 806, "Count": 1, "Name": "Supreme Decoder" },
 		{ "Item": 1030, "Count": 3, "Name": "100 Point Coupon" },
-		{ "Item": 396, "Count": 4, "Name": "Code A Decoder" },
+		{ "Item": 8312, "Count": 1, "Name": "Premium Class Decoder" },
 		{ "Item": 2179, "Count": 2, "Name": "Bingo Ticket" },
 		{ "Item": 1030, "Count": 3, "Name": "100 Point Coupon" },
-		{ "Item": 396, "Count": 6, "Name": "Code A Decoder" },
+		{ "Item": 2599, "Count": 1, "Name": "Epic Decoder" },
 		{ "Item": 8292, "Count": 3, "Name": "Transcendence Decoder", "RiftTickets": 15, "BlackBadges": 15 }
 	],
 	"Bonuses": [

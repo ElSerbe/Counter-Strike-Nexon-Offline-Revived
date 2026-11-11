@@ -3324,10 +3324,10 @@ index 0000000..1a0e4c5
 +bool IsZombieModeOffline(int mode);
 diff --git a/src/manager/missionmanager.cpp b/src/manager/missionmanager.cpp
 new file mode 100644
-index 0000000..d9831a0
+index 0000000..7cd3162
 --- /dev/null
 +++ b/src/manager/missionmanager.cpp
-@@ -0,0 +1,461 @@
+@@ -0,0 +1,503 @@
 +#include "missionmanager.h"
 +#include "medalmanager.h"
 +#include "warbondmanager.h"
@@ -3356,6 +3356,19 @@ index 0000000..d9831a0
 +
 +bool CMissionManager::Init()
 +{
++	{
++		ifstream f("Data/DailyDecoders.json");
++		json d = json::parse(f, nullptr, false, true);
++		if (!d.is_discarded() && d.is_object())
++		{
++			m_DailyDecoderChance = d.value("Chance", 0.0);
++			for (auto& e : d.value("Decoders", json::array()))
++				if (e.value("Item", 0) > 0 && e.value("Weight", 0) > 0)
++					m_DailyDecoders.push_back({ e.value("Item", 0), e.value("Weight", 0), e.value("Name", string("a decoder")) });
++			Logger().Info("MissionManager: dailies give a decoder %.0f%% of the time (%d kinds)\n", m_DailyDecoderChance,
++				(int)m_DailyDecoders.size());
++		}
++	}
 +	LoadLoginSupplies();
 +	return LoadConfig();
 +}
@@ -3537,6 +3550,32 @@ index 0000000..d9831a0
 +	return rows;
 +}
 +
++string CMissionManager::DailyDecoder(IUser* user)
++{
++	if (!user || m_DailyDecoders.empty() || m_DailyDecoderChance <= 0)
++		return "";
++	static mt19937 rng(random_device{}());
++	if (uniform_real_distribution<double>(0, 100)(rng) >= m_DailyDecoderChance)
++		return "";
++	int total = 0;
++	for (auto& d : m_DailyDecoders)
++		total += d.weight;
++	int pick = uniform_int_distribution<int>(0, total - 1)(rng);
++	for (auto& d : m_DailyDecoders)
++	{
++		if (pick >= d.weight)
++		{
++			pick -= d.weight;
++			continue;
++		}
++		if (g_ItemManager.AddItem(user->GetID(), user, d.itemID, 1, 0) != ITEM_ADD_SUCCESS)
++			return "";
++		Logger().Info("MissionManager: %s gets a %s (item %d) from a daily\n", user->GetUsername().c_str(), d.name.c_str(), d.itemID);
++		return d.name;
++	}
++	return "";
++}
++
 +void CMissionManager::Reward(IUser* user, int badges, int medals, const char* what)
 +{
 +	if (badges)
@@ -3714,6 +3753,9 @@ index 0000000..d9831a0
 +			g_UserDatabase.DeleteMissions(userID, key + ".");
 +			g_UserDatabase.SetMissions(userID, { { key, 0, 2, day } });
 +			Reward(user, req->badges, req->medals, ("Request \"" + req->title + "\"").c_str());
++			string decoder = DailyDecoder(user);
++			if (!decoder.empty())
++				g_PacketManager.SendUMsgNoticeMessageInChat(user->GetExtendedSocket(), "Bonus: a " + decoder + " (Inventory > Decoder)");
 +			g_MedalManager.AddCounter(user, "RequestsDone", 1);
 +			g_MedalManager.CheckMedals(user);
 +		}
@@ -3791,10 +3833,10 @@ index 0000000..d9831a0
 +}
 diff --git a/src/manager/missionmanager.h b/src/manager/missionmanager.h
 new file mode 100644
-index 0000000..f7d9e86
+index 0000000..1b30be3
 --- /dev/null
 +++ b/src/manager/missionmanager.h
-@@ -0,0 +1,137 @@
+@@ -0,0 +1,149 @@
 +#pragma once
 +
 +#include <string>
@@ -3896,6 +3938,10 @@ index 0000000..f7d9e86
 +	// game texts botassist replaces (GET /api/questtexts, Data/GameTexts.json): the tutorial's reward list, the Point Coupon
 +	nlohmann::json TextOverrides();
 +
++	// now and then a decoder for a daily (a daily order, a mission request): Data/DailyDecoders.json, Chance % then one
++	// drawn by Weight. Returns its name for the chat message ("" when none came)
++	std::string DailyDecoder(IUser* user);
++
 +private:
 +	bool LoadConfig();
 +	void LoadLoginSupplies();
@@ -3929,6 +3975,14 @@ index 0000000..f7d9e86
 +	nlohmann::json m_GameTexts;           // Data/GameTexts.json
 +	std::map<int, int> m_LoginSentDay;    // the day each user's window was last sent
 +	std::map<int, int> m_TutorialFlags; // cache: the user info is built often
++	struct DailyDecoder_s
++	{
++		int itemID;
++		int weight;
++		std::string name;
++	};
++	double m_DailyDecoderChance = 0;
++	std::vector<DailyDecoder_s> m_DailyDecoders;
 +};
 +
 +extern CMissionManager g_MissionManager;
@@ -4255,17 +4309,18 @@ index 0000000..4de865d
 +	void OnMatchEnd(IUser* user, int gameMode, int mapID, int difficulty, bool won, int place, int kills);
 +}
 diff --git a/src/manager/packetmanager.cpp b/src/manager/packetmanager.cpp
-index 0defb02..e7b9aa4 100644
+index 0defb02..9294475 100644
 --- a/src/manager/packetmanager.cpp
 +++ b/src/manager/packetmanager.cpp
-@@ -1,4 +1,6 @@
+@@ -1,4 +1,7 @@
++#include <set>
  #include "packetmanager.h"
 +#include "usermanager.h"
 +#include "transfer.h"
  #include "serverinstance.h"
  #include "channelmanager.h"
  
-@@ -372,7 +374,7 @@ void CPacketManager::SendUMsgNotice(IExtendedSocket* socket, const Notice_s& not
+@@ -372,7 +375,7 @@ void CPacketManager::SendUMsgNotice(IExtendedSocket* socket, const Notice_s& not
  
  	msg->WriteUInt16(notice.id + 10000);
  	msg->WriteUInt8(notice.type);
@@ -4274,7 +4329,7 @@ index 0defb02..e7b9aa4 100644
  	msg->WriteUInt32(notice.startDate);
  	msg->WriteUInt32(notice.endDate);
  	msg->WriteString(notice.name);
-@@ -568,6 +570,21 @@ void CPacketManager::SendServerList(IExtendedSocket* socket)
+@@ -568,6 +571,21 @@ void CPacketManager::SendServerList(IExtendedSocket* socket)
  	socket->Send(msg);
  }
  
@@ -4296,7 +4351,7 @@ index 0defb02..e7b9aa4 100644
  void CPacketManager::SendStatistic(IExtendedSocket* socket)
  {
  	CSendPacket* msg = CreatePacket(socket, PacketId::Statistic);
-@@ -892,7 +909,7 @@ void CPacketManager::SendMetadataUnk8(IExtendedSocket* socket)
+@@ -892,7 +910,7 @@ void CPacketManager::SendMetadataUnk8(IExtendedSocket* socket)
  	socket->Send(msg);
  }
  
@@ -4305,7 +4360,40 @@ index 0defb02..e7b9aa4 100644
  {
  	CSendPacket* msg = CreatePacket(socket, PacketId::Metadata);
  	msg->BuildHeader();
-@@ -1625,7 +1642,7 @@ void CPacketManager::SendMetadataUnk64(IExtendedSocket* socket)
+@@ -934,11 +952,30 @@ void CPacketManager::SendMetadataItemBox(IExtendedSocket* socket, const vector<I
+ 
+ 	msg->WriteUInt8(kPacket_Metadata_ItemBox);
+ 
++	// offline build: every (decoder, item) once (ItemBox.json lists an item in each of its decoder's rate groups), and no
++	// more than fits in one packet (64 KB, 26 bytes an entry): a packet over the limit isn't sent, and the sequence number it
++	// took makes the game drop the connection
++	vector<const ItemBoxItem*> unique;
++	{
++		set<pair<int, int>> seen;
++		for (auto& i : items)
++			if (seen.insert({ i.itemBoxItemID, i.itemId }).second)
++				unique.push_back(&i);
++		const size_t maxEntries = (PACKET_MAX_SIZE - 64) / 26;
++		if (unique.size() > maxEntries)
++		{
++			Logger().Warn("SendMetadataItemBox: %d decoder entries, only the first %d fit in the packet (ItemBox.json)\n",
++				(int)unique.size(), (int)maxEntries);
++			unique.resize(maxEntries);
++		}
++	}
++
+ 	msg->WriteUInt8(0); // unk
+-	msg->WriteUInt32((unsigned int)items.size());
++	msg->WriteUInt32((unsigned int)unique.size());
+ 
+-	for (auto& i : items)
++	for (auto* e : unique)
+ 	{
++		const ItemBoxItem& i = *e;
+ 		msg->WriteUInt32(i.itemBoxItemID);
+ 		msg->WriteUInt32(i.itemId);
+ 		msg->WriteInt16(-1);
+@@ -1625,7 +1662,7 @@ void CPacketManager::SendMetadataUnk64(IExtendedSocket* socket)
  	socket->Send(msg);
  }
  
@@ -4314,7 +4402,7 @@ index 0defb02..e7b9aa4 100644
  {
  	CSendPacket* msg = CreatePacket(socket, PacketId::Metadata);
  	msg->BuildHeader();
-@@ -1819,43 +1836,63 @@ void CPacketManager::SendItemEquipTattoo(IExtendedSocket* socket)
+@@ -1819,43 +1856,63 @@ void CPacketManager::SendItemEquipTattoo(IExtendedSocket* socket)
  	socket->Send(msg);
  }
  
@@ -4398,7 +4486,7 @@ index 0defb02..e7b9aa4 100644
  
  	socket->Send(msg);
  }
-@@ -2245,12 +2282,17 @@ void CPacketManager::SendRoomListFull(IExtendedSocket* socket, const vector<IRoo
+@@ -2245,12 +2302,17 @@ void CPacketManager::SendRoomListFull(IExtendedSocket* socket, const vector<IRoo
  
  	msg->WriteUInt16(2);
  	msg->WriteUInt16(1);
@@ -4417,7 +4505,7 @@ index 0defb02..e7b9aa4 100644
  
  	socket->Send(msg);
  }
-@@ -2732,7 +2774,7 @@ void WriteSettings(CSendPacket* msg, CRoomSettings* newSettings, int low, int lo
+@@ -2732,7 +2794,7 @@ void WriteSettings(CSendPacket* msg, CRoomSettings* newSettings, int low, int lo
  		}
  	}
  	if (lowMidFlag & ROOM_LOWMID_VOXEL) {
@@ -4426,7 +4514,7 @@ index 0defb02..e7b9aa4 100644
  		if (newSettings->voxelFlag & VOXELFLAG_ID) {
  			msg->WriteString(newSettings->voxel_id);
  		}
-@@ -2934,7 +2976,7 @@ void CPacketManager::SendRoomCreateAndJoin(IExtendedSocket* socket, IRoom* roomI
+@@ -2934,7 +2996,7 @@ void CPacketManager::SendRoomCreateAndJoin(IExtendedSocket* socket, IRoom* roomI
  	msg->WriteUInt8((unsigned int)roomInfo->GetUsers().size());
  	for (auto user : roomInfo->GetUsers())
  	{
@@ -4435,7 +4523,7 @@ index 0defb02..e7b9aa4 100644
  
  		msg->WriteUInt32(user->GetID());
  		msg->WriteUInt32(0);
-@@ -2972,7 +3014,7 @@ void CPacketManager::SendRoomPlayerJoin(IExtendedSocket* socket, IUser* user, Ro
+@@ -2972,7 +3034,7 @@ void CPacketManager::SendRoomPlayerJoin(IExtendedSocket* socket, IUser* user, Ro
  	msg->WriteUInt32(0);
  	msg->WriteString(user->GetUsername());
  
@@ -4444,7 +4532,7 @@ index 0defb02..e7b9aa4 100644
  
  	// user network info
  	msg->WriteUInt8(num);
-@@ -3044,6 +3086,62 @@ void CPacketManager::SendRoomSetHost(IExtendedSocket* socket, IUser* user)
+@@ -3044,6 +3106,62 @@ void CPacketManager::SendRoomSetHost(IExtendedSocket* socket, IUser* user)
  	socket->Send(msg);
  }
  
@@ -4507,7 +4595,7 @@ index 0defb02..e7b9aa4 100644
  void CPacketManager::SendRoomPlayerLeave(IExtendedSocket* socket, int userId)
  {
  	CSendPacket* msg = CreatePacket(socket, PacketId::Room);
-@@ -3144,7 +3242,7 @@ void CPacketManager::SendRoomGameResult(IExtendedSocket* socket, IRoom* room, CG
+@@ -3144,7 +3262,7 @@ void CPacketManager::SendRoomGameResult(IExtendedSocket* socket, IRoom* room, CG
  		msg->WriteUInt16(0);
  		msg->WriteUInt16(0);
  		msg->WriteUInt8(0); // kakaito huita sleva
@@ -4516,7 +4604,7 @@ index 0defb02..e7b9aa4 100644
  		msg->WriteUInt8(0); // frag kills
  		msg->WriteUInt8(0); // knife kills
  
-@@ -3636,6 +3734,25 @@ void CPacketManager::SendHostGameStart(IExtendedSocket* socket, int userId)
+@@ -3636,6 +3754,25 @@ void CPacketManager::SendHostGameStart(IExtendedSocket* socket, int userId)
  	socket->Send(msg);
  }
  
@@ -4542,7 +4630,7 @@ index 0defb02..e7b9aa4 100644
  void CPacketManager::SendHostZBAddon(IExtendedSocket* socket, int userID, const vector<int>& addons)
  {
  	CSendPacket* msg = CreatePacket(socket, PacketId::Host);
-@@ -3662,7 +3779,7 @@ void CPacketManager::SendHostJoin(IExtendedSocket* socket, IUser* host)
+@@ -3662,7 +3799,7 @@ void CPacketManager::SendHostJoin(IExtendedSocket* socket, IUser* host)
  	msg->WriteUInt32(host->GetID());
  	msg->WriteUInt64(0); // что это?
  
@@ -4551,7 +4639,7 @@ index 0defb02..e7b9aa4 100644
  
  	msg->WriteUInt32(ip_string_to_int(network.m_szExternalIpAddress), false);
  	msg->WriteUInt16(network.m_nExternalClientPort);
-@@ -6072,7 +6189,82 @@ void CPacketManager::SendTitle(IExtendedSocket* socket, int id)
+@@ -6072,7 +6209,82 @@ void CPacketManager::SendTitle(IExtendedSocket* socket, int id)
  
  	msg->WriteUInt8(0);
  	msg->WriteUInt16(id);
@@ -4559,7 +4647,7 @@ index 0defb02..e7b9aa4 100644
 +
 +	socket->Send(msg);
 +}
-+
+ 
 +// offline build: the medals as the client's honor quests (hw.dll Packet_Quest type 1, the full quest list): they are
 +// what My Info's Medals tab shows, with a gauge per requirement. Quest ID = 2000 + title ID.
 +void CPacketManager::SendHonorQuests(IExtendedSocket* socket, const vector<HonorQuest_s>& quests, int honorPoints)
@@ -4599,7 +4687,7 @@ index 0defb02..e7b9aa4 100644
 +
 +	socket->Send(msg);
 +}
- 
++
 +// offline build: the game's Steam achievements (hw.dll Packet_Steam, id 192, calls ISteamUserStats). Type 0: stats
 +// (SetStat, optionally IndicateAchievementProgress); type 1: achievements (SetAchievement), then StoreStats.
 +// Only for clients started through Steam: the game has no ISteamUserStats otherwise.
@@ -8298,10 +8386,10 @@ index c7d2bdb..75d0ee9 100644
 +extern CVoxelManager g_VoxelManager;
 diff --git a/src/manager/warbondmanager.cpp b/src/manager/warbondmanager.cpp
 new file mode 100644
-index 0000000..81849d5
+index 0000000..894646d
 --- /dev/null
 +++ b/src/manager/warbondmanager.cpp
-@@ -0,0 +1,1023 @@
+@@ -0,0 +1,1029 @@
 +#include "channelmanager.h"
 +#include "guestprofile.h"
 +#include "transfer.h"
@@ -9189,6 +9277,12 @@ index 0000000..81849d5
 +			string reward = o.reward ? va("+%d medals%s", medals, medals < o.reward ? " (sv_cheats)" : "") : "";
 +			if (o.tickets)
 +				reward += string(reward.empty() ? "" : ", ") + va("+%d Bingo Ticket%s", o.tickets, o.tickets == 1 ? "" : "s");
++			if (o.period == "Daily")
++			{
++				string decoder = g_MissionManager.DailyDecoder(user); // now and then a decoder too (Data/DailyDecoders.json)
++				if (!decoder.empty())
++					reward += string(reward.empty() ? "" : ", ") + "a " + decoder;
++			}
 +			g_PacketManager.SendUMsgNoticeMessageInChat(user->GetExtendedSocket(),
 +				va("%s complete: %s (%s)", o.period == "Challenge" ? "Challenge" : "Order", o.text.c_str(), reward.c_str()));
 +			if (o.tickets)

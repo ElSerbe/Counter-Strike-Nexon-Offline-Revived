@@ -1,0 +1,21 @@
+{
+	// Now and then a decoder for a daily: each daily order done (Warbonds.json Orders, Period Daily) and each mission
+	// request claimed (Missions page) has "Chance" % of also giving one, drawn by "Weight" (CMissionManager::DailyDecoder).
+	// Contents: ItemBox.json (tools/gen_decoders.py). Names show in the chat message.
+	"Version": 1,
+	"Chance": 10,
+	"Decoders": [
+		{ "Item": 165, "Weight": 25, "Name": "Decoder" },
+		{ "Item": 533, "Weight": 20, "Name": "Code B Decoder" },
+		{ "Item": 8310, "Weight": 15, "Name": "Rare Decoder" },
+		{ "Item": 774, "Weight": 12, "Name": "Mileage Decoder" },
+		{ "Item": 173, "Weight": 10, "Name": "Advanced Decoder" },
+		{ "Item": 8308, "Weight": 8, "Name": "Unique Decoder" },
+		{ "Item": 8311, "Weight": 6, "Name": "Class Decoder" },
+		{ "Item": 9084, "Weight": 6, "Name": "Paint Decoder" },
+		{ "Item": 8453, "Weight": 6, "Name": "Event Decoder" },
+		{ "Item": 396, "Weight": 4, "Name": "Code A Decoder" },
+		{ "Item": 806, "Weight": 2, "Name": "Supreme Decoder" },
+		{ "Item": 8292, "Weight": 1, "Name": "Transcendence Decoder" }
+	]
+}
