@@ -849,6 +849,22 @@ paid (+0xe8 wood, +0xec iron, +0xf0 power; taken down, 0x10842e50 frees the powe
 when the storage can pay for it again, by day, with heavy axe hits (TakeDamage 0x10894e40: repair hits carry 0x20000000, a teammate's
 other hits need 0x10000000 and enough "contribution"; untested which hit that is: 10 s without damage = given up, 3 such = no more
 tries that map), then builds the same row in the same place at the same angle. Nobody repairs a building being taken down.
+A rebuild refused in the old place is tried up to 3 times 60-200 u away. Anywhere-builds are sent from 70-170 u away, not on top of the place.
+Progression (`ShPlanBuild`): next step = the building the next tier needs (Workroom 15 -> tier 2 -> Communication Tower 17 -> tier 3 ->
+Concrete Refinery 16 -> tier 4), else the tier itself. Its cost is reserved in the storage (`g_shReserve`): only the step itself,
+storages when the storage can't hold its cost (up to 6), the first medical facility, generators and the first two turrets ignore the
+reserve. Free power = storage type 2 minus rules +0x2c4 + team*4 (the old check didn't subtract the power in use). The builder learns
+Engineer I/II/III first. The observation post (row 0) is never built. `ShFreeSpot` keeps 230 u from the map's fixed spots, 90 from
+buildings, 110 from blueprints, no roofs (z above the shelter's centre). `ShPlanUpgrade` replaces a turret (and tier-1 walls, gates, traps)
+with the best row of its family the tier allows, via the same take-down-and-build.
+Blueprints: orders 8 or "/blueprints". Seven families (turret, wall, gate, trap, medical, storage, alarm) at the ground where the player
+aims, with the view's angle rounded to 90. The builder builds the best affordable row of the family where none stands within 100 u.
+They're kept by map in Bin/botassist_shelter_blueprints.txt. With turret blueprints, no turrets are placed at random.
+Crafts: the skill-up's "one craft skill" check (0x10844970) is jumped over in memory (`ShOpenCrafts`: eb 28 -> 0x1084499a), so players and
+bots can learn all three. Bots craft at a finished Workroom (`ShCraft`, "zsht_worktable <n>": 0 Machete, 1 Gunbarrel, 2 Pistol, 3 Crowbar,
+4 Fuse, 5 Sensor, 6 Claw Hammer, 7 Turret Component, 8 Public Resource System; column skill 27/28/29 via rules vfunc 0x490; cost from tables
+vfunc 0x324 +4/+8; once each except the pistol, error 0xf). They craft 8, 1, 7, 4, 5, and a pistol when they have no gun. They don't
+craft the melee weapons (the resources take only weapon 29's hits).
 botassist.log "Shelter:" (state every 15 s with the shelter tier, each bot's job, order and task every 20 s, deposits, skills, buys, repairs,
 fixed spots, builds planned, sent, done or refused, unreachable resources, orders).
 

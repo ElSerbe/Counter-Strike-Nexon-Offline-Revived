@@ -185,6 +185,9 @@ struct ShPlan
     void* demolish = nullptr; // rebuild: the old building (its edict) and its private data (an edict gets reused)
     void* demolishPriv = nullptr;
     int powerBefore = 0;
+    bool again = false; // a rebuild or a replacement (refused in the old place: tried nearby, up to 3 times)
+    int tries = 0;
+    int blueprint = -1; // a player's blueprint it builds
 };
 
 struct ShBot
@@ -225,6 +228,10 @@ struct ShBot
     // healing: its health when it last went up at the place, and when; places seen not to heal, left out until then
     float healHp = -1, healSince = 0;
     std::map<void*, float> noHeal;
+    // the Worktable: what it crafted (bits by craft number), tries, next look
+    int crafted = 0;
+    int craftTries[9] = {};
+    float nextCraft = 0, pistolAt = -100;
 };
 static std::map<void*, int> g_shBanCount; // resources a bot couldn't reach: how often (each time banned longer)
 static std::map<void*, bool> g_shReachable; // resources: whether a bot can stand where its axe reaches them (by level)
@@ -678,7 +685,7 @@ enum ShSayKey
 {
     SAY_FULL, SAY_HURT, SAY_SANITY, SAY_NIGHT, SAY_GATHER, SAY_BUILD, SAY_UPGRADE, SAY_REPAIR, SAY_BUY, SAY_BOSS, SAY_RAID,
     SAY_DEPOSIT, SAY_STORAGE_FULL, SAY_NO_GUN, SAY_DEFEND, SAY_REST, SAY_FIGHT, SAY_BREAK, SAY_HUNT, SAY_HEAL, SAY_NO_MEDIC,
-    SAY_GUN, SAY_REBUILD
+    SAY_GUN, SAY_REBUILD, SAY_CRAFT
 };
 static float g_shLastSay = -100;
 
@@ -839,6 +846,43 @@ static const int kSkillsByCat[3][11] = {
     { 18, 21, 24, 19, 22, 29, 20, 23, 26, 25, 32 },
 };
 static const int kSkillExclusive[3][3] = { { 8, 17, 25 }, { 30, 31, 32 }, { 27, 28, 29 } };
+// The three craft skills (Combat, Survival, Tech Craft) each open one column of the Worktable, and the game lets a player
+// learn only one (skill-up 0x10844830: at 0x10844970 it checks 27/28/29 and refuses with message 0x17). The player wants
+// everyone to have all three: that check is jumped over in memory (jmp to 0x1084499a, the "learned" message), so the
+// players and the bots can learn the three.
+static const DWORD MP_SHT_CRAFT_CHECK = 0x10844970;
+static bool g_shCraftsOpen = false;
+static void ShOpenCrafts()
+{
+    if (g_shCraftsOpen)
+        return;
+    unsigned char* at = (unsigned char*)(MP_SHT_CRAFT_CHECK + g_mpDelta);
+    static const unsigned char want[] = { 0x66, 0x83, 0xbf, 0xdc, 0x32, 0x00, 0x00, 0x00 };
+    static int reports = 0;
+    if (!Readable(at, 8))
+        return;
+    if (at[0] == 0xeb && at[1] == 0x28)
+    {
+        g_shCraftsOpen = true;
+        return;
+    }
+    if (memcmp(at, want, sizeof(want)))
+    {
+        if (reports++ < 1)
+            Log("Shelter: the craft skills' check isn't what was expected (%02x %02x %02x %02x): left as it is", at[0], at[1], at[2], at[3]);
+        return;
+    }
+    DWORD old;
+    if (VirtualProtect(at, 2, PAGE_EXECUTE_READWRITE, &old))
+    {
+        at[0] = 0xeb; // jmp 0x1084499a
+        at[1] = 0x28;
+        VirtualProtect(at, 2, old, &old);
+        FlushInstructionCache(GetCurrentProcess(), at, 2);
+        g_shCraftsOpen = true;
+        Log("Shelter: the three craft skills can be learned together now");
+    }
+}
 
 static int ShPoints(void* bot)
 {
@@ -862,7 +906,7 @@ static const char* ShSkillBlock(void* bot, int id)
         return ShFmt("needs %s", kSkills[s.parent].brief);
     for (auto& g : kSkillExclusive)
     {
-        if (g[0] != id && g[1] != id && g[2] != id)
+        if ((g[0] != id && g[1] != id && g[2] != id) || (g[0] == 27 && g_shCraftsOpen))
             continue;
         for (int o : g)
             if (o != id && ShSkillLevel(bot, o) > 0)
@@ -982,9 +1026,9 @@ static void ShPlanAdd(void* bot, ShSkillPlan& p, int id)
 // Beginner Harvest Mastery (more wood and iron per hit) and soon takes Strong Patience (the mental gauge lasts twice as
 // long outside); the builder then Rookie Engineer (the worktable) and the cheaper blueprints, gatherers Advanced Harvest
 // Mastery (cars and scrap) and speed, fighters the weapon masteries (SMGs and shotguns need the first) and HP.
-static const int kAutoBuilder[] = { 18, 21, 18, 19, 21, 22, 24, 9, 21, 16, 19, 22, 20, 18, 26, 24, 22, 19, 20, 24, 20, 23, 29, 9, 13, 5, 9, 32 };
-static const int kAutoGatherer[] = { 9, 10, 9, 16, 9, 13, 10, 15, 10, 13, 5, 15, 11, 15, 13, 11, 12, 14, 11, 14, 28, 14, 31, 5, 5 };
-static const int kAutoFighter[] = { 9, 0, 5, 16, 0, 13, 1, 5, 6, 4, 0, 1, 3, 5, 6, 13, 1, 7, 3, 2, 6, 7, 3, 2, 2, 30, 13 };
+static const int kAutoBuilder[] = { 18, 19, 20, 21, 22, 29, 21, 9, 16, 22, 24, 21, 28, 27, 26, 22, 18, 19, 20, 24, 18, 19, 20, 24, 23, 9, 13, 5, 9, 32 };
+static const int kAutoGatherer[] = { 9, 10, 9, 16, 9, 28, 13, 10, 29, 27, 15, 10, 13, 5, 15, 11, 15, 13, 11, 12, 14, 11, 14, 14, 31, 5, 5 };
+static const int kAutoFighter[] = { 9, 0, 5, 16, 27, 0, 13, 1, 28, 29, 5, 6, 4, 0, 1, 3, 5, 6, 13, 1, 7, 3, 2, 6, 7, 3, 2, 2, 30, 13 };
 
 static void ShSkillLog(void* bot, int id, const char* how)
 {
@@ -1067,7 +1111,7 @@ static std::vector<int> ShAutoOrder(void* bot, ShRole role, const ShSkillPlan& p
             continue;
         bool other = false;
         for (auto& g : kSkillExclusive)
-            if (g[0] == id || g[1] == id || g[2] == id)
+            if ((g[0] == id || g[1] == id || g[2] == id) && !(g[0] == 27 && g_shCraftsOpen))
                 for (int o : g)
                     other |= o != id && lv[o] > 0;
         if (other)
@@ -1090,6 +1134,19 @@ static void ShSpendSkill(void* bot, BotState& st)
         ShSkillLog(bot, 18, "nobody in the team had it: the Workroom needs it");
         return;
     }
+    // the builder: Rookie, Intermediate and Advanced Engineer first (the Workroom, the Communication Tower and the Concrete
+    // Refinery, which the shelter's tiers 2, 3 and 4 need)
+    if (!plan.manual && ShJobOf(bot, st) == SHR_BUILDER)
+        for (int id : { 18, 19, 20 })
+            if (ShSkillLevel(bot, id) <= 0)
+            {
+                if (!ShSkillBlock(bot, id) && ShLearn(bot, id))
+                {
+                    ShSkillLog(bot, id, "the builder: the shelter's next tiers need it");
+                    return;
+                }
+                break;
+            }
     bool changed = false;
     for (size_t i = 0; i < plan.queue.size();)
     {
@@ -1243,13 +1300,32 @@ static void ShTeamBuildings(int team, std::map<int, int>& byRow, std::map<std::s
     });
 }
 
-static bool ShCanAfford(unsigned char* rules, void* bot, int team, const ShBuildRow& r)
+// the team's power not in use: the generators' total (storage type 2) minus what its buildings use (rules +0x2c4 + team*4;
+// the game's cost check 0x1083d6c0 compares that, the old check compared the total and saw power that was used up)
+static int ShPowerFree(unsigned char* rules, int team)
 {
-    if (ShStorage(rules, team, 2) < r.power)
+    int used = team >= 0 && team < 4 ? *(int*)(rules + 0x2c4 + team * 4) : 0;
+    return ShStorage(rules, team, 2) - used;
+}
+
+// what the shelter's next step costs stays in the storage: the builds that aren't part of it only use what's above it
+struct ShReserve
+{
+    int wood = 0, iron = 0, power = 0;
+};
+static ShReserve g_shReserve;
+
+static bool ShCanAfford(unsigned char* rules, void* bot, int team, const ShBuildRow& r, bool reserved = false)
+{
+    ShReserve z = reserved ? g_shReserve : ShReserve{};
+    if (ShPowerFree(rules, team) - z.power < r.power)
         return false;
+    int sw = ShStorage(rules, team, 0) - z.wood, si = ShStorage(rules, team, 1) - z.iron;
+    sw = sw > 0 ? sw : 0;
+    si = si > 0 ? si : 0;
     if (r.global)
-        return ShStorage(rules, team, 0) >= r.wood && ShStorage(rules, team, 1) >= r.iron;
-    int wood = ShCarried(rules, bot, 0) + ShStorage(rules, team, 0), iron = ShCarried(rules, bot, 1) + ShStorage(rules, team, 1);
+        return sw >= r.wood && si >= r.iron;
+    int wood = ShCarried(rules, bot, 0) + sw, iron = ShCarried(rules, bot, 1) + si;
     return wood >= r.wood && iron >= r.iron && ShCarryMax(rules, bot, 0) >= r.wood && ShCarryMax(rules, bot, 1) >= r.iron;
 }
 
@@ -1266,18 +1342,122 @@ static bool ShBanned(int building, int spot, float now)
     return it != g_shBuildBan.end() && now < it->second;
 }
 
-// a place to build anywhere near the shelter: on the ground, in the open, a few steps from its walls
-static bool ShFreeSpot(V3 home, V3& out)
+// the blueprints players put down (the orders menu, 8): what to build where; kept by map in botassist_shelter_blueprints.txt
+enum ShFamily
 {
-    for (int tries = 0; tries < 12; tries++)
+    SHF_TURRET,
+    SHF_WALL,
+    SHF_GATE,
+    SHF_TRAP,
+    SHF_MEDIC,
+    SHF_STORAGE,
+    SHF_ALARM,
+    SHF_COUNT
+};
+static const char* const g_shFamilyNames[] = { "Turret", "Wall", "Gate", "Trap", "Medical facility", "Storage", "Alarm" };
+// each family's rows, the best first (the builder builds the best one the shelter's tier and its skills allow, and replaces
+// an older one when a better one opens up)
+static const int kFamilyRows[SHF_COUNT][6] = {
+    { 32, 31, 28, 14, 13, 12 }, { 5, 4, 3, -1 }, { 7, 6, -1 }, { 11, 9, 27, 10, -1 }, { 22, -1 }, { 18, -1 }, { 8, -1 },
+};
+struct ShBlueprint
+{
+    int family;
+    V3 at;
+    float yaw;
+};
+static std::vector<ShBlueprint> g_shBlueprints;
+static std::string g_shBlueprintsMap;
+static bool g_shBlueprintsLoaded = false;
+
+static int ShFamilyOf(int row)
+{
+    for (int f = 0; f < SHF_COUNT; f++)
+        for (int r : kFamilyRows[f])
+            if (r == row)
+                return f;
+    return -1;
+}
+
+static void ShBlueprintsLoad()
+{
+    if (g_shBlueprintsLoaded && g_shBlueprintsMap == g_nav.map)
+        return;
+    g_shBlueprintsLoaded = true;
+    g_shBlueprintsMap = g_nav.map;
+    g_shBlueprints.clear();
+    char path[MAX_PATH];
+    snprintf(path, sizeof(path), "%sbotassist_shelter_blueprints.txt", g_dir);
+    FILE* f = fopen(path, "r");
+    if (!f)
+        return;
+    char line[256], map[96];
+    ShBlueprint bp{};
+    while (fgets(line, sizeof(line), f))
+        if (line[0] != '#' && sscanf(line, "%95s %d %f %f %f %f", map, &bp.family, &bp.at.x, &bp.at.y, &bp.at.z, &bp.yaw) == 6 &&
+            g_nav.map == map && bp.family >= 0 && bp.family < SHF_COUNT)
+            g_shBlueprints.push_back(bp);
+    fclose(f);
+    Log("Shelter: %d blueprints for %s", (int)g_shBlueprints.size(), g_nav.map.c_str());
+}
+
+static void ShBlueprintsSave()
+{
+    char path[MAX_PATH];
+    snprintf(path, sizeof(path), "%sbotassist_shelter_blueprints.txt", g_dir);
+    // the other maps' lines stay
+    std::vector<std::string> keep;
+    if (FILE* f = fopen(path, "r"))
     {
-        float a = Rnd() * 6.2831853f, r = 200.0f + Rnd() * 320.0f;
-        V3 p{ home.x + cosf(a) * r, home.y + sinf(a) * r, home.z + 64.0f };
+        char line[256], map[96];
+        while (fgets(line, sizeof(line), f))
+            if (line[0] != '#' && sscanf(line, "%95s", map) == 1 && g_nav.map != map)
+                keep.push_back(line);
+        fclose(f);
+    }
+    FILE* f = fopen(path, "w");
+    if (!f)
+        return;
+    fprintf(f, "# Zombie Shelter blueprints (the orders menu, 8): map, what (0 turret 1 wall 2 gate 3 trap 4 medical 5 storage 6 alarm), x y z, angle\n");
+    for (auto& l : keep)
+        fputs(l.c_str(), f);
+    for (auto& bp : g_shBlueprints)
+        fprintf(f, "%s %d %.0f %.0f %.0f %.0f\n", g_nav.map.c_str(), bp.family, bp.at.x, bp.at.y, bp.at.z, bp.yaw);
+    fclose(f);
+}
+
+// a place to build anywhere near the shelter (or near `around`, within 60-200 units): on the ground, not on a roof, in the
+// open, a few steps from its walls, and away from the map's fixed building spots (a medical facility next to the Workroom's
+// spot kept the Workroom from being built), the team's buildings, the blueprints and the shelter itself
+static bool ShFreeSpot(V3 home, V3& out, const V3* around = nullptr)
+{
+    ShBlueprintsLoad();
+    std::vector<V3> taken;
+    ForEntitiesNear(around ? *around : home, 900.0f, [&](void* e) {
+        if (ShBuildingAny(e))
+            taken.push_back(Origin(e));
+    });
+    for (int tries = 0; tries < 30; tries++)
+    {
+        float a = Rnd() * 6.2831853f, r = around ? 60.0f + Rnd() * 140.0f : 200.0f + Rnd() * 320.0f;
+        V3 c = around ? *around : home;
+        V3 p{ c.x + cosf(a) * r, c.y + sinf(a) * r, home.z + 64.0f };
         TraceResult tr;
         Trace(p, p - V3{ 0, 0, 400 }, nullptr, 1, tr);
         if (tr.flFraction >= 1.0f || tr.fStartSolid)
             continue;
         V3 ground = Vec(tr.vecEndPos);
+        if (ground.z > home.z + 10.0f) // a roof (a turret was refused at z 106, the ground being 0)
+            continue;
+        bool clear = true;
+        for (auto& s : g_shSpots)
+            clear = clear && Len2D(V3{ s.at.x, s.at.y, 0 } - V3{ ground.x, ground.y, 0 }) > 230.0f;
+        for (auto& b : taken)
+            clear = clear && Len2D(b - ground) > 90.0f;
+        for (auto& bp : g_shBlueprints)
+            clear = clear && Len2D(bp.at - ground) > 110.0f;
+        if (!clear)
+            continue;
         // room around it (no wall within 48 units at chest height)
         bool open = true;
         for (int d = 0; d < 4 && open; d++)
@@ -1350,7 +1530,7 @@ static bool ShPlanRebuild(unsigned char* rules, void* bot, V3 home, float now, S
         int now_ = (int)(r->power * factor > 1.0f ? r->power * factor : 1.0f);
         if (paid - now_ <= bestSave || paid > 200)
             return;
-        if (F<float>(Vars(e), EV_HEALTH) < F<float>(Vars(e), EV_MAX_HEALTH) * 0.9f || !ShCanAfford(rules, bot, team, *r))
+        if (F<float>(Vars(e), EV_HEALTH) < F<float>(Vars(e), EV_MAX_HEALTH) * 0.9f || !ShCanAfford(rules, bot, team, *r, true))
             return;
         bestSave = paid - now_;
         best = e;
@@ -1373,6 +1553,70 @@ static bool ShPlanRebuild(unsigned char* rules, void* bot, V3 home, float now, S
     return true;
 }
 
+// the best row of a family the builder can build now (tier, skill, buildings needed, cost above the reserve), -1 none
+static int ShBestOfFamily(unsigned char* rules, void* bot, int family, int tier, std::map<int, int>& byRow, bool afford)
+{
+    int team = TeamOf(bot);
+    for (int id : kFamilyRows[family])
+    {
+        const ShBuildRow* r = id >= 0 ? ShRow(id) : nullptr;
+        if (r && ShRowAllowed(bot, *r, tier, byRow) && (!afford || ShCanAfford(rules, bot, team, *r, true)))
+            return id;
+    }
+    return -1;
+}
+
+// an old building of the team taken down for a better one of its family in the same place (a gun tower once the gatling
+// tower opens up), one at a time, by day; the turrets first, then what the blueprints hold
+static bool ShPlanUpgrade(unsigned char* rules, void* bot, V3 home, float now, int tier, std::map<int, int>& byRow, ShPlan& plan)
+{
+    if (g_shDemolishFails >= 3 || ShNight(rules))
+        return false;
+    float left = ShPhaseLeft(rules);
+    if (left >= 0 && left < 60.0f)
+        return false;
+    int team = TeamOf(bot);
+    void* worst = nullptr;
+    int worstTier = 99, newRow = -1;
+    ForEntitiesNear(home, 3000.0f, [&](void* e) {
+        if (!ShBuilding(e, team) || g_shDemolishing.count(e) || !ShBuiltDone(e))
+            return;
+        auto ban = g_shRebuildBan.find(e);
+        if (ban != g_shRebuildBan.end() && now < ban->second)
+            return;
+        unsigned char* p = (unsigned char*)PrivateOf(e);
+        if (!p || !Readable(p + 0xf4, 4))
+            return;
+        const ShBuildRow* r = ShRow(*(int*)(p + SH_BUILDING_ROW));
+        int fam = r ? ShFamilyOf(r->id) : -1;
+        if (fam != SHF_TURRET && fam != SHF_WALL && fam != SHF_GATE && fam != SHF_TRAP)
+            return;
+        int best = ShBestOfFamily(rules, bot, fam, tier, byRow, true);
+        const ShBuildRow* b = best >= 0 ? ShRow(best) : nullptr;
+        if (!b || b->tier <= r->tier || (fam != SHF_TURRET && r->tier >= 2))
+            return;
+        int score = r->tier + (fam == SHF_TURRET ? 0 : 10);
+        if (score < worstTier)
+        {
+            worstTier = score;
+            worst = e;
+            newRow = best;
+        }
+    });
+    if (!worst)
+        return false;
+    plan = ShPlan{};
+    plan.kind = 4;
+    plan.building = newRow;
+    plan.at = Origin(worst);
+    plan.yaw = F<float>(Vars(worst), EV_ANGLES + 4);
+    plan.demolish = worst;
+    plan.demolishPriv = PrivateOf(worst);
+    g_shDemolishing.insert(worst);
+    Log("Shelter: '%s' will replace a %s with row %d (%s)", ShBotName(bot).c_str(), ClassName(worst), newRow, ShRow(newRow)->cls);
+    return true;
+}
+
 // The builder's next build: the shelter's next tier, else a fixed spot (worktable, generators, communication tower, posts,
 // refinery), else turrets around the shelter (more with each tier), a storage when the storage is full, a recovery bed.
 static bool ShPlanBuild(unsigned char* rules, void* bot, V3 home, float now, ShPlan& plan)
@@ -1384,68 +1628,127 @@ static bool ShPlanBuild(unsigned char* rules, void* bot, V3 home, float now, ShP
     ShTeamBuildings(team, byRow, byClass);
     ShLoadSpots();
 
-    // the shelter's next tier
+    ShBlueprintsLoad();
+    // The shelter's progression is the game's core: the Workroom (Rookie Engineer) -> tier 2 -> the Communication Tower
+    // (Intermediate Engineer) -> tier 3 -> the Concrete Refinery (Advanced Engineer) -> tier 4. Its next step's cost is kept
+    // in the storage (g_shReserve); the rest waits for what's above it. It hadn't upgraded the shelter: turrets and
+    // rebuilds took everything first.
+    g_shReserve = ShReserve{};
+    const ShBuildRow* goal = nullptr;
     if (tier < 4)
     {
-        const ShBuildRow* r = ShRow(SH_UPGRADES[tier - 1]);
-        if (r && (r->needs < 0 || byRow[r->needs] > 0) && ShCanAfford(rules, bot, team, *r) && !ShBanned(r->id, 0, now))
+        const ShBuildRow* up = ShRow(SH_UPGRADES[tier - 1]);
+        goal = up && up->needs >= 0 && byRow[up->needs] == 0 ? ShRow(up->needs) : up;
+        if (goal)
+            g_shReserve = ShReserve{ goal->wood, goal->iron, goal->power };
+        if (goal == up && up && ShCanAfford(rules, bot, team, *up) && !ShBanned(up->id, 0, now))
         {
-            plan = ShPlan{ 3, r->id, -1, home };
+            plan = ShPlan{ 3, up->id, -1, home };
             return true;
         }
     }
-    // the fixed spots, in this order of their type: worktable, generator, communication tower, post, refinery
-    static const int typeOrder[] = { 2, 6, 5, 1, 4 };
-    for (int type : typeOrder)
-        for (auto& s : g_shSpots)
-        {
-            if (s.type != type)
-                continue;
-            void* standing = nullptr;
-            int cur = ShSpotBuilding(rules, s.id, &standing);
-            if (cur == -2)
-                continue;
-            const ShBuildRow* have = cur >= 0 ? ShRow(cur) : nullptr;
-            const ShBuildRow* best = nullptr;
-            for (auto& r : kBuild)
-                if (r.spot == type && (!have || r.tier > have->tier) && ShRowAllowed(bot, r, tier, byRow) &&
-                    ShCanAfford(rules, bot, team, r) && !ShBanned(r.id, s.id, now) && (!best || r.tier < best->tier))
-                    best = &r;
-            if (best)
-            {
-                plan = ShPlan{ 1, best->id, s.id, V3{ s.at.x, s.at.y, home.z } };
-                plan.before = standing;
-                return true;
-            }
-        }
-    // a building that would use less power built again (Electric Engineering)
-    if (ShPlanRebuild(rules, bot, home, now, plan))
-        return true;
-    // turrets: two, and two more each tier; the best one this tier allows
-    int turrets = byClass["shelter_team_turret"] + byClass["shelter_team_flame_turret"] + byClass["shelter_team_mortar_turret"] +
-                  byClass["shelter_team_laser_turret"] + byClass["shelter_team_electronic_turret"];
-    std::vector<int> wanted;
-    if (turrets < 2 * tier)
-        for (int id : { 32, 31, 28, 14, 13, 12 })
-            wanted.push_back(id);
-    // the Emergency Medical Facility before the turrets (the only thing that heals at the start), a storage first when the
-    // storage is full (up to three)
-    if (byClass["shelter_team_field_bed"] == 0)
-        wanted.insert(wanted.begin(), 22);
+    static int goalReports = 0;
+    if (goal && goalReports++ % 40 == 0)
+        Log("Shelter: the shelter's next step: row %d (%s), %d wood %d iron %d power; storage %d/%d wood %d/%d iron, free power %d",
+            goal->id, goal->cls ? goal->cls : "tier up", goal->wood, goal->iron, goal->power, ShStorage(rules, team, 0),
+            ShStorageMax(rules, team, 0), ShStorage(rules, team, 1), ShStorageMax(rules, team, 1), ShPowerFree(rules, team));
+    // room for it: a storage when the storage can't hold its cost (the tiers cost 40, 70 and 125)
     bool full = ShStorage(rules, team, 0) >= ShStorageMax(rules, team, 0) || ShStorage(rules, team, 1) >= ShStorageMax(rules, team, 1);
-    if (full && byClass["shelter_team_warehouse"] < 3)
-        wanted.insert(wanted.begin(), 18);
-    for (int id : wanted)
+    bool tooSmall = goal && goal->global && (ShStorageMax(rules, team, 0) < goal->wood || ShStorageMax(rules, team, 1) < goal->iron);
+    std::vector<int> first;
+    if ((tooSmall && byClass["shelter_team_warehouse"] < 6) || (full && byClass["shelter_team_warehouse"] < 3))
+        first.push_back(18);
+    // the Emergency Medical Facility (the only thing that heals at the start)
+    if (byClass["shelter_team_field_bed"] == 0)
+        first.push_back(22);
+    // the fixed spots: the next step's building, the generators (power), then the posts (not the first one: the observation
+    // post is useless) with what's above the reserve; the refinery and the rest of the functional buildings as the tiers allow
+    static const int typeOrder[] = { 2, 5, 4, 6, 1 };
+    for (int pass = 0; pass < 2; pass++)
+        for (int type : typeOrder)
+            for (auto& s : g_shSpots)
+            {
+                if (s.type != type)
+                    continue;
+                void* standing = nullptr;
+                int cur = ShSpotBuilding(rules, s.id, &standing);
+                if (cur == -2)
+                    continue;
+                const ShBuildRow* have = cur >= 0 ? ShRow(cur) : nullptr;
+                const ShBuildRow* best = nullptr;
+                for (auto& r : kBuild)
+                {
+                    if (r.spot != type || r.id == 0 || (have && r.tier <= have->tier) || !ShRowAllowed(bot, r, tier, byRow) ||
+                        ShBanned(r.id, s.id, now) || (best && r.tier >= best->tier))
+                        continue;
+                    bool essential = (goal && r.id == goal->id) || type == 6;
+                    if ((pass == 0) != essential)
+                        continue;
+                    if (ShCanAfford(rules, bot, team, r, !essential))
+                        best = &r;
+                }
+                if (best)
+                {
+                    plan = ShPlan{ 1, best->id, s.id, V3{ s.at.x, s.at.y, home.z } };
+                    plan.before = standing;
+                    return true;
+                }
+            }
+    for (int id : first)
     {
         const ShBuildRow* r = ShRow(id);
-        if (!r || !ShRowAllowed(bot, *r, tier, byRow) || !ShCanAfford(rules, bot, team, *r) || ShBanned(id, 0, now))
-            continue;
         V3 at;
-        if (!ShFreeSpot(home, at))
-            return false;
+        if (!r || !ShRowAllowed(bot, *r, tier, byRow) || !ShCanAfford(rules, bot, team, *r) || ShBanned(id, 0, now) || !ShFreeSpot(home, at))
+            continue;
         plan = ShPlan{ 2, id, -1, at };
         plan.countBefore = byClass[r->cls];
         return true;
+    }
+    // the players' blueprints: the best of each one's family where nothing of it stands yet
+    for (int i = 0; i < (int)g_shBlueprints.size(); i++)
+    {
+        const ShBlueprint& bp = g_shBlueprints[i];
+        if (ShBanned(1000 + i, 0, now))
+            continue;
+        bool there = false;
+        ForEntitiesNear(bp.at, 100.0f, [&](void* e) {
+            unsigned char* q = ShBuilding(e, team) ? (unsigned char*)PrivateOf(e) : nullptr;
+            if (q && Readable(q + SH_BUILDING_ROW, 4) && ShFamilyOf(*(int*)(q + SH_BUILDING_ROW)) == bp.family)
+                there = true;
+        });
+        int id = there ? -1 : ShBestOfFamily(rules, bot, bp.family, tier, byRow, true);
+        if (id < 0)
+            continue;
+        plan = ShPlan{ 2, id, -1, bp.at };
+        plan.yaw = bp.yaw;
+        plan.blueprint = i;
+        plan.countBefore = byClass[ShRow(id)->cls];
+        return true;
+    }
+    // an old turret, wall, gate or trap for a better one, then a building that would use less power built again (Electric
+    // Engineering)
+    if (ShPlanUpgrade(rules, bot, home, now, tier, byRow, plan))
+        return true;
+    if (ShPlanRebuild(rules, bot, home, now, plan))
+        return true;
+    // turrets (where no blueprint says where): two, and two more each tier; the best one the tier allows. The first two
+    // don't wait for the reserve.
+    bool turretPrints = false;
+    for (auto& bp : g_shBlueprints)
+        turretPrints |= bp.family == SHF_TURRET;
+    int turrets = byClass["shelter_team_turret"] + byClass["shelter_team_flame_turret"] + byClass["shelter_team_mortar_turret"] +
+                  byClass["shelter_team_laser_turret"] + byClass["shelter_team_electronic_turret"];
+    if (!turretPrints && turrets < 2 * tier)
+    {
+        int id = ShBestOfFamily(rules, bot, SHF_TURRET, tier, byRow, turrets >= 2);
+        const ShBuildRow* r = id >= 0 ? ShRow(id) : nullptr;
+        V3 at;
+        if (r && (turrets >= 2 || ShCanAfford(rules, bot, team, *r)) && !ShBanned(id, 0, now) && ShFreeSpot(home, at))
+        {
+            plan = ShPlan{ 2, id, -1, at };
+            plan.countBefore = byClass[r->cls];
+            return true;
+        }
     }
     return false;
 }
@@ -1518,6 +1821,24 @@ static void ShCheckBuild(unsigned char* rules, void* bot, ShBot& b, float now)
     static int reports = 0;
     if (reports++ < 120)
         Log("Shelter: '%s' build of row %d %s", String(F<int>(Vars(bot), EV_NETNAME)), b.plan.building, ok ? "done" : "refused by the game");
+    // a rebuild or replacement refused where the old one stood: tried a little further, 3 times (the old one is gone: giving
+    // up there lost it)
+    if (!ok && b.plan.kind == 2 && b.plan.again && b.plan.tries < 3)
+    {
+        V3 old = b.plan.at, at;
+        if (ShFreeSpot(old, at, &old))
+        {
+            b.plan.tries++;
+            b.plan.at = at;
+            b.sent = false;
+            b.planSince = now;
+            Log("Shelter: '%s' tries the rebuild of row %d %.0f u further (try %d)", ShBotName(bot).c_str(), b.plan.building, Len2D(at - old),
+                b.plan.tries);
+            return;
+        }
+    }
+    if (!ok && b.plan.blueprint >= 0)
+        g_shBuildBan[(1000LL + b.plan.blueprint) * 1000LL] = now + 60.0f; // (ShBanned(1000 + i, 0))
     if (!ok)
         g_shBuildBan[b.plan.building * 1000LL + (b.plan.spot > 0 ? b.plan.spot : 0)] = now + (b.plan.kind == 2 ? 20.0f : 90.0f);
     b.sent = false;
@@ -1894,6 +2215,7 @@ static void ShDecide(unsigned char* rules, void* bot, BotState& st, ShBot& b, V3
             ShTeamBuildings(team, byRow, byClass);
             const ShBuildRow* r = ShRow(b.plan.building);
             b.plan.kind = 2;
+            b.plan.again = true;
             b.plan.countBefore = r && r->cls ? byClass[r->cls] : 0;
             b.planSince = now;
             Log("Shelter: '%s' took down the %s: builds it again (storage wood %d iron %d power %d)", ShBotName(bot).c_str(),
@@ -2260,6 +2582,16 @@ static void ShDecide(unsigned char* rules, void* bot, BotState& st, ShBot& b, V3
     case SH_BUILD:
         b.goal = b.plan.at;
         b.arrive = b.plan.kind == 3 ? SH_HOME_RADIUS * 0.6f : SH_BUILD_REACH * 0.6f;
+        if (b.plan.kind == 2)
+        {
+            // a few steps off the place, not on it (standing where it rebuilt a turret, the game refused it)
+            V3 away = me - b.plan.at;
+            away.z = 0;
+            float d = Len2D(away);
+            V3 dir = d > 1.0f ? away * (1.0f / d) : YawDir(Rnd() * 360.0f);
+            b.goal = b.plan.at + dir * 115.0f;
+            b.arrive = 35.0f;
+        }
         break;
     case SH_HOME:
         b.goal = home;
@@ -2289,6 +2621,73 @@ static void ShDecide(unsigned char* rules, void* bot, BotState& st, ShBot& b, V3
         b.goal = b.roam;
         b.arrive = 50.0f;
         break;
+    }
+}
+
+// ---------------------------------------------------------------- the Worktable
+// "zsht_worktable <n>" (client command parser 0x108396b0): 0 Machete, 1 Enhanced Gunbarrel, 2 Pistol, 3 Crowbar, 4 Enhanced
+// Fuse, 5 Inductive Sensor, 6 Claw Hammer, 7 Enhanced Turret Component, 8 Public Resource System. A column needs its craft
+// skill (27 Combat, 28 Survival, 29 Tech: rules vfunc 0x490 = 0x10839130, the skill's level); the cost is the tables' vfunc
+// 0x324(n) +4 wood +8 iron, paid from what the player carries (with the Public Resource System, from the storage too:
+// 0x1083d6c0); each one but the pistol once per player (0x114e5840, error 0xf). The bots craft, in the shelter by day when the
+// team has a finished Workroom: the Public Resource System (once each), the upgrades, and a pistol when they have no gun.
+// The melee weapons (machete, crowbar, claw hammer) aren't crafted: they'd take the axe's place, and the resources only
+// take the axe's hits (weapon 29).
+static const char* const g_shCraftNames[] = { "Machete", "Enhanced Gunbarrel", "Pistol", "Crowbar", "Enhanced Fuse", "Inductive Sensor",
+                                             "Claw Hammer", "Enhanced Turret Component", "Public Resource System" };
+
+static void ShCraft(unsigned char* rules, void* bot, ShBot& b, V3 me, V3 home, float now)
+{
+    if (now < b.nextCraft || ShNight(rules) || Len2D(me - home) > SH_HOME_RADIUS * 1.5f)
+        return;
+    b.nextCraft = now + 5.0f;
+    int team = TeamOf(bot);
+    bool table = false;
+    ForEntitiesNear(home, 3000.0f, [&](void* e) {
+        const char* c = ClassName(e);
+        if (c && !strcmp(c, "shelter_team_worktable") && ShTeamOfEntity(e) == team && ShBuiltDone(e))
+            table = true;
+    });
+    if (!table)
+        return;
+    static const int order[] = { 8, 1, 7, 4, 5, 2 };
+    for (int n : order)
+    {
+        if (n == 2 ? (b.gunOwned || now - b.pistolAt < 60.0f) : (b.crafted & (1 << n)) || b.craftTries[n] >= 3)
+            continue;
+        if (ShSkillLevel(bot, 27 + n / 3) <= 0)
+            continue;
+        unsigned char* row = ShTableCall(0x324, n);
+        if (!row)
+            return;
+        int wood = *(int*)(row + 4), iron = *(int*)(row + 8);
+        if (wood < 0 || wood > 300 || iron < 0 || iron > 300)
+            return;
+        if (ShCarried(rules, bot, 0) < wood || ShCarried(rules, bot, 1) < iron)
+            ShWithdraw(rules, bot, wood, iron);
+        bool prs = (b.crafted & (1 << 8)) != 0;
+        int w = ShCarried(rules, bot, 0) + (prs ? ShStorage(rules, team, 0) : 0), i = ShCarried(rules, bot, 1) + (prs ? ShStorage(rules, team, 1) : 0);
+        if (w < wood || i < iron)
+            continue; // not enough yet
+        int before = ShCarried(rules, bot, 0) + ShCarried(rules, bot, 1) + ShStorage(rules, team, 0) + ShStorage(rules, team, 1);
+        char a[4];
+        snprintf(a, sizeof(a), "%d", n);
+        ShelterCommand(bot, "zsht_worktable", a);
+        int after = ShCarried(rules, bot, 0) + ShCarried(rules, bot, 1) + ShStorage(rules, team, 0) + ShStorage(rules, team, 1);
+        bool ok = after < before || (wood == 0 && iron == 0);
+        if (n == 2)
+            b.pistolAt = now;
+        else if (ok)
+            b.crafted |= 1 << n;
+        else
+            b.craftTries[n]++;
+        static int reports = 0;
+        if (reports++ < 60)
+            Log("Shelter: '%s' crafts %s at the Worktable (%d wood %d iron): %s", ShBotName(bot).c_str(), g_shCraftNames[n], wood, iron,
+                ok ? "done" : "nothing happened");
+        if (ok)
+            ShSay(bot, b, SAY_CRAFT, 30.0f, "Crafted a %s at the Worktable.", g_shCraftNames[n]);
+        return;
     }
 }
 
@@ -2336,13 +2735,17 @@ static void ShelterBotThink(void* bot, BotState& st)
             ShDecide(rules, bot, st, b, me, now);
         else
             b.hasGoal = false;
+        V3 craftHome;
+        if (!orderedAway && ShHome(rules, bot, craftHome))
+            ShCraft(rules, bot, b, me, craftHome, now);
         if (now >= b.nextSkill)
         {
             b.nextSkill = now + 3.0f + Rnd() * 3.0f;
             ShSpendSkill(bot, st);
         }
         // at the build place: the command
-        if (b.task == SH_BUILD && b.plan.kind && !b.sent && Len2D(b.plan.at - me) < (b.plan.kind == 3 ? SH_HOME_RADIUS : SH_BUILD_REACH))
+        if (b.task == SH_BUILD && b.plan.kind && !b.sent && Len2D(b.plan.at - me) < (b.plan.kind == 3 ? SH_HOME_RADIUS : SH_BUILD_REACH) &&
+            (b.plan.kind != 2 || Len2D(b.plan.at - me) > 70.0f))
             ShSendBuild(rules, bot, b, now);
         // at a buy zone: the shared buying runs now (UpdateBuying, st.buyAt)
         if (b.task == SH_BUY && b.object && ShInBox(me, b.object, 16.0f))
@@ -2699,6 +3102,7 @@ enum ShMenuPage
     SHM_CAT,
     SHM_PLAN,  // a bot's plan: the skills it will learn, in order
     SHM_ENTRY, // one step of the plan: earlier, later, first, remove
+    SHM_PRINTS, // the blueprints: what to build where the player aims
 };
 struct ShMenu
 {
@@ -2800,8 +3204,8 @@ static void ShShowPage(void* player)
     if (m.page == SHM_ORDERS)
     {
         add("Shelter orders for the bots\n\n1. Gather resources\n2. Defend the shelter\n3. Repair buildings\n4. Build\n5. Follow me\n"
-            "6. Free: each does its job\n7. Bots' skills\n\n0. Close");
-        keys |= 0x7f;
+            "6. Free: each does its job\n7. Bots' skills\n8. Blueprints: what to build where\n\n0. Close");
+        keys |= 0xff;
     }
     else if (m.page == SHM_BOTS)
     {
@@ -2881,6 +3285,19 @@ static void ShShowPage(void* player)
         }
         add("\n9. %s\n0. Back", m.sub ? "First page" : "More skills");
         keys |= 1 << 8;
+    }
+    else if (m.page == SHM_PRINTS)
+    {
+        ShBlueprintsLoad();
+        int n[SHF_COUNT] = {};
+        for (auto& bp : g_shBlueprints)
+            n[bp.family]++;
+        add("Blueprints (%d on this map): aim at the ground where it goes and pick what. The builder builds the best one it can there.\n\n",
+            (int)g_shBlueprints.size());
+        for (int f = 0; f < SHF_COUNT; f++)
+            add("%d. %s%s\n", f + 1, g_shFamilyNames[f], n[f] ? ShFmt(" (%d)", n[f]) : "");
+        add("8. Remove the one closest to where you aim\n9. Remove all of this map\n0. Back");
+        keys |= 0x1ff;
     }
     else if (m.page == SHM_PLAN)
     {
@@ -2972,6 +3389,24 @@ static void ShGiveOrder(void* player, ShOrder order)
         FakeCommand(answer, "roger");
 }
 
+// where the player aims: the ground under the point its view hits (within 600 units), else under its feet; the angle
+// rounded to a right angle (the build command's)
+static void ShAimPoint(void* player, V3& at, float& yaw)
+{
+    unsigned char* v = Vars(player);
+    float pitch = F<float>(v, EV_VANGLE) / RAD, y = F<float>(v, EV_VANGLE + 4);
+    V3 eye = Eye(player);
+    V3 fwd{ cosf(pitch) * cosf(y / RAD), cosf(pitch) * sinf(y / RAD), -sinf(pitch) };
+    TraceResult tr;
+    Trace(eye, eye + fwd * 600.0f, player, 1, tr);
+    V3 hit = tr.flFraction < 1.0f ? Vec(tr.vecEndPos) - fwd * 24.0f : Origin(player);
+    TraceResult down;
+    Trace(hit + V3{ 0, 0, 16 }, hit - V3{ 0, 0, 400 }, player, 1, down);
+    at = down.flFraction < 1.0f ? Vec(down.vecEndPos) : Origin(player);
+    float r = floorf(y / 90.0f + 0.5f) * 90.0f;
+    yaw = fmodf(r + 720.0f, 360.0f);
+}
+
 // a skill picked in the menu: learned now when the bot has a point (and the tree allows it), else planned for later
 static void ShPickSkill(void* player, void* bot, int id)
 {
@@ -3031,6 +3466,8 @@ static void ShMenuKey(void* player, int key)
             ShGiveOrder(player, SHO_FREE);
         else if (key == 7)
             ShOpenMenu(player, SHM_BOTS);
+        else if (key == 8)
+            ShOpenMenu(player, SHM_PRINTS);
         break;
     case SHM_BOTS:
         if (key >= 1 && key <= (int)m.bots.size())
@@ -3086,6 +3523,51 @@ static void ShMenuKey(void* player, int key)
         else if (key == 9)
             ShOpenMenu(player, SHM_BOTS);
         break;
+    case SHM_PRINTS:
+    {
+        ShBlueprintsLoad();
+        V3 at;
+        float yaw;
+        ShAimPoint(player, at, yaw);
+        if (key >= 1 && key <= SHF_COUNT)
+        {
+            g_shBlueprints.push_back(ShBlueprint{ key - 1, at, yaw });
+            ShBlueprintsSave();
+            ShPrint(player, ShFmt("Blueprint: %s here (%d blueprints)", g_shFamilyNames[key - 1], (int)g_shBlueprints.size()));
+            Log("Shelter: a player puts a %s blueprint at %.0f %.0f %.0f (angle %.0f) on %s", g_shFamilyNames[key - 1], at.x, at.y, at.z, yaw,
+                g_nav.map.c_str());
+        }
+        else if (key == 8)
+        {
+            int best = -1;
+            float bestD = 400.0f;
+            for (int i = 0; i < (int)g_shBlueprints.size(); i++)
+                if (Len2D(g_shBlueprints[i].at - at) < bestD)
+                {
+                    bestD = Len2D(g_shBlueprints[i].at - at);
+                    best = i;
+                }
+            if (best >= 0)
+            {
+                ShPrint(player, ShFmt("Blueprint removed: %s", g_shFamilyNames[g_shBlueprints[best].family]));
+                g_shBlueprints.erase(g_shBlueprints.begin() + best);
+                ShBlueprintsSave();
+            }
+            else
+                ShPrint(player, "No blueprint near where you aim");
+        }
+        else if (key == 9)
+        {
+            g_shBlueprints.clear();
+            ShBlueprintsSave();
+            ShPrint(player, "All the blueprints of this map removed");
+        }
+        if (key == 0)
+            ShOpenMenu(player, SHM_ORDERS);
+        else
+            ShOpenMenu(player, SHM_PRINTS);
+        break;
+    }
     case SHM_PLAN:
         if (key >= 1 && key <= 8 && m.planSub * 8 + key - 1 < (int)ShPlanOf(m.bot).queue.size())
         {
@@ -3199,6 +3681,8 @@ static bool ShelterPlayerCommand(void* player, const std::string& c)
             t.pop_back();
         if (t == "orders" || t == "menu" || t == "bots")
             ShOpenMenu(player, SHM_ORDERS);
+        else if (t == "blueprints" || t == "blueprint" || t == "plans")
+            ShOpenMenu(player, SHM_PRINTS);
         else if (t == "skills" || t == "skill")
         {
             ShPrintSkills(player);
@@ -3270,8 +3754,9 @@ static void ShelterRespawnBots(float now)
             Log("Shelter: bot '%s' died (dead flag %d, death time %.1f, now %.1f)", ShBotName(e).c_str(), F<int>(v, EV_DEADFLAG),
                 *(float*)(p + 0xf74), now);
         }
+        // (+0xf74 can still hold the last death's time for a moment: one bot came back at once, "103 s after dying")
         float died = *(float*)(p + 0xf74);
-        if (died <= 0 || died > now + 1.0f)
+        if (died <= 0 || died > now + 1.0f || died < d.since - 2.0f)
             died = d.since;
         if (now - died < 3.0f || now - d.lastTry < 0.5f)
             return;
@@ -3314,6 +3799,7 @@ static void ShelterWatch()
     if (!rules || !g_pGlobals || !*g_pGlobals)
         return;
     float now = Now();
+    ShOpenCrafts();
     ShelterRespawnBots(now);
     if (now >= next - 60.0f && now < next)
         return;
