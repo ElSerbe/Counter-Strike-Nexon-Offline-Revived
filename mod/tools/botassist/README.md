@@ -863,8 +863,10 @@ They're kept by map in Bin/botassist_shelter_blueprints.txt. With turret bluepri
 Crafts: the skill-up's "one craft skill" check (0x10844970) is jumped over in memory (`ShOpenCrafts`: eb 28 -> 0x1084499a), so players and
 bots can learn all three. Bots craft at a finished Workroom (`ShCraft`, "zsht_worktable <n>": 0 Machete, 1 Gunbarrel, 2 Pistol, 3 Crowbar,
 4 Fuse, 5 Sensor, 6 Claw Hammer, 7 Turret Component, 8 Public Resource System; column skill 27/28/29 via rules vfunc 0x490; cost from tables
-vfunc 0x324 +4/+8; once each except the pistol, error 0xf). They craft 8, 1, 7, 4, 5, and a pistol when they have no gun. They don't
-craft the melee weapons (the resources take only weapon 29's hits).
+vfunc 0x324 +4/+8; once each except the pistol, error 0xf). They craft 8, their job's melee tool (crowbar gatherer, claw hammer builder,
+machete fighter: the resources take any melee tool's hits), 1, 7, 4, 5, and a pistol when they have no gun. `ShMeleeHeld` is the axe
+(weapon 29) or the melee slot's item in hand; the bot draws its melee slot's class. The three craft skills come free to every living
+player, people and bots (`ShGrantCrafts`: a skill point plus the game's skill-up, the point taken back if refused; again after a skill reset).
 botassist.log "Shelter:" (state every 15 s with the shelter tier, each bot's job, order and task every 20 s, deposits, skills, buys, repairs,
 fixed spots, builds planned, sent, done or refused, unreachable resources, orders).
 

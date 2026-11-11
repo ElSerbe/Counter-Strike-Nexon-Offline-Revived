@@ -353,11 +353,19 @@ static int ShWeaponId(void* bot)
     return w && Readable(w + SH_WEAPON_ID, 4) ? *(int*)(w + SH_WEAPON_ID) : 0;
 }
 
-// the axe or another melee tool (machete, crowbar, claw hammer) in hand
+// the axe or another melee tool (the Worktable's machete, crowbar, claw hammer: the resources take their hits too) in hand:
+// the item in hand is the melee slot's (3), or its model says so
 static bool ShMeleeHeld(void* bot)
 {
     if (ShWeaponId(bot) == SH_KNIFE_ID)
         return true;
+    unsigned char* p = (unsigned char*)PrivateOf(bot);
+    if (p && Readable(p + 0xfb8 + 16 * 3, 8) && Readable(p + SHP_ACTIVE_ITEM, 4))
+    {
+        void* inHand = *(void**)(p + SHP_ACTIVE_ITEM);
+        if (inHand && inHand == *(void**)(p + 0xfb8 + 16 * 3 + 4))
+            return true;
+    }
     const char* m = String(F<int>(Vars(bot), EV_WEAPONMODEL));
     return m && (strstr(m, "knife") || strstr(m, "axe") || strstr(m, "machete") || strstr(m, "crowbar") || strstr(m, "hammer"));
 }
@@ -831,9 +839,9 @@ static const ShSkill kSkills[33] = {
     { 24, 2, 3, 1, -1, "Battlefield Repair", "Repair", "armor and turrets repair themselves" },
     { 25, 2, 1, 4, 20, "Wrecking Team", "Wrecking", "special: C4 against objects" },
     { 26, 2, 1, 3, 22, "Construction Expert", "Construction", "builds faster with a high mental gauge" },
-    { 27, 0, 1, 2, -1, "Combat Craft", "Combat Craft", "crafts at the worktable (one craft skill)" },
-    { 28, 1, 1, 2, -1, "Survival Craft", "Survival Craft", "crafts at the worktable (one craft skill)" },
-    { 29, 2, 1, 2, -1, "Tech Craft", "Tech Craft", "crafts at the worktable (one craft skill)" },
+    { 27, 0, 1, 2, -1, "Combat Craft", "Combat Craft", "Worktable: machete, gunbarrel, pistol (free for everyone)" },
+    { 28, 1, 1, 2, -1, "Survival Craft", "Survival Craft", "Worktable: crowbar, fuse, sensor (free for everyone)" },
+    { 29, 2, 1, 2, -1, "Tech Craft", "Tech Craft", "Worktable: claw hammer, turret part, public resources (free)" },
     { 30, 0, 1, 4, -1, "Power Shoot", "Power Shoot", "special: HP, armor, damage and ammo up" },
     { 31, 1, 1, 4, -1, "Transport Resources", "Transport", "special: full pockets go to the storage" },
     { 32, 2, 1, 4, -1, "Moving Tower", "Moving Tower", "special: move built turrets" },
@@ -882,6 +890,41 @@ static void ShOpenCrafts()
         g_shCraftsOpen = true;
         Log("Shelter: the three craft skills can be learned together now");
     }
+}
+
+// The three craft skills come with every player (people and bots), free: a living player of a team without one gets a skill
+// point and the game's skill-up for it (so the game counts it, the client's skill tree shows it and the Worktable opens), and
+// the point is taken back if the game didn't take it. A skill reset takes them away: they come back a moment later.
+static void ShGrantCrafts(float now)
+{
+    static float next = 0;
+    if (!g_shCraftsOpen || (now < next && now > next - 5.0f))
+        return;
+    next = now + 1.0f;
+    ForEntitiesNear(V3{ 0, 0, 0 }, 1e6f, [&](void* e) {
+        if (!(F<int>(Vars(e), EV_FLAGS) & (FL_CLIENT | FL_FAKECLIENT)) || !Alive(e) || TeamOf(e) < 1 || TeamOf(e) > 2)
+            return;
+        unsigned char* p = (unsigned char*)PrivateOf(e);
+        if (!p || !Readable(p + SHP_SKILL_POINTS, 2))
+            return;
+        for (int id = 27; id <= 29; id++)
+        {
+            if (ShSkillLevel(e, id) > 0)
+                continue;
+            short& points = *(short*)(p + SHP_SKILL_POINTS);
+            short before = points;
+            points = before + 1;
+            char a[4];
+            snprintf(a, sizeof(a), "%d", id);
+            ShelterCommand(e, "zsht_RequestSkillup", a);
+            bool ok = ShSkillLevel(e, id) > 0;
+            if (!ok)
+                points = before;
+            static int reports = 0;
+            if (reports++ < 60)
+                Log("Shelter: '%s' gets %s free%s (skill points %d)", String(F<int>(Vars(e), EV_NETNAME)), kSkills[id].name, ok ? "" : ": REFUSED", points);
+        }
+    });
 }
 
 static int ShPoints(void* bot)
@@ -1026,9 +1069,10 @@ static void ShPlanAdd(void* bot, ShSkillPlan& p, int id)
 // Beginner Harvest Mastery (more wood and iron per hit) and soon takes Strong Patience (the mental gauge lasts twice as
 // long outside); the builder then Rookie Engineer (the worktable) and the cheaper blueprints, gatherers Advanced Harvest
 // Mastery (cars and scrap) and speed, fighters the weapon masteries (SMGs and shotguns need the first) and HP.
-static const int kAutoBuilder[] = { 18, 19, 20, 21, 22, 29, 21, 9, 16, 22, 24, 21, 28, 27, 26, 22, 18, 19, 20, 24, 18, 19, 20, 24, 23, 9, 13, 5, 9, 32 };
-static const int kAutoGatherer[] = { 9, 10, 9, 16, 9, 28, 13, 10, 29, 27, 15, 10, 13, 5, 15, 11, 15, 13, 11, 12, 14, 11, 14, 14, 31, 5, 5 };
-static const int kAutoFighter[] = { 9, 0, 5, 16, 27, 0, 13, 1, 28, 29, 5, 6, 4, 0, 1, 3, 5, 6, 13, 1, 7, 3, 2, 6, 7, 3, 2, 2, 30, 13 };
+// (the three craft skills come free: ShGrantCrafts)
+static const int kAutoBuilder[] = { 18, 19, 20, 21, 22, 21, 9, 16, 22, 24, 21, 26, 22, 18, 19, 20, 24, 18, 19, 20, 24, 23, 9, 13, 5, 9, 32 };
+static const int kAutoGatherer[] = { 9, 10, 9, 16, 9, 13, 10, 15, 10, 13, 5, 15, 11, 15, 13, 11, 12, 14, 11, 14, 14, 31, 5, 5 };
+static const int kAutoFighter[] = { 9, 0, 5, 16, 0, 13, 1, 5, 6, 4, 0, 1, 3, 5, 6, 13, 1, 7, 3, 2, 6, 7, 3, 2, 2, 30, 13 };
 
 static void ShSkillLog(void* bot, int id, const char* how)
 {
@@ -2324,7 +2368,7 @@ static void ShDecide(unsigned char* rules, void* bot, BotState& st, ShBot& b, V3
         unsigned char* p = (unsigned char*)PrivateOf(bot);
         int hits = ShResourceHits(b.object), carried = ShCarried(rules, bot, 0) + ShCarried(rules, bot, 1);
         int money = p && Readable(p + SHP_MONEY, 4) ? *(int*)(p + SHP_MONEY) : 0;
-        bool inReach = Len(ShClosest(Eye(bot), b.object) - Eye(bot)) < SH_REACH + 16.0f && !st.target && ShWeaponId(bot) == SH_KNIFE_ID;
+        bool inReach = Len(ShClosest(Eye(bot), b.object) - Eye(bot)) < SH_REACH + 16.0f && !st.target && ShMeleeHeld(bot);
         if (!inReach || !b.gatherNear || hits != b.gatherHits || carried != b.gatherCarried || money != b.gatherMoney)
         {
             b.gatherNear = inReach ? now : 0;
@@ -2631,12 +2675,12 @@ static void ShDecide(unsigned char* rules, void* bot, BotState& st, ShBot& b, V3
 // 0x324(n) +4 wood +8 iron, paid from what the player carries (with the Public Resource System, from the storage too:
 // 0x1083d6c0); each one but the pistol once per player (0x114e5840, error 0xf). The bots craft, in the shelter by day when the
 // team has a finished Workroom: the Public Resource System (once each), the upgrades, and a pistol when they have no gun.
-// The melee weapons (machete, crowbar, claw hammer) aren't crafted: they'd take the axe's place, and the resources only
-// take the axe's hits (weapon 29).
+// And the melee tool of its job (the resources take any melee tool's hits): the crowbar for gathering, the claw hammer for
+// building, the machete for fighting; one each.
 static const char* const g_shCraftNames[] = { "Machete", "Enhanced Gunbarrel", "Pistol", "Crowbar", "Enhanced Fuse", "Inductive Sensor",
                                              "Claw Hammer", "Enhanced Turret Component", "Public Resource System" };
 
-static void ShCraft(unsigned char* rules, void* bot, ShBot& b, V3 me, V3 home, float now)
+static void ShCraft(unsigned char* rules, void* bot, ShBot& b, ShRole role, V3 me, V3 home, float now)
 {
     if (now < b.nextCraft || ShNight(rules) || Len2D(me - home) > SH_HOME_RADIUS * 1.5f)
         return;
@@ -2650,7 +2694,8 @@ static void ShCraft(unsigned char* rules, void* bot, ShBot& b, V3 me, V3 home, f
     });
     if (!table)
         return;
-    static const int order[] = { 8, 1, 7, 4, 5, 2 };
+    int tool = role == SHR_BUILDER ? 6 : role == SHR_GATHERER ? 3 : 0;
+    const int order[] = { 8, tool, 1, 7, 4, 5, 2 };
     for (int n : order)
     {
         if (n == 2 ? (b.gunOwned || now - b.pistolAt < 60.0f) : (b.crafted & (1 << n)) || b.craftTries[n] >= 3)
@@ -2737,7 +2782,7 @@ static void ShelterBotThink(void* bot, BotState& st)
             b.hasGoal = false;
         V3 craftHome;
         if (!orderedAway && ShHome(rules, bot, craftHome))
-            ShCraft(rules, bot, b, me, craftHome, now);
+            ShCraft(rules, bot, b, ShJobOf(bot, st), me, craftHome, now);
         if (now >= b.nextSkill)
         {
             b.nextSkill = now + 3.0f + Rnd() * 3.0f;
@@ -2782,7 +2827,9 @@ static void ShelterBotThink(void* bot, BotState& st)
         {
             if (hitting && !melee)
             {
-                FakeCommand(bot, "weapon_knife");
+                // its melee slot's tool (the axe, or what it crafted at the Worktable)
+                std::string tool = SlotClass(bot, 3);
+                FakeCommand(bot, tool.compare(0, 7, "weapon_") ? "weapon_knife" : tool.c_str());
                 b.switchAt = now + 1.0f;
             }
             else if (!hitting && melee && (st.target || st.threat || ShNight(rules)))
@@ -3003,7 +3050,7 @@ static int ShelterSwing(void* bot, BotState& st, float yaw, float pitch)
         return 0;
     ShBot& b = it->second;
     if ((b.task != SH_GATHER && b.task != SH_REPAIR && b.task != SH_BREAK && b.task != SH_DEMOLISH) || !b.object ||
-        ShWeaponId(bot) != SH_KNIFE_ID)
+        !ShMeleeHeld(bot))
         return 0;
     V3 eye = Eye(bot);
     V3 c = ShClosest(eye, b.object);
@@ -3800,6 +3847,7 @@ static void ShelterWatch()
         return;
     float now = Now();
     ShOpenCrafts();
+    ShGrantCrafts(now);
     ShelterRespawnBots(now);
     if (now >= next - 60.0f && now < next)
         return;
