@@ -2189,7 +2189,7 @@ index 24d1ccc..e4b37a8 100644
  		if (destRoom->GetSettings()->gameModeId == 15)
  		{
 diff --git a/src/manager/itemmanager.cpp b/src/manager/itemmanager.cpp
-index ad8d88a..e5fca6f 100644
+index ad8d88a..f126702 100644
 --- a/src/manager/itemmanager.cpp
 +++ b/src/manager/itemmanager.cpp
 @@ -1,9 +1,11 @@
@@ -2204,7 +2204,57 @@ index ad8d88a..e5fca6f 100644
  
  #include "user/userinventoryitem.h"
  
-@@ -1364,8 +1366,8 @@ int CItemManager::AddItems(int userID, IUser* user, vector<RewardItem>& items)
+@@ -411,6 +413,23 @@ bool CItemManager::KVToJson()
+ 	return true;
+ }
+ 
++// The crafting window (the inventory's ItemFarm: weapon assembly from blueprints, material assembly, disassembly) has
++// no server side yet: its requests are logged byte for byte, from the current read position, so the first tries in the
++// game show their layout.
++static void LogItemPacketBytes(const char* what, CReceivePacket* msg)
++{
++	const Buffer& buf = msg->GetData();
++	const std::vector<unsigned char>& bytes = buf.getBuffer();
++	string hex;
++	char b[4];
++	for (size_t i = (size_t)buf.getReadOffset(); i < bytes.size() && hex.size() < 3 * 512; i++)
++	{
++		snprintf(b, sizeof(b), "%02x ", bytes[i]);
++		hex += b;
++	}
++	Logger().Warn("Crafting: %s request, %d bytes left: %s\n", what, (int)(bytes.size() - min(bytes.size(), (size_t)buf.getReadOffset())), hex.c_str());
++}
++
+ bool CItemManager::OnItemPacket(CReceivePacket* msg, IExtendedSocket* socket)
+ {
+ 	LOG_PACKET;
+@@ -612,14 +631,17 @@ bool CItemManager::OnItemPacket(CReceivePacket* msg, IExtendedSocket* socket)
+ 		OpenDecoder(user, msg->ReadUInt16(), msg->ReadUInt16());
+ 		break;
+ 	case ItemPacketType::WeaponAssem:
++		LogItemPacketBytes("weapon assembly (type 5)", msg);
+ 		break;
+ 	case ItemPacketType::MaterialAssem:
++		LogItemPacketBytes("material assembly (type 6)", msg);
+ 		break;
+ 	case ItemPacketType::DailyRewards:
+ 		OnDailyRewardsRequest(user, msg->ReadUInt8());
+ 		break;
+ 	case ItemPacketType::Disassemble:
+ 	{
++		LogItemPacketBytes("disassembly (type 7)", msg);
+ 		OnDisassembleRequest(user, msg);
+ 		break;
+ 	}
+@@ -660,6 +682,7 @@ bool CItemManager::OnItemPacket(CReceivePacket* msg, IExtendedSocket* socket)
+ 		break;
+ 	default:
+ 		Logger().Warn("Packet_Item type %d is not implemented\n", type);
++		LogItemPacketBytes(("item packet type " + to_string(type)).c_str(), msg);
+ 		break;
+ 	}
+ 
+@@ -1364,8 +1387,8 @@ int CItemManager::AddItems(int userID, IUser* user, vector<RewardItem>& items)
  			}
  		}
  
@@ -2215,7 +2265,7 @@ index ad8d88a..e5fca6f 100644
  	}
  
  	if (result == ITEM_ADD_DB_ERROR)
-@@ -1450,6 +1452,8 @@ int CItemManager::UseItem(IUser* user, int slot, int additionalArg, int addition
+@@ -1450,6 +1473,8 @@ int CItemManager::UseItem(IUser* user, int slot, int additionalArg, int addition
  
  	switch (item.m_nItemID)
  	{
@@ -2224,7 +2274,7 @@ index ad8d88a..e5fca6f 100644
  	case 676:
  	{
  		CUserInventoryItem targetItem;
-@@ -2039,18 +2043,8 @@ void CItemManager::OnNicknameChangeUse(IUser* user, string newNickname)
+@@ -2039,18 +2064,8 @@ void CItemManager::OnNicknameChangeUse(IUser* user, string newNickname)
  
  bool CItemManager::OnDailyRewardsRequest(IUser* user, int requestID)
  {
@@ -2245,7 +2295,7 @@ index ad8d88a..e5fca6f 100644
  
  	return true;
  }
-@@ -2859,6 +2853,23 @@ bool CItemManager::OnLockItemRequest(IUser* user, CReceivePacket* msg)
+@@ -2859,6 +2874,23 @@ bool CItemManager::OnLockItemRequest(IUser* user, CReceivePacket* msg)
  
  void CItemManager::OnUserLogin(IUser* user)
  {
