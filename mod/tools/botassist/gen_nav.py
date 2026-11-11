@@ -89,7 +89,7 @@ class Trace:
 class Collision:
     """Point and line tests against the world and the solid brush entities, in one hull."""
 
-    def __init__(self, bsp, classes=None):
+    def __init__(self, bsp, classes=None, skip=()):
         classes = SOLID_ENTITIES if classes is None else classes
         self.planes = bsp.planes
         self.clip = bsp.clip
@@ -100,7 +100,7 @@ class Collision:
                 continue  # SF_CONVEYOR_NOTSOLID, SF_BRUSH_ROTATE_NOT_SOLID: the arrows on the floor, the river's flow
             if cls in classes and e.get("model", "").startswith("*"):
                 idx = int(e["model"][1:])
-                if 0 < idx < len(bsp.models):
+                if 0 < idx < len(bsp.models) and idx not in skip:
                     org = tuple(float(x) for x in e.get("origin", "0 0 0").split()) if "origin" in e else (0.0, 0.0, 0.0)
                     self.bodies.append((idx, org))
         self.models = bsp.models
@@ -199,7 +199,9 @@ class NavBuilder:
     def __init__(self, bsp, log=print):
         self.bsp = bsp
         self.col = Collision(bsp)
-        self.ground = Collision(bsp, SOLID_ENTITIES | FLOOR_ENTITIES)
+        self.movers = self.find_movers()
+        # the lifts' and trains' floors are areas of their own at each stop (decks), not cells of the flood
+        self.ground = Collision(bsp, SOLID_ENTITIES | FLOOR_ENTITIES, skip={m["model"] for m in self.movers})
         self.log = log
         # water volumes (func_water): falling into one doesn't hurt, and a body in one swims up to its surface
         self.water = []
@@ -242,9 +244,109 @@ class NavBuilder:
         self.index[key] = lst[-1]
         return key, True
 
+    # ---- what carries players: lifts (func_door moving up or down, func_plat) and trains (func_train, func_tracktrain along
+    # their path_corner / path_track); teleports are added in write()
+    def find_movers(self):
+        ents = self.bsp.entities
+        named = {}
+        for e in ents:
+            if "targetname" in e:
+                named.setdefault(e["targetname"], e)
+        out = []
+        for e in ents:
+            cls, model = e.get("classname", ""), e.get("model", "")
+            if not model.startswith("*") or cls not in ("func_door", "func_plat", "func_train", "func_tracktrain"):
+                continue
+            idx = int(model[1:])
+            if not 0 < idx < len(self.bsp.models):
+                continue
+            m = self.bsp.models[idx]
+            org = [float(v) for v in e["origin"].split()] if "origin" in e else [0.0, 0.0, 0.0]
+            lo = [m["mins"][k] + org[k] for k in range(3)]
+            hi = [m["maxs"][k] + org[k] for k in range(3)]
+            size = [hi[k] - lo[k] for k in range(3)]
+            if size[0] < 64 or size[1] < 64:
+                continue  # a door, a bar, a small machine: not something to ride
+            stops = []   # (x0, y0, x1, y1, top)
+            if cls == "func_door":
+                pitch = float((e.get("angles", "0 0 0").split() + ["0"])[0])
+                if abs(abs(pitch) - 90) > 1:
+                    continue  # it slides sideways
+                sign = 1 if pitch < 0 else -1          # -90: up, 90: down
+                dist = size[2] - 2 - float(e.get("lip", "0") or 0)
+                stops = [(lo[0], lo[1], hi[0], hi[1], hi[2]), (lo[0], lo[1], hi[0], hi[1], hi[2] + sign * dist)]
+                kind = 0
+            elif cls == "func_plat":
+                height = float(e.get("height", "0") or 0) or size[2] - 8
+                stops = [(lo[0], lo[1], hi[0], hi[1], hi[2]), (lo[0], lo[1], hi[0], hi[1], hi[2] - height)]
+                kind = 0
+            else:
+                # centred on each corner of its path (CFuncTrain::Activate: origin = corner - (mins + maxs) / 2)
+                seen, name = set(), e.get("target")
+                while name and name not in seen and name in named and len(stops) < 64:
+                    seen.add(name)
+                    c = named[name]
+                    if "origin" not in c:
+                        break
+                    x, y, z = (float(v) for v in c["origin"].split())
+                    stops.append((x - size[0] / 2, y - size[1] / 2, x + size[0] / 2, y + size[1] / 2, z + size[2] / 2))
+                    name = c.get("target")
+                kind = 1
+            if len(stops) < 2 or max(abs(s[k] - stops[0][k]) for s in stops for k in (0, 1, 4)) < 24:
+                continue
+            # where one stands on it: its lowest floor with room to stand (inside a train car, not on its roof)
+            sink = self.deck_depth(m, idx, stops)
+            stops = [(x0, y0, x1, y1, top - sink) for x0, y0, x1, y1, top in stops]
+            out.append({"cls": cls, "model": idx, "size": size, "stops": stops, "kind": kind, "sink": sink})
+        return out
+
+    def deck_depth(self, m, idx, stops):
+        """how far below the top of a brush model the floor one stands on is: of its standable surfaces (at its middle,
+        room for a standing body above), the one closest to the floors around its stops (a crane's platform, not its base;
+        a train car's floor, not its roof); with none around, the top"""
+        cx, cy = (m["mins"][0] + m["maxs"][0]) / 2, (m["mins"][1] + m["maxs"][1]) / 2
+        crouch, stand = m["head"][HULL_CROUCH], m["head"][HULL_STAND]
+        solid = lambda head, z: self.col._contents(head, (cx, cy, z)) == CONTENTS_SOLID
+        sinks = []
+        z = m["maxs"][2] + CROUCH_HALF + 2
+        while z > m["mins"][2]:
+            if not solid(crouch, z) and solid(crouch, z - 2):
+                feet = z - CROUCH_HALF
+                if not solid(stand, feet + STAND_HALF + 1):
+                    sinks.append(m["maxs"][2] - feet)
+            z -= 2
+        if not sinks:
+            return 0.0
+        # for each candidate: the stops with floor beside them at that height (within a jump), the mover itself left out
+        around = Collision(self.bsp, SOLID_ENTITIES | FLOOR_ENTITIES, skip={idx})
+
+        def score(s):
+            fit, near = 0, 0
+            for x0, y0, x1, y1, top in stops:
+                floor, mx, my, best = top - s, (x0 + x1) / 2, (y0 + y1) / 2, None
+                for dx, dy in DIRS:
+                    for off in (8, 24, 48):
+                        px, py = mx + dx * ((x1 - x0) / 2 + off), my + dy * ((y1 - y0) / 2 + off)
+                        tr = around.trace(HULL_CROUCH, (px, py, floor + JUMP_HEIGHT + CROUCH_HALF),
+                                          (px, py, floor - JUMP_HEIGHT + CROUCH_HALF), through=True)
+                        if not tr.startsolid and tr.fraction < 1.0 and tr.normal[2] >= MIN_NORMAL_Z:
+                            d = abs(tr.end[2] - CROUCH_HALF - floor)
+                            best = d if best is None else min(best, d)
+                            near += 1
+                            break
+                if best is not None:
+                    fit += 1
+            return (fit, near, -s)
+        return max(sinks, key=score)
+
     # ---- flood fill
     def seed_points(self):
         pts = []
+        for m in self.movers:
+            for x0, y0, x1, y1, top in m["stops"]:
+                cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+                for dx, dy in DIRS:
+                    pts.append((cx + dx * ((x1 - x0) / 2 + 32), cy + dy * ((y1 - y0) / 2 + 32), top + 40))
         for e in self.bsp.entities:
             cls = e.get("classname", "")
             if cls in ("info_player_start", "info_player_deathmatch", "zombiespawn", "info_teleport_destination") and "origin" in e:
@@ -409,56 +511,155 @@ class NavBuilder:
 
     def write(self, path, text=True):
         """the mesh as the game's .nav (text=False) or as botassist's .navtxt (the same areas, one per line: kept in Git as
-        text; nav_tools.inl NavFromText turns it into the .nav when the map loads)"""
+        text; nav_tools.inl NavFromText turns it into the .nav when the map loads). The .navtxt also has, after the areas,
+        a "deck" line per lift or train stop (its area, the mover's class, size, the middle of its floor there and how far that
+        floor is below its top) and a "ride" line per way
+        a mover or a teleport carries players (kind 0 lift, 1 train, 2 teleport; from and to area; where on and off)."""
         rects, owner = self.areas()
-        links = [set() for _ in rects]
+        half = GRID / 2
+        areas = []   # [lo.x, lo.y, nwz, hi.x, hi.y, sez, nez, swz, flags, {(dir, index)}]
+        for rows in rects:
+            first, last = rows[0][0], rows[-1][-1]
+            c0 = self.index[first]
+            f = (NAV_CROUCH if c0["crouch"] else 0) | (NAV_JUMP if c0["jump"] else 0)
+            areas.append([first[0] * GRID - half, first[1] * GRID - half, self.index[rows[0][0]]["z"],
+                          last[0] * GRID + half, last[1] * GRID + half, self.index[rows[-1][-1]]["z"],
+                          self.index[rows[0][-1]]["z"], self.index[rows[-1][0]]["z"], f, set()])
         for k, c in self.index.items():
             a = owner[k]
             for d, nk in c["edges"]:
                 b = owner.get(nk)
                 if b is not None and b != a:
-                    links[a].add((d, b))
+                    areas[a][9].add((d, b))
+        base = len(areas)
+
+        def z_at(a, x, y):
+            w, h = a[3] - a[0], a[4] - a[1]
+            u = min(max((x - a[0]) / w, 0), 1) if w > 0 else 0
+            v = min(max((y - a[1]) / h, 0), 1) if h > 0 else 0
+            north = a[2] + u * (a[6] - a[2])
+            south = a[7] + u * (a[5] - a[7])
+            return north + v * (south - north)
+
+        def area_at(x, y, z):
+            best = None
+            for i, a in enumerate(areas[:base]):
+                if a[0] - 1 <= x <= a[3] + 1 and a[1] - 1 <= y <= a[4] + 1:
+                    dz = z - z_at(a, x, y)
+                    if -24 <= dz <= 80 and (best is None or abs(dz) < best[0]):
+                        best = (abs(dz), i)
+            return best[1] if best else None
+
+        # each stop of a lift or train: an area on its floor, linked by walking to the floor beside it
+        decks, rides = [], []
+        for m in self.movers:
+            ids = []
+            for x0, y0, x1, y1, top in m["stops"]:
+                d = [x0 + 4, y0 + 4, top, x1 - 4, y1 - 4, top, top, top, 0, set()]
+                di = len(areas)
+                areas.append(d)
+                for i, a in enumerate(areas[:base]):
+                    gx = max(a[0] - d[3], d[0] - a[3], 0)
+                    gy = max(a[1] - d[4], d[1] - a[4], 0)
+                    if gx > 20 or gy > 20 or (gx > 0 and gy > 0):
+                        continue
+                    x = min(max((d[0] + d[3]) / 2, a[0]), a[3])
+                    y = min(max((d[1] + d[4]) / 2, a[1]), a[4])
+                    rise = top - z_at(a, x, y)
+                    overlap = gx <= 0 and gy <= 0
+                    if abs(rise) > (STEP if overlap else JUMP_HEIGHT):
+                        continue  # (under it: only the same floor, not a shaft's bottom or what it passes over)
+                    if rise > STEP + 2:
+                        d[8] |= NAV_JUMP  # a jump up onto it
+                    ac, dc = ((a[0] + a[3]) / 2, (a[1] + a[4]) / 2), ((d[0] + d[3]) / 2, (d[1] + d[4]) / 2)
+                    if a[0] >= d[3] - 1 or (overlap and ac[0] - dc[0] >= abs(ac[1] - dc[1])):
+                        dirn = 1
+                    elif a[3] <= d[0] + 1 or (overlap and dc[0] - ac[0] >= abs(ac[1] - dc[1])):
+                        dirn = 3
+                    elif a[1] >= d[4] - 1 or (overlap and ac[1] >= dc[1]):
+                        dirn = 2
+                    else:
+                        dirn = 0
+                    d[9].add((dirn, i))
+                    a[9].add(((dirn + 2) % 4, di))
+                ids.append(di)
+                decks.append((di, m, (x0, y0, x1, y1, top)))
+            stops = m["stops"]
+            centre = lambda s: ((s[0] + s[2]) / 2, (s[1] + s[3]) / 2, s[4])
+            pairs = [(0, 1), (1, 0)] if m["kind"] == 0 else [(i, i + 1) for i in range(len(stops) - 1)]
+            for a, b in pairs:
+                rides.append((m["kind"], ids[a], ids[b], centre(stops[a]), centre(stops[b])))
+        # teleports: from the trigger's floor to the destination's
+        named = {e["targetname"]: e for e in self.bsp.entities if "targetname" in e}
+        teleports = 0
+        for e in self.bsp.entities:
+            if e.get("classname") != "trigger_teleport" or not e.get("model", "").startswith("*"):
+                continue
+            dest = named.get(e.get("target", ""))
+            if not dest or "origin" not in dest:
+                continue
+            m = self.bsp.models[int(e["model"][1:])]
+            lo, hi = m["mins"], m["maxs"]
+            dx, dy, dz = (float(v) for v in dest["origin"].split())
+            gz = self.floor(dx, dy, dz)
+            b = area_at(dx, dy, gz) if gz is not None else None
+            # the area to step in from: one under or beside the trigger, its floor no lower than a body below it (a
+            # trigger at the bottom of a pit, the void under a map: a fall, not a way)
+            best = None
+            for i, ar in enumerate(areas[:base]):
+                gx = max(ar[0] - hi[0], lo[0] - ar[3], 0)
+                gy = max(ar[1] - hi[1], lo[1] - ar[4], 0)
+                if gx > 64 or gy > 64:
+                    continue
+                x = min(max((lo[0] + hi[0]) / 2, ar[0]), ar[3])
+                y = min(max((lo[1] + hi[1]) / 2, ar[1]), ar[4])
+                z = z_at(ar, x, y)
+                if not lo[2] - 72 <= z <= hi[2]:
+                    continue
+                score = gx + gy
+                if best is None or score < best[0]:
+                    x = min(max(x, lo[0] + 8), hi[0] - 8) if hi[0] - lo[0] > 16 else (lo[0] + hi[0]) / 2
+                    y = min(max(y, lo[1] + 8), hi[1] - 8) if hi[1] - lo[1] > 16 else (lo[1] + hi[1]) / 2
+                    best = (score, i, (x, y, z))
+            if best is None or b is None:
+                continue
+            rides.append((2, best[1], b, best[2], (dx, dy, gz)))
+            teleports += 1
+
         out = bytearray()
-        lines = [f"# botassist navigation mesh of {os.path.basename(self.bsp.path)} (tools/botassist/gen_nav.py)",
-                 f"version 5 bspsize {self.bsp.size} areas {len(rects)}"]
         num = lambda v: ("%.2f" % v).rstrip("0").rstrip(".")
+        lines = [f"# botassist navigation mesh of {os.path.basename(self.bsp.path)} (tools/botassist/gen_nav.py)",
+                 f"version 5 bspsize {self.bsp.size} areas {len(areas)}"]
         out += struct.pack("<III", 0xFEEDFACE, 5, self.bsp.size)
         out += struct.pack("<H", 0)                     # places
-        out += struct.pack("<I", len(rects))
-        half = GRID / 2
-        for i, rows in enumerate(rects):
-            h, w = len(rows), len(rows[0])
-            first, last = rows[0][0], rows[-1][-1]
-            c0 = self.index[first]
-            f = (NAV_CROUCH if c0["crouch"] else 0) | (NAV_JUMP if c0["jump"] else 0)
-            lo = (first[0] * GRID - half, first[1] * GRID - half)
-            hi = (last[0] * GRID + half, last[1] * GRID + half)
-            nwz = self.index[rows[0][0]]["z"]
-            nez = self.index[rows[0][-1]]["z"]
-            swz = self.index[rows[-1][0]]["z"]
-            sez = self.index[rows[-1][-1]]["z"]
-            out += struct.pack("<IB", i + 1, f)
-            out += struct.pack("<3f", lo[0], lo[1], nwz)
-            out += struct.pack("<3f", hi[0], hi[1], sez)
-            out += struct.pack("<2f", nez, swz)
-            row = [str(i + 1), str(f)] + [num(v) for v in (lo[0], lo[1], nwz, hi[0], hi[1], sez, nez, swz)]
+        out += struct.pack("<I", len(areas))
+        for i, a in enumerate(areas):
+            out += struct.pack("<IB", i + 1, a[8])
+            out += struct.pack("<8f", a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7])
+            row = [str(i + 1), str(a[8])] + [num(v) for v in a[:8]]
             for d in range(4):
-                ids = sorted(b + 1 for dd, b in links[i] if dd == d)
+                ids = sorted(b + 1 for dd, b in a[9] if dd == d)
                 out += struct.pack("<I", len(ids)) + b"".join(struct.pack("<I", x) for x in ids)
                 row.append(",".join(map(str, ids)) or "-")
             lines.append(" ".join(row))
-            out += struct.pack("<B", 0)    # hiding spots
-            out += struct.pack("<B", 0)    # approach areas
-            out += struct.pack("<I", 0)    # encounter paths
-            out += struct.pack("<H", 0)    # place
+            out += struct.pack("<BBIH", 0, 0, 0, 0)    # hiding spots, approach areas, encounter paths, place
+        for di, m, (x0, y0, x1, y1, top) in decks:
+            lines.append("deck %d %s %s %s %s %s %s %s %s" % (di + 1, m["cls"], num(m["size"][0]), num(m["size"][1]),
+                                                          num(m["size"][2]), num((x0 + x1) / 2), num((y0 + y1) / 2), num(top),
+                                                          num(m["sink"])))
+        for kind, a, b, p, q in rides:
+            lines.append("ride %d %d %d %s %s %s %s %s %s" % ((kind, a + 1, b + 1) + tuple(num(v) for v in p + q)))
         if text:
             open(path, "w", newline="\n").write("\n".join(lines) + "\n")
         else:
             open(path, "wb").write(out)
+        self.decks, self.rides, self.area_list = decks, rides, areas
         jumps = sum(1 for c in self.index.values() if c["jump"])
         crouch = sum(1 for c in self.index.values() if c["crouch"])
-        self.log(f"  {len(rects)} areas ({crouch} crouch cells, {jumps} jump cells) -> {path} ({len(out)} bytes)")
-        return len(rects)
+        lonely = sum(1 for di, m, s in decks if not areas[di][9])
+        self.log(f"  {base} areas ({crouch} crouch cells, {jumps} jump cells), {len(decks)} lift and train stops "
+                 f"({lonely} with no floor beside them), {len(rides)} rides ({teleports} teleports) -> {path}")
+        return len(areas)
 
 
 def main():

@@ -79,8 +79,8 @@ static bool NavFromText(const std::string& path, std::vector<unsigned char>& out
     bool header = false;
     while (fgets(line, sizeof(line), f))
     {
-        if (line[0] == '#' || line[0] == '\n' || line[0] == '\r')
-            continue;
+        if (line[0] == '#' || line[0] == '\n' || line[0] == '\r' || !strncmp(line, "deck ", 5) || !strncmp(line, "ride ", 5))
+            continue; // the lifts, trains and teleports: LoadRides
         if (!header)
         {
             if (sscanf(line, "version 5 bspsize %u areas %u", &bspSize, &count) != 2)
@@ -124,6 +124,78 @@ static bool NavFromText(const std::string& path, std::vector<unsigned char>& out
     }
     fclose(f);
     return header && written == count && count > 0;
+}
+
+// The rides of a .navtxt mesh (its "deck" and "ride" lines, see FindPath), when the mesh loaded is that file's: not when the
+// map has a .nav in botassist_nav (saved with the game's editor: other areas), nor when the area count differs.
+static void LoadRides(const std::string& map)
+{
+    g_navDecks.clear();
+    g_navRides.clear();
+    std::string path = NavToolsDir() + map + ".navtxt";
+    if (FileThere(NavFileOf(map)) || !FileThere(path))
+        return;
+    FILE* f = fopen(path.c_str(), "r");
+    if (!f)
+        return;
+    std::unordered_map<unsigned, int> index;
+    for (size_t i = 0; i < g_navBaseAreas && i < g_nav.areas.size(); i++)
+        index[g_nav.areas[i].id] = (int)i;
+    std::unordered_map<int, int> deckOfArea;
+    char line[1024];
+    unsigned count = 0;
+    bool same = false;
+    while (fgets(line, sizeof(line), f))
+    {
+        if (!strncmp(line, "version 5 bspsize", 17))
+        {
+            unsigned size;
+            same = sscanf(line, "version 5 bspsize %u areas %u", &size, &count) == 2 && count == g_navBaseAreas;
+            if (!same)
+                break;
+            continue;
+        }
+        if (!strncmp(line, "deck ", 5))
+        {
+            unsigned id;
+            char cls[64];
+            NavDeck d;
+            if (sscanf(line, "deck %u %63s %f %f %f %f %f %f %f", &id, cls, &d.size.x, &d.size.y, &d.size.z, &d.at.x, &d.at.y, &d.at.z,
+                       &d.sink) != 9 || !index.count(id))
+                continue;
+            d.cls = cls;
+            d.area = index[id];
+            deckOfArea[d.area] = (int)g_navDecks.size();
+            g_navDecks.push_back(d);
+        }
+        else if (!strncmp(line, "ride ", 5))
+        {
+            unsigned a, b;
+            NavRide r;
+            if (sscanf(line, "ride %d %u %u %f %f %f %f %f %f", &r.kind, &a, &b, &r.on.x, &r.on.y, &r.on.z, &r.off.x, &r.off.y,
+                       &r.off.z) != 9 || !index.count(a) || !index.count(b))
+                continue;
+            r.from = index[a];
+            r.to = index[b];
+            r.deckFrom = deckOfArea.count(r.from) ? deckOfArea[r.from] : -1;
+            r.deckTo = deckOfArea.count(r.to) ? deckOfArea[r.to] : -1;
+            if (r.kind != 2 && r.deckFrom < 0)
+                continue;
+            g_navRides.push_back(r);
+        }
+    }
+    fclose(f);
+    if (!same)
+    {
+        Log("%s: rides not loaded (the mesh isn't the .navtxt's: %u areas there, %u loaded)", path.c_str(), count,
+            (unsigned)g_navBaseAreas);
+        return;
+    }
+    int kinds[3] = { 0, 0, 0 };
+    for (auto& r : g_navRides)
+        kinds[r.kind < 0 || r.kind > 2 ? 0 : r.kind]++;
+    Log("%s: %d lift and train stops, rides: %d by lift, %d by train, %d by teleport", map.c_str(), (int)g_navDecks.size(),
+        kinds[0], kinds[1], kinds[2]);
 }
 
 static unsigned char* HookedLoadFile(const char* name, int* length)

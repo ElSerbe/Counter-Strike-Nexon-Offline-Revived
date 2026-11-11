@@ -979,10 +979,23 @@ while their row is missing ("zombie class N skill ... skipped" in botassist.log)
 - Kept as text (`.navtxt`, one area per line) so Git has no binaries; `nav_tools.inl` `NavFromText` builds the .nav in
   memory when the game asks for `maps/<map>.nav` and botassist_nav has no `.nav` of the map (a mesh saved with the game's
   editor wins).
-- Where the route needs something the mesh can't hold (a lift, a train, the scripted bridges and crates of a defence), the
-  boxes fall into separate parts of the mesh: Blood Castle 1-9 / 10-14 / 15-18 / 19-20 and exit, Skyline 1-16 / 17-20,
-  Hitchhiking 1-13 / 14-20 (the trains), Rising 1-5 / 6-13 / 14-20, Rhyzome several (the waterfall). There a human bot
-  follows the human furthest along the route.
+- Lifts, trains and teleports (shared code, any map with a .navtxt): `gen_nav.py` finds what carries players, a `func_door`
+  moving up or down or a `func_plat` (two stops) and a `func_train` / `func_tracktrain` (a stop at each corner of its path,
+  centred there like `CFuncTrain::Activate`), at least 64 x 64. Its floor is the model's standable surface (at its middle,
+  room to stand) that meets floor beside its stops (a crane's platform, a lift cage's floor). Each stop is an area of its own
+  (a deck) linked by walking to the floor beside it (within a jump; under it only at the same height), and a ride joins the
+  decks (both ways for a lift, along the path for a train). A `trigger_teleport` is a ride from the area under or beside it to
+  its destination. The .navtxt ends with `deck` and `ride` lines; `LoadRides` (nav_tools.inl) reads them when the mesh is the
+  .navtxt's. `FindPath` takes rides (cost 300 + a quarter of the distance) and gives two waypoints, the way on and the way off
+  (flag `NAV_RIDE_FLAG` + ride). `NavRideStep` (from NavTraverse, the way on or off ahead): a teleport is walked into; a lift
+  or train that isn't at the stop is waited for at least 72 u from the edge, one that is is boarded (a jump onto a higher
+  floor), aboard the bot goes to the middle and stands. Meanwhile `NextWaypoint` neither repaths nor counts it stuck
+  (`rideUntil`), so the way off is the next waypoint when the mover gets there. The mover is found by class and size.
+  Blood Castle: the castle lift (zones 13-14) and the boat; Skyline: the lift, two cranes and the truck; Hitchhiking: the
+  teleport to the last part (zones 13-14: the whole route is one piece now); Rising: the building's lift (zones 16-17).
+- What still splits the route (no lift or train there: drops from roofs, the scripted bridges and crates of the defences,
+  Rhyzome's waterfall): Blood Castle 1-9 / 10-14 / 15-18 / 19-20 and exit, Skyline 1-16 / 17-20 (a 440 u drop off a roof),
+  Rising 1-5 / 6-13 / 14-20, Rhyzome several. There a human bot follows the human furthest along the route.
 - `ZeMove` (human): the next box after the highest it reached (`g_zeZone`, per life), then the nearest exit, where it waits.
   A button within 350 u of this box or the next, not pressed (its entity still has the bounds the map gave it), is pressed
   by one bot (aim, `+use`). A breakable ahead within 140 u is shot when no zombie is in sight. Pushing on a closed door it

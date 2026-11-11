@@ -557,6 +557,15 @@ static bool ZeMove(void* bot, BotState& st, float& viewYaw, float& viewPitch, bo
         st.lastProgress = now;
         return true;
     }
+    int ride = RideFlagAhead(st.pathFlags, st.pathIndex);
+    if (ride && (st.pathFlags[st.pathIndex] == ride || Len2D(wp - me) < 300.0f))
+    {
+        // a lift, a train or a teleport: NavTraverse (NavRideStep) gets it on and keeps it there
+        z.task = 6;
+        fwd = side = 0;
+        st.lastProgress = now;
+        return true;
+    }
     float wayYaw = YawOf(wp - me);
 
     // a barrier between it and where it goes: shot down (a human with no zombie to shoot at)

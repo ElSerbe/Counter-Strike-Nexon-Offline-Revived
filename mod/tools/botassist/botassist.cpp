@@ -528,6 +528,7 @@ static int CheckClock()
 static void PoiLoad(const std::string& map); // points of interest: see nav_tools.inl
 static void PoiRebuild();
 
+static void LoadRides(const std::string& map); // nav_tools.inl: the lifts, trains and teleports of a .navtxt mesh
 static void LoadNav()
 {
     std::string map = String(*(int*)((DWORD)*g_pGlobals + GV_MAPNAME));
@@ -631,6 +632,7 @@ static void LoadNav()
     g_navBaseAreas = g_nav.areas.size();
     PoiRebuild();
     Log("%s: %u navigation areas loaded", path.c_str(), (unsigned)g_nav.areas.size());
+    LoadRides(map);
 }
 
 static int AreaAt(V3 p)
@@ -885,6 +887,38 @@ struct NavLadder
     V3 bottomPoint{}, topPoint{};
 };
 static std::vector<NavLadder> g_ladders;
+
+// ---- rides: what carries players across the meshes gen_nav.py builds (the .navtxt's "deck" and "ride" lines, LoadRides):
+// a lift (func_door going up or down, func_plat) or a train (func_train along its path) has an area of its own at each stop,
+// its deck, linked by walking to the floor beside it; a ride joins two decks, or a teleport's trigger to its destination. A
+// path through one gets two waypoints: where to get on and, flagged NAV_RIDE_FLAG + ride, where it gets off; NavRideStep
+// waits at the edge until the deck is there, steps on, stays on, and NextWaypoint neither repaths nor counts it stuck meanwhile.
+struct NavDeck
+{
+    int area = -1;
+    std::string cls;
+    V3 size{}, at{};  // the mover's size; the middle of its floor at this stop
+    float sink = 0;   // its floor below its top
+};
+struct NavRide
+{
+    int kind = 0;     // 0 lift, 1 train, 2 teleport
+    int from = -1, to = -1, deckFrom = -1, deckTo = -1;
+    V3 on{}, off{};
+};
+static std::vector<NavDeck> g_navDecks;
+static std::vector<NavRide> g_navRides;
+static const int NAV_RIDE_FLAG = 10000;
+static const float RIDE_COST = 300.0f;
+// the ride the bot is on or about to take: its waypoint is the way off (flagged), or the way on just before it; 0: none
+static int RideFlagAhead(const std::vector<int>& flags, size_t index)
+{
+    if (index < flags.size() && flags[index] >= NAV_RIDE_FLAG)
+        return flags[index];
+    if (index + 1 < flags.size() && flags[index] == 0 && flags[index + 1] >= NAV_RIDE_FLAG)
+        return flags[index + 1];
+    return 0;
+}
 static int g_laddersLevel = -1;
 static std::vector<int> g_pathFlagsOut; // FindPath: per waypoint, 1 + ladder index when it is reached by that ladder, else 0
 
@@ -1070,6 +1104,21 @@ static bool FindPath(V3 from, V3 to, std::vector<V3>& out, bool partial = false)
                     open.push({ c + Len(g_nav.areas[nb].center - to), nb });
                 }
             }
+        // a ride from this area (parentDir 1000 + ride)
+        for (size_t ri = 0; ri < g_navRides.size(); ri++)
+        {
+            const NavRide& r = g_navRides[ri];
+            if (r.from != cur || r.to < 0 || closed[r.to] || (NavAreaHurts(r.to) && r.to != goal))
+                continue;
+            float c = cost[cur] + Len(r.off - r.on) * 0.25f + RIDE_COST + NavAvoidCost(r.to, pathNow) + PoiAreaCost(r.to);
+            if (c < cost[r.to])
+            {
+                cost[r.to] = c;
+                parent[r.to] = cur;
+                parentDir[r.to] = 1000 + (int)ri;
+                open.push({ c + Len(g_nav.areas[r.to].center - to), r.to });
+            }
+        }
         // a ladder from this area (parentDir 4 + 2 x ladder, + 1 going down)
         for (size_t li = 0; li < g_ladders.size(); li++)
         {
@@ -1116,6 +1165,15 @@ static bool FindPath(V3 from, V3 to, std::vector<V3>& out, bool partial = false)
         {
             out.push_back(Portal(parent[chain[i]], d, chain[i]));
             g_pathFlagsOut.push_back(0);
+            continue;
+        }
+        if (d >= 1000)
+        {
+            const NavRide& r = g_navRides[d - 1000];
+            out.push_back(r.on); // where to get on
+            g_pathFlagsOut.push_back(0);
+            out.push_back(r.off); // where it gets off
+            g_pathFlagsOut.push_back(NAV_RIDE_FLAG + (d - 1000));
             continue;
         }
         const NavLadder& l = g_ladders[(d - 4) / 2];
@@ -1173,6 +1231,7 @@ struct BotState
     float duckUntil = 0;         // crouching: a low area of the mesh
     std::vector<int> pathFlags;  // per waypoint of path: 1 + ladder index when reached by climbing it (FindPath)
     float gapJumpAt = -100;      // NavTraverse: the last jump over a gap or onto a ledge
+    float rideUntil = 0;         // NavRideStep: waiting for or on a lift, train or teleport: no repath, not stuck
     bool climbing = false;       // NavTraverse: on its way up or down a ladder
     float steerSide = 1, steerUntil = 0; // keeps going around an obstacle by the same side
     float jumpAt = -100;
@@ -1518,7 +1577,8 @@ static bool NextWaypoint(void* bot, BotState& st, V3 pos, V3 goal, float arrive,
         st.path.clear();
         return false;
     }
-    if (g_nav.ok)
+    bool riding = now < st.rideUntil && RideFlagAhead(st.pathFlags, st.pathIndex) != 0;
+    if (g_nav.ok && !riding)
         NavProgress(bot, st, pos, goal, now);
     if (now < st.navBackUntil && st.navBackUntil - now <= NAV_BACK_TIME && Len2D(st.navBackTo - pos) > 32.0f)
     {
@@ -1530,7 +1590,7 @@ static bool NextWaypoint(void* bot, BotState& st, V3 pos, V3 goal, float arrive,
         out = goal; // no mesh: straight line
         return true;
     }
-    if (st.path.empty() || now >= st.nextRepath || Len(goal - st.pathGoal) > 120.0f)
+    if (!riding && (st.path.empty() || now >= st.nextRepath || Len(goal - st.pathGoal) > 120.0f))
     {
         g_navAvoid = &st.navAvoid;
         if (!FindPath(pos, goal, st.path, partial))
@@ -5335,6 +5395,105 @@ static void NavJump(BotState& st, unsigned short& buttons, float now, const char
         Log("bot %d jumps (%s) at (%.0f %.0f %.0f)", st.slot, why, pos.x, pos.y, pos.z);
 }
 
+// the mover of a deck: the entity of its class and size closest to `around` (its bounds are the model's grown by 1 on each side)
+static void* DeckEntity(const NavDeck& d, V3 around, float radius)
+{
+    void* best = nullptr;
+    float bestDist = 1e30f;
+    ForEntitiesNear(around, radius, [&](void* e) {
+        if (d.cls != ClassName(e))
+            return;
+        unsigned char* v = Vars(e);
+        V3 lo = Vec((float*)(v + EV_ABSMIN)), hi = Vec((float*)(v + EV_ABSMAX));
+        V3 s = hi - lo;
+        if (fabsf(s.x - d.size.x) > 6.0f || fabsf(s.y - d.size.y) > 6.0f || fabsf(s.z - d.size.z) > 6.0f)
+            return;
+        float dist = Len((lo + hi) * 0.5f - around);
+        if (dist < bestDist)
+        {
+            bestDist = dist;
+            best = e;
+        }
+    });
+    return best;
+}
+static V3 DeckFloor(const NavDeck& d, void* e) // the middle of the mover's floor where it is now
+{
+    unsigned char* v = Vars(e);
+    V3 lo = Vec((float*)(v + EV_ABSMIN)), hi = Vec((float*)(v + EV_ABSMAX));
+    return V3{ (lo.x + hi.x) * 0.5f, (lo.y + hi.y) * 0.5f, hi.z - 1.0f - d.sink };
+}
+static bool OnDeck(const NavDeck& d, void* e, V3 feet)
+{
+    unsigned char* v = Vars(e);
+    V3 lo = Vec((float*)(v + EV_ABSMIN)), hi = Vec((float*)(v + EV_ABSMAX));
+    float floor = hi.z - 1.0f - d.sink;
+    return feet.x > lo.x && feet.x < hi.x && feet.y > lo.y && feet.y < hi.y && feet.z > floor - 12.0f && feet.z < floor + 30.0f;
+}
+
+// one frame of a ride: true when it moved the bot (NavTraverse stops there)
+static bool NavRideStep(void* bot, BotState& st, const NavRide& r, V3 pos, V3 feet, float& fwd, float& side, unsigned short& buttons)
+{
+    float now = Now();
+    float viewYaw = F<float>(Vars(bot), EV_VANGLE + 4);
+    auto walkTo = [&](V3 p, float speed) {
+        float rel = (YawOf(p - pos) - viewYaw) / RAD;
+        fwd = cosf(rel) * speed;
+        side = -sinf(rel) * speed;
+    };
+    static int reports = 0, reportLevel = -1;
+    if (reportLevel != g_nav.level)
+        reportLevel = g_nav.level, reports = 0;
+    st.rideUntil = now + 1.0f;
+    if (r.kind == 2)
+    {
+        // a teleport: into the trigger; on the other side NextWaypoint is at the way off already
+        walkTo(r.on, 250.0f);
+        if (Len2D(r.on - pos) < 24.0f)
+            walkTo(r.on + (r.on - pos) * 4.0f, 250.0f);
+        return true;
+    }
+    if (r.deckFrom < 0 || r.deckFrom >= (int)g_navDecks.size())
+        return false;
+    const NavDeck& from = g_navDecks[r.deckFrom];
+    void* mover = DeckEntity(from, pos, 2000.0f);
+    if (!mover)
+        return false; // gone (a train that left for good): the path goes elsewhere next time
+    V3 deck = DeckFloor(from, mover);
+    if (OnDeck(from, mover, feet))
+    {
+        // aboard: to its middle, and stay
+        if (Len2D(deck - pos) > 24.0f)
+            walkTo(deck, 120.0f);
+        else
+            fwd = side = 0;
+        buttons &= ~(IN_JUMP | IN_DUCK);
+        if (reports++ < 40 && Len2D(deck - pos) <= 24.0f && Len(deck - from.at) < 8.0f)
+            Log("bot %d is aboard the %s at (%.0f %.0f %.0f), going to (%.0f %.0f %.0f)", st.slot, from.cls.c_str(), deck.x,
+                deck.y, deck.z, r.off.x, r.off.y, r.off.z);
+        return true;
+    }
+    bool here = Len2D(deck - from.at) < 12.0f && fabsf(deck.z - from.at.z) < 10.0f;
+    float edge = max(fabsf(pos.x - from.at.x) - from.size.x * 0.5f, fabsf(pos.y - from.at.y) - from.size.y * 0.5f);
+    if (here)
+    {
+        // it's at this stop: on board (a jump if its floor is higher than this one)
+        walkTo(from.at, 250.0f);
+        if (from.at.z > feet.z + 18.0f && edge < 48.0f && now - st.jumpAt > 0.8f)
+        {
+            st.jumpAt = now;
+            buttons |= IN_JUMP;
+        }
+        return true;
+    }
+    // not here yet: wait by its edge (the shaft or the track is no floor)
+    if (edge > 72.0f)
+        walkTo(from.at, 200.0f);
+    else
+        fwd = side = 0;
+    return true;
+}
+
 static void NavTraverse(void* bot, BotState& st, float* aim, float& fwd, float& side, unsigned short& buttons)
 {
     unsigned char* v = Vars(bot);
@@ -5352,6 +5511,11 @@ static void NavTraverse(void* bot, BotState& st, float* aim, float& fwd, float& 
     float* va = (float*)(v + EV_VANGLE);
     float* ang = (float*)(v + EV_ANGLES);
 
+    // ---- a lift, a train, a teleport
+    int ride = RideFlagAhead(st.pathFlags, st.pathIndex);
+    if (ride && (flag == ride || Len2D(wp - pos) < 300.0f) && ride - NAV_RIDE_FLAG < (int)g_navRides.size() &&
+        NavRideStep(bot, st, g_navRides[ride - NAV_RIDE_FLAG], pos, feet, fwd, side, buttons))
+        return;
     // ---- a ladder
     if (flag > 0 && flag <= (int)g_ladders.size() && fabsf(feet.z - wp.z) > 24.0f)
     {
