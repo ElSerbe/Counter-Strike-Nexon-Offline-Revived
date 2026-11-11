@@ -836,7 +836,19 @@ order (the table's "depend" column: the skill each leads to) is followed here. "
 bot's skills, auto level-up on/off, its plan; a category page learns a skill now when it has points, else plans it (with the skills
 before it). A bot spends its points on its plan first, then (auto) by its job's order (`kAutoBuilder/Gatherer/Fighter`: Beginner
 Harvest Mastery and Strong Patience early for all). Plans and the auto switch are kept by bot name in Bin/botassist_shelter_skills.txt.
-"/autoskills on|off" sets it for the whole team.
+"/autoskills on|off" sets it for the whole team. The bot page also edits the plan (each step: earlier, later, first, remove), shows
+what auto level-up learns next (`ShAutoOrder`) and can put that into the plan to edit it. Rookie Engineer (18) comes first for an auto bot
+when nobody living in the team has it. The team's builder (`ShTeamBuilder`) is the builder by place while it lives, else the living bot
+with the most Tech levels; the builder's auto order is Tech first.
+Respawn: the rules' death think (vfunc 0x118, 0x1083f450: dead flag 2 -> 3 after player +0xf74 + min(50, random + 3 per two deaths - 3) s,
+then respawn) never ran for dead bots; `ShelterRespawnBots` runs PlayerDeathThink for them every 0.5 s from 3 s after death, and mp's
+respawn after 60 s.
+Electric Engineering (skill 22; cost 0x1083b3a0: power x 0.91/0.75/0.65, min 1) applies to new buildings only. A building keeps what it
+paid (+0xe8 wood, +0xec iron, +0xf0 power; taken down, 0x10842e50 frees the power and gives back 30%, more with Demolition Skill).
+`ShPlanRebuild`: a bot with the skill takes down a finished anywhere-building of its team (not a storage) that would save 2+ power,
+when the storage can pay for it again, by day, with heavy axe hits (TakeDamage 0x10894e40: repair hits carry 0x20000000, a teammate's
+other hits need 0x10000000 and enough "contribution"; untested which hit that is: 10 s without damage = given up, 3 such = no more
+tries that map), then builds the same row in the same place at the same angle. Nobody repairs a building being taken down.
 botassist.log "Shelter:" (state every 15 s with the shelter tier, each bot's job, order and task every 20 s, deposits, skills, buys, repairs,
 fixed spots, builds planned, sent, done or refused, unreachable resources, orders).
 
