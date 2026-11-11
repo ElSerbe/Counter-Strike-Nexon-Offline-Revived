@@ -1176,6 +1176,53 @@ static V3 ShRoamPoint(unsigned char* rules, void* bot, V3 home)
     return g_shRoam[rand() % g_shRoam.size()];
 }
 
+// a barricade the players break (zbsbreak, IsObjective) within `radius` (to its box, flat) of `at`, with nav floor next to
+// it, that this bot hasn't given up on: the closest
+static void* ShBarricadeNear(void* bot, V3 at, float radius, float now)
+{
+    auto it = g_shBots.find(bot);
+    void* found = nullptr;
+    float best = radius;
+    ForEntitiesNear(at, radius + 400.0f, [&](void* e) {
+        if (!IsObjective(e))
+            return;
+        float d = Len2D(ShClosest(at, e) - at);
+        if (d >= best || !ShReachable(e))
+            return;
+        if (it != g_shBots.end())
+        {
+            auto u = it->second.useless.find(e);
+            if (u != it->second.useless.end() && now < u->second)
+                return;
+        }
+        best = d;
+        found = e;
+    });
+    return found;
+}
+
+// a zombie to hunt by day: the one it hunts while it lives and stays near the shelter, else the closest living monster
+// (not a boss: 20000+ health) within 1500 of the shelter
+static void* ShPrey(void* bot, ShBot& b, V3 home, V3 me)
+{
+    if (b.task == SH_HUNT && b.object && IsLivingMonster(b.object) && Len2D(Origin(b.object) - home) < 2000.0f &&
+        Now() - b.objectSince < 40.0f)
+        return b.object;
+    void* found = nullptr;
+    float best = 1e9f;
+    ForEntitiesNear(home, 1500.0f, [&](void* e) {
+        if (!IsLivingMonster(e) || F<float>(Vars(e), EV_HEALTH) >= 20000.0f)
+            return;
+        float d = Len(Origin(e) - me);
+        if (d < best)
+        {
+            best = d;
+            found = e;
+        }
+    });
+    return found;
+}
+
 static void ShDecide(unsigned char* rules, void* bot, BotState& st, ShBot& b, V3 me, float now)
 {
     V3 home;
@@ -1205,6 +1252,11 @@ static void ShDecide(unsigned char* rules, void* bot, BotState& st, ShBot& b, V3
         carries |= c > 0;
     }
     full = (fullT[0] && room[0]) || (fullT[1] && room[1]) || (fullT[0] && fullT[1]);
+    // what it carries can go into the storage: going home for it makes sense (with the storage full it stood at home
+    // with its wood for a minute, doing nothing)
+    bool canDeposit = (carried[0] && room[0]) || (carried[1] && room[1]);
+    if (full && !canDeposit && Len2D(me - home) < SH_HOME_RADIUS)
+        full = false;
     bool building = b.plan.kind != 0 && (b.task == SH_BUILD || b.sent);
     if (atHome && carries && !building)
     {
@@ -1319,6 +1371,25 @@ static void ShDecide(unsigned char* rules, void* bot, BotState& st, ShBot& b, V3
         }
         object = zone;
     }
+    // barricades (by day, when it's free to work): the one it breaks stays its job while it keeps going down (25 s
+    // without progress: given up); one right next to it (in its way) is broken first; zombies it hunts stay its job
+    // for a while unless something to gather turns up (the gathering below runs first then)
+    if (task == SH_GATHER && !night)
+    {
+        float since = b.objectSince > b.breakProgressAt ? b.objectSince : b.breakProgressAt;
+        auto u = b.task == SH_BREAK && b.object ? b.useless.find(b.object) : b.useless.end();
+        bool usable = u == b.useless.end() || now >= u->second;
+        if (b.task == SH_BREAK && b.object && IsObjective(b.object) && usable && now - since < 25.0f)
+        {
+            task = SH_BREAK;
+            object = b.object;
+        }
+        else if (void* bar = ShBarricadeNear(bot, me, 140.0f, now))
+        {
+            task = SH_BREAK;
+            object = bar;
+        }
+    }
     if (task == SH_GATHER && b.task == SH_GATHER && b.object && ShResourceUp(b.object))
     {
         // hitting it in reach: something must come of it (the resource's hit count, what it carries or its money); after
@@ -1360,40 +1431,112 @@ static void ShDecide(unsigned char* rules, void* bot, BotState& st, ShBot& b, V3
         {
             if (b.object && b.task == SH_GATHER && ShResourceFor(bot, b.object, now))
             {
-                g_shBanned[b.object] = now + 60.0f; // not reached in time
+                // not reached in time: left alone for a minute, then 2, 4, 8 (the same pile behind a fence pulled the
+                // bots back every minute)
+                int n = ++g_shBanCount[b.object];
+                float minutes = (float)(1 << (n - 1 < 3 ? n - 1 : 3));
+                g_shBanned[b.object] = now + 60.0f * minutes;
                 static int reports = 0;
                 if (reports++ < 30)
-                    Log("Shelter: '%s' couldn't reach a %s, leaving it for a minute", String(F<int>(Vars(bot), EV_NETNAME)), ClassName(b.object));
+                    Log("Shelter: '%s' couldn't reach a %s, leaving it for %.0f min", String(F<int>(Vars(bot), EV_NETNAME)), ClassName(b.object), minutes);
             }
             std::set<void*> taken;
             for (auto& kv : g_shBots)
                 if (kv.first != bot && kv.second.task == SH_GATHER && kv.second.object)
                     taken.insert(kv.second.object);
-            float best = 1e9f, bestCrowded = 1e9f;
-            void* crowded = nullptr;
-            ForEntitiesNear(home, SH_GATHER_RANGE, [&](void* e) {
-                if (!ShResourceFor(bot, e, now) || taken.count(e) || typeFull(e) || ShDangerous(danger, Center(e), hasGun, false))
-                    return;
-                auto ban = g_shBanned.find(e);
-                if (ban != g_shBanned.end() && now < ban->second)
-                    return;
-                float d = Len(Center(e) - me);
-                bool crowd = ShDangerous(danger, Center(e), hasGun);
-                if (!crowd && d < best)
-                {
-                    best = d;
-                    object = e;
-                }
-                else if (crowd && d < bestCrowded)
-                {
-                    bestCrowded = d;
-                    crowded = e;
-                }
-            });
+            // the closest one; a crowd of zombies or a type the storage has no room for puts it after the others. When the
+            // strict look finds nothing (all taken, near a turret, banned), a second one over the whole map takes what
+            // it can, rather than the bot standing in the shelter
+            int why[8] = {}; // up, unreachable/skill/useless, taken, carrying full, turret, banned, storage full, found
+            for (int pass = 0; pass < 2 && !object; pass++)
+            {
+                float best = 1e9f, bestCrowded = 1e9f;
+                void* crowded = nullptr;
+                ForEntitiesNear(home, pass ? 16384.0f : SH_GATHER_RANGE, [&](void* e) {
+                    if (!ShResourceUp(e))
+                        return;
+                    why[0] += !pass;
+                    if (!ShResourceFor(bot, e, now))
+                    {
+                        why[1] += !pass;
+                        return;
+                    }
+                    if (typeFull(e))
+                    {
+                        why[3] += !pass;
+                        return;
+                    }
+                    if (!pass && taken.count(e))
+                    {
+                        why[2]++;
+                        return;
+                    }
+                    bool turret = ShDangerous(danger, Center(e), hasGun, false);
+                    if (turret && !pass)
+                    {
+                        why[4]++;
+                        return;
+                    }
+                    auto ban = g_shBanned.find(e);
+                    if (ban != g_shBanned.end() && now < ban->second && !pass)
+                    {
+                        why[5]++;
+                        return;
+                    }
+                    float d = Len(Center(e) - me);
+                    int t = ShResourceType(e);
+                    if (t >= 0 && !room[t])
+                    {
+                        why[6] += !pass;
+                        d += 1500.0f;
+                    }
+                    if (pass && (turret || (ban != g_shBanned.end() && now < ban->second)))
+                        d += 3000.0f;
+                    bool crowd = turret || ShDangerous(danger, Center(e), hasGun);
+                    if (!crowd && d < best)
+                    {
+                        best = d;
+                        object = e;
+                    }
+                    else if (crowd && d < bestCrowded)
+                    {
+                        bestCrowded = d;
+                        crowded = e;
+                    }
+                });
+                if (!object)
+                    object = crowded; // only crowded ones: the closest of them
+            }
+            if (!object && now - b.whyAt > 30.0f)
+            {
+                b.whyAt = now;
+                static int reports = 0;
+                if (reports++ < 60)
+                    Log("Shelter: '%s' finds nothing to gather: %d up, %d it gets nothing from or can't reach, %d taken, %d of a type it "
+                        "carries all it can of, %d near a zombie turret, %d banned, %d of a type the storage has no room for",
+                        String(F<int>(Vars(bot), EV_NETNAME)), why[0], why[1], why[2], why[3], why[4], why[5], why[6]);
+            }
             if (!object)
-                object = crowded; // only crowded ones: the closest of them
-            if (!object)
-                task = carries ? SH_HOME : SH_DEFEND;
+            {
+                // nothing to gather: by day something useful instead of standing in the shelter: a barricade near the
+                // shelter, the zombies around it (money for a gun), home if what it carries fits in the storage
+                void* bar = !night && (left < 0 || left > SH_NIGHT_NEAR) ? ShBarricadeNear(bot, home, 1500.0f, now) : nullptr;
+                void* prey = !night && (left < 0 || left > SH_NIGHT_NEAR) && !hurt ? ShPrey(bot, b, home, me) : nullptr;
+                if (carries && canDeposit && !atHome)
+                    task = SH_HOME;
+                else if (bar)
+                {
+                    task = SH_BREAK;
+                    object = bar;
+                }
+                else if (prey)
+                {
+                    task = SH_HUNT;
+                    object = prey;
+                }
+                else
+                    task = SH_DEFEND;
+            }
         }
     }
     if (task != b.task)
@@ -1433,6 +1576,13 @@ static void ShDecide(unsigned char* rules, void* bot, BotState& st, ShBot& b, V3
         case SH_RAID:
             ShSay(bot, b, SAY_RAID, 90.0f, "Going to hit the enemy shelter!");
             break;
+        case SH_BREAK:
+            ShSay(bot, b, SAY_BREAK, 60.0f, ShGunBeatsAxeRaw(bot) ? "A barricade, shooting it down." :
+                                                                   "A barricade in the way, breaking it with my axe.");
+            break;
+        case SH_HUNT:
+            ShSay(bot, b, SAY_HUNT, 90.0f, "Nothing left to gather nearby. Hunting zombies around the shelter (%d$).", money);
+            break;
         case SH_DEFEND:
             if (night)
                 ShSay(bot, b, SAY_DEFEND, 120.0f, "Holding the shelter tonight.");
@@ -1449,6 +1599,8 @@ static void ShDecide(unsigned char* rules, void* bot, BotState& st, ShBot& b, V3
         b.objectSince = now;
         b.lastObjectHp = -1;
         b.swings = 0;
+        b.breakHp = -1;
+        b.breakProgressAt = 0;
     }
     b.task = task;
     b.object = object;
@@ -1476,6 +1628,18 @@ static void ShDecide(unsigned char* rules, void* bot, BotState& st, ShBot& b, V3
     case SH_RAID:
         b.goal = Center(object);
         b.arrive = 500.0f;
+        break;
+    case SH_BREAK:
+    {
+        // right up to it for the axe; a gun shoots it from where it sees it
+        V3 c = ShClosest(me, object);
+        b.goal = V3{ c.x, c.y, me.z };
+        b.arrive = ShGunBeatsAxeRaw(bot) ? 250.0f : 20.0f;
+        break;
+    }
+    case SH_HUNT:
+        b.goal = Origin(object);
+        b.arrive = hasGun ? 250.0f : 40.0f;
         break;
     case SH_BUILD:
         b.goal = b.plan.at;
@@ -1560,7 +1724,8 @@ static void ShelterBotThink(void* bot, BotState& st)
         }
         // the axe for hitting, a gun for fighting; when its gun slots give nothing (none, or out of ammo: the game puts the
         // axe back) it stops trying for half a minute and fights only what comes close
-        bool hitting = (b.task == SH_GATHER || b.task == SH_REPAIR) && b.object && Len(ShClosest(me, b.object) - me) < 300.0f && !st.target;
+        bool hitting = (b.task == SH_GATHER || b.task == SH_REPAIR || (b.task == SH_BREAK && !ShGunBeatsAxeRaw(bot))) && b.object &&
+                       Len(ShClosest(me, b.object) - me) < 300.0f && !st.target;
         bool melee = ShMeleeHeld(bot);
         if (now >= b.switchAt)
         {
@@ -1691,10 +1856,16 @@ static void* ShelterTarget(void* bot, V3 eye, void* best)
             if (hittingNow || !ShGunBeatsAxeRaw(bot) || Len(ShClosest(eye, best) - eye) > 600.0f)
                 best = nullptr;
         }
+        // breaking one: its gun shoots that one (the axe goes up to it instead: ShelterLook/ShelterSwing)
+        if (b.task == SH_BREAK && b.object && IsObjective(b.object) && (!best || !IsLivingMonster(best)))
+        {
+            bool gun = ShGunBeatsAxeRaw(bot);
+            best = gun && Len(ShClosest(eye, b.object) - eye) < 700.0f && CanSee(bot, eye, b.object) ? b.object : nullptr;
+        }
         if (best && IsLivingMonster(best))
         {
             float d = Len(ShClosest(eye, best) - eye);
-            bool hitting = (b.task == SH_GATHER || b.task == SH_REPAIR || b.task == SH_BUILD) && b.object &&
+            bool hitting = (b.task == SH_GATHER || b.task == SH_REPAIR || b.task == SH_BUILD || b.task == SH_BREAK) && b.object &&
                            Len(ShClosest(eye, b.object) - eye) < 300.0f;
             if (d > 1200.0f || (now < b.noGunUntil && d > SH_MELEE_CHASE) || (hitting && d > 250.0f))
                 best = nullptr;
@@ -1746,7 +1917,7 @@ static bool ShelterLook(void* bot, BotState& st, V3 eye, float& yaw, float& pitc
     if (it == g_shBots.end())
         return false;
     ShBot& b = it->second;
-    if ((b.task != SH_GATHER && b.task != SH_REPAIR) || !b.object || Len(ShClosest(eye, b.object) - eye) > 220.0f)
+    if ((b.task != SH_GATHER && b.task != SH_REPAIR && b.task != SH_BREAK) || !b.object || Len(ShClosest(eye, b.object) - eye) > 220.0f)
         return false;
     V3 c = ShClosest(eye, b.object);
     V3 mid = Center(b.object);
@@ -1756,30 +1927,55 @@ static bool ShelterLook(void* bot, BotState& st, V3 eye, float& yaw, float& pitc
     return true;
 }
 
-// whether it swings the axe now: holding it, in reach, looking at it
-static bool ShelterSwing(void* bot, BotState& st, float yaw, float pitch)
+// which axe button it presses now (0 none): holding the axe, in reach, looking at it. Resources and buildings take the
+// quick hit (attack); barricades the heavy one (attack2), which does far more to them
+static int ShelterSwing(void* bot, BotState& st, float yaw, float pitch)
 {
     if (st.target || !ShRules())
-        return false;
+        return 0;
     auto it = g_shBots.find(bot);
     if (it == g_shBots.end())
-        return false;
+        return 0;
     ShBot& b = it->second;
-    if ((b.task != SH_GATHER && b.task != SH_REPAIR) || !b.object || ShWeaponId(bot) != SH_KNIFE_ID)
-        return false;
+    if ((b.task != SH_GATHER && b.task != SH_REPAIR && b.task != SH_BREAK) || !b.object || ShWeaponId(bot) != SH_KNIFE_ID)
+        return 0;
     V3 eye = Eye(bot);
     V3 c = ShClosest(eye, b.object);
     if (Len(c - eye) > SH_REACH)
-        return false;
+        return 0;
     float wantYaw = YawOf(c - eye), wantPitch = PitchOf(c - eye);
     if (Len(c - eye) > 24.0f && (fabsf(AngleDiff(wantYaw, yaw)) > 25.0f || fabsf(wantPitch - pitch) > 30.0f))
-        return false;
+        return 0;
     float now = Now();
     if (!b.swings++)
         b.swingSince = now;
+    if (b.task == SH_BREAK)
+    {
+        // its health going down is progress (ShDecide gives up after 25 s without); 10 s of heavy hits and no damage:
+        // the axe does nothing to this one, left alone for 5 minutes (logged)
+        float hp = F<float>(Vars(b.object), EV_HEALTH);
+        if (b.breakHp < 0 || hp < b.breakHp - 0.5f)
+        {
+            if (b.breakHp >= 0)
+                b.breakProgressAt = now;
+            b.breakHp = hp;
+        }
+        float since = b.breakProgressAt > b.swingSince ? b.breakProgressAt : b.swingSince;
+        if (now - since > 10.0f)
+        {
+            b.useless[b.object] = now + 300.0f;
+            static int reports = 0;
+            if (reports++ < 20)
+                Log("Shelter: '%s' hit a barricade for 10 s with the heavy axe and it didn't go down (health %.0f): leaves it",
+                    String(F<int>(Vars(bot), EV_NETNAME)), hp);
+            return 0;
+        }
+        // the heavy hit: held 0.5 s, released 0.2 s (it swings once per press)
+        return fmodf(now - b.swingSince, 0.7f) < 0.5f ? 0x800 : 0;
+    }
     // the axe is tapped (held, it was seen not to swing again): 0.3 s down, a moment up
     if (fmodf(now - b.swingSince, 0.4f) > 0.3f)
-        return false;
+        return 0;
     // a building that doesn't get better after a while of hitting: the game doesn't take these hits (logged)
     if (b.task == SH_REPAIR)
     {
@@ -1796,7 +1992,7 @@ static bool ShelterSwing(void* bot, BotState& st, float yaw, float pitch)
             b.lastObjectHp = hp;
         }
     }
-    return true;
+    return IN_ATTACK;
 }
 
 // ---------------------------------------------------------------- the player's orders

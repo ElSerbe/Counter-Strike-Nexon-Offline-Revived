@@ -366,7 +366,7 @@ static bool ShelterFriendlyClass(const char* cls);
 static bool ShelterActive();
 static bool ShelterGoal(void* bot, BotState& st, V3 pos, V3& goal, float& arrive, bool& wantMove);
 static bool ShelterLook(void* bot, BotState& st, V3 eye, float& yaw, float& pitch);
-static bool ShelterSwing(void* bot, BotState& st, float yaw, float pitch);
+static int ShelterSwing(void* bot, BotState& st, float yaw, float pitch); // 0, IN_ATTACK or IN_ATTACK2
 static void ShelterBotThink(void* bot, BotState& st);
 static void ShelterWatch();
 static bool ShelterHoldFire(void* bot, BotState& st);
@@ -2431,8 +2431,8 @@ static void Drive(void* bot, BotState& st, Command& cmd, float dt)
         st.firedSinceReload = false;
         st.nextReload = now + 3.0f;
     }
-    if (ShelterSwing(bot, st, st.yaw, st.pitch))
-        cmd.buttons = (unsigned short)((cmd.buttons | IN_ATTACK) & ~IN_RELOAD); // Zombie Shelter: the axe
+    if (int swing = ShelterSwing(bot, st, st.yaw, st.pitch))
+        cmd.buttons = (unsigned short)((cmd.buttons & ~(IN_ATTACK | IN_RELOAD)) | swing); // Zombie Shelter: the axe (heavy on barricades)
 
     // ---- movement relative to where we look
     if (moving)
