@@ -845,6 +845,22 @@ A shared change, because bots got caught on corners in every mode: `FindPath`, `
   path as "no way there" and pick another goal. `AreaAt` off the mesh measures to the area's edge, not its centre (just outside hs_desertstorm's 2500 x 5150 area, its centre is far past the 400 u limit: no area, so a straight line again).
 - Mesh attributes: `NAV_CROUCH` areas are walked crouching (`duckUntil`, applied in `HookedRunPlayerMove`; hs_sidewinder has 12, de_dust2 8). `Drive` jumps low ledges (`LedgeAhead`): its old check compared a floor height with the origin, so it only
   fired for floors 60 u above the feet, too high to jump.
+- Ladders and jumps, every mode (`NavTraverse`, called in `HookedRunPlayerMove` after any mode's driver, for bots whose
+  driver walked a path through `NextWaypoint` in the last 0.3 s):
+  - This game's .nav files have no ladders (de_dust2 ends right after its areas; the 96 bytes after zsh_hellride_pve's 3333
+    areas are one more area). `BuildLadders` takes the map's `func_ladder` brushes: the area at the foot (floor within 40 of
+    the brush's bottom, at most 64 u beside it) and at the top (floor 72 below to 24 above its top). With no area at the top
+    (Zombie Shelter's watchtowers aren't in the mesh) it adds a 40 x 40 area of its own on the floor found beside the ladder's
+    top (after the mesh's areas, `g_navBaseAreas`; rebuilt each level and every 20 s while a ladder is unlinked). One
+    `g_ladders` entry per brush, in map order: `FindPath` links foot and top both ways and flags the step-off waypoint
+    (`st.pathFlags` = 1 + ladder); `NextWaypoint` doesn't pass it until the feet are within 24 u of its height, nor shortcut
+    past it. On it the bot faces the ladder, pitch -60 (up) or +60 (down), forward; near the top it turns to the step-off point,
+    pitch -40. Stuck checks count height as progress.
+  - Jumps: onto a ledge 20-60 u above the feet within 20-36 u ahead, on the way to a waypoint above, with room for the head
+    (a crouch jump: the legs are tucked 0.1-0.5 s after every jump); over a gap (no floor within 96 or a hurt zone 28 u ahead,
+    running over 160 u/s, waypoint 56-240 u away, at most 40 above and 120 below, floor where it lands, a clear line); into
+    a `NAV_JUMP` area. None in `NAV_NO_JUMP` areas (de_dust2 has 18). `NAV_PRECISE` areas: no shortcuts. botassist.log:
+    "bot N jumps (onto a ledge | over a gap | into a jump area)", "bot N takes a ladder up/down", "ladders (map): ...".
 
 ## Create room: Random Map in fun modes
 

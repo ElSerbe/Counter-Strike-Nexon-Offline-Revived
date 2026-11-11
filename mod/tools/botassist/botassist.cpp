@@ -446,7 +446,8 @@ static bool CanSee(void* bot, V3 eye, void* target)
 }
 
 // ---------------------------------------------------------------- navigation mesh (CS:CZ .nav, version 5)
-static const unsigned char NAV_CROUCH = 1;
+// area attributes (CS:CZ): crouch, jump (a jump gets there), precise (no shortcuts or steering), no jump
+static const unsigned char NAV_CROUCH = 1, NAV_JUMP = 2, NAV_PRECISE = 4, NAV_NO_JUMP = 8;
 struct NavArea
 {
     unsigned id;
@@ -456,6 +457,7 @@ struct NavArea
     V3 center;
     std::vector<int> adj[4]; // N (-y), E (+x), S (+y), W (-x): indices into g_nav.areas
 };
+static size_t g_navBaseAreas = 0; // the mesh's own areas; after them, botassist's (the tops of ladders, BuildLadders)
 static struct
 {
     std::string map;
@@ -625,6 +627,7 @@ static void LoadNav()
                     g_nav.areas[i].adj[d].push_back(it->second);
             }
     g_nav.ok = true;
+    g_navBaseAreas = g_nav.areas.size();
     PoiRebuild();
     Log("%s: %u navigation areas loaded", path.c_str(), (unsigned)g_nav.areas.size());
 }
@@ -870,19 +873,161 @@ static float BodyRoom(void* bot, V3 pos, float yaw, float len)
     return BodyFraction(bot, pos, pos + YawDir(yaw) * len, tr) * len;
 }
 
+// ---- ladders. This game's .nav files have none (they end after the areas), so they come from the map's func_ladder brushes:
+// the area at the foot (floor within reach of the brush's bottom, at most 64 units beside it) and the area at the top (floor
+// near the brush's top) are linked both ways for the A* below. A path through one gets two waypoints: where to step on and,
+// flagged with the ladder, where to step off; NavTraverse climbs it (looking up or down and walking into it).
+struct NavLadder
+{
+    V3 lo, hi;
+    int bottom = -1, top = -1;
+    V3 bottomPoint{}, topPoint{};
+};
+static std::vector<NavLadder> g_ladders;
+static int g_laddersLevel = -1;
+static std::vector<int> g_pathFlagsOut; // FindPath: per waypoint, 1 + ladder index when it is reached by that ladder, else 0
+
+// the point of area a closest to p, pulled `into` units towards the area's centre
+static V3 AreaPointNear(const NavArea& a, V3 p, float into)
+{
+    V3 q{ p.x < a.lo[0] ? a.lo[0] : p.x > a.hi[0] ? a.hi[0] : p.x, p.y < a.lo[1] ? a.lo[1] : p.y > a.hi[1] ? a.hi[1] : p.y, 0 };
+    V3 c = a.center - q;
+    c.z = 0;
+    float l = Len2D(c);
+    if (l > 1.0f)
+        q = q + c * ((into < l ? into : l) / l);
+    q.z = AreaZ(a, q.x, q.y);
+    return q;
+}
+
+static float AreaGap2D(const NavArea& a, V3 lo, V3 hi)
+{
+    float dx = a.hi[0] < lo.x ? lo.x - a.hi[0] : a.lo[0] > hi.x ? a.lo[0] - hi.x : 0.0f;
+    float dy = a.hi[1] < lo.y ? lo.y - a.hi[1] : a.lo[1] > hi.y ? a.lo[1] - hi.y : 0.0f;
+    return sqrtf(dx * dx + dy * dy);
+}
+
+// a small area of botassist's own on the platform a ladder leads to, when the mesh has none there (the watchtowers of Zombie
+// Shelter: buildings of the match): floor beside the ladder's top on one of its four sides, with room to stand
+static int LadderTopArea(const NavLadder& l, float bottomFloor)
+{
+    V3 mid{ (l.lo.x + l.hi.x) * 0.5f, (l.lo.y + l.hi.y) * 0.5f, 0 };
+    float hx = (l.hi.x - l.lo.x) * 0.5f, hy = (l.hi.y - l.lo.y) * 0.5f;
+    const V3 sides[4] = { { hx + 28.0f, 0, 0 }, { -hx - 28.0f, 0, 0 }, { 0, hy + 28.0f, 0 }, { 0, -hy - 28.0f, 0 } };
+    for (const V3& off : sides)
+    {
+        V3 at{ mid.x + off.x, mid.y + off.y, l.hi.z + 48.0f };
+        TraceResult tr;
+        if (Trace(at, at - V3{ 0, 0, 120 }, nullptr, 1, tr) || tr.fStartSolid || tr.fAllSolid)
+            continue;
+        float fz = tr.vecEndPos[2];
+        if (fz < l.hi.z - 72.0f || fz > l.hi.z + 24.0f || fz < bottomFloor + 64.0f)
+            continue;
+        V3 feet{ at.x, at.y, fz + 2.0f };
+        if (!Trace(feet, feet + V3{ 0, 0, 70 }, nullptr, 1, tr))
+            continue; // no room for a body
+        NavArea a;
+        a.id = 0xF0000000u + (unsigned)g_nav.areas.size();
+        a.lo[0] = at.x - 20.0f, a.lo[1] = at.y - 20.0f, a.lo[2] = fz;
+        a.hi[0] = at.x + 20.0f, a.hi[1] = at.y + 20.0f, a.hi[2] = fz;
+        a.neZ = a.swZ = fz;
+        a.center = { at.x, at.y, fz };
+        g_nav.areas.push_back(a);
+        return (int)g_nav.areas.size() - 1;
+    }
+    return -1;
+}
+
+// one entry per func_ladder of the map, in the map's order (FindPath's flags point into it), linked or not; a ladder whose top
+// has no floor yet is looked at again every 20 s (built later)
+static float g_laddersRetry = 0;
+
+static void BuildLadders()
+{
+    float now = Now();
+    bool retry = g_laddersLevel == g_nav.level && now >= g_laddersRetry && now < g_laddersRetry + 60.0f;
+    if ((g_laddersLevel == g_nav.level && !retry) || !g_nav.ok)
+        return;
+    bool firstTime = g_laddersLevel != g_nav.level;
+    g_laddersLevel = g_nav.level;
+    g_laddersRetry = 0;
+    if (g_nav.areas.size() > g_navBaseAreas)
+        g_nav.areas.resize(g_navBaseAreas);
+    g_ladders.clear();
+    int seen = 0, made = 0;
+    ForEntitiesNear(V3{ 0, 0, 0 }, 1e6f, [&](void* e) {
+        const char* cls = ClassName(e);
+        if (!cls || strcmp(cls, "func_ladder"))
+            return;
+        seen++;
+        unsigned char* v = Vars(e);
+        g_ladders.push_back(NavLadder{});
+        NavLadder& l = g_ladders.back();
+        l.lo = Vec((float*)(v + EV_ABSMIN));
+        l.hi = Vec((float*)(v + EV_ABSMAX));
+        if (l.hi.z - l.lo.z < 48.0f)
+            return;
+        V3 mid{ (l.lo.x + l.hi.x) * 0.5f, (l.lo.y + l.hi.y) * 0.5f, 0 };
+        float bestB = 1e9f, bestT = 1e9f;
+        for (size_t i = 0; i < g_nav.areas.size(); i++)
+        {
+            const NavArea& a = g_nav.areas[i];
+            float gap = AreaGap2D(a, l.lo, l.hi);
+            if (gap > 64.0f)
+                continue;
+            float floor = AreaPointNear(a, mid, 0.0f).z;
+            if (floor > l.lo.z - 40.0f && floor < l.lo.z + 40.0f && gap + fabsf(floor - l.lo.z) < bestB)
+            {
+                bestB = gap + fabsf(floor - l.lo.z);
+                l.bottom = (int)i;
+            }
+            if (floor > l.hi.z - 72.0f && floor < l.hi.z + 24.0f && gap + fabsf(floor - l.hi.z) < bestT)
+            {
+                bestT = gap + fabsf(floor - l.hi.z);
+                l.top = (int)i;
+            }
+        }
+        if (l.bottom >= 0 && (l.top < 0 || l.top == l.bottom))
+        {
+            l.top = LadderTopArea(l, AreaPointNear(g_nav.areas[l.bottom], mid, 0.0f).z);
+            made += l.top >= 0;
+        }
+        if (l.bottom < 0 || l.top < 0 || l.bottom == l.top)
+        {
+            l.bottom = l.top = -1;
+            g_laddersRetry = now + 20.0f;
+            return;
+        }
+        l.bottomPoint = AreaPointNear(g_nav.areas[l.bottom], mid, 0.0f);
+        l.topPoint = AreaPointNear(g_nav.areas[l.top], mid, 24.0f);
+        if (l.topPoint.z - l.bottomPoint.z < 40.0f)
+            l.bottom = l.top = -1; // the two floors are about level: no climbing there
+    });
+    int linked = 0;
+    for (auto& l : g_ladders)
+        linked += l.bottom >= 0;
+    static int reports = 0;
+    if (seen && (firstTime || made) && reports++ < 40)
+        Log("ladders (%s): %d of %d func_ladder linked into the navigation mesh (%d to a platform botassist added)", g_nav.map.c_str(),
+            linked, seen, made);
+}
+
 // A* over areas; returns the waypoints from the bot's area to the goal. partial: when nothing connects to the goal, the way to the
 // area closest to it (not reached: false without it)
 static bool FindPath(V3 from, V3 to, std::vector<V3>& out, bool partial = false)
 {
     out.clear();
+    g_pathFlagsOut.clear();
     int start = AreaAt(from), goal = AreaAt(to);
     if (start < 0 || goal < 0)
         return false;
     if (start == goal)
     {
         out.push_back(to);
+        g_pathFlagsOut.push_back(0);
         return true;
     }
+    BuildLadders();
     float pathNow = Now();
     size_t n = g_nav.areas.size();
     std::vector<float> cost(n, 1e30f);
@@ -924,6 +1069,24 @@ static bool FindPath(V3 from, V3 to, std::vector<V3>& out, bool partial = false)
                     open.push({ c + Len(g_nav.areas[nb].center - to), nb });
                 }
             }
+        // a ladder from this area (parentDir 4 + 2 x ladder, + 1 going down)
+        for (size_t li = 0; li < g_ladders.size(); li++)
+        {
+            const NavLadder& l = g_ladders[li];
+            if (l.bottom < 0)
+                continue;
+            int nb = l.bottom == cur ? l.top : l.top == cur ? l.bottom : -1;
+            if (nb < 0 || closed[nb] || (NavAreaHurts(nb) && nb != goal))
+                continue;
+            float c = cost[cur] + Len(l.topPoint - l.bottomPoint) * 1.5f + 64.0f + NavAvoidCost(nb, pathNow) + PoiAreaCost(nb);
+            if (c < cost[nb])
+            {
+                cost[nb] = c;
+                parent[nb] = cur;
+                parentDir[nb] = 4 + (int)li * 2 + (nb == l.bottom ? 1 : 0);
+                open.push({ c + Len(g_nav.areas[nb].center - to), nb });
+            }
+        }
     }
     bool reached = parent[goal] >= 0;
     if (!reached)
@@ -946,8 +1109,23 @@ static bool FindPath(V3 from, V3 to, std::vector<V3>& out, bool partial = false)
     for (int a = goal; a != start && a >= 0; a = parent[a])
         chain.push_back(a);
     for (int i = (int)chain.size() - 1; i >= 0; i--)
-        out.push_back(Portal(parent[chain[i]], parentDir[chain[i]], chain[i]));
+    {
+        int d = parentDir[chain[i]];
+        if (d < 4)
+        {
+            out.push_back(Portal(parent[chain[i]], d, chain[i]));
+            g_pathFlagsOut.push_back(0);
+            continue;
+        }
+        const NavLadder& l = g_ladders[(d - 4) / 2];
+        bool down = (d - 4) % 2 == 1;
+        out.push_back(down ? l.topPoint : l.bottomPoint); // where to step on
+        g_pathFlagsOut.push_back(0);
+        out.push_back(down ? l.bottomPoint : l.topPoint); // where to step off: climbed to
+        g_pathFlagsOut.push_back(1 + (d - 4) / 2);
+    }
     out.push_back(reached ? to : g_nav.areas[goal].center);
+    g_pathFlagsOut.push_back(0);
     return true;
 }
 
@@ -992,6 +1170,9 @@ struct BotState
     float navBackUntil = 0;
     float navNextCheck = 0;      // shortcuts and crouching are looked at a few times a second
     float duckUntil = 0;         // crouching: a low area of the mesh
+    std::vector<int> pathFlags;  // per waypoint of path: 1 + ladder index when reached by climbing it (FindPath)
+    float gapJumpAt = -100;      // NavTraverse: the last jump over a gap or onto a ledge
+    bool climbing = false;       // NavTraverse: on its way up or down a ladder
     float steerSide = 1, steerUntil = 0; // keeps going around an obstacle by the same side
     float jumpAt = -100;
     float strafeSide = 1, nextStrafe = 0;
@@ -1278,7 +1459,7 @@ static void NavProgress(void* bot, BotState& st, V3 pos, V3 goal, float now)
     }
     bool paused = now - st.navLastCall > 0.5f || now < st.navLastCall; // wasn't walking
     st.navLastCall = now;
-    bool moved = Len2D(pos - st.navAnchor) > NAV_STUCK_MOVE;
+    bool moved = Len2D(pos - st.navAnchor) > NAV_STUCK_MOVE || fabsf(pos.z - st.navAnchor.z) > NAV_STUCK_MOVE; // (a ladder: up or down)
     if (paused || moved)
     {
         st.navAnchor = pos;
@@ -1352,16 +1533,25 @@ static bool NextWaypoint(void* bot, BotState& st, V3 pos, V3 goal, float arrive,
     {
         g_navAvoid = &st.navAvoid;
         if (!FindPath(pos, goal, st.path, partial))
+        {
             st.path = { goal };
+            g_pathFlagsOut.assign(1, 0);
+        }
+        st.pathFlags = g_pathFlagsOut;
+        if (st.pathFlags.size() != st.path.size())
+            st.pathFlags.assign(st.path.size(), 0);
         g_navAvoid = nullptr;
         st.pathIndex = 0;
         st.pathGoal = goal;
         st.nextRepath = now + 1.0f;
         st.navNextCheck = 0;
     }
-    // close to this one: on to the next, unless that's round a corner the body wouldn't clear from here
+    // close to this one: on to the next, unless that's round a corner the body wouldn't clear from here (or the end of a ladder
+    // it hasn't climbed yet: right above or below it, the ladder still has to be climbed)
     while (st.pathIndex + 1 < st.path.size() && Len2D(st.path[st.pathIndex] - pos) < 48.0f)
     {
+        if (st.pathIndex < st.pathFlags.size() && st.pathFlags[st.pathIndex] && fabsf(pos.z - 36.0f - st.path[st.pathIndex].z) > 24.0f)
+            break;
         if (Len2D(st.path[st.pathIndex] - pos) >= 20.0f && !BodyClear(bot, pos, PathBody(st, st.pathIndex + 1)))
             break;
         st.pathIndex++;
@@ -1370,7 +1560,18 @@ static bool NextWaypoint(void* bot, BotState& st, V3 pos, V3 goal, float arrive,
     {
         st.navNextCheck = now + 0.1f;
         // a shortcut to a later waypoint the whole body can walk to in a straight line
-        for (size_t i = min(st.path.size() - 1, st.pathIndex + 3); i > st.pathIndex; i--)
+        size_t last = min(st.path.size() - 1, st.pathIndex + 3);
+        for (size_t k = st.pathIndex; k <= last; k++)
+            if (k < st.pathFlags.size() && st.pathFlags[k])
+            {
+                last = k > st.pathIndex ? k - 1 : st.pathIndex; // never past a ladder
+                break;
+            }
+        // (in a precise area of the mesh, none: it keeps to the waypoints)
+        int hereArea = AreaAt(pos);
+        if (hereArea >= 0 && (g_nav.areas[hereArea].attr & NAV_PRECISE))
+            last = st.pathIndex;
+        for (size_t i = last; i > st.pathIndex; i--)
         {
             V3 body = PathBody(st, i);
             if (fabsf(body.z - pos.z) < 40 && BodyClear(bot, pos, body) && FloorAlong(bot, pos, body))
@@ -1968,9 +2169,7 @@ static void Drive(void* bot, BotState& st, Command& cmd, float dt)
     float moveYaw = 0;
     if (moving)
     {
-        moveYaw = YawOf(waypoint - pos);
-        if (waypoint.z > pos.z + 24.0f && Len2D(waypoint - pos) < 120.0f)
-            cmd.buttons |= IN_JUMP;
+        moveYaw = YawOf(waypoint - pos); // (jumps up to a waypoint above, over gaps, ladders: NavTraverse)
     }
 
     // ---- combat movement: get away from monsters that come close, strafe at mid range
@@ -2025,7 +2224,7 @@ static void Drive(void* bot, BotState& st, Command& cmd, float dt)
     // ---- stuck: jump and sidestep, then repath
     if (moving)
     {
-        if (Len2D(pos - st.lastPos) > 24.0f)
+        if (Len2D(pos - st.lastPos) > 24.0f || fabsf(pos.z - st.lastPos.z) > 24.0f || st.climbing)
         {
             st.lastPos = pos;
             st.lastProgress = now;
@@ -5096,6 +5295,166 @@ static void ApplyTeamCharacter(void* bot, BotState& bs)
 }
 
 // ---------------------------------------------------------------- hooks
+// ---------------------------------------------------------------- crossing the map: ladders and jumps
+// Runs for every bot after its mode's driver (they all walk paths through NextWaypoint), so climbing and jumping work the
+// same in every mode:
+//  - a ladder of the path (FindPath's flagged waypoint): walk into it, look up (or down) and hold forward until the floor of
+//    the other end; at the top, over the lip towards where it steps off
+//  - a ledge too high to walk up, up to 60 units (a crouch jump: the legs tucked in the air clear 18 more than a jump), on the
+//    way to a waypoint above: jump
+//  - a gap: no floor (or a fall) just ahead and the waypoint across it, at most 240 away and not above a jump: a running jump
+//  - the mesh's "jump" areas: jump into them; "no jump" areas: no jumping at all
+//  - every jump tucks the legs in the air (duck 0.1 to 0.5 s after it)
+static const int NAV_EV_MOVETYPE = 0x118, NAV_MOVETYPE_FLY = 5, FL_ONGROUND = 0x200, FL_DUCKING = 0x4000;
+static const float JUMP_RISE = 60.0f, GAP_JUMP_MAX = 240.0f;
+
+// the floor under a point (z), or -1e9 when there's none within depth; hurts: it is in a hurt zone
+static float FloorUnder(void* bot, V3 at, float depth, bool& hurts)
+{
+    TraceResult tr;
+    hurts = false;
+    if (Trace(at, at - V3{ 0, 0, depth }, bot, 1, tr) || tr.fStartSolid || tr.fAllSolid)
+        return -1e9f;
+    V3 f{ tr.vecEndPos[0], tr.vecEndPos[1], tr.vecEndPos[2] };
+    hurts = InHurtZone(f + V3{ 0, 0, 8 }, 0.0f);
+    return f.z;
+}
+
+static void NavJump(BotState& st, unsigned short& buttons, float now, const char* why, V3 pos)
+{
+    buttons |= IN_JUMP;
+    st.jumpAt = now;
+    st.gapJumpAt = now;
+    static int reports = 0, reportLevel = -1;
+    if (reportLevel != g_nav.level)
+        reportLevel = g_nav.level, reports = 0;
+    if (reports++ < 60)
+        Log("bot %d jumps (%s) at (%.0f %.0f %.0f)", st.slot, why, pos.x, pos.y, pos.z);
+}
+
+static void NavTraverse(void* bot, BotState& st, float* aim, float& fwd, float& side, unsigned short& buttons)
+{
+    unsigned char* v = Vars(bot);
+    float now = Now();
+    int flags = F<int>(v, EV_FLAGS);
+    bool onLadder = F<int>(v, NAV_EV_MOVETYPE) == NAV_MOVETYPE_FLY;
+    if (now - st.jumpAt > 0.1f && now - st.jumpAt < 0.5f && !onLadder)
+        buttons |= IN_DUCK; // tucked legs: a crouch jump
+    if (!g_nav.ok || st.path.empty() || st.pathIndex >= st.path.size() || now - st.navLastCall > 0.3f || now < st.navLastCall)
+        return;
+    V3 pos = Origin(bot);
+    V3 feet = pos - V3{ 0, 0, (flags & FL_DUCKING) ? 18.0f : 36.0f };
+    V3 wp = st.path[st.pathIndex];
+    int flag = st.pathIndex < st.pathFlags.size() ? st.pathFlags[st.pathIndex] : 0;
+    float* va = (float*)(v + EV_VANGLE);
+    float* ang = (float*)(v + EV_ANGLES);
+
+    // ---- a ladder
+    if (flag > 0 && flag <= (int)g_ladders.size() && fabsf(feet.z - wp.z) > 24.0f)
+    {
+        const NavLadder& l = g_ladders[flag - 1];
+        bool up = wp.z > feet.z;
+        V3 mid{ (l.lo.x + l.hi.x) * 0.5f, (l.lo.y + l.hi.y) * 0.5f, pos.z };
+        float dx = pos.x < l.lo.x ? l.lo.x - pos.x : pos.x > l.hi.x ? pos.x - l.hi.x : 0.0f;
+        float dy = pos.y < l.lo.y ? l.lo.y - pos.y : pos.y > l.hi.y ? pos.y - l.hi.y : 0.0f;
+        float gap = sqrtf(dx * dx + dy * dy);
+        float yaw = YawOf(mid - pos), pitch;
+        if (onLadder || gap < 40.0f)
+        {
+            if (up && feet.z > l.hi.z - 24.0f)
+            {
+                yaw = YawOf(wp - pos); // at the top: over the lip
+                pitch = -40.0f;
+            }
+            else
+                pitch = up ? -60.0f : 60.0f;
+        }
+        else
+            pitch = up ? -20.0f : 30.0f;
+        aim[0] = va[0] = pitch;
+        aim[1] = va[1] = AngleDiff(yaw, 0.0f);
+        va[2] = 0;
+        ang[0] = pitch / -3.0f;
+        ang[1] = va[1];
+        fwd = 250.0f;
+        side = 0;
+        buttons &= ~(IN_JUMP | IN_DUCK);
+        st.duckUntil = 0;
+        static int reports = 0, reportLevel = -1;
+        if (reportLevel != g_nav.level)
+            reportLevel = g_nav.level, reports = 0;
+        if (!st.climbing && reports++ < 60)
+            Log("bot %d takes a ladder %s at (%.0f %.0f %.0f) to (%.0f %.0f %.0f)", st.slot, up ? "up" : "down", pos.x, pos.y, pos.z,
+                wp.x, wp.y, wp.z);
+        st.climbing = true;
+        return;
+    }
+    st.climbing = false;
+    if (onLadder)
+        return;
+    int here = AreaAt(pos);
+    if (here >= 0 && (g_nav.areas[here].attr & NAV_NO_JUMP))
+    {
+        buttons &= ~IN_JUMP;
+        return;
+    }
+    if (!(flags & FL_ONGROUND) || (fabsf(fwd) < 1.0f && fabsf(side) < 1.0f) || now - st.gapJumpAt < 0.8f || now - st.jumpAt < 0.6f)
+        return;
+    // the way it walks: its view plus the move keys (sidemove positive is right)
+    float moveYaw = va[1] + atan2f(-side, fwd) * RAD;
+    V3 dir = YawDir(moveYaw);
+    float toWp = fabsf(AngleDiff(YawOf(wp - pos), moveYaw));
+    bool hurts = false;
+
+    // a ledge to climb with a crouch jump
+    if (wp.z > feet.z + 12.0f && toWp < 60.0f)
+        for (float d : { 20.0f, 36.0f })
+        {
+            V3 probe = pos + dir * d;
+            probe.z = feet.z + JUMP_RISE + 8.0f;
+            float fz = FloorUnder(bot, probe, JUMP_RISE + 72.0f, hurts);
+            if (fz < -1e8f || hurts)
+                break;
+            float rise = fz - feet.z;
+            if (rise > 20.0f && rise <= JUMP_RISE)
+            {
+                TraceResult tr;
+                if (Trace(pos + V3{ 0, 0, 28 }, pos + V3{ 0, 0, 28 } + dir * (d + 16.0f), bot, 1, tr)) // room for the head
+                {
+                    NavJump(st, buttons, now, "onto a ledge", pos);
+                    return;
+                }
+            }
+            if (rise > 4.0f)
+                break; // something lower was in the way first
+        }
+
+    // a gap with the waypoint across it
+    float speed = Len2D(Vec((float*)(v + EV_VELOCITY)));
+    float horiz = Len2D(wp - pos);
+    if (speed > 160.0f && toWp < 30.0f && horiz > 56.0f && horiz < GAP_JUMP_MAX && wp.z < feet.z + 40.0f && wp.z > feet.z - 120.0f)
+    {
+        V3 ahead = pos + dir * 28.0f;
+        float fz = FloorUnder(bot, ahead, 36.0f + 96.0f, hurts);
+        if (fz < -1e8f || fz < feet.z - 64.0f || hurts)
+        {
+            bool landHurts = false;
+            float lz = FloorUnder(bot, wp + V3{ 0, 0, 36 }, 100.0f, landHurts);
+            TraceResult tr;
+            if (lz > -1e8f && !landHurts && Trace(pos + V3{ 0, 0, 16 }, wp + V3{ 0, 0, 40 }, bot, 1, tr))
+            {
+                NavJump(st, buttons, now, "over a gap", pos);
+                return;
+            }
+        }
+    }
+
+    // the mesh marks the next area as one to jump into
+    int next = AreaAt(wp);
+    if (next >= 0 && next != here && (g_nav.areas[next].attr & NAV_JUMP) && horiz < 56.0f && wp.z > feet.z + 10.0f && toWp < 60.0f)
+        NavJump(st, buttons, now, "into a jump area", pos);
+}
+
 static void HookedRunPlayerMove(void* fakeclient, const float* angles, float fwd, float side, float up,
                                 unsigned short buttons, unsigned char impulse, unsigned char msec)
 {
@@ -5344,6 +5703,8 @@ static void HookedRunPlayerMove(void* fakeclient, const float* angles, float fwd
         if (faults++ < 5)
             Log("exception 0x%08lX in the bot hook (ignored)", GetExceptionCode());
     }
+    if (dbg)
+        __try { NavTraverse(fakeclient, *dbg, aim, fwd, side, buttons); } __except (EXCEPTION_EXECUTE_HANDLER) {}
     if (dbg && Now() < dbg->duckUntil && dbg->duckUntil - Now() < 1.0f)
         buttons |= IN_DUCK;
     g_RunPlayerMove(fakeclient, aim, fwd, side, up, buttons, impulse, msec);
