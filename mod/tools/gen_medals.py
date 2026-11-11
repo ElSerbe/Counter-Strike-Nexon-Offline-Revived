@@ -50,13 +50,41 @@ BOT_MODES = [3, 4, 5]
 BOT_ZOMBIE = [24]
 GROUP_NAMES = {  # how a mode list reads in the condition text
     tuple(ORIGINAL): "Original modes", tuple(TDM): "Team Deathmatch modes", tuple(DM): "Deathmatch modes",
-    tuple(ZOMBIE): "Zombie modes", tuple(ZOMBIE_CLASSIC): "Zombie (Original, Mutation, Hero)",
+    tuple(ZOMBIE): "Zombie modes", tuple(ZOMBIE_CLASSIC): "Zombie Classic, Zombie Mutant or Zombie Hero",
     tuple(ZOMBIE_ALL): "any zombie mode", tuple(ZS): "Zombie Scenario", tuple(SCENARIO): "scenario modes",
     tuple(HUMAN_SCENARIO): "Human Scenario", tuple(SOCCER): "Soccer", tuple(ESCAPE): "Zombie Escape",
     tuple(ZOMBIE_Z): "Zombie Z", tuple(EVOLUTION): "Zombie Evolution", tuple(PROP_HUNT): "Prop Hunt",
     tuple(STUDIO): "Studio modes", tuple(SUPER_SOLDIER): "Super Soldier", tuple(BOT_MODES): "AI modes",
     tuple(BOT_ZOMBIE): "Zombie (AI)", tuple(ORIGINAL + TDM + DM): "Original, Deathmatch and Team Deathmatch",
+    tuple(ORIGINAL + TDM): "Original and Team Deathmatch modes", tuple(TDM + DM): "Deathmatch and Team Deathmatch modes",
+    (28, 52): "Zombie Shelter",
 }
+# each mode's name as the create-room menu shows it (GameModeList.csv -> resource/cso_na_en.txt; the modes the text lacks
+# named after what they are), so a condition on one mode reads "in Zombie Hero", never "in modes 14"
+MODE_NAMES = {
+    0: "Original", 1: "Deathmatch", 2: "Team Deathmatch", 3: "Original (AI)", 4: "Deathmatch (AI)", 5: "Team Deathmatch (AI)",
+    6: "Official tournament", 7: "Official tournament", 8: "Zombie Classic", 9: "Zombie Mutant", 12: "Challenge",
+    14: "Zombie Hero", 15: "Zombie Scenario", 16: "Soccer", 17: "Human Scenario", 18: "Metal Arena", 19: "Item Battle",
+    20: "Zombie Escape", 22: "Gun Deathmatch", 23: "Basic", 24: "Zombie (AI)", 27: "Beast", 28: "Zombie Shelter",
+    29: "Zombie Darkness", 30: "Zombie Giant", 32: "Zombie War", 33: "Zombie Files", 35: "Zombie tournament",
+    36: "Zombie tournament", 37: "Zombie Hide and Seek", 38: "Studio creation mode", 39: "Studio play mode", 40: "All Star",
+    41: "Hide-Out", 42: "Ranked Mode: Original", 43: "Ranked Mode: Zombie War", 44: "Ranked Mode: Zombie Hero",
+    45: "Zombie Z", 48: "Hide-Out 2 Scenario", 49: "Hide and Seek", 50: "Partner Mode", 51: "Manhunt",
+    52: "Zombie Shelter", 53: "Scenario TX", 54: "Zombie Evolution", 56: "Zombie Conquest", 57: "Super Soldier",
+    58: "Zombie Hero Classic", 59: "Zombie Disaster Zone",
+}
+
+
+def modes_text(modes):
+    """how a list of modes reads: a known group's name, else the modes' names ("Zombie Mutant or Zombie Hero")"""
+    if tuple(modes) in GROUP_NAMES:
+        return GROUP_NAMES[tuple(modes)]
+    names = []
+    for m in modes:
+        n = MODE_NAMES.get(m, f"mode {m}")
+        if n not in names:
+            names.append(n)
+    return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " or " + names[-1]
 
 # statistics the server keeps (CMedalManager), and how a condition on them reads
 COUNTERS = {
@@ -353,7 +381,7 @@ def describe(req, sets, count=None):
     elif counter == "Seconds" and target == 3600:
         text = "Play for 1 hour"
     if modes:
-        text += " in " + GROUP_NAMES.get(tuple(modes), "modes " + ", ".join(map(str, modes)))
+        text += " in " + modes_text(modes)
     return text
 
 

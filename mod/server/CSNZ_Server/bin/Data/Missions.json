@@ -212,7 +212,7 @@
    "Npc": "Senior Researcher Soi",
    "Portrait": "doctora",
    "Story": "Soldier! Don't forget that war isn't fought with headcount alone. A competent soldier can outmatch 100 enemies all by himself.\n\nThe battle is not going well for us so I'll need you to pick up the slack.\n\nI trust that you'll return after eliminating at least 5 enemies without falling in battle.\n\n* This mission can only be completed in a room with 4 or more players.\n* Unclaimed prizes will disappear when the mission has been reset.",
-   "Text": "Score 25 kills in modes 2, 5, 19, 1, 4, 22",
+   "Text": "Score 25 kills in Deathmatch and Team Deathmatch modes",
    "Conditions": [
     {
      "Counter": "Kills",
@@ -236,7 +236,7 @@
    "Npc": "Evelyn",
    "Portrait": "evelyn",
    "Story": "We at Aegis Institute are investigating the Hero that helped us greatly against the zombies. Because those disgusting zombies have the ability to evolve, we cannot be careless in our research towards enhancing the Hero’s abilities.\n\nSuch research is difficult because we lack information from real battles.\n\nIf you can bring us real combat data on the Hero, it would be vital to our research.\n\n* This mission can only be completed in a room with 4 or more players.\n* Unclaimed prizes will disappear when the mission has been reset.",
-   "Text": "Win 2 matches in modes 14",
+   "Text": "Win 2 matches in Zombie Hero",
    "Conditions": [
     {
      "Counter": "Wins",
@@ -255,7 +255,7 @@
    "Npc": "Signalman Felix",
    "Portrait": "felix",
    "Story": "The effect of the morale booster was what helped us counter-attack those nauseating zombies. At Aegis Institute, we're analyzing the effects of the morale booster in order to destroy zombies more effectively.\n\nOf course, the problem is... Yes. It's the lack of data. If you can come back to us after fully experiencing the morale booster that info will be priceless.\n\n* This mission can only be completed in a room with 4 or more players.\n* Unclaimed prizes will disappear when the mission has been reset.",
-   "Text": "Kill 20 zombies in modes 14",
+   "Text": "Kill 20 zombies in Zombie Hero",
    "Conditions": [
     {
      "Counter": "ZombieKills",
@@ -274,7 +274,7 @@
    "Npc": "Douglas Jacob",
    "Portrait": "jacob",
    "Story": "Have you heard the phrase 'a penny saved is a penny earned'? It means that money, however small, can become a fortune when it's pooled together. That's why being frugal is so important.\n\nWe can see how wasteful you are with bullets when killing zombies. If you can put down zombies without wasting any ammunition then that's just good sense.\n\n*This mission can only be completed in a room with 4 or more players.\n* Unclaimed prizes will disappear when the mission has been reset.",
-   "Text": "Score 3 melee kills in Zombie (Original, Mutation, Hero)",
+   "Text": "Score 3 melee kills in Zombie Classic, Zombie Mutant or Zombie Hero",
    "Conditions": [
     {
      "Counter": "MeleeKills",
@@ -295,7 +295,7 @@
    "Npc": "Commander Victor",
    "Portrait": "victor",
    "Story": "Hey rookie, how much do you know about zombies? Heheh... I have quite a bit of experience toying with zombies. You at least know to eliminate the host first in order to kill all of them, right? That's the fastest way to weaken them...\n\nRookie, this mission is to eliminate the host.\nSo how about it? It's been a while since I've played with zombies. Let's have some fun!\n\n*This mission can only be completed in a room with 4 or more players.\n* Unclaimed prizes will disappear when the mission has been reset.",
-   "Text": "Score 5 headshots in modes 9, 14",
+   "Text": "Score 5 headshots in Zombie Mutant or Zombie Hero",
    "Conditions": [
     {
      "Counter": "Headshots",
@@ -315,7 +315,7 @@
    "Npc": "Jim the 'Red Lizard'",
    "Portrait": "zim",
    "Story": "This is big trouble. We've received communication that zombies have infested district B7 again. I think we're going to have to send over a supply box, but it's going to be a nasty operation because of those zombies.\n\nWe need your help. Retrieve the supply box amidst the crowd of zombies.\nIt'll be a big help during combat as well.\n\n*This mission can only be completed in a room with 4 or more players.\n* Unclaimed prizes will disappear when the mission has been reset.",
-   "Text": "Kill 30 zombies in modes 9, 14",
+   "Text": "Kill 30 zombies in Zombie Mutant or Zombie Hero",
    "Conditions": [
     {
      "Counter": "ZombieKills",
@@ -335,7 +335,7 @@
    "Npc": "Security Chief Chen",
    "Portrait": "chen",
    "Story": "An interesting world, isn't it? There's even a time when zombies and humans must be allies in battle. They are always\nat each other's throat, how long will they go on pretending to be friends? Such a dangerous alliance will only end in betrayal.\n\nNow, I have a request. Show me a hint of that betrayal.\n Proof that it is merely fate that humans\nmust kill zombies and zombies must kill humans...\n \r\n\n*This mission can only be completed in a room with 4 or more players.\n* Unclaimed prizes will disappear when the mission has been reset.",
-   "Text": "Kill 10 zombies in Zombie (Original, Mutation, Hero); Infect 10 humans in Zombie (Original, Mutation, Hero)",
+   "Text": "Kill 10 zombies in Zombie Classic, Zombie Mutant or Zombie Hero; Infect 10 humans in Zombie Classic, Zombie Mutant or Zombie Hero",
    "Conditions": [
     {
      "Counter": "ZombieKills",
@@ -467,7 +467,7 @@
    "Npc": "Commander Victor",
    "Portrait": "victor",
    "Story": "Well, we have an annoying problem... Sometimes a minor dispute can grow into a big fight. Sure, fighting each other is fine but not when it damages the company, right? Go and subdue the defense system.\n\nIt's simple. Subdue the hostile guardian and secure a few bases.\n\n*This mission can only be completed in a room with 4 or more players.\n* Unclaimed prizes will disappear when the mission has been reset.",
-   "Text": "Score 50 kills in modes 0, 3, 6, 7, 23, 42, 2, 5, 19",
+   "Text": "Score 50 kills in Original and Team Deathmatch modes",
    "Conditions": [
     {
      "Counter": "Kills",
@@ -561,7 +561,7 @@
    "Npc": "Evelyn",
    "Portrait": "evelyn",
    "Story": "The numbers of those grotesque zombies aren't decreasing. We need to take a stable defensive position.\nHowever, we lack the number of experts who can help us out. We need your help.\nIf you can become an expert through experience that is the best way. Please help out.\n\n* Can be only completed in a room with 2 or more people.\n* Uncollected rewards will vanish upon reset.",
-   "Text": "Win 1 matches in modes 28, 52",
+   "Text": "Win 1 matches in Zombie Shelter",
    "Conditions": [
     {
      "Counter": "Wins",
@@ -581,7 +581,7 @@
    "Npc": "Signalman Felix",
    "Portrait": "felix",
    "Story": "Through our efforts, our position has become more fortified against attacks, but we can't be satisfied here. We'll need to be on our toes.\nFrom what I hear, a Black Market was open while the zombie forces took a hit. Please go over there and buy weapons.\nWith them, we can fortify our position even further. Hurry.\n\n* Can be only completed in a room with 4 or more people.\n* Uncollected rewards will vanish upon reset.",
-   "Text": "Play 2 matches in modes 28, 52",
+   "Text": "Play 2 matches in Zombie Shelter",
    "Conditions": [
     {
      "Counter": "Matches",
@@ -601,7 +601,7 @@
    "Npc": "Douglas Jacob",
    "Portrait": "jacob",
    "Story": "One of the reasons why we were able to push the zombie forces back and go on the counter attack was our recharged fighting spirit. Aegis Institute is preparing to study ways to eliminate zombies more effectively by studying this effect.\nThe problem is that we don't have enough data.\nIf you can experience this effect first-hand by going into their lair, there won't be any data that can compare.\n\n* Can be only completed in a room with 4 or more people.\n* Uncollected rewards will vanish upon reset.",
-   "Text": "Kill 30 zombies in modes 14",
+   "Text": "Kill 30 zombies in Zombie Hero",
    "Conditions": [
     {
      "Counter": "ZombieKills",
@@ -620,7 +620,7 @@
    "Npc": "Commander Victor",
    "Portrait": "victor",
    "Story": "You've almost become a Super Soldier now. However, we cannot be satisfied yet.\nWith the research that has been carried out, you now have an ability to infect others with the virus.\nNow, the time has come. It will be a new era for us. Go forth and infect those lowly humans, so that they will become one of us. Show us your abilities.\n\n* Can be only completed in a room with 4 or more people.\n* Uncollected rewards will vanish upon reset.",
-   "Text": "Infect 10 humans in Zombie (Original, Mutation, Hero)",
+   "Text": "Infect 10 humans in Zombie Classic, Zombie Mutant or Zombie Hero",
    "Conditions": [
     {
      "Counter": "Infections",
@@ -641,7 +641,7 @@
    "Npc": "Jim the 'Red Lizard'",
    "Portrait": "zim",
    "Story": "We're in a dire situation here. We've received a report that zombies have resurfaced in Zone B7. We'll need to send them supplies but it looks like it'll be hard due to the area being overrun by zombies.\n\nWe need your help.\nPlease send them Supply Boxes by going through the area.\nIt'll be of great help in battle.\n\n* Can be only completed in a room with 4 or more people.\n* Uncollected rewards will vanish upon reset.",
-   "Text": "Play 3 matches in Zombie (Original, Mutation, Hero)",
+   "Text": "Play 3 matches in Zombie Classic, Zombie Mutant or Zombie Hero",
    "Conditions": [
     {
      "Counter": "Matches",
@@ -662,7 +662,7 @@
    "Npc": "Security Chief Chen",
    "Portrait": "chen",
    "Story": "Looks like you're getting used to special grenades.\nIf we are to expand our forces, we'll need to familiarize ourselves with this.\nGo, show us what you can do.\n\n* Can be only completed in a room with 4 or more people.\n* Uncollected rewards will vanish upon reset.",
-   "Text": "Infect 5 humans in modes 9, 14",
+   "Text": "Infect 5 humans in Zombie Mutant or Zombie Hero",
    "Conditions": [
     {
      "Counter": "Infections",
@@ -767,7 +767,7 @@
    "Npc": "Officer Rowen",
    "Portrait": "rowen",
    "Story": "A special operation from Command. Get it done and report back.",
-   "Text": "Score 50 kills in modes 3",
+   "Text": "Score 50 kills in Original (AI)",
    "Conditions": [
     {
      "Counter": "Kills",
@@ -786,7 +786,7 @@
    "Npc": "Senior Researcher Soi",
    "Portrait": "doctora",
    "Story": "A special operation from Command. Get it done and report back.",
-   "Text": "Score 120 kills in modes 4",
+   "Text": "Score 120 kills in Deathmatch (AI)",
    "Conditions": [
     {
      "Counter": "Kills",
@@ -805,7 +805,7 @@
    "Npc": "Evelyn",
    "Portrait": "evelyn",
    "Story": "A special operation from Command. Get it done and report back.",
-   "Text": "Score 80 kills in modes 5",
+   "Text": "Score 80 kills in Team Deathmatch (AI)",
    "Conditions": [
     {
      "Counter": "Kills",
@@ -820,11 +820,11 @@
   },
   {
    "ID": 107,
-   "Title": "Special Operation: Zombie",
+   "Title": "Special Operation: Zombie Classic",
    "Npc": "Signalman Felix",
    "Portrait": "felix",
    "Story": "A special operation from Command. Get it done and report back.",
-   "Text": "Kill 10 zombies in modes 8",
+   "Text": "Kill 10 zombies in Zombie Classic",
    "Conditions": [
     {
      "Counter": "ZombieKills",
@@ -839,11 +839,11 @@
   },
   {
    "ID": 108,
-   "Title": "Special Operation: Zombie Mutation",
+   "Title": "Special Operation: Zombie Mutant",
    "Npc": "Douglas Jacob",
    "Portrait": "jacob",
    "Story": "A special operation from Command. Get it done and report back.",
-   "Text": "Kill 10 zombies in modes 9",
+   "Text": "Kill 10 zombies in Zombie Mutant",
    "Conditions": [
     {
      "Counter": "ZombieKills",
@@ -862,7 +862,7 @@
    "Npc": "Commander Victor",
    "Portrait": "victor",
    "Story": "A special operation from Command. Get it done and report back.",
-   "Text": "Kill 5 zombies in modes 14",
+   "Text": "Kill 5 zombies in Zombie Hero",
    "Conditions": [
     {
      "Counter": "ZombieKills",
@@ -912,11 +912,11 @@
   },
   {
    "ID": 111,
-   "Title": "Special Operation: Zombie Exterminate",
+   "Title": "Special Operation: Zombie War",
    "Npc": "Security Chief Chen",
    "Portrait": "chen",
    "Story": "A special operation from Command. Get it done and report back.",
-   "Text": "Kill 30 zombies in modes 32",
+   "Text": "Kill 30 zombies in Zombie War",
    "Conditions": [
     {
      "Counter": "ZombieKills",
@@ -973,7 +973,7 @@
    "Npc": "Signalman Felix",
    "Portrait": "felix",
    "Story": "A special operation from Command. Get it done and report back.",
-   "Text": "Score 45 kills in modes 22",
+   "Text": "Score 45 kills in Gun Deathmatch",
    "Conditions": [
     {
      "Counter": "Kills",
@@ -988,11 +988,11 @@
   },
   {
    "ID": 116,
-   "Title": "Special Operation: Light Original",
+   "Title": "Special Operation: Basic",
    "Npc": "Douglas Jacob",
    "Portrait": "jacob",
    "Story": "A special operation from Command. Get it done and report back.",
-   "Text": "Score 45 kills in modes 23",
+   "Text": "Score 45 kills in Basic",
    "Conditions": [
     {
      "Counter": "Kills",
@@ -1040,7 +1040,7 @@
    "Npc": "Security Chief Chen",
    "Portrait": "chen",
    "Story": "A special operation from Command. Get it done and report back.",
-   "Text": "Kill 300 monsters in modes 28, 52",
+   "Text": "Kill 300 monsters in Zombie Shelter",
    "Conditions": [
     {
      "Counter": "MonsterKills",
@@ -1060,7 +1060,7 @@
    "Npc": "Senior Researcher Soi",
    "Portrait": "doctora",
    "Story": "A special operation from Command. Get it done and report back.",
-   "Text": "Kill 10 zombies in modes 29",
+   "Text": "Kill 10 zombies in Zombie Darkness",
    "Conditions": [
     {
      "Counter": "ZombieKills",
@@ -1079,7 +1079,7 @@
    "Npc": "Evelyn",
    "Portrait": "evelyn",
    "Story": "A special operation from Command. Get it done and report back.",
-   "Text": "Score 3 kills in modes 30",
+   "Text": "Score 3 kills in Zombie Giant",
    "Conditions": [
     {
      "Counter": "Kills",

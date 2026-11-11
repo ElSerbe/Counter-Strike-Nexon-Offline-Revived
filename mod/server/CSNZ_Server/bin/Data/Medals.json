@@ -1308,7 +1308,7 @@
    "Name": "Survival Master",
    "Group": "Zombie",
    "Lore": "A medal given to those who have survived 5,000 times or more in Zombie (Original, Mutant, Hero) mode.",
-   "Text": "Win 200 matches in Zombie (Original, Mutation, Hero)",
+   "Text": "Win 200 matches in Zombie Classic, Zombie Mutant or Zombie Hero",
    "Conditions": [
     {
      "Counter": "Wins",
@@ -1327,7 +1327,7 @@
    "Name": "Zombie Hunter",
    "Group": "Zombie",
    "Lore": "A medal given to those who have killed 5,000 more Zombies in Zombie (Original, Mutant, Hero) mode.",
-   "Text": "Kill 2,000 zombies in Zombie (Original, Mutation, Hero)",
+   "Text": "Kill 2,000 zombies in Zombie Classic, Zombie Mutant or Zombie Hero",
    "Conditions": [
     {
      "Counter": "ZombieKills",
@@ -1346,7 +1346,7 @@
    "Name": "Dead Growth",
    "Group": "Zombie",
    "Lore": "A medal for Zombies who have mastered the evolutions of their form.",
-   "Text": "Infect 500 humans in Zombie (Original, Mutation, Hero)",
+   "Text": "Infect 500 humans in Zombie Classic, Zombie Mutant or Zombie Hero",
    "Conditions": [
     {
      "Counter": "Infections",
@@ -2678,7 +2678,7 @@
    "Name": "Last",
    "Group": "Scenario",
    "Lore": "This is a medal that will be given to soldiers who fought against zombies and secured the Shelter in the City of the dead",
-   "Text": "Win 30 matches in modes 28, 52",
+   "Text": "Win 30 matches in Zombie Shelter",
    "Conditions": [
     {
      "Counter": "Wins",
@@ -2696,7 +2696,7 @@
    "Name": "Destroy",
    "Group": "Scenario",
    "Lore": "This is a medal that will be given to soldiers who avoided the zombie attacks and destroyed the enemy's shelter.",
-   "Text": "Win 100 matches in modes 28, 52",
+   "Text": "Win 100 matches in Zombie Shelter",
    "Conditions": [
     {
      "Counter": "Wins",
