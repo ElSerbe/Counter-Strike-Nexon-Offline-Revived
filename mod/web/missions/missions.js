@@ -138,52 +138,6 @@
     </div>`;
   }
 
-  // ---------------------------------------------------------------- Login Supplies
-  // the same calendar as the game's Login Supplies window (Data/DailyLogin.json): one item a day, collected in the
-  // lobby with the window's button; missed days are lost, days collected count toward the bonuses
-  function loginLines(d) {
-    const lines = [];
-    const what = (n, one, many) => `${num(n)}<small>${n === 1 ? one : many}</small>`;
-    if (d.itemID) lines.push(`<span class="i" title="${esc(d.name || "Item " + d.itemID)}${d.days ? ` (${d.days} days)` : ""}"><img src="../shop/icons/${d.itemID}.png" alt="" onerror="this.style.display='none'">${esc(d.name || "Item " + d.itemID)}</span>`);
-    if (d.medals) lines.push(`<span class="m">${medal(true)}${what(d.medals, "medal", "medals")}</span>`);
-    if (d.badges) lines.push(`<span class="b" title="Black Badges (Black Market)">${badge(true)}${what(d.badges, "Black Badge", "Black Badges")}</span>`);
-    if (d.riftTickets) lines.push(`<span class="t" title="Rift Tickets (Rift Exchange)">${ticket(true)}${what(d.riftTickets, "Rift Ticket", "Rift Tickets")}</span>`);
-    if (d.bingoTickets) lines.push(`<span class="g" title="Bingo Tickets (Mileage Bingo)"><img src="../shop/icons/2179.png" alt="">${what(d.bingoTickets, "Bingo Ticket", "Bingo Tickets")}</span>`);
-    return lines.join("");
-  }
-
-  function renderLogin() {
-    const lg = data.login;
-    if (!lg) {
-      view.innerHTML = '<div class="message">Login Supplies are off (Data/DailyLogin.json of CSNZ_Server).</div>';
-      return;
-    }
-    const n = lg.days.length;
-    const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    const date = i => { const d = new Date((lg.start + i * 86400 + 43200) * 1000); return `${days[d.getDay()]} ${d.getDate()}/${d.getMonth() + 1}`; };
-    const weeks = [];
-    for (let w = 0; w * 7 < n; w++) weeks.push(lg.days.slice(w * 7, w * 7 + 7).map((d, k) => [d, w * 7 + k]));
-    const cell = ([d, i]) => {
-      const isToday = i === lg.today;
-      const missed = !d.collected && i < lg.today;
-      const label = d.collected ? (isToday ? "Today &middot; collected" : "Collected") : isToday ? "Today &middot; ready" : missed ? "Missed" : i === lg.today + 1 ? "Tomorrow" : "";
-      return `<div class="lday${d.collected ? " claimed" : ""}${missed ? " missed" : ""}${isToday ? " today" : ""}${(i + 1) % 7 === 0 ? " big" : ""}">
-        <div class="lhead"><span class="dn">${date(i)}</span>${d.collected ? '<span class="check">&#10003;</span>' : ""}</div>
-        <div class="lrew">${loginLines(d)}</div>
-        <div class="lstate">${label}</div></div>`;
-    };
-    const bonus = b => `<div class="lday${b.given ? " claimed" : ""}">
-        <div class="lhead"><span class="dn">${b.after} days</span>${b.given ? '<span class="check">&#10003;</span>' : ""}</div>
-        <div class="lrew">${loginLines(b)}</div>
-        <div class="lstate">${b.given ? "Received" : `${Math.max(0, b.after - lg.collected)} to go`}</div></div>`;
-    view.innerHTML = `<div class="event login">
-      <div class="event-head"><h2>Login Supplies</h2><span class="ends">Next day in ${timeLeft(lg.nextIn)}</span>
-        <p>Collect one item a day in the lobby: <b>Login Supplies</b> button (bottom right), then <b>Get Login Supplies</b>. Days you miss are lost; every day collected counts toward the bonuses. A new ${n}-day calendar starts after the last day. ${num(lg.collected)} of ${n} collected.</p></div>
-      ${lg.bonuses.length ? `<section class="lweek"><h2 class="section-title">Bonuses</h2><div class="lgrid">${lg.bonuses.map(bonus).join("")}</div></section>` : ""}
-      ${weeks.map((w, k) => `<section class="lweek"><h2 class="section-title">Week ${k + 1}</h2><div class="lgrid">${w.map(cell).join("")}</div></section>`).join("")}
-    </div>`;
-  }
-
   // ---------------------------------------------------------------- black market
   // 3D preview like the shop's battle passes (../shop/viewer.js, models from tools/export_shop_assets.py): costumes
   // worn by the player's character, zombie skins as the zombie, weapons in the character's hands
@@ -350,7 +304,6 @@
     $("tickets").textContent = rift ? num(rift.tickets) : "--";
     document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("active", b.dataset.tab === tab));
     if (tab === "event") renderEvent();
-    else if (tab === "login") renderLogin();
     else if (tab === "market") renderMarket();
     else if (tab === "rift") renderRift();
     else if (tab === "orders") renderOrders();
@@ -444,16 +397,6 @@
         [9424, "M 249ex (S25-3)", 30, "Weapon"], [9108, "Balrog 7 (S24-3)", 30, "Weapon"], [9023, "Skull 2 (S24-2)", 30, "Weapon"],
         [9655, "Agenth (Pet)", 300, "Costume"], [9586, "Coralcrown (Head)", 300, "Costume"], [8928, "Beveragecan (Pelvis)", 300, "Costume"],
         [9413, "Orientalinkfan (Back)", 300, "Costume"], [8584, "Boomerskin (S21-4)", 30, "Costume"]].map(([itemID, name, price, kind], i) => ({ itemID, name, price, kind, owned: i === 4 }));
-      const dec = c => ({ itemID: 396, count: c, name: "Code A Decoder" + (c > 1 ? " x" + c : "") });
-      const pnt = c => ({ itemID: 1030, count: c, name: "300 Point Coupon" + (c > 1 ? " x" + c : "") });
-      const week = (k, t) => [dec(2 + k), pnt(1 + k), dec(3), { itemID: 2179, count: 1, name: "Bingo Ticket" }, pnt(2), dec(4 + k),
-        { itemID: 8292, count: 1 + k, name: "Transcendence Decoder" + (k ? " x" + (1 + k) : ""), riftTickets: t, badges: t }];
-      const days = [].concat(week(0, 5), week(1, 6), week(1, 8), week(2, 15));
-      days.forEach((d, i) => { d.collected = i < 10 && i !== 4; });
-      const now = new Date(); now.setHours(0, 0, 0, 0);
-      mock.login = { today: 10, collected: 9, nextIn: 30000, start: now.getTime() / 1000 - 10 * 86400, days,
-        bonuses: [[5, 8292, 1, "Transcendence Decoder"], [10, 1030, 5, "300 Point Coupon x5"], [15, 8292, 2, "Transcendence Decoder x2"],
-          [20, 2179, 3, "Bingo Ticket x3"], [25, 8292, 3, "Transcendence Decoder x3"]].map(([after, itemID, count, name]) => ({ after, itemID, count, name, given: after <= 9 })) };
     }
     if (path === "/api/riftexchange") {
       if (!mock.rift) {

@@ -270,10 +270,10 @@
 			"Image": "",
 			"Pages": [
 				{ "Unlock": 0, "Items": [
-					{ "ItemID": 517, "Cost": 30 }, { "ItemID": 407, "Cost": 30 }, { "ItemID": 532, "Cost": 55 }, { "ItemID": 151, "Cost": 155 }
+					{ "ItemID": 517, "Cost": 30 }, { "ItemID": 407, "Cost": 100 }, { "ItemID": 532, "Cost": 55 }, { "ItemID": 151, "Cost": 155 }
 				] },
 				{ "Unlock": 130, "Items": [
-					{ "ItemID": 482, "Cost": 80 }, { "ItemID": 367, "Cost": 80 }, { "ItemID": 554, "Cost": 65 }, { "ItemID": 153, "Cost": 155 }
+					{ "ItemID": 482, "Cost": 80 }, { "ItemID": 367, "Cost": 80 }, { "ItemID": 554, "Cost": 100 }, { "ItemID": 153, "Cost": 155 }
 				] },
 				{ "Unlock": 330, "Items": [
 					{ "ItemID": 466, "Cost": 175 }, { "ItemID": 327, "Cost": 175 }, { "ItemID": 483, "Cost": 90 }, { "ItemID": 154, "Cost": 155 }
@@ -286,7 +286,7 @@
 			"Image": "", "Theme": ["#240f12", "#ff5a4f"],
 			"Pages": [
 				{ "Unlock": 0, "Items": [
-					{ "ItemID": 812, "Cost": 105 }, { "ItemID": 834, "Cost": 185 }, { "ItemID": 776, "Cost": 210 }
+					{ "ItemID": 812, "Cost": 135 }, { "ItemID": 834, "Cost": 185 }, { "ItemID": 776, "Cost": 340 }
 				] },
 				{ "Unlock": 340, "Items": [
 					{ "ItemID": 784, "Cost": 300 }, { "ItemID": 764, "Cost": 250 }, { "ItemID": 752, "Cost": 660 }
@@ -325,10 +325,10 @@
 			"Image": "",
 			"Pages": [
 				{ "Unlock": 0, "Items": [
-					{ "ItemID": 8219, "Cost": 35 }, { "ItemID": 8119, "Cost": 65 }, { "ItemID": 8132, "Cost": 75 }
+					{ "ItemID": 8219, "Cost": 100 }, { "ItemID": 8119, "Cost": 200 }, { "ItemID": 8132, "Cost": 200 }
 				] },
 				{ "Unlock": 100, "Items": [
-					{ "ItemID": 8118, "Cost": 85 }, { "ItemID": 8193, "Cost": 190 }, { "ItemID": 8327, "Cost": 95 }
+					{ "ItemID": 8118, "Cost": 200 }, { "ItemID": 8193, "Cost": 305 }, { "ItemID": 8327, "Cost": 200 }
 				] }
 			]
 		},
@@ -393,7 +393,7 @@
 					{ "ItemID": 670, "Cost": 45 }, { "ItemID": 671, "Cost": 45 }, { "ItemID": 683, "Cost": 55 }, { "ItemID": 709, "Cost": 155 }
 				] },
 				{ "Unlock": 110, "Items": [
-					{ "ItemID": 672, "Cost": 45 }, { "ItemID": 8088, "Cost": 45 }, { "ItemID": 523, "Cost": 55 }, { "ItemID": 710, "Cost": 155 }
+					{ "ItemID": 672, "Cost": 45 }, { "ItemID": 8088, "Cost": 100 }, { "ItemID": 523, "Cost": 55 }, { "ItemID": 710, "Cost": 155 }
 				] },
 				{ "Unlock": 280, "Items": [
 					{ "ItemID": 706, "Cost": 50 }, { "ItemID": 8320, "Cost": 55 }, { "ItemID": 8323, "Cost": 30 }, { "ItemID": 592, "Cost": 155 }
@@ -424,19 +424,19 @@
 					{ "ItemID": 379, "Cost": 80 }, { "ItemID": 783, "Cost": 30 }, { "ItemID": 720, "Cost": 50 }, { "ItemID": 818, "Cost": 155 }
 				] },
 				{ "Unlock": 320, "Items": [
-					{ "ItemID": 548, "Cost": 55 }, { "ItemID": 495, "Cost": 80 }, { "ItemID": 8194, "Cost": 30 }, { "ItemID": 925, "Cost": 155 }
+					{ "ItemID": 548, "Cost": 55 }, { "ItemID": 495, "Cost": 100 }, { "ItemID": 8194, "Cost": 450 }, { "ItemID": 925, "Cost": 155 }
 				] },
 				{ "Unlock": 540, "Items": [
-					{ "ItemID": 564, "Cost": 80 }, { "ItemID": 435, "Cost": 150 }, { "ItemID": 8221, "Cost": 55 }, { "ItemID": 8128, "Cost": 155 }
+					{ "ItemID": 564, "Cost": 80 }, { "ItemID": 435, "Cost": 150 }, { "ItemID": 8221, "Cost": 450 }, { "ItemID": 8128, "Cost": 155 }
 				] },
 				{ "Unlock": 790, "Items": [
-					{ "ItemID": 789, "Cost": 175 }, { "ItemID": 899, "Cost": 85 }, { "ItemID": 8381, "Cost": 35 }, { "ItemID": 8129, "Cost": 170 }
+					{ "ItemID": 789, "Cost": 175 }, { "ItemID": 899, "Cost": 85 }, { "ItemID": 8381, "Cost": 300 }, { "ItemID": 8129, "Cost": 170 }
 				] },
 				{ "Unlock": 1080, "Items": [
-					{ "ItemID": 8393, "Cost": 85 }, { "ItemID": 8394, "Cost": 85 }, { "ItemID": 8258, "Cost": 85 }, { "ItemID": 8195, "Cost": 170 }
+					{ "ItemID": 8393, "Cost": 85 }, { "ItemID": 8394, "Cost": 85 }, { "ItemID": 8258, "Cost": 450 }, { "ItemID": 8195, "Cost": 170 }
 				] },
 				{ "Unlock": 1400, "Items": [
-					{ "ItemID": 815, "Cost": 175 }, { "ItemID": 924, "Cost": 55 }, { "ItemID": 8385, "Cost": 65 }, { "ItemID": 8288, "Cost": 170 }
+					{ "ItemID": 815, "Cost": 220 }, { "ItemID": 924, "Cost": 55 }, { "ItemID": 8385, "Cost": 450 }, { "ItemID": 8288, "Cost": 170 }
 				] }
 			]
 		},
@@ -446,13 +446,13 @@
 			"Image": "", "Theme": ["#1f1a08", "#ffd24a"],
 			"Pages": [
 				{ "Unlock": 0, "Items": [
-					{ "ItemID": 341, "Cost": 60 }, { "ItemID": 172, "Cost": 60 }, { "ItemID": 549, "Cost": 60 }, { "ItemID": 416, "Cost": 60 }
+					{ "ItemID": 341, "Cost": 60 }, { "ItemID": 172, "Cost": 100 }, { "ItemID": 549, "Cost": 60 }, { "ItemID": 416, "Cost": 60 }
 				] },
 				{ "Unlock": 220, "Items": [
 					{ "ItemID": 309, "Cost": 110 }, { "ItemID": 346, "Cost": 110 }, { "ItemID": 496, "Cost": 110 }, { "ItemID": 220, "Cost": 110 }
 				] },
 				{ "Unlock": 560, "Items": [
-					{ "ItemID": 441, "Cost": 110 }, { "ItemID": 583, "Cost": 110 }, { "ItemID": 8055, "Cost": 110 }, { "ItemID": 8106, "Cost": 440 }
+					{ "ItemID": 441, "Cost": 110 }, { "ItemID": 583, "Cost": 110 }, { "ItemID": 8055, "Cost": 200 }, { "ItemID": 8106, "Cost": 880 }
 				] },
 				{ "Unlock": 960, "Items": [
 					{ "ItemID": 170, "Cost": 160 }, { "ItemID": 244, "Cost": 160 }, { "ItemID": 221, "Cost": 160 }, { "ItemID": 420, "Cost": 160 }
@@ -483,13 +483,13 @@
 					{ "ItemID": 282, "Cost": 55 }, { "ItemID": 681, "Cost": 45 }, { "ItemID": 8330, "Cost": 80 }, { "ItemID": 8336, "Cost": 155 }
 				] },
 				{ "Unlock": 430, "Items": [
-					{ "ItemID": 279, "Cost": 85 }, { "ItemID": 280, "Cost": 85 }, { "ItemID": 405, "Cost": 55 }, { "ItemID": 8110, "Cost": 260 }
+					{ "ItemID": 279, "Cost": 85 }, { "ItemID": 280, "Cost": 85 }, { "ItemID": 405, "Cost": 55 }, { "ItemID": 8110, "Cost": 420 }
 				] },
 				{ "Unlock": 640, "Items": [
 					{ "ItemID": 8331, "Cost": 85 }, { "ItemID": 480, "Cost": 55 }, { "ItemID": 610, "Cost": 65 }, { "ItemID": 8328, "Cost": 55 }
 				] },
 				{ "Unlock": 870, "Items": [
-					{ "ItemID": 428, "Cost": 220 }, { "ItemID": 679, "Cost": 165 }, { "ItemID": 8143, "Cost": 420 }, { "ItemID": 959, "Cost": 220 }
+					{ "ItemID": 428, "Cost": 355 }, { "ItemID": 679, "Cost": 165 }, { "ItemID": 8143, "Cost": 900 }, { "ItemID": 959, "Cost": 440 }
 				] }
 			]
 		}

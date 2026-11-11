@@ -5,44 +5,44 @@
 	// toward the bonuses (5 at most, "After" days collected).
 	// A day: "Item" (Item.csv id, shown in the window), "Count", "Days" (0 = permanent), "Name" (chat line and the
 	// Missions page), and currencies given with it: "Medals", "BlackBadges", "RiftTickets", "BingoTickets".
-	// 396 Code A Decoder (ItemBox.json), 8292 Transcendence Decoder, 1030 300 Point Coupon, 2179 Bingo Ticket.
+	// 396 Code A Decoder (ItemBox.json), 8292 Transcendence Decoder, 1030 100 Point Coupon, 2179 Bingo Ticket.
 	"Enabled": true,
 	"Days": [
 		{ "Item": 396, "Count": 2, "Name": "Code A Decoder" },
-		{ "Item": 1030, "Count": 1, "Name": "300 Point Coupon" },
+		{ "Item": 1030, "Count": 1, "Name": "100 Point Coupon" },
 		{ "Item": 396, "Count": 3, "Name": "Code A Decoder" },
 		{ "Item": 2179, "Count": 1, "Name": "Bingo Ticket" },
-		{ "Item": 1030, "Count": 2, "Name": "300 Point Coupon" },
+		{ "Item": 1030, "Count": 2, "Name": "100 Point Coupon" },
 		{ "Item": 396, "Count": 4, "Name": "Code A Decoder" },
 		{ "Item": 8292, "Count": 1, "Name": "Transcendence Decoder", "RiftTickets": 5, "BlackBadges": 5 },
 
 		{ "Item": 396, "Count": 2, "Name": "Code A Decoder" },
-		{ "Item": 1030, "Count": 2, "Name": "300 Point Coupon" },
+		{ "Item": 1030, "Count": 2, "Name": "100 Point Coupon" },
 		{ "Item": 396, "Count": 3, "Name": "Code A Decoder" },
 		{ "Item": 2179, "Count": 1, "Name": "Bingo Ticket" },
-		{ "Item": 1030, "Count": 2, "Name": "300 Point Coupon" },
+		{ "Item": 1030, "Count": 2, "Name": "100 Point Coupon" },
 		{ "Item": 396, "Count": 5, "Name": "Code A Decoder" },
 		{ "Item": 8292, "Count": 2, "Name": "Transcendence Decoder", "RiftTickets": 6, "BlackBadges": 6 },
 
 		{ "Item": 396, "Count": 3, "Name": "Code A Decoder" },
-		{ "Item": 1030, "Count": 2, "Name": "300 Point Coupon" },
+		{ "Item": 1030, "Count": 2, "Name": "100 Point Coupon" },
 		{ "Item": 396, "Count": 3, "Name": "Code A Decoder" },
 		{ "Item": 2179, "Count": 2, "Name": "Bingo Ticket" },
-		{ "Item": 1030, "Count": 3, "Name": "300 Point Coupon" },
+		{ "Item": 1030, "Count": 3, "Name": "100 Point Coupon" },
 		{ "Item": 396, "Count": 5, "Name": "Code A Decoder" },
 		{ "Item": 8292, "Count": 2, "Name": "Transcendence Decoder", "RiftTickets": 8, "BlackBadges": 8 },
 
 		{ "Item": 396, "Count": 3, "Name": "Code A Decoder" },
-		{ "Item": 1030, "Count": 3, "Name": "300 Point Coupon" },
+		{ "Item": 1030, "Count": 3, "Name": "100 Point Coupon" },
 		{ "Item": 396, "Count": 4, "Name": "Code A Decoder" },
 		{ "Item": 2179, "Count": 2, "Name": "Bingo Ticket" },
-		{ "Item": 1030, "Count": 3, "Name": "300 Point Coupon" },
+		{ "Item": 1030, "Count": 3, "Name": "100 Point Coupon" },
 		{ "Item": 396, "Count": 6, "Name": "Code A Decoder" },
 		{ "Item": 8292, "Count": 3, "Name": "Transcendence Decoder", "RiftTickets": 15, "BlackBadges": 15 }
 	],
 	"Bonuses": [
 		{ "After": 5, "Item": 8292, "Count": 1, "Name": "Transcendence Decoder" },
-		{ "After": 10, "Item": 1030, "Count": 5, "Name": "300 Point Coupon" },
+		{ "After": 10, "Item": 1030, "Count": 5, "Name": "100 Point Coupon" },
 		{ "After": 15, "Item": 8292, "Count": 2, "Name": "Transcendence Decoder" },
 		{ "After": 20, "Item": 2179, "Count": 3, "Name": "Bingo Ticket" },
 		{ "After": 25, "Item": 8292, "Count": 3, "Name": "Transcendence Decoder" }
