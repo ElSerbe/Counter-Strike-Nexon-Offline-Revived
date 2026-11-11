@@ -1,8 +1,9 @@
 """Writes CSNZ_Server's Data/RiftExchange.json: the cosmetics of the Rift Exchange (Missions page), paid with the
-Rift Tickets that clearing Zombie Disaster Zone gives. Every costume (head, back, pelvis, arm, face, pet), zombie
-skin and tattoo of the game's Item.csv that has a shop picture, minus the ones the battle passes (Warbonds.json) and
-the Black Market (Missions.json) already sell, one item per resource. Also exports their icons
-(web/shop/icons/<id>.png, shared with the shop); run export_shop_assets.py afterwards for the 3D preview models.
+Rift Tickets that clearing Zombie Disaster Zone gives. Every cosmetic of the game's Item.csv, one item per resource:
+costumes (head, back, pelvis, arm, face, pet), zombie skins, tattoos, weapon paints, nameplates, kill taunts,
+zombification effects, damage fonts, chat colours and sprays, also the ones the battle passes and the Black Market sell
+and the ones without a shop picture. Also exports their icons (web/shop/icons/<id>.png, shared with the shop); run
+export_shop_assets.py afterwards for the 3D preview models.
 
 The server's rules (tickets per clear, stock size, holds) are in Data/ZSRift.json.
 
@@ -29,7 +30,25 @@ KINDS = {
     "HeadCostume": ("Head", 45), "BackCostume": ("Back", 50), "PelvisCostume": ("Pelvis", 35),
     "ArmCostume": ("Arm", 30), "FaceCostume": ("Face", 30), "PetCostume": ("Pet", 60),
     "ZombieSkinCostume": ("Zombie Skin", 55), "Tattoo": ("Tattoo", 25),
+    "WeaponPaintItem": ("Weapon Paint", 40), "LobbyBG": ("Nameplate", 35), "CombatInfoItem": ("Kill Taunt", 45),
+    "zbRespawnEffect": ("Zombification", 45),
 }
+
+
+def kind_of(it):
+    """(kind, price) of a cosmetic, None for anything else; periodic items by resource (damage fonts, chat colours,
+    sprays)"""
+    cls, res = it.get("class"), it.get("resource", "").lower()
+    if cls in KINDS:
+        return KINDS[cls]
+    if cls == "PeriodicItem":
+        if res.startswith("floatingdamageskin"):
+            return ("Damage Font", 35)
+        if res.startswith("chatcolor_"):
+            return ("Chat Colour", 35)
+        if "spray" in res or res.endswith("spay"):
+            return ("Spray", 15)
+    return None
 
 
 def load_json(path):
@@ -48,7 +67,6 @@ def item_name(res, kind):
 
 def main():
     items = esa.load_items()
-    taken = esa.warbond_item_ids() | esa.market_item_ids()
     item_names = load_json(os.path.join(DATA, "ItemNames.json"))
 
     os.makedirs(WORK, exist_ok=True)
@@ -57,7 +75,7 @@ def main():
     for item_id in sorted(items):
         it = items[item_id]
         res = it.get("resource", "")
-        if it.get("class") not in KINDS or item_id in taken or not res or res.lower() in seen:
+        if not kind_of(it) or not res.strip() or res.lower() in seen:
             continue
         seen.add(res.lower())
         picks.append(item_id)
@@ -86,11 +104,9 @@ def main():
                 open(icon, "wb").write(esa.tga_to_png(open(src, "rb").read()))
             except ValueError:
                 pass
-        if not os.path.exists(icon):
-            continue  # no picture: most likely an unfinished entry
         it = items[item_id]
         res = it["resource"]
-        kind, price = KINDS[it["class"]]
+        kind, price = kind_of(it)
         name = (item_names.get(str(item_id)) or strings.get(f"cso_item_name_{res.lower()}") or strings.get(f"cso_{res.lower()}")
                 or item_name(res, kind))
         out.append({"ItemID": item_id, "Name": name, "Kind": kind, "Price": price})

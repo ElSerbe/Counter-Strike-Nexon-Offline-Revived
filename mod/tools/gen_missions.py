@@ -19,7 +19,7 @@ MOD = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 import export_shop_assets as esa  # noqa: E402
 from gen_medals import (ORIGINAL, TDM, DM, ZOMBIE, ZOMBIE_CLASSIC, ZOMBIE_ALL, ZS, SCENARIO, HUMAN_SCENARIO,  # noqa: E402
-                        SOCCER, BOT_MODES, PROP_HUNT, describe)
+                        SOCCER, PROP_HUNT, describe)
 
 COSTUME_MIN_PRICE = 300  # Black Badges: cosmetics are the Black Market's expensive goods
 DATA = os.path.join(MOD, "server", "CSNZ_Server", "bin", "Data")
@@ -36,7 +36,8 @@ def c(counter, target, modes=None):
 
 # game quest -> (requirements, black badges, medals)
 DAILY = {
-    1: ([c("Wins", 3)], 4, 15), 2: ([c("Headshots", 5)], 3, 10), 3: ([c("Headshots", 7, BOT_MODES)], 3, 10),
+    # 3 (headshots in the AI modes) and the AI modes' special operations are left out: every mode has bots now
+    1: ([c("Wins", 3)], 4, 15), 2: ([c("Headshots", 5)], 3, 10),
     4: ([c("Bombs", 3, ORIGINAL)], 5, 15), 5: ([c("Hostages", 5, ORIGINAL)], 5, 15), 6: ([c("Wins", 2, ORIGINAL)], 4, 15),
     7: ([c("GrenadeKills", 1, ORIGINAL + TDM + DM)], 3, 10),
     8: ([c("MeleeKills", 1, ORIGINAL + TDM + DM), c("PistolKills", 1, ORIGINAL + TDM + DM)], 4, 10),
@@ -54,8 +55,7 @@ DAILY = {
 }
 SPECIAL = {
     1: ("Original", [c("Kills", 15, ORIGINAL)], 3, 10), 2: ("Deathmatch", [c("Kills", 60, DM)], 4, 15),
-    3: ("Team Deathmatch", [c("Kills", 45, TDM)], 4, 15), 4: ("Original (AI)", [c("Kills", 50, [3])], 4, 15),
-    5: ("Deathmatch (AI)", [c("Kills", 120, [4])], 5, 15), 6: ("Team Deathmatch (AI)", [c("Kills", 80, [5])], 5, 15),
+    3: ("Team Deathmatch", [c("Kills", 45, TDM)], 4, 15),
     7: ("Zombie Classic", [c("ZombieKills", 10, [8])], 3, 10), 8: ("Zombie Mutant", [c("ZombieKills", 10, [9])], 3, 10),
     9: ("Zombie Hero", [c("ZombieKills", 5, [14])], 3, 10), 10: ("Zombie hunt", [c("ZombieKills", 50, ZOMBIE_ALL)], 5, 15),
     11: ("Zombie War", [c("ZombieKills", 30, [32])], 5, 15), 12: ("Zombie Scenario", [c("MonsterKills", 300, ZS)], 5, 20),

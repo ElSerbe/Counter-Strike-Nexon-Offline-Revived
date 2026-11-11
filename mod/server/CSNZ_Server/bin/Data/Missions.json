@@ -36,27 +36,6 @@
    "Medals": 10
   },
   {
-   "ID": 3,
-   "Title": "Perfect Headshot",
-   "Npc": "Signalman Felix",
-   "Portrait": "felix",
-   "Story": "Accuracy is essential for a soldier.\nIf you lack the skill to eliminate an enemy with one headshot it puts your own life in danger.\n\nNow, this fodder shouldn't be too much trouble, show me some real precision.\n\n* This mission can only be completed in a room with 4 or more players.\n* Unclaimed prizes will disappear when the mission has been reset.",
-   "Text": "Score 7 headshots in AI modes",
-   "Conditions": [
-    {
-     "Counter": "Headshots",
-     "Target": 7,
-     "Modes": [
-      3,
-      4,
-      5
-     ]
-    }
-   ],
-   "Badges": 3,
-   "Medals": 10
-  },
-  {
    "ID": 4,
    "Title": "C4 Plan Support",
    "Npc": "Douglas Jacob",
@@ -759,63 +738,6 @@
     }
    ],
    "Badges": 4,
-   "Medals": 15
-  },
-  {
-   "ID": 104,
-   "Title": "Special Operation: Original (AI)",
-   "Npc": "Officer Rowen",
-   "Portrait": "rowen",
-   "Story": "A special operation from Command. Get it done and report back.",
-   "Text": "Score 50 kills in Original (AI)",
-   "Conditions": [
-    {
-     "Counter": "Kills",
-     "Target": 50,
-     "Modes": [
-      3
-     ]
-    }
-   ],
-   "Badges": 4,
-   "Medals": 15
-  },
-  {
-   "ID": 105,
-   "Title": "Special Operation: Deathmatch (AI)",
-   "Npc": "Senior Researcher Soi",
-   "Portrait": "doctora",
-   "Story": "A special operation from Command. Get it done and report back.",
-   "Text": "Score 120 kills in Deathmatch (AI)",
-   "Conditions": [
-    {
-     "Counter": "Kills",
-     "Target": 120,
-     "Modes": [
-      4
-     ]
-    }
-   ],
-   "Badges": 5,
-   "Medals": 15
-  },
-  {
-   "ID": 106,
-   "Title": "Special Operation: Team Deathmatch (AI)",
-   "Npc": "Evelyn",
-   "Portrait": "evelyn",
-   "Story": "A special operation from Command. Get it done and report back.",
-   "Text": "Score 80 kills in Team Deathmatch (AI)",
-   "Conditions": [
-    {
-     "Counter": "Kills",
-     "Target": 80,
-     "Modes": [
-      5
-     ]
-    }
-   ],
-   "Badges": 5,
    "Medals": 15
   },
   {

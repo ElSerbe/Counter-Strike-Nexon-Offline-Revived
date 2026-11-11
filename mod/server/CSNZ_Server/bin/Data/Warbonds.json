@@ -161,33 +161,48 @@
 				] },
 				{ "Unlock": 1480, "Items": [
 					{ "ItemID": 197, "Cost": 70 }, { "ItemID": 449, "Cost": 75 }, { "ItemID": 781, "Cost": 75 }, { "ItemID": 493, "Cost": 70 }
+				] },
+				{ "Unlock": 1480, "Title": "Cosmetics", "Items": [
+					{ "ItemID": 651, "Cost": 30 }, { "ItemID": 652, "Cost": 30 }, { "ItemID": 656, "Cost": 30 }, { "ItemID": 660, "Cost": 30 }, { "ItemID": 664, "Cost": 30 }, { "ItemID": 8191, "Cost": 60 }, { "ItemID": 8421, "Cost": 50 }
 				] }
 			]
 		},
 		{
 			"ID": 22, "Name": "Daily Armory", "Type": "Daily", "Cost": 0,
-			"Description": "Free for everyone. Six random weapons from all the battle passes, new every day at midnight. You don't need their battle pass or its pages, but they cost 1.5 times as much.",
+			"Description": "Free for everyone. Eight random weapons from all the battle passes, new every day at midnight. You don't need their battle pass or its pages, but they cost twice as much.",
 			"Image": "", "Theme": ["#1f1a08", "#ffd34f"],
 			// Rotation: Count random weapons of the other passes each day, at PriceFactor x their price (rounded up to 5)
-			"Rotation": { "Count": 6, "PriceFactor": 1.5 },
+			"Rotation": { "Count": 8, "PriceFactor": 2 },
 			"Pages": []
 		},
 		{
 			"ID": 21, "Name": "Supply Depot", "Type": "Supply", "Cost": 0,
-			"Description": "Boosters, tools and supplies you can buy again and again. Pick how many you want.",
+			"Description": "Every consumable of the game: boosters, tools, room host options and supplies you can buy again and again. Pick how many you want. Damage Display, Killer Display, Minimap Improvement, Retry, Round Retry and Advanced Body Armor are yours for good, free.",
 			"Image": "", "Theme": ["#0c1a1c", "#3fd0c9"],
 			"Pages": [
 				{ "Unlock": 0, "Title": "Boosters", "Items": [
-					{ "ItemID": 59, "Cost": 5, "Repeatable": true, "Days": 1 }, { "ItemID": 73, "Cost": 6, "Repeatable": true, "Days": 1 }, { "ItemID": 182, "Cost": 4, "Repeatable": true, "Days": 1 }, { "ItemID": 180, "Cost": 5, "Repeatable": true, "Days": 1 }
+					{ "ItemID": 59, "Cost": 5, "Repeatable": true, "Days": 1 }, { "ItemID": 73, "Cost": 6, "Repeatable": true, "Days": 1 }, { "ItemID": 108, "Cost": 5, "Repeatable": true, "Days": 1 }, { "ItemID": 182, "Cost": 4, "Repeatable": true, "Days": 1 }, { "ItemID": 180, "Cost": 5, "Repeatable": true, "Days": 1 }, { "ItemID": 181, "Cost": 4, "Repeatable": true, "Days": 1 }, { "ItemID": 455, "Cost": 4, "Repeatable": true, "Days": 1 }
 				] },
 				{ "Unlock": 0, "Title": "Battlefield tools", "Items": [
-					{ "ItemID": 76, "Cost": 4, "Repeatable": true, "Days": 7 }, { "ItemID": 111, "Cost": 3, "Repeatable": true, "Days": 7 }, { "ItemID": 84, "Cost": 3, "Repeatable": true, "Days": 7 }, { "ItemID": 77, "Cost": 3, "Repeatable": true, "Days": 7 }, { "ItemID": 109, "Cost": 4, "Repeatable": true, "Days": 7 }
+					{ "ItemID": 76, "Cost": 4, "Repeatable": true, "Days": 7 }, { "ItemID": 109, "Cost": 4, "Repeatable": true, "Days": 7 }, { "ItemID": 110, "Cost": 3, "Repeatable": true, "Days": 7 }, { "ItemID": 439, "Cost": 3, "Repeatable": true, "Days": 7 }, { "ItemID": 537, "Cost": 3, "Repeatable": true, "Days": 7 }
+				] },
+				{ "Unlock": 0, "Title": "Room host options", "Items": [
+					{ "ItemID": 58, "Cost": 2, "Repeatable": true, "Days": 7 }, { "ItemID": 62, "Cost": 2, "Repeatable": true, "Days": 7 }, { "ItemID": 75, "Cost": 2, "Repeatable": true, "Days": 7 }, { "ItemID": 78, "Cost": 2, "Repeatable": true, "Days": 7 }, { "ItemID": 86, "Cost": 2, "Repeatable": true, "Days": 7 }, { "ItemID": 112, "Cost": 2, "Repeatable": true, "Days": 7 }, { "ItemID": 116, "Cost": 2, "Repeatable": true, "Days": 7 }, { "ItemID": 178, "Cost": 2, "Repeatable": true, "Days": 7 }
 				] },
 				{ "Unlock": 0, "Title": "Zombie Scenario supplies", "Items": [
-					{ "ItemID": 620, "Cost": 2, "Repeatable": true, "Days": 1 }, { "ItemID": 623, "Cost": 2, "Repeatable": true, "Days": 1 }, { "ItemID": 626, "Cost": 2, "Repeatable": true, "Days": 1 }, { "ItemID": 629, "Cost": 2, "Repeatable": true, "Days": 1 }, { "ItemID": 632, "Cost": 2, "Repeatable": true, "Days": 1 }, { "ItemID": 635, "Cost": 2, "Repeatable": true, "Days": 1 }, { "ItemID": 638, "Cost": 2, "Repeatable": true, "Days": 1 }, { "ItemID": 381, "Cost": 3, "Repeatable": true, "Days": 1 }, { "ItemID": 470, "Cost": 3, "Repeatable": true, "Days": 1 }, { "ItemID": 594, "Cost": 3, "Repeatable": true, "Days": 1 }, { "ItemID": 740, "Cost": 3, "Repeatable": true, "Days": 1 }
+					{ "ItemID": 620, "Cost": 2, "Repeatable": true, "Days": 1 }, { "ItemID": 623, "Cost": 2, "Repeatable": true, "Days": 1 }, { "ItemID": 629, "Cost": 2, "Repeatable": true, "Days": 1 }, { "ItemID": 632, "Cost": 2, "Repeatable": true, "Days": 1 }, { "ItemID": 635, "Cost": 2, "Repeatable": true, "Days": 1 }, { "ItemID": 638, "Cost": 2, "Repeatable": true, "Days": 1 }, { "ItemID": 285, "Cost": 2, "Repeatable": true, "Days": 1 }, { "ItemID": 286, "Cost": 2, "Repeatable": true, "Days": 1 }, { "ItemID": 287, "Cost": 2, "Repeatable": true, "Days": 1 }, { "ItemID": 288, "Cost": 2, "Repeatable": true, "Days": 1 }, { "ItemID": 350, "Cost": 2, "Repeatable": true, "Days": 1 }, { "ItemID": 351, "Cost": 2, "Repeatable": true, "Days": 1 }, { "ItemID": 352, "Cost": 2, "Repeatable": true, "Days": 1 }, { "ItemID": 353, "Cost": 2, "Repeatable": true, "Days": 1 }, { "ItemID": 464, "Cost": 2, "Repeatable": true, "Days": 1 }, { "ItemID": 465, "Cost": 2, "Repeatable": true, "Days": 1 }, { "ItemID": 547, "Cost": 2, "Repeatable": true, "Days": 1 }
+				] },
+				{ "Unlock": 0, "Title": "Boss keys", "Items": [
+					{ "ItemID": 381, "Cost": 3, "Repeatable": true, "Days": 1 }, { "ItemID": 470, "Cost": 3, "Repeatable": true, "Days": 1 }, { "ItemID": 594, "Cost": 3, "Repeatable": true, "Days": 1 }, { "ItemID": 740, "Cost": 3, "Repeatable": true, "Days": 1 }, { "ItemID": 879, "Cost": 3, "Repeatable": true, "Days": 1 }, { "ItemID": 8087, "Cost": 3, "Repeatable": true, "Days": 1 }
+				] },
+				{ "Unlock": 0, "Title": "Strategic guidelines", "Items": [
+					{ "ItemID": 3600, "Cost": 2, "Repeatable": true, "Days": 1 }, { "ItemID": 3601, "Cost": 2, "Repeatable": true, "Days": 1 }, { "ItemID": 3602, "Cost": 2, "Repeatable": true, "Days": 1 }, { "ItemID": 3603, "Cost": 2, "Repeatable": true, "Days": 1 }, { "ItemID": 3604, "Cost": 2, "Repeatable": true, "Days": 1 }, { "ItemID": 3605, "Cost": 2, "Repeatable": true, "Days": 1 }, { "ItemID": 3606, "Cost": 2, "Repeatable": true, "Days": 1 }, { "ItemID": 3607, "Cost": 2, "Repeatable": true, "Days": 1 }, { "ItemID": 3608, "Cost": 2, "Repeatable": true, "Days": 1 }, { "ItemID": 3609, "Cost": 2, "Repeatable": true, "Days": 1 }, { "ItemID": 3610, "Cost": 2, "Repeatable": true, "Days": 1 }, { "ItemID": 3611, "Cost": 2, "Repeatable": true, "Days": 1 }, { "ItemID": 3612, "Cost": 2, "Repeatable": true, "Days": 1 }, { "ItemID": 3613, "Cost": 2, "Repeatable": true, "Days": 1 }, { "ItemID": 3614, "Cost": 2, "Repeatable": true, "Days": 1 }, { "ItemID": 3615, "Cost": 2, "Repeatable": true, "Days": 1 }, { "ItemID": 3616, "Cost": 2, "Repeatable": true, "Days": 1 }, { "ItemID": 3617, "Cost": 2, "Repeatable": true, "Days": 1 }, { "ItemID": 3618, "Cost": 2, "Repeatable": true, "Days": 1 }
 				] },
 				{ "Unlock": 0, "Title": "Scenario supplies", "Items": [
-					{ "ItemID": 258, "Cost": 2, "Repeatable": true, "Days": 0 }, { "ItemID": 259, "Cost": 3, "Repeatable": true, "Days": 0 }, { "ItemID": 260, "Cost": 3, "Repeatable": true, "Days": 0 }, { "ItemID": 300, "Cost": 4, "Repeatable": true, "Days": 0 }, { "ItemID": 234, "Cost": 3, "Repeatable": true, "Days": 0 }
+					{ "ItemID": 258, "Cost": 2, "Repeatable": true, "Days": 0 }, { "ItemID": 259, "Cost": 3, "Repeatable": true, "Days": 0 }, { "ItemID": 260, "Cost": 3, "Repeatable": true, "Days": 0 }, { "ItemID": 334, "Cost": 4, "Repeatable": true, "Days": 0 }
+				] },
+				{ "Unlock": 0, "Title": "Soccer shots", "Items": [
+					{ "ItemID": 314, "Cost": 3, "Repeatable": true, "Days": 7 }, { "ItemID": 315, "Cost": 3, "Repeatable": true, "Days": 7 }, { "ItemID": 693, "Cost": 3, "Repeatable": true, "Days": 7 }, { "ItemID": 694, "Cost": 3, "Repeatable": true, "Days": 7 }, { "ItemID": 695, "Cost": 3, "Repeatable": true, "Days": 7 }
 				] },
 				{ "Unlock": 0, "Title": "Account", "Items": [
 					{ "ItemID": 65, "Cost": 15, "Repeatable": true, "Days": 0 }
@@ -204,6 +219,9 @@
 				] },
 				{ "Unlock": 100, "Items": [
 					{ "ItemID": 725, "Cost": 65 }, { "ItemID": 901, "Cost": 100 }
+				] },
+				{ "Unlock": 100, "Title": "Cosmetics", "Items": [
+					{ "ItemID": 653, "Cost": 30 }, { "ItemID": 8346, "Cost": 50 }, { "ItemID": 8347, "Cost": 50 }, { "ItemID": 8348, "Cost": 50 }
 				] }
 			]
 		},
@@ -217,6 +235,9 @@
 				] },
 				{ "Unlock": 110, "Items": [
 					{ "ItemID": 255, "Cost": 100 }, { "ItemID": 902, "Cost": 100 }
+				] },
+				{ "Unlock": 110, "Title": "Cosmetics", "Items": [
+					{ "ItemID": 8345, "Cost": 50 }, { "ItemID": 541, "Cost": 50 }, { "ItemID": 542, "Cost": 60 }, { "ItemID": 543, "Cost": 40 }, { "ItemID": 544, "Cost": 40 }
 				] }
 			]
 		},
@@ -230,6 +251,9 @@
 				] },
 				{ "Unlock": 110, "Items": [
 					{ "ItemID": 588, "Cost": 65 }, { "ItemID": 414, "Cost": 100 }, { "ItemID": 713, "Cost": 65 }, { "ItemID": 909, "Cost": 100 }
+				] },
+				{ "Unlock": 110, "Title": "Cosmetics", "Items": [
+					{ "ItemID": 654, "Cost": 30 }, { "ItemID": 657, "Cost": 30 }, { "ItemID": 374, "Cost": 30 }
 				] }
 			]
 		},
@@ -243,6 +267,9 @@
 				] },
 				{ "Unlock": 110, "Items": [
 					{ "ItemID": 442, "Cost": 75 }, { "ItemID": 355, "Cost": 100 }
+				] },
+				{ "Unlock": 110, "Title": "Cosmetics", "Items": [
+					{ "ItemID": 655, "Cost": 30 }, { "ItemID": 658, "Cost": 30 }, { "ItemID": 8400, "Cost": 50 }
 				] }
 			]
 		},
@@ -256,6 +283,9 @@
 				] },
 				{ "Unlock": 100, "Items": [
 					{ "ItemID": 423, "Cost": 70 }, { "ItemID": 430, "Cost": 70 }
+				] },
+				{ "Unlock": 100, "Title": "Cosmetics", "Items": [
+					{ "ItemID": 659, "Cost": 30 }, { "ItemID": 661, "Cost": 30 }, { "ItemID": 8355, "Cost": 50 }, { "ItemID": 8354, "Cost": 50 }
 				] }
 			]
 		},
@@ -269,6 +299,9 @@
 				] },
 				{ "Unlock": 100, "Items": [
 					{ "ItemID": 233, "Cost": 75 }
+				] },
+				{ "Unlock": 100, "Title": "Cosmetics", "Items": [
+					{ "ItemID": 662, "Cost": 30 }, { "ItemID": 663, "Cost": 30 }, { "ItemID": 8349, "Cost": 50 }
 				] }
 			]
 		},
@@ -282,6 +315,9 @@
 				] },
 				{ "Unlock": 90, "Items": [
 					{ "ItemID": 457, "Cost": 100 }, { "ItemID": 8164, "Cost": 300 }
+				] },
+				{ "Unlock": 90, "Title": "Cosmetics", "Items": [
+					{ "ItemID": 475, "Cost": 50 }, { "ItemID": 476, "Cost": 60 }, { "ItemID": 477, "Cost": 50 }, { "ItemID": 478, "Cost": 60 }, { "ItemID": 479, "Cost": 40 }, { "ItemID": 8281, "Cost": 60 }, { "ItemID": 8253, "Cost": 80 }
 				] }
 			]
 		},
@@ -295,6 +331,9 @@
 				] },
 				{ "Unlock": 90, "Items": [
 					{ "ItemID": 814, "Cost": 75 }, { "ItemID": 8108, "Cost": 450 }
+				] },
+				{ "Unlock": 90, "Title": "Cosmetics", "Items": [
+					{ "ItemID": 8420, "Cost": 50 }, { "ItemID": 736, "Cost": 50 }, { "ItemID": 738, "Cost": 60 }, { "ItemID": 739, "Cost": 40 }
 				] }
 			]
 		},
@@ -308,6 +347,9 @@
 				] },
 				{ "Unlock": 90, "Items": [
 					{ "ItemID": 579, "Cost": 65 }, { "ItemID": 580, "Cost": 75 }, { "ItemID": 581, "Cost": 90 }
+				] },
+				{ "Unlock": 90, "Title": "Cosmetics", "Items": [
+					{ "ItemID": 474, "Cost": 40 }, { "ItemID": 529, "Cost": 40 }, { "ItemID": 560, "Cost": 40 }, { "ItemID": 550, "Cost": 50 }, { "ItemID": 551, "Cost": 50 }
 				] }
 			]
 		},
@@ -321,6 +363,9 @@
 				] },
 				{ "Unlock": 90, "Items": [
 					{ "ItemID": 8136, "Cost": 100 }, { "ItemID": 8133, "Cost": 450 }
+				] },
+				{ "Unlock": 90, "Title": "Cosmetics", "Items": [
+					{ "ItemID": 948, "Cost": 50 }, { "ItemID": 949, "Cost": 50 }, { "ItemID": 615, "Cost": 30 }
 				] }
 			]
 		},
@@ -334,6 +379,9 @@
 				] },
 				{ "Unlock": 90, "Items": [
 					{ "ItemID": 8179, "Cost": 120 }, { "ItemID": 609, "Cost": 125 }, { "ItemID": 556, "Cost": 100 }, { "ItemID": 8220, "Cost": 300 }
+				] },
+				{ "Unlock": 90, "Title": "Cosmetics", "Items": [
+					{ "ItemID": 963, "Cost": 60 }, { "ItemID": 900, "Cost": 60 }
 				] }
 			]
 		},
@@ -347,6 +395,9 @@
 				] },
 				{ "Unlock": 90, "Items": [
 					{ "ItemID": 347, "Cost": 90 }, { "ItemID": 364, "Cost": 80 }
+				] },
+				{ "Unlock": 90, "Title": "Cosmetics", "Items": [
+					{ "ItemID": 471, "Cost": 50 }, { "ItemID": 472, "Cost": 60 }, { "ItemID": 473, "Cost": 40 }, { "ItemID": 8278, "Cost": 40 }, { "ItemID": 8254, "Cost": 80 }, { "ItemID": 526, "Cost": 50 }, { "ItemID": 527, "Cost": 60 }, { "ItemID": 528, "Cost": 40 }
 				] }
 			]
 		},
@@ -360,6 +411,9 @@
 				] },
 				{ "Unlock": 90, "Items": [
 					{ "ItemID": 8180, "Cost": 120 }, { "ItemID": 399, "Cost": 100 }, { "ItemID": 8247, "Cost": 300 }
+				] },
+				{ "Unlock": 90, "Title": "Cosmetics", "Items": [
+					{ "ItemID": 8280, "Cost": 60 }, { "ItemID": 696, "Cost": 30 }
 				] }
 			]
 		},
@@ -370,6 +424,9 @@
 			"Pages": [
 				{ "Unlock": 0, "Items": [
 					{ "ItemID": 316, "Cost": 90 }, { "ItemID": 317, "Cost": 90 }, { "ItemID": 318, "Cost": 90 }, { "ItemID": 319, "Cost": 90 }
+				] },
+				{ "Unlock": 0, "Title": "Cosmetics", "Items": [
+					{ "ItemID": 829, "Cost": 50 }, { "ItemID": 730, "Cost": 50 }, { "ItemID": 731, "Cost": 60 }, { "ItemID": 732, "Cost": 40 }
 				] }
 			]
 		},
@@ -383,6 +440,9 @@
 				] },
 				{ "Unlock": 90, "Items": [
 					{ "ItemID": 510, "Cost": 120 }, { "ItemID": 511, "Cost": 120 }
+				] },
+				{ "Unlock": 90, "Title": "Cosmetics", "Items": [
+					{ "ItemID": 512, "Cost": 50 }, { "ItemID": 8362, "Cost": 60 }, { "ItemID": 8363, "Cost": 60 }, { "ItemID": 8364, "Cost": 50 }, { "ItemID": 8365, "Cost": 50 }, { "ItemID": 8366, "Cost": 60 }, { "ItemID": 8367, "Cost": 60 }, { "ItemID": 8368, "Cost": 60 }, { "ItemID": 8369, "Cost": 40 }
 				] }
 			]
 		},
@@ -396,6 +456,9 @@
 				] },
 				{ "Unlock": 90, "Items": [
 					{ "ItemID": 261, "Cost": 70 }, { "ItemID": 486, "Cost": 65 }, { "ItemID": 164, "Cost": 60 }
+				] },
+				{ "Unlock": 90, "Title": "Cosmetics", "Items": [
+					{ "ItemID": 779, "Cost": 50 }, { "ItemID": 386, "Cost": 30 }
 				] }
 			]
 		},
@@ -409,6 +472,9 @@
 				] },
 				{ "Unlock": 90, "Items": [
 					{ "ItemID": 903, "Cost": 100 }
+				] },
+				{ "Unlock": 90, "Title": "Cosmetics", "Items": [
+					{ "ItemID": 666, "Cost": 30 }, { "ItemID": 667, "Cost": 30 }
 				] }
 			]
 		},
@@ -422,6 +488,9 @@
 				] },
 				{ "Unlock": 90, "Items": [
 					{ "ItemID": 408, "Cost": 90 }, { "ItemID": 960, "Cost": 75 }
+				] },
+				{ "Unlock": 90, "Title": "Cosmetics", "Items": [
+					{ "ItemID": 665, "Cost": 30 }, { "ItemID": 8215, "Cost": 50 }
 				] }
 			]
 		},
@@ -435,6 +504,9 @@
 				] },
 				{ "Unlock": 90, "Items": [
 					{ "ItemID": 222, "Cost": 100 }, { "ItemID": 458, "Cost": 100 }, { "ItemID": 832, "Cost": 100 }, { "ItemID": 398, "Cost": 100 }, { "ItemID": 243, "Cost": 100 }
+				] },
+				{ "Unlock": 90, "Title": "Cosmetics", "Items": [
+					{ "ItemID": 772, "Cost": 60 }, { "ItemID": 773, "Cost": 50 }, { "ItemID": 704, "Cost": 50 }, { "ItemID": 705, "Cost": 50 }
 				] }
 			]
 		},
@@ -448,6 +520,9 @@
 				] },
 				{ "Unlock": 90, "Items": [
 					{ "ItemID": 892, "Cost": 125 }, { "ItemID": 978, "Cost": 300 }
+				] },
+				{ "Unlock": 90, "Title": "Cosmetics", "Items": [
+					{ "ItemID": 785, "Cost": 50 }, { "ItemID": 786, "Cost": 40 }, { "ItemID": 8289, "Cost": 50 }
 				] }
 			]
 		},
@@ -461,6 +536,9 @@
 				] },
 				{ "Unlock": 90, "Items": [
 					{ "ItemID": 463, "Cost": 100 }, { "ItemID": 250, "Cost": 100 }
+				] },
+				{ "Unlock": 90, "Title": "Cosmetics", "Items": [
+					{ "ItemID": 790, "Cost": 50 }, { "ItemID": 854, "Cost": 30 }, { "ItemID": 8403, "Cost": 60 }, { "ItemID": 851, "Cost": 30 }, { "ItemID": 852, "Cost": 30 }
 				] }
 			]
 		},
@@ -474,6 +552,9 @@
 				] },
 				{ "Unlock": 90, "Items": [
 					{ "ItemID": 440, "Cost": 75 }, { "ItemID": 421, "Cost": 75 }
+				] },
+				{ "Unlock": 90, "Title": "Cosmetics", "Items": [
+					{ "ItemID": 8244, "Cost": 50 }, { "ItemID": 8245, "Cost": 50 }, { "ItemID": 8186, "Cost": 50 }, { "ItemID": 8187, "Cost": 40 }, { "ItemID": 8188, "Cost": 50 }, { "ItemID": 8189, "Cost": 60 }, { "ItemID": 8255, "Cost": 60 }, { "ItemID": 8256, "Cost": 50 }, { "ItemID": 8257, "Cost": 50 }
 				] }
 			]
 		},
@@ -490,6 +571,9 @@
 				] },
 				{ "Unlock": 330, "Items": [
 					{ "ItemID": 466, "Cost": 175 }, { "ItemID": 327, "Cost": 175 }, { "ItemID": 483, "Cost": 90 }, { "ItemID": 154, "Cost": 155 }
+				] },
+				{ "Unlock": 330, "Title": "Cosmetics", "Items": [
+					{ "ItemID": 8197, "Cost": 50 }, { "ItemID": 8198, "Cost": 60 }, { "ItemID": 8225, "Cost": 60 }, { "ItemID": 8226, "Cost": 60 }, { "ItemID": 850, "Cost": 60 }, { "ItemID": 712, "Cost": 60 }
 				] }
 			]
 		},
@@ -503,6 +587,9 @@
 				] },
 				{ "Unlock": 340, "Items": [
 					{ "ItemID": 784, "Cost": 300 }, { "ItemID": 764, "Cost": 250 }, { "ItemID": 752, "Cost": 660 }
+				] },
+				{ "Unlock": 340, "Title": "Cosmetics", "Items": [
+					{ "ItemID": 612, "Cost": 50 }, { "ItemID": 613, "Cost": 50 }, { "ItemID": 614, "Cost": 60 }, { "ItemID": 616, "Cost": 60 }, { "ItemID": 617, "Cost": 60 }, { "ItemID": 618, "Cost": 60 }
 				] }
 			]
 		},
@@ -516,6 +603,9 @@
 				] },
 				{ "Unlock": 120, "Items": [
 					{ "ItemID": 424, "Cost": 85 }, { "ItemID": 268, "Cost": 150 }, { "ItemID": 267, "Cost": 175 }, { "ItemID": 840, "Cost": 190 }
+				] },
+				{ "Unlock": 120, "Title": "Cosmetics", "Items": [
+					{ "ItemID": 505, "Cost": 50 }, { "ItemID": 506, "Cost": 60 }, { "ItemID": 508, "Cost": 50 }, { "ItemID": 574, "Cost": 50 }, { "ItemID": 575, "Cost": 60 }, { "ItemID": 619, "Cost": 30 }, { "ItemID": 946, "Cost": 60 }, { "ItemID": 947, "Cost": 60 }, { "ItemID": 8073, "Cost": 60 }
 				] }
 			]
 		},
@@ -529,6 +619,9 @@
 				] },
 				{ "Unlock": 330, "Items": [
 					{ "ItemID": 587, "Cost": 300 }, { "ItemID": 684, "Cost": 250 }, { "ItemID": 595, "Cost": 660 }
+				] },
+				{ "Unlock": 330, "Title": "Cosmetics", "Items": [
+					{ "ItemID": 8290, "Cost": 60 }, { "ItemID": 855, "Cost": 30 }, { "ItemID": 856, "Cost": 30 }
 				] }
 			]
 		},
@@ -542,6 +635,9 @@
 				] },
 				{ "Unlock": 100, "Items": [
 					{ "ItemID": 8118, "Cost": 200 }, { "ItemID": 8193, "Cost": 305 }, { "ItemID": 8327, "Cost": 200 }
+				] },
+				{ "Unlock": 100, "Title": "Cosmetics", "Items": [
+					{ "ItemID": 8090, "Cost": 50 }, { "ItemID": 8089, "Cost": 40 }, { "ItemID": 853, "Cost": 30 }
 				] }
 			]
 		},
@@ -555,6 +651,9 @@
 				] },
 				{ "Unlock": 330, "Items": [
 					{ "ItemID": 804, "Cost": 300 }, { "ItemID": 833, "Cost": 250 }, { "ItemID": 787, "Cost": 660 }
+				] },
+				{ "Unlock": 330, "Title": "Cosmetics", "Items": [
+					{ "ItemID": 373, "Cost": 30 }, { "ItemID": 8168, "Cost": 60 }
 				] }
 			]
 		},
@@ -568,6 +667,9 @@
 				] },
 				{ "Unlock": 120, "Items": [
 					{ "ItemID": 8264, "Cost": 85 }, { "ItemID": 8263, "Cost": 85 }, { "ItemID": 8266, "Cost": 175 }, { "ItemID": 8262, "Cost": 95 }, { "ItemID": 8269, "Cost": 155 }
+				] },
+				{ "Unlock": 120, "Title": "Cosmetics", "Items": [
+					{ "ItemID": 489, "Cost": 50 }, { "ItemID": 490, "Cost": 60 }, { "ItemID": 8274, "Cost": 50 }, { "ItemID": 8275, "Cost": 50 }, { "ItemID": 8276, "Cost": 50 }, { "ItemID": 8279, "Cost": 40 }, { "ItemID": 765, "Cost": 50 }, { "ItemID": 8211, "Cost": 60 }, { "ItemID": 8340, "Cost": 60 }, { "ItemID": 8341, "Cost": 60 }
 				] }
 			]
 		},
@@ -581,6 +683,9 @@
 				] },
 				{ "Unlock": 120, "Items": [
 					{ "ItemID": 8231, "Cost": 85 }, { "ItemID": 8234, "Cost": 85 }, { "ItemID": 8235, "Cost": 175 }, { "ItemID": 8239, "Cost": 155 }
+				] },
+				{ "Unlock": 120, "Title": "Cosmetics", "Items": [
+					{ "ItemID": 8241, "Cost": 50 }, { "ItemID": 8242, "Cost": 50 }, { "ItemID": 8243, "Cost": 60 }, { "ItemID": 8246, "Cost": 50 }
 				] }
 			]
 		},
@@ -594,6 +699,9 @@
 				] },
 				{ "Unlock": 110, "Items": [
 					{ "ItemID": 8200, "Cost": 75 }, { "ItemID": 8201, "Cost": 75 }, { "ItemID": 8203, "Cost": 85 }, { "ItemID": 8205, "Cost": 190 }, { "ItemID": 8209, "Cost": 155 }
+				] },
+				{ "Unlock": 110, "Title": "Cosmetics", "Items": [
+					{ "ItemID": 8212, "Cost": 60 }, { "ItemID": 8213, "Cost": 40 }, { "ItemID": 8214, "Cost": 50 }, { "ItemID": 8216, "Cost": 60 }, { "ItemID": 8217, "Cost": 40 }, { "ItemID": 8218, "Cost": 40 }, { "ItemID": 699, "Cost": 50 }, { "ItemID": 701, "Cost": 60 }, { "ItemID": 702, "Cost": 40 }
 				] }
 			]
 		},
@@ -622,6 +730,9 @@
 				] },
 				{ "Unlock": 1250, "Items": [
 					{ "ItemID": 8091, "Cost": 55 }, { "ItemID": 8318, "Cost": 175 }, { "ItemID": 8111, "Cost": 55 }, { "ItemID": 376, "Cost": 170 }
+				] },
+				{ "Unlock": 1250, "Title": "Cosmetics", "Items": [
+					{ "ItemID": 8021, "Cost": 60 }, { "ItemID": 8022, "Cost": 60 }, { "ItemID": 8023, "Cost": 60 }, { "ItemID": 8024, "Cost": 60 }, { "ItemID": 8025, "Cost": 60 }, { "ItemID": 8026, "Cost": 60 }, { "ItemID": 8027, "Cost": 60 }, { "ItemID": 8028, "Cost": 60 }, { "ItemID": 8029, "Cost": 60 }, { "ItemID": 8030, "Cost": 60 }
 				] }
 			]
 		},
@@ -650,6 +761,9 @@
 				] },
 				{ "Unlock": 1400, "Items": [
 					{ "ItemID": 815, "Cost": 220 }, { "ItemID": 924, "Cost": 55 }, { "ItemID": 8385, "Cost": 450 }, { "ItemID": 8288, "Cost": 170 }
+				] },
+				{ "Unlock": 1400, "Title": "Cosmetics", "Items": [
+					{ "ItemID": 8399, "Cost": 50 }, { "ItemID": 8401, "Cost": 60 }, { "ItemID": 8402, "Cost": 60 }, { "ItemID": 8404, "Cost": 80 }, { "ItemID": 8397, "Cost": 60 }, { "ItemID": 8398, "Cost": 60 }, { "ItemID": 797, "Cost": 60 }, { "ItemID": 798, "Cost": 50 }
 				] }
 			]
 		},
@@ -678,6 +792,9 @@
 				] },
 				{ "Unlock": 2470, "Items": [
 					{ "ItemID": 531, "Cost": 330 }, { "ItemID": 602, "Cost": 330 }
+				] },
+				{ "Unlock": 2470, "Title": "Cosmetics", "Items": [
+					{ "ItemID": 515, "Cost": 50 }, { "ItemID": 516, "Cost": 60 }, { "ItemID": 494, "Cost": 60 }, { "ItemID": 819, "Cost": 50 }, { "ItemID": 820, "Cost": 60 }, { "ItemID": 8105, "Cost": 60 }
 				] }
 			]
 		},
@@ -703,6 +820,9 @@
 				] },
 				{ "Unlock": 870, "Items": [
 					{ "ItemID": 428, "Cost": 355 }, { "ItemID": 679, "Cost": 165 }, { "ItemID": 8143, "Cost": 900 }, { "ItemID": 959, "Cost": 440 }
+				] },
+				{ "Unlock": 870, "Title": "Cosmetics", "Items": [
+					{ "ItemID": 8342, "Cost": 50 }, { "ItemID": 8343, "Cost": 40 }, { "ItemID": 8344, "Cost": 50 }, { "ItemID": 387, "Cost": 30 }, { "ItemID": 375, "Cost": 30 }
 				] }
 			]
 		}

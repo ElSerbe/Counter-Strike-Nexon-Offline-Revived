@@ -2163,7 +2163,7 @@ index 0000000..361d895
 +	void Tick(time_t now);
 +}
 diff --git a/src/manager/hostmanager.cpp b/src/manager/hostmanager.cpp
-index 24d1ccc..e4b37a8 100644
+index 24d1ccc..c51929e 100644
 --- a/src/manager/hostmanager.cpp
 +++ b/src/manager/hostmanager.cpp
 @@ -1,4 +1,5 @@
@@ -2172,7 +2172,19 @@ index 24d1ccc..e4b37a8 100644
  #include "packetmanager.h"
  #include "dedicatedservermanager.h"
  #include "usermanager.h"
-@@ -292,6 +293,15 @@ bool CHostManager::OnUpdateUserStatus(CReceivePacket* msg, IExtendedSocket* sock
+@@ -259,7 +260,10 @@ bool CHostManager::OnUseInGameItem(CReceivePacket* msg, IExtendedSocket* socket,
+ 	if (!g_UserDatabase.GetInventoryItemsByID(destUser->GetID(), itemID, items))
+ 		return false;
+ 
+-	g_ItemManager.UseItem(destUser, items[0].GetGameSlot());
++	// the items every account owns for good (ServerConfig DefaultUser.AlwaysOwnedItems: Retry, Round Retry) aren't used up
++	const vector<int>& always = g_pServerConfig->defUser.alwaysOwnedItems;
++	if (find(always.begin(), always.end(), itemID) == always.end())
++		g_ItemManager.UseItem(destUser, items[0].GetGameSlot());
+ 
+ 	g_PacketManager.SendHostOnItemUse(socket, userID, items[0].m_nItemID);
+ 
+@@ -292,6 +296,15 @@ bool CHostManager::OnUpdateUserStatus(CReceivePacket* msg, IExtendedSocket* sock
  	int status = msg->ReadUInt8();
  	if (status == 1)
  	{
@@ -2189,7 +2201,7 @@ index 24d1ccc..e4b37a8 100644
  		if (destRoom->GetSettings()->gameModeId == 15)
  		{
 diff --git a/src/manager/itemmanager.cpp b/src/manager/itemmanager.cpp
-index ad8d88a..f126702 100644
+index ad8d88a..1707218 100644
 --- a/src/manager/itemmanager.cpp
 +++ b/src/manager/itemmanager.cpp
 @@ -1,9 +1,11 @@
@@ -2246,7 +2258,7 @@ index ad8d88a..f126702 100644
  		OnDisassembleRequest(user, msg);
  		break;
  	}
-@@ -660,6 +682,7 @@ bool CItemManager::OnItemPacket(CReceivePacket* msg, IExtendedSocket* socket)
+@@ -660,12 +682,21 @@ bool CItemManager::OnItemPacket(CReceivePacket* msg, IExtendedSocket* socket)
  		break;
  	default:
  		Logger().Warn("Packet_Item type %d is not implemented\n", type);
@@ -2254,7 +2266,33 @@ index ad8d88a..f126702 100644
  		break;
  	}
  
-@@ -1364,8 +1387,8 @@ int CItemManager::AddItems(int userID, IUser* user, vector<RewardItem>& items)
+ 	return true;
+ }
+ 
++// items kept as a count (a stack with a use button: Retry, medical kits, decoders) rather than a period
++bool CItemManager::IsCountableItem(int itemID)
++{
++	int useType = g_pItemTable->GetCell<int>(OBFUSCATE("UseType"), to_string(itemID));
++	int category = g_pItemTable->GetCell<int>("Category", to_string(itemID));
++	return (category == 9 && (useType == 0 || useType == 1 || useType == 2)) || (category == 8 && (useType == 0 || useType == 2));
++}
++
+ int CItemManager::AddItem(int userID, IUser* user, int itemID, int count, int duration, int lockStatus)
+ {
+ 	int itemStatus = 1;
+@@ -738,10 +769,9 @@ int CItemManager::AddItem(int userID, IUser* user, int itemID, int count, int du
+ 		duration = currentTimestamp + duration * CSO_24_HOURS_IN_MINUTES; // !!! items must have inuse = 1 and status = 1
+ 
+ 	// Category: 1 - pistols, 2 - shotguns, 3 - SMG, 4 - rifle, 5 - machine guns, 6 - equipment,  7 - class, 12 - costume, 13 - weapon parts, 
+-	int useType = g_pItemTable->GetCell<int>(OBFUSCATE("UseType"), to_string(itemID));
+ 	int category = g_pItemTable->GetCell<int>("Category", to_string(itemID));
+ 	// countable items with use button
+-	if ((category == 9 && (useType == 0 || useType == 1 || useType == 2)) || (category == 8 && (useType == 0 || useType == 2)))
++	if (IsCountableItem(itemID))
+ 	{
+ 		vector<CUserInventoryItem> items;
+ 		if (itemWithSameID.m_nItemID)
+@@ -1364,8 +1394,8 @@ int CItemManager::AddItems(int userID, IUser* user, vector<RewardItem>& items)
  			}
  		}
  
@@ -2265,7 +2303,7 @@ index ad8d88a..f126702 100644
  	}
  
  	if (result == ITEM_ADD_DB_ERROR)
-@@ -1450,6 +1473,8 @@ int CItemManager::UseItem(IUser* user, int slot, int additionalArg, int addition
+@@ -1450,6 +1480,8 @@ int CItemManager::UseItem(IUser* user, int slot, int additionalArg, int addition
  
  	switch (item.m_nItemID)
  	{
@@ -2274,7 +2312,7 @@ index ad8d88a..f126702 100644
  	case 676:
  	{
  		CUserInventoryItem targetItem;
-@@ -2039,18 +2064,8 @@ void CItemManager::OnNicknameChangeUse(IUser* user, string newNickname)
+@@ -2039,18 +2071,8 @@ void CItemManager::OnNicknameChangeUse(IUser* user, string newNickname)
  
  bool CItemManager::OnDailyRewardsRequest(IUser* user, int requestID)
  {
@@ -2295,23 +2333,42 @@ index ad8d88a..f126702 100644
  
  	return true;
  }
-@@ -2859,6 +2874,23 @@ bool CItemManager::OnLockItemRequest(IUser* user, CReceivePacket* msg)
+@@ -2859,6 +2881,42 @@ bool CItemManager::OnLockItemRequest(IUser* user, CReceivePacket* msg)
  
  void CItemManager::OnUserLogin(IUser* user)
  {
 +	// offline build: the items every account owns for good (ServerConfig DefaultUser.AlwaysOwnedItems: the Studio's tool
 +	// licences and block themes); a missing one, or one only owned for a time, is added permanently. Before the login
 +	// packet, so the inventory sent with it has them (no packet to the client here).
++	// Countable ones (Retry, Round Retry) are topped up to ALWAYS_OWNED_COUNT and never used up (CHostManager::
++	// OnUseInGameItem); a timed copy of a periodic one (a Damage Display bought for 7 days) is replaced by the permanent
++	// one, which is then the active copy.
++	const int ALWAYS_OWNED_COUNT = 99;
 +	for (int itemID : g_pServerConfig->defUser.alwaysOwnedItems)
 +	{
 +		vector<CUserInventoryItem> owned;
 +		g_UserDatabase.GetInventoryItemsByID(user->GetID(), itemID, owned);
-+		bool forever = false;
-+		for (auto& item : owned)
-+			forever |= item.m_nExpiryDate == 0;
-+		if (forever)
-+			continue;
-+		int status = AddItem(user->GetID(), NULL, itemID, 1, 0);
++		int status;
++		if (IsCountableItem(itemID))
++		{
++			int count = 0;
++			for (auto& item : owned)
++				count += item.m_nCount;
++			if (count >= ALWAYS_OWNED_COUNT)
++				continue;
++			status = AddItem(user->GetID(), NULL, itemID, ALWAYS_OWNED_COUNT - count, 0);
++		}
++		else
++		{
++			bool forever = false;
++			for (auto& item : owned)
++				forever |= item.m_nExpiryDate == 0;
++			if (forever)
++				continue;
++			for (auto& item : owned)
++				RemoveItem(user->GetID(), NULL, item);
++			status = AddItem(user->GetID(), NULL, itemID, 1, 0);
++		}
 +		Logger().Info("Always-owned item %d for %s: %s\n", itemID, user->GetUsername().c_str(),
 +			status == ITEM_ADD_SUCCESS ? "given" : "couldn't be given");
 +	}
@@ -2319,6 +2376,18 @@ index ad8d88a..f126702 100644
  	vector<int> rewardsNotices;
  	g_UserDatabase.GetRewardNotices(user->GetID(), rewardsNotices);
  
+diff --git a/src/manager/itemmanager.h b/src/manager/itemmanager.h
+index ee188d8..6007fc4 100644
+--- a/src/manager/itemmanager.h
++++ b/src/manager/itemmanager.h
+@@ -27,6 +27,7 @@ public:
+ 	bool LoadWeaponPaints();
+ 	bool KVToJson();
+ 	bool OnItemPacket(CReceivePacket* msg, IExtendedSocket* socket);
++	static bool IsCountableItem(int itemID);
+ 	int AddItem(int userID, IUser* user, int itemId, int count, int duration, int lockStatus = 0);
+ 	int AddItems(int userID, IUser* user, std::vector<RewardItem>& item);
+ 	bool RemoveItem(int userID, IUser* user, CUserInventoryItem& item);
 diff --git a/src/manager/loginsupplies.cpp b/src/manager/loginsupplies.cpp
 new file mode 100644
 index 0000000..b5024a4
@@ -3374,10 +3443,10 @@ index 0000000..1a0e4c5
 +bool IsZombieModeOffline(int mode);
 diff --git a/src/manager/missionmanager.cpp b/src/manager/missionmanager.cpp
 new file mode 100644
-index 0000000..4838778
+index 0000000..4426160
 --- /dev/null
 +++ b/src/manager/missionmanager.cpp
-@@ -0,0 +1,505 @@
+@@ -0,0 +1,509 @@
 +#include "missionmanager.h"
 +#include "medalmanager.h"
 +#include "warbondmanager.h"
@@ -3780,9 +3849,13 @@ index 0000000..4838778
 +			vector<int> offers = Offers(userID, day, missions);
 +			if (find(offers.begin(), offers.end(), id) == offers.end())
 +				return fail(409, "This request isn't offered today.");
++			// only requests that still exist: one taken before it was removed from Missions.json doesn't hold a slot
 +			int count = 0;
-+			for (auto& m : missions)
-+				count += m.first[0] == 'R' && m.first.find('.') == string::npos && m.second.state == 1;
++			for (auto& r : m_Requests)
++			{
++				auto m = missions.find("R" + to_string(r.id));
++				count += m != missions.end() && m->second.state == 1;
++			}
 +			if (count >= m_RequestSlots)
 +				return fail(409, "Finish or drop a request first: all your request slots are taken.");
 +			g_UserDatabase.DeleteMissions(userID, key + ".");

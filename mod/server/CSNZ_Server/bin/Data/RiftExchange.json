@@ -2,8 +2,356 @@
  "Version": 1,
  "Items": [
   {
+   "ItemID": 156,
+   "Name": "Eventspray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 167,
+   "Name": "Newyearspray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 168,
+   "Name": "Newyearspraykor",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 177,
+   "Name": "Taegeukgi Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 179,
+   "Name": "Bloody Valentine Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 183,
+   "Name": "Natasha Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 184,
+   "Name": "Jennifer Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 185,
+   "Name": "Ritsuka Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 186,
+   "Name": "Ji Yoon Choi Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 188,
+   "Name": "SD 707 Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 189,
+   "Name": "SD SAS Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 190,
+   "Name": "SD Elite Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 191,
+   "Name": "SD National Liberation Campaign Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 192,
+   "Name": "Fake CT Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 193,
+   "Name": "Fake TR Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 194,
+   "Name": "Fake Psycho Zombie Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 195,
+   "Name": "Fake Ladder Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 196,
+   "Name": "Fake Normal Zombie Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 198,
+   "Name": "Skullspray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 199,
+   "Name": "Bandspray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 205,
+   "Name": "Criss Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 206,
+   "Name": "Yuri Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 207,
+   "Name": "Watch Your Back Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 208,
+   "Name": "Bullseye Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 209,
+   "Name": "Accident Scene Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 210,
+   "Name": "Master Sniper Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 217,
+   "Name": "Crazy Human Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 218,
+   "Name": "Crazy Zombie Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 219,
+   "Name": "Treasure Hunter Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 223,
+   "Name": "A Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 224,
+   "Name": "B Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 225,
+   "Name": "C Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 230,
+   "Name": "LV 04sprayjpn",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 231,
+   "Name": "SD Jennifer Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 232,
+   "Name": "SD Natasha Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 235,
+   "Name": "SD Ritsuka Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 236,
+   "Name": "SD Ji Yoon Choi Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 238,
+   "Name": "July 7 Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 239,
+   "Name": "SD Criss Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 240,
+   "Name": "SD Yuri Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 241,
+   "Name": "Ji Yoon Choi Model Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 256,
+   "Name": "SD Psycho Zombie (Surgeon) Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 257,
+   "Name": "SD Psycho Zombie (Common) Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 264,
+   "Name": "Christmas Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 265,
+   "Name": "SD Heavy Zombie Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 266,
+   "Name": "SD Light Zombie Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 269,
+   "Name": "Pcroomspray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 297,
+   "Name": "Left Heart Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 298,
+   "Name": "Right Heart Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 299,
+   "Name": "Heart of Love",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 301,
+   "Name": "Lightning SMG-1 Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 302,
+   "Name": "SL8 Gold Edition Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 303,
+   "Name": "M134 Christmas Edition Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 323,
+   "Name": "TW 2ndspray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 331,
+   "Name": "Mei Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 332,
+   "Name": "Erica Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 366,
+   "Name": "Skull Rabbit Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
    "ItemID": 373,
    "Name": "Flame Tattoo",
+   "Kind": "Tattoo",
+   "Price": 25
+  },
+  {
+   "ItemID": 374,
+   "Name": "Tiger Tattoo",
    "Kind": "Tattoo",
    "Price": 25
   },
@@ -44,6 +392,12 @@
    "Price": 35
   },
   {
+   "ItemID": 474,
+   "Name": "Cat Mask",
+   "Kind": "Face",
+   "Price": 30
+  },
+  {
    "ItemID": 475,
    "Name": "Angel Halo",
    "Kind": "Head",
@@ -74,6 +428,12 @@
    "Price": 35
   },
   {
+   "ItemID": 481,
+   "Name": "Goodluckspray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
    "ItemID": 489,
    "Name": "Pumpkin Head",
    "Kind": "Head",
@@ -90,6 +450,12 @@
    "Name": "Golden Clock Key",
    "Kind": "Back",
    "Price": 50
+  },
+  {
+   "ItemID": 498,
+   "Name": "WCG 2012 Spray",
+   "Kind": "Spray",
+   "Price": 15
   },
   {
    "ItemID": 505,
@@ -128,6 +494,12 @@
    "Price": 50
   },
   {
+   "ItemID": 524,
+   "Name": "Lusty Rose (Light Zombie costume)",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
    "ItemID": 526,
    "Name": "Pig Ears",
    "Kind": "Head",
@@ -146,6 +518,30 @@
    "Price": 35
   },
   {
+   "ItemID": 529,
+   "Name": "Pig Mask",
+   "Kind": "Face",
+   "Price": 30
+  },
+  {
+   "ItemID": 534,
+   "Name": "Lightning AR-2 Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 535,
+   "Name": "AT4CS Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 536,
+   "Name": "E-Key Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
    "ItemID": 541,
    "Name": "Panda Ears",
    "Kind": "Head",
@@ -162,6 +558,12 @@
    "Name": "Panda Tail",
    "Kind": "Pelvis",
    "Price": 35
+  },
+  {
+   "ItemID": 544,
+   "Name": "Panda Mask",
+   "Kind": "Face",
+   "Price": 30
   },
   {
    "ItemID": 550,
@@ -194,6 +596,12 @@
    "Price": 35
   },
   {
+   "ItemID": 560,
+   "Name": "Squirrel Mask",
+   "Kind": "Face",
+   "Price": 30
+  },
+  {
    "ItemID": 574,
    "Name": "Polar Bear Head",
    "Kind": "Head",
@@ -204,6 +612,42 @@
    "Name": "Fierce Penguin",
    "Kind": "Back",
    "Price": 50
+  },
+  {
+   "ItemID": 599,
+   "Name": "CSOWC 2013 Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 603,
+   "Name": "Headquarters Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 604,
+   "Name": "Corps Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 605,
+   "Name": "Division Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 606,
+   "Name": "Regiment Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 607,
+   "Name": "Battalion Spray",
+   "Kind": "Spray",
+   "Price": 15
   },
   {
    "ItemID": 612,
@@ -452,6 +896,24 @@
    "Price": 35
   },
   {
+   "ItemID": 745,
+   "Name": "Weapon Paint - Red Lightning",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 746,
+   "Name": "Weapon Paint - Blue Lightning",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 747,
+   "Name": "Weapon Paint - Erica",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
    "ItemID": 765,
    "Name": "Jack's Mask",
    "Kind": "Head",
@@ -506,6 +968,12 @@
    "Price": 45
   },
   {
+   "ItemID": 807,
+   "Name": "Weapon Paint - Hawk",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
    "ItemID": 819,
    "Name": "Pharaoh Mask",
    "Kind": "Head",
@@ -518,10 +986,34 @@
    "Price": 50
   },
   {
+   "ItemID": 822,
+   "Name": "Galaxy PaintBlueprint",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 823,
+   "Name": "Weapon Paint - Ji Yoon Choi",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
    "ItemID": 829,
    "Name": "Sprout Headband",
    "Kind": "Head",
    "Price": 45
+  },
+  {
+   "ItemID": 836,
+   "Name": "Keep Out Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 838,
+   "Name": "Run Away Spray",
+   "Kind": "Spray",
+   "Price": 15
   },
   {
    "ItemID": 850,
@@ -566,10 +1058,64 @@
    "Price": 25
   },
   {
+   "ItemID": 862,
+   "Name": "Weapon Paint - Blood",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 865,
+   "Name": "Cherry Blossom Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 866,
+   "Name": "Tea Time Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 874,
+   "Name": "Weapon Paint - Poison",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 896,
+   "Name": "Weapon Paint - Aqua",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 897,
+   "Name": "Weapon Paint - Leaf green",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 898,
+   "Name": "Weapon Paint - Violet",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
    "ItemID": 900,
    "Name": "Mr. X's shell",
    "Kind": "Back",
    "Price": 50
+  },
+  {
+   "ItemID": 914,
+   "Name": "Weapon Paint - Planet",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 915,
+   "Name": "Weapon Paint: Race",
+   "Kind": "Weapon Paint",
+   "Price": 40
   },
   {
    "ItemID": 946,
@@ -596,10 +1142,64 @@
    "Price": 45
   },
   {
+   "ItemID": 950,
+   "Name": "Weapon Paint - Honey",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 951,
+   "Name": "Weapon Paint - Snake",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 952,
+   "Name": "Weapon Paint - Plastic Model",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
    "ItemID": 963,
    "Name": "Tyrant Crab's Bag",
    "Kind": "Back",
    "Price": 50
+  },
+  {
+   "ItemID": 8001,
+   "Name": "KR Weapon Paint Design",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 8002,
+   "Name": "CN Weapon Paint Design",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 8003,
+   "Name": "TW Weapon Paint Design",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 8004,
+   "Name": "JP Weapon Paint Design",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 8005,
+   "Name": "NA Weapon Paint Design",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 8006,
+   "Name": "ID Weapon Paint Design",
+   "Kind": "Weapon Paint",
+   "Price": 40
   },
   {
    "ItemID": 8009,
@@ -806,6 +1406,12 @@
    "Price": 55
   },
   {
+   "ItemID": 8146,
+   "Name": "CSOGS 2018 Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
    "ItemID": 8166,
    "Name": "Stoneboomer_sr",
    "Kind": "Zombie Skin",
@@ -816,6 +1422,36 @@
    "Name": "Phoenix Wings",
    "Kind": "Back",
    "Price": 50
+  },
+  {
+   "ItemID": 8169,
+   "Name": "CSOGS Weapon Paint",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 8181,
+   "Name": "Lucia Tube Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8182,
+   "Name": "Michaela Tube Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8183,
+   "Name": "Sea Tyrant Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8184,
+   "Name": "Transcendent's Crest Spray",
+   "Kind": "Spray",
+   "Price": 15
   },
   {
    "ItemID": 8186,
@@ -864,6 +1500,24 @@
    "Name": "Aetheris' Beacon",
    "Kind": "Back",
    "Price": 50
+  },
+  {
+   "ItemID": 8206,
+   "Name": "Black Anarchist Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8207,
+   "Name": "Sheriff Gerard Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8208,
+   "Name": "Pioneer's Crest Spray",
+   "Kind": "Spray",
+   "Price": 15
   },
   {
    "ItemID": 8211,
@@ -924,6 +1578,30 @@
    "Name": "Medea's Wings",
    "Kind": "Back",
    "Price": 50
+  },
+  {
+   "ItemID": 8227,
+   "Name": "Heavenly Sword Paint Blueprint",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 8236,
+   "Name": "Lifeguard Dominique Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8237,
+   "Name": "Vacation Alin Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8238,
+   "Name": "Vacation Season Spray",
+   "Kind": "Spray",
+   "Price": 15
   },
   {
    "ItemID": 8241,
@@ -992,6 +1670,24 @@
    "Price": 45
   },
   {
+   "ItemID": 8271,
+   "Name": "Pirate Psycho Zombie Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8272,
+   "Name": "Fallen Angel Rusty Wing Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8273,
+   "Name": "Halloween Party Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
    "ItemID": 8274,
    "Name": "Wraith Bride's Veil",
    "Kind": "Head",
@@ -1050,6 +1746,60 @@
    "Name": "Combat Booster",
    "Kind": "Back",
    "Price": 50
+  },
+  {
+   "ItemID": 8296,
+   "Name": "Old-Time BALROG-XI Weapon Paint",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 8297,
+   "Name": "Old-Time CROW-11 Weapon Paint",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 8298,
+   "Name": "Old-Time JANUS-11 Weapon Paint",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 8299,
+   "Name": "Old-Time THANATOS-11 Weapon Paint",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 8300,
+   "Name": "Old-Time TURBULENT-11 Weapon Paint",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 8301,
+   "Name": "Old-Time SKULL-11 Weapon Paint",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 8337,
+   "Name": "Kingdom Poster Spray (Lee-chang)",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8338,
+   "Name": "Kingdom Poster Spray (Group)",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8339,
+   "Name": "Royal Seal Spray",
+   "Kind": "Spray",
+   "Price": 15
   },
   {
    "ItemID": 8340,
@@ -1172,6 +1922,60 @@
    "Price": 35
   },
   {
+   "ItemID": 8370,
+   "Name": "Dorothy Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8371,
+   "Name": "Cowardly Lion Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8372,
+   "Name": "Scarecrow Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8373,
+   "Name": "Tin Man Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8374,
+   "Name": "Tin Heart Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8378,
+   "Name": "Tin Weapon Paint",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 8379,
+   "Name": "Wood Weapon Paint",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 8387,
+   "Name": "Zombie League Master Zombification",
+   "Kind": "Zombification",
+   "Price": 45
+  },
+  {
+   "ItemID": 8388,
+   "Name": "Zombie League Nameplate",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
    "ItemID": 8397,
    "Name": "Android Light Zombie (Costume)",
    "Kind": "Zombie Skin",
@@ -1220,6 +2024,66 @@
    "Price": 60
   },
   {
+   "ItemID": 8405,
+   "Name": "Boss David Black Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8406,
+   "Name": "Android Light Zombie Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8407,
+   "Name": "Boombox Stamper Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8408,
+   "Name": "Special Agent Criss Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8409,
+   "Name": "Psychic Punk CS Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8410,
+   "Name": "Cyber Neon Weapon Paint",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 8411,
+   "Name": "Psychedelic Weapon Paint",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 8415,
+   "Name": "Default Image Font",
+   "Kind": "Damage Font",
+   "Price": 35
+  },
+  {
+   "ItemID": 8416,
+   "Name": "Floatingdamageskin 02",
+   "Kind": "Damage Font",
+   "Price": 35
+  },
+  {
+   "ItemID": 8417,
+   "Name": "Halloween Font",
+   "Kind": "Damage Font",
+   "Price": 35
+  },
+  {
    "ItemID": 8420,
    "Name": "Black's Sunglasses",
    "Kind": "Head",
@@ -1232,6 +2096,90 @@
    "Price": 45
   },
   {
+   "ItemID": 8422,
+   "Name": "Mnemonic Weapon Paint",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 8423,
+   "Name": "Leather Weapon Paint",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 8424,
+   "Name": "Sigma Weapon Paint",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 8427,
+   "Name": "Rock Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8428,
+   "Name": "Paper Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8429,
+   "Name": "Scissors Spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8430,
+   "Name": "Inferno Zombification",
+   "Kind": "Zombification",
+   "Price": 45
+  },
+  {
+   "ItemID": 8431,
+   "Name": "Frosty Zombification",
+   "Kind": "Zombification",
+   "Price": 45
+  },
+  {
+   "ItemID": 8432,
+   "Name": "You'll-Be-Back Zombification",
+   "Kind": "Zombification",
+   "Price": 45
+  },
+  {
+   "ItemID": 8433,
+   "Name": "Oberon Nameplate",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8434,
+   "Name": "Phobos Nameplate",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8435,
+   "Name": "Laughing Kill Taunt",
+   "Kind": "Kill Taunt",
+   "Price": 45
+  },
+  {
+   "ItemID": 8436,
+   "Name": "Smirking Kill Taunt",
+   "Kind": "Kill Taunt",
+   "Price": 45
+  },
+  {
+   "ItemID": 8438,
+   "Name": "Zombie League Season 2 Nameplate",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
    "ItemID": 8441,
    "Name": "Buffclass 20s 4tr (Back)",
    "Kind": "Back",
@@ -1242,6 +2190,72 @@
    "Name": "Buffclass 20s 4ct_face",
    "Kind": "Head",
    "Price": 45
+  },
+  {
+   "ItemID": 8444,
+   "Name": "Floatingdamageskin 05",
+   "Kind": "Damage Font",
+   "Price": 35
+  },
+  {
+   "ItemID": 8445,
+   "Name": "Zbrespawneffect 005",
+   "Kind": "Zombification",
+   "Price": 45
+  },
+  {
+   "ItemID": 8446,
+   "Name": "Killermarkeffect 003",
+   "Kind": "Kill Taunt",
+   "Price": 45
+  },
+  {
+   "ItemID": 8447,
+   "Name": "Lobbybg 015_webm",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8448,
+   "Name": "Weaponpaintchn 12th",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 8449,
+   "Name": "Weaponpaint 20cn",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 8450,
+   "Name": "Weaponpaint 20kr",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 8451,
+   "Name": "Weaponpaint 20tw",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 8452,
+   "Name": "Weaponpaint 20na",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 8454,
+   "Name": "Weaponpaintflake",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 8455,
+   "Name": "Weaponpaintcracked",
+   "Kind": "Weapon Paint",
+   "Price": 40
   },
   {
    "ItemID": 8461,
@@ -1292,6 +2306,60 @@
    "Price": 50
   },
   {
+   "ItemID": 8469,
+   "Name": "S 1spraya",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8470,
+   "Name": "S 1sprayb",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8471,
+   "Name": "S 1sprayc",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8472,
+   "Name": "S 1sprayd",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8473,
+   "Name": "S 1sprayp",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8475,
+   "Name": "Lobbybg 003",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8478,
+   "Name": "Lobbybg 016",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8479,
+   "Name": "Floatingdamageskin 06",
+   "Kind": "Damage Font",
+   "Price": 35
+  },
+  {
+   "ItemID": 8484,
+   "Name": "Lobbybg 004",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
    "ItemID": 8490,
    "Name": "Buffclass 21s 1tr (Back)",
    "Kind": "Back",
@@ -1302,6 +2370,66 @@
    "Name": "Buffclass 21s 1ct (Back)",
    "Kind": "Back",
    "Price": 50
+  },
+  {
+   "ItemID": 8492,
+   "Name": "Backpack",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 8493,
+   "Name": "Floatingdamageskin 07",
+   "Kind": "Damage Font",
+   "Price": 35
+  },
+  {
+   "ItemID": 8494,
+   "Name": "Lobbybg 017",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8496,
+   "Name": "Weaponpaint 21rb",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 8497,
+   "Name": "Lobbybg 018",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8498,
+   "Name": "Lobbybg 019",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8499,
+   "Name": "Lobbybg 020_webm",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8500,
+   "Name": "Lobbybg 005",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8506,
+   "Name": "S 2deimosskin",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8507,
+   "Name": "S 2witchskin",
+   "Kind": "Zombie Skin",
+   "Price": 55
   },
   {
    "ItemID": 8508,
@@ -1340,6 +2468,48 @@
    "Price": 60
   },
   {
+   "ItemID": 8514,
+   "Name": "S 2spraya",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8515,
+   "Name": "S 2sprayb",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8516,
+   "Name": "S 2sprayc",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8517,
+   "Name": "S 2sprayd",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8518,
+   "Name": "S 2sprayp",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8519,
+   "Name": "Weaponpaintdknight",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 8520,
+   "Name": "Weaponpainthighelf",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
    "ItemID": 8528,
    "Name": "Buffclass 21s 2tr (Back)",
    "Kind": "Pet",
@@ -1350,6 +2520,78 @@
    "Name": "Buffclass 21s 2ct (Head)",
    "Kind": "Head",
    "Price": 45
+  },
+  {
+   "ItemID": 8533,
+   "Name": "Lobbybg 021",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8534,
+   "Name": "Lobbybg 022",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8535,
+   "Name": "Lobbybg 023",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8540,
+   "Name": "S 3deimos 2skin",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8541,
+   "Name": "S 3boosterzombiskin",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8542,
+   "Name": "Weaponpaintclock",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 8543,
+   "Name": "Weaponpaintcopper",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 8544,
+   "Name": "S 3spraya",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8545,
+   "Name": "S 3sprayb",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8546,
+   "Name": "S 3sprayc",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8547,
+   "Name": "S 3sprayd",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8548,
+   "Name": "S 3sprayp",
+   "Kind": "Spray",
+   "Price": 15
   },
   {
    "ItemID": 8549,
@@ -1388,6 +2630,18 @@
    "Price": 60
   },
   {
+   "ItemID": 8556,
+   "Name": "Hipsack",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 8557,
+   "Name": "Lobbybg 024",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
    "ItemID": 8561,
    "Name": "Buffclass 21s 3tr (Back)",
    "Kind": "Pet",
@@ -1400,6 +2654,24 @@
    "Price": 60
   },
   {
+   "ItemID": 8564,
+   "Name": "Lobbybg 025",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8565,
+   "Name": "Lobbybg 026",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8569,
+   "Name": "Lobbybg 027",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
    "ItemID": 8574,
    "Name": "Buffclass 21s 4tr (Back)",
    "Kind": "Back",
@@ -1410,6 +2682,66 @@
    "Name": "Buffclass 21s 4ct (Pelvis)",
    "Kind": "Pelvis",
    "Price": 35
+  },
+  {
+   "ItemID": 8577,
+   "Name": "Lobbybg 028",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8583,
+   "Name": "S 4bloterskin",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8584,
+   "Name": "S 4boomerskin",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8585,
+   "Name": "Weaponpainttyranno",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 8586,
+   "Name": "Weaponpainttricera",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 8587,
+   "Name": "S 4spraya",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8588,
+   "Name": "S 4sprayb",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8589,
+   "Name": "S 4sprayc",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8590,
+   "Name": "S 4sprayd",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8591,
+   "Name": "S 4sprayp",
+   "Kind": "Spray",
+   "Price": 15
   },
   {
    "ItemID": 8592,
@@ -1448,10 +2780,124 @@
    "Price": 60
   },
   {
+   "ItemID": 8598,
+   "Name": "Lobbybg 029",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8599,
+   "Name": "Lobbybg 030",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8600,
+   "Name": "Lobbybg 031",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8601,
+   "Name": "Lobbybg 032",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8602,
+   "Name": "Lobbybg 033",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8603,
+   "Name": "Lobbybg 034",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8604,
+   "Name": "Lobbybg 035",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8605,
+   "Name": "Lobbybg 036",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8606,
+   "Name": "Lobbybg 037",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8607,
+   "Name": "Lobbybg 038",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8608,
+   "Name": "Lobbybg 039_webm",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8609,
+   "Name": "Lobbybg 040",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8610,
+   "Name": "Floatingdamageskin 08",
+   "Kind": "Damage Font",
+   "Price": 35
+  },
+  {
+   "ItemID": 8612,
+   "Name": "Lobbybg 006",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8613,
+   "Name": "Lobbybg 007",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8614,
+   "Name": "Lobbybg 008",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8615,
+   "Name": "Lobbybg 009",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8618,
+   "Name": "Weaponpaintchn 13th",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
    "ItemID": 8619,
    "Name": "Letteringglass_face",
    "Kind": "Head",
    "Price": 45
+  },
+  {
+   "ItemID": 8625,
+   "Name": "Lobbybg 041",
+   "Kind": "Nameplate",
+   "Price": 35
   },
   {
    "ItemID": 8626,
@@ -1472,6 +2918,30 @@
    "Price": 45
   },
   {
+   "ItemID": 8636,
+   "Name": "Weaponpaintpark",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 8637,
+   "Name": "S 1spraya",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8638,
+   "Name": "S 1sprayb",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8639,
+   "Name": "S 1sprayp",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
    "ItemID": 8640,
    "Name": "S 1parkhairband (Head)",
    "Kind": "Head",
@@ -1490,6 +2960,72 @@
    "Price": 35
   },
   {
+   "ItemID": 8643,
+   "Name": "Dicespray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8644,
+   "Name": "Earplug (Head)",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8645,
+   "Name": "Lobbybg 042",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8646,
+   "Name": "Floatingdamageskin 09",
+   "Kind": "Damage Font",
+   "Price": 35
+  },
+  {
+   "ItemID": 8647,
+   "Name": "Emoticon_sweat_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8648,
+   "Name": "Emoticon_tongue_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8649,
+   "Name": "Emoticon_smile_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8650,
+   "Name": "Emoticon_cry_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8651,
+   "Name": "Emoticon_heart_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8652,
+   "Name": "Emoticon_laugh_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8653,
+   "Name": "Emoticon_angry_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
    "ItemID": 8661,
    "Name": "Buffclass 22s 2tr_face",
    "Kind": "Head",
@@ -1500,6 +3036,126 @@
    "Name": "Buffclass 22s 2ct_face",
    "Kind": "Head",
    "Price": 45
+  },
+  {
+   "ItemID": 8664,
+   "Name": "Lobbybg 043",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8671,
+   "Name": "Lobbybg 044",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8672,
+   "Name": "Floatingdamageskin 10",
+   "Kind": "Damage Font",
+   "Price": 35
+  },
+  {
+   "ItemID": 8673,
+   "Name": "Lobbybg 045",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8674,
+   "Name": "Lobbybg 046",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8675,
+   "Name": "Lobbybg 047",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8676,
+   "Name": "Lobbybg 048",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8677,
+   "Name": "Lobbybg 049",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8678,
+   "Name": "Lobbybg 050",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8679,
+   "Name": "Lobbybg 051",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8680,
+   "Name": "Lobbybg 052",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8681,
+   "Name": "Lobbybg 053",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8682,
+   "Name": "Lobbybg 054",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8683,
+   "Name": "Lobbybg 055",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8684,
+   "Name": "Lobbybg 056_webm",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8685,
+   "Name": "Lobbybg 057_webm",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8686,
+   "Name": "Weaponpaintlunar",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 8687,
+   "Name": "S 2spraya",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8688,
+   "Name": "S 2sprayb",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8689,
+   "Name": "S 2sprayp",
+   "Kind": "Spray",
+   "Price": 15
   },
   {
    "ItemID": 8690,
@@ -1517,6 +3173,18 @@
    "ItemID": 8692,
    "Name": "S22-2 Pelvis Costume",
    "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 8693,
+   "Name": "Mask (Head)",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8700,
+   "Name": "Lobbybg 059_webm",
+   "Kind": "Nameplate",
    "Price": 35
   },
   {
@@ -1538,6 +3206,42 @@
    "Price": 45
   },
   {
+   "ItemID": 8707,
+   "Name": "Lobbybg 060_webm",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8708,
+   "Name": "Lobbybg 061",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8710,
+   "Name": "Weaponpaintlizard",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 8711,
+   "Name": "S 3spraya",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8712,
+   "Name": "S 3sprayb",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8713,
+   "Name": "S 3sprayp",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
    "ItemID": 8714,
    "Name": "S22-3 Head Costume",
    "Kind": "Head",
@@ -1556,6 +3260,144 @@
    "Price": 35
   },
   {
+   "ItemID": 8721,
+   "Name": "Emoticon_wink_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8722,
+   "Name": "Emoticon_sweat_sz_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8723,
+   "Name": "Emoticon_tongue_sz_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8724,
+   "Name": "Emoticon_smile_sz_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8725,
+   "Name": "Emoticon_cry_sz_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8726,
+   "Name": "Emoticon_heart_sz_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8727,
+   "Name": "Emoticon_laugh_sz_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8728,
+   "Name": "Emoticon_angry_sz_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8729,
+   "Name": "Emoticon_wink_sz_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8730,
+   "Name": "Lobbybg 062",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8731,
+   "Name": "Lobbybg 063",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8732,
+   "Name": "Lobbybg 064_webm",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8733,
+   "Name": "Lobbybg 065",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8734,
+   "Name": "Floatingdamageskin 11",
+   "Kind": "Damage Font",
+   "Price": 35
+  },
+  {
+   "ItemID": 8735,
+   "Name": "Spraykit (Pelvis)",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 8736,
+   "Name": "Emoticon_sweat_wz_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8737,
+   "Name": "Emoticon_tongue_wz_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8738,
+   "Name": "Emoticon_smile_wz_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8739,
+   "Name": "Emoticon_cry_wz_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8740,
+   "Name": "Emoticon_heart_wz_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8741,
+   "Name": "Emoticon_laugh_wz_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8742,
+   "Name": "Emoticon_angry_wz_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8743,
+   "Name": "Emoticon_wink_wz_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
    "ItemID": 8749,
    "Name": "Buffclass 22s 4tr (Back)",
    "Kind": "Pet",
@@ -1566,6 +3408,18 @@
    "Name": "Buffclass 22s 4ct (Back)",
    "Kind": "Back",
    "Price": 50
+  },
+  {
+   "ItemID": 8751,
+   "Name": "Lobbybg 066",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8754,
+   "Name": "Weaponpaintchn 14th",
+   "Kind": "Weapon Paint",
+   "Price": 40
   },
   {
    "ItemID": 8755,
@@ -1640,6 +3494,90 @@
    "Price": 35
   },
   {
+   "ItemID": 8768,
+   "Name": "Emoticon_sweat_yr_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8769,
+   "Name": "Emoticon_tongue_yr_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8770,
+   "Name": "Emoticon_smile_yr_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8771,
+   "Name": "Emoticon_cry_yr_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8772,
+   "Name": "Emoticon_heart_yr_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8773,
+   "Name": "Emoticon_laugh_yr_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8774,
+   "Name": "Emoticon_angry_yr_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8775,
+   "Name": "Emoticon_wink_yr_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8776,
+   "Name": "Lobbybg 067",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8777,
+   "Name": "Floatingdamageskin 12",
+   "Kind": "Damage Font",
+   "Price": 35
+  },
+  {
+   "ItemID": 8778,
+   "Name": "Lobbybg 068",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8779,
+   "Name": "Floatingdamageskin 13",
+   "Kind": "Damage Font",
+   "Price": 35
+  },
+  {
+   "ItemID": 8786,
+   "Name": "Lobbybg 070",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8789,
+   "Name": "Lobbybg 071_webm",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
    "ItemID": 8790,
    "Name": "Wingcos (Back)",
    "Kind": "Back",
@@ -1650,6 +3588,72 @@
    "Name": "Newyearcos (Head)",
    "Kind": "Head",
    "Price": 45
+  },
+  {
+   "ItemID": 8792,
+   "Name": "Lobbybg 072",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8795,
+   "Name": "Lobbybg 073",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8796,
+   "Name": "Floatingdamageskin 14",
+   "Kind": "Damage Font",
+   "Price": 35
+  },
+  {
+   "ItemID": 8797,
+   "Name": "Lobbybg 012",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8798,
+   "Name": "Lobbybg 074",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8799,
+   "Name": "Lobbybg 075",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8800,
+   "Name": "Lobbybg 076_webm",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8801,
+   "Name": "Weaponpaintcyborg",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 8802,
+   "Name": "S 1spraya",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8803,
+   "Name": "S 1sprayb",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8804,
+   "Name": "S 1sprayp",
+   "Kind": "Spray",
+   "Price": 15
   },
   {
    "ItemID": 8805,
@@ -1670,6 +3674,18 @@
    "Price": 35
   },
   {
+   "ItemID": 8808,
+   "Name": "S 1normal",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8809,
+   "Name": "Pendant (Back)",
+   "Kind": "Pet",
+   "Price": 60
+  },
+  {
    "ItemID": 8815,
    "Name": "Buffclass 23s 1tr (Back)",
    "Kind": "Pet",
@@ -1680,6 +3696,30 @@
    "Name": "Buffclass 23s 1ct (Back)",
    "Kind": "Pet",
    "Price": 60
+  },
+  {
+   "ItemID": 8817,
+   "Name": "Floatingdamageskin 15",
+   "Kind": "Damage Font",
+   "Price": 35
+  },
+  {
+   "ItemID": 8818,
+   "Name": "Lobbybg 077",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8819,
+   "Name": "Lobbybg 078",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8822,
+   "Name": "Lobbybg 079",
+   "Kind": "Nameplate",
+   "Price": 35
   },
   {
    "ItemID": 8823,
@@ -1712,6 +3752,48 @@
    "Price": 50
   },
   {
+   "ItemID": 8830,
+   "Name": "Lobbybg 080",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8836,
+   "Name": "Lobbybg 011",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8839,
+   "Name": "Weaponpainttrump",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 8840,
+   "Name": "S 2witchskin",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8841,
+   "Name": "S 2spraya",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8842,
+   "Name": "S 2sprayb",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8843,
+   "Name": "S 2sprayp",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
    "ItemID": 8844,
    "Name": "S23-2 Back Costume",
    "Kind": "Back",
@@ -1730,6 +3812,36 @@
    "Price": 60
   },
   {
+   "ItemID": 8852,
+   "Name": "Lobbybg 081",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8853,
+   "Name": "Lobbybg 082",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8854,
+   "Name": "Lobbybg 083",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8855,
+   "Name": "Lobbybg 084",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8856,
+   "Name": "Lobbybg 096",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
    "ItemID": 8859,
    "Name": "Buffclass 23s 2tr (Pelvis)",
    "Kind": "Pelvis",
@@ -1740,6 +3852,12 @@
    "Name": "Buffclass 23s 2ct (Back)",
    "Kind": "Back",
    "Price": 50
+  },
+  {
+   "ItemID": 8862,
+   "Name": "Arcadeconsole (Pelvis)",
+   "Kind": "Pelvis",
+   "Price": 35
   },
   {
    "ItemID": 8863,
@@ -1754,10 +3872,112 @@
    "Price": 45
   },
   {
+   "ItemID": 8866,
+   "Name": "Lobbybg 114",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8870,
+   "Name": "Lobbybg 115",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8877,
+   "Name": "Lobbybg 094",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8878,
+   "Name": "Lobbybg 093",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8879,
+   "Name": "Eventmatchcup 2spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8880,
+   "Name": "Lobbybg 116_webm",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8881,
+   "Name": "Lobbybg 112",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
    "ItemID": 8882,
    "Name": "Wingcos 2 (Back)",
    "Kind": "Back",
    "Price": 50
+  },
+  {
+   "ItemID": 8887,
+   "Name": "Lobbybg 117",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8888,
+   "Name": "Weaponpainty 23chn 77",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 8892,
+   "Name": "Eventmatchcup 2_costume 1 (Head)",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8893,
+   "Name": "Eventmatchcup 2_costume 2 (Head)",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 8894,
+   "Name": "Lobbybg 089",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8895,
+   "Name": "Lobbybg 090",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8896,
+   "Name": "Lobbybg 091",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8897,
+   "Name": "Lobbybg 092",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8900,
+   "Name": "Lobbybg 124",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8902,
+   "Name": "Lobbybg 119",
+   "Kind": "Nameplate",
+   "Price": 35
   },
   {
    "ItemID": 8905,
@@ -1770,6 +3990,30 @@
    "Name": "Buffclass 23s 3ct (Head)",
    "Kind": "Head",
    "Price": 45
+  },
+  {
+   "ItemID": 8907,
+   "Name": "Lobbybg 105",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8908,
+   "Name": "Lobbybg 107",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8909,
+   "Name": "Lobbybg 106",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8910,
+   "Name": "Lobbybg 104",
+   "Kind": "Nameplate",
+   "Price": 35
   },
   {
    "ItemID": 8917,
@@ -1787,6 +4031,72 @@
    "ItemID": 8919,
    "Name": "S23-3 Pelvis Costume",
    "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 8920,
+   "Name": "S 3spraya",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8921,
+   "Name": "S 3sprayb",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8922,
+   "Name": "S 3sprayp",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8923,
+   "Name": "Weaponpaintegypt 1",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 8924,
+   "Name": "Weaponpaintegypt 2",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 8925,
+   "Name": "S 3normal",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8926,
+   "Name": "Lobbybg 123",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8927,
+   "Name": "Floatingdamageskin 16",
+   "Kind": "Damage Font",
+   "Price": 35
+  },
+  {
+   "ItemID": 8928,
+   "Name": "Beveragecan (Pelvis)",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 8929,
+   "Name": "Mapleleafspray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8930,
+   "Name": "Lobbybg 120",
+   "Kind": "Nameplate",
    "Price": 35
   },
   {
@@ -1808,6 +4118,84 @@
    "Price": 45
   },
   {
+   "ItemID": 8937,
+   "Name": "Weaponpaintpurpledark",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 8938,
+   "Name": "Treedollspray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8940,
+   "Name": "Cookiespay",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8941,
+   "Name": "Lobbybg 126",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8942,
+   "Name": "Lobbybg 098_webm",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8943,
+   "Name": "Weaponpaintchn 15th",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 8946,
+   "Name": "15thspraya",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8947,
+   "Name": "15thsprayb",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8948,
+   "Name": "Floatingdamageskin 17",
+   "Kind": "Damage Font",
+   "Price": 35
+  },
+  {
+   "ItemID": 8953,
+   "Name": "Lobbybg 128",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8962,
+   "Name": "Floatingdamageskin 18",
+   "Kind": "Damage Font",
+   "Price": 35
+  },
+  {
+   "ItemID": 8963,
+   "Name": "Lobbybg 127",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8964,
+   "Name": "Deliverbag (Back)",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
    "ItemID": 8966,
    "Name": "S24-1 Head Costume",
    "Kind": "Head",
@@ -1826,10 +4214,76 @@
    "Price": 35
   },
   {
+   "ItemID": 8969,
+   "Name": "Weaponpaintranger",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 8970,
+   "Name": "S 1spraya",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8971,
+   "Name": "S 1sprayb",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8972,
+   "Name": "S 1sprayp",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 8973,
+   "Name": "S 1aksha",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 8978,
+   "Name": "Lobbybg 129",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8979,
+   "Name": "Lobbybg 130",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8980,
+   "Name": "Lobbybg 131_webm",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
    "ItemID": 8982,
    "Name": "Wingcos 1 (Back)",
    "Kind": "Back",
    "Price": 50
+  },
+  {
+   "ItemID": 8983,
+   "Name": "Lobbybg 099",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8984,
+   "Name": "Lobbybg 132",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 8985,
+   "Name": "Matchcup 24s 1_ 2_spray",
+   "Kind": "Spray",
+   "Price": 15
   },
   {
    "ItemID": 8990,
@@ -1844,6 +4298,12 @@
    "Price": 60
   },
   {
+   "ItemID": 8997,
+   "Name": "Event 2024_ 01_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
    "ItemID": 8998,
    "Name": "Foolsday 1 (Head)",
    "Kind": "Head",
@@ -1856,10 +4316,46 @@
    "Price": 50
   },
   {
+   "ItemID": 9000,
+   "Name": "Buffclass 24s 1trspray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9001,
+   "Name": "Buffclass 24s 1ctspray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9008,
+   "Name": "Event 2024_ 02_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9009,
+   "Name": "Lobbybg 135",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 9010,
+   "Name": "Floatingdamageskin 19",
+   "Kind": "Damage Font",
+   "Price": 35
+  },
+  {
    "ItemID": 9011,
    "Name": "Cathat (Head)",
    "Kind": "Head",
    "Price": 45
+  },
+  {
+   "ItemID": 9012,
+   "Name": "Lobbybg 136",
+   "Kind": "Nameplate",
+   "Price": 35
   },
   {
    "ItemID": 9014,
@@ -1880,6 +4376,36 @@
    "Price": 35
   },
   {
+   "ItemID": 9017,
+   "Name": "Weaponpaintviking",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 9018,
+   "Name": "S 2spraya",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9019,
+   "Name": "S 2sprayb",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9020,
+   "Name": "S 2sprayp",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9021,
+   "Name": "S 2deimos",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
    "ItemID": 9027,
    "Name": "Buffclass 24s 2tr (Pet)",
    "Kind": "Pet",
@@ -1890,6 +4416,84 @@
    "Name": "Buffclass 24s 2ct (Pet)",
    "Kind": "Pet",
    "Price": 60
+  },
+  {
+   "ItemID": 9029,
+   "Name": "Buffclass 24s 2trspray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9030,
+   "Name": "Buffclass 24s 2ctspray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9031,
+   "Name": "Lobbybg 145",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 9032,
+   "Name": "Floatingdamageskin 20",
+   "Kind": "Damage Font",
+   "Price": 35
+  },
+  {
+   "ItemID": 9033,
+   "Name": "Sunflowerhat (Head)",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 9034,
+   "Name": "Emoticon_sweat_cjy_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9035,
+   "Name": "Emoticon_tongue_cjy_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9036,
+   "Name": "Emoticon_smile_cjy_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9037,
+   "Name": "Emoticon_cry_cjy_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9038,
+   "Name": "Emoticon_heart_cjy_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9039,
+   "Name": "Emoticon_laugh_cjy_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9040,
+   "Name": "Emoticon_angry_cjy_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9041,
+   "Name": "Emoticon_wink_cjy_spray",
+   "Kind": "Spray",
+   "Price": 15
   },
   {
    "ItemID": 9042,
@@ -1904,6 +4508,42 @@
    "Price": 50
   },
   {
+   "ItemID": 9044,
+   "Name": "Event 2024_ 05_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9047,
+   "Name": "Lobbybg 146",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 9049,
+   "Name": "Weaponpaintgoldtiger",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 9050,
+   "Name": "Weaponpaintsilvertiger",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 9052,
+   "Name": "Lobbybg 147",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 9059,
+   "Name": "Lobbybg 148",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
    "ItemID": 9060,
    "Name": "Buffclass 24s 3tr (Pet)",
    "Kind": "Pet",
@@ -1916,10 +4556,130 @@
    "Price": 60
   },
   {
+   "ItemID": 9062,
+   "Name": "Buffclass 24s 3trspray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9063,
+   "Name": "Buffclass 24s 3ctspray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9064,
+   "Name": "Weaponpaintred",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 9065,
+   "Name": "Weaponpaintorange",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 9066,
+   "Name": "Weaponpaintyellow",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 9067,
+   "Name": "Weaponpaintgreen",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 9068,
+   "Name": "Weaponpaintblue",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 9069,
+   "Name": "Weaponpaintpurple",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 9070,
+   "Name": "Chatcolor_influ",
+   "Kind": "Chat Colour",
+   "Price": 35
+  },
+  {
+   "ItemID": 9071,
+   "Name": "Chatcolor_vip",
+   "Kind": "Chat Colour",
+   "Price": 35
+  },
+  {
+   "ItemID": 9072,
+   "Name": "Chatcolor_vvip",
+   "Kind": "Chat Colour",
+   "Price": 35
+  },
+  {
    "ItemID": 9073,
    "Name": "Wingcos 2 (Back)",
    "Kind": "Back",
    "Price": 50
+  },
+  {
+   "ItemID": 9075,
+   "Name": "Lobbybg 149_webm",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 9078,
+   "Name": "Floatingdamageskin 21",
+   "Kind": "Damage Font",
+   "Price": 35
+  },
+  {
+   "ItemID": 9079,
+   "Name": "Weaponpaintfever",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 9083,
+   "Name": "Matchcup 24s 2_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9085,
+   "Name": "Floatingdamageskin 22",
+   "Kind": "Damage Font",
+   "Price": 35
+  },
+  {
+   "ItemID": 9086,
+   "Name": "Lobbybg 152",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 9087,
+   "Name": "S 3spraya",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9088,
+   "Name": "S 3sprayb",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9089,
+   "Name": "S 3sprayp",
+   "Kind": "Spray",
+   "Price": 15
   },
   {
    "ItemID": 9090,
@@ -1940,6 +4700,12 @@
    "Price": 35
   },
   {
+   "ItemID": 9099,
+   "Name": "Pingpongpaddle (Back)",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
    "ItemID": 9100,
    "Name": "08_pig (Head)",
    "Kind": "Head",
@@ -1949,6 +4715,54 @@
    "ItemID": 9101,
    "Name": "08_pig (Pelvis)",
    "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 9103,
+   "Name": "S 3speedskin",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 9104,
+   "Name": "Lobbybg 140",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 9105,
+   "Name": "Lobbybg 139",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 9106,
+   "Name": "Lobbybg 138",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 9107,
+   "Name": "Lobbybg 137",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 9111,
+   "Name": "Weaponpaintneo",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 9120,
+   "Name": "Lobbybg 100",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 9121,
+   "Name": "Lobbybg 125",
+   "Kind": "Nameplate",
    "Price": 35
   },
   {
@@ -1988,6 +4802,18 @@
    "Price": 35
   },
   {
+   "ItemID": 9131,
+   "Name": "Buffclass 24s 4trspray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9132,
+   "Name": "Buffclass 24s 4ctspray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
    "ItemID": 9139,
    "Name": "Baseball (Head)",
    "Kind": "Head",
@@ -2000,6 +4826,24 @@
    "Price": 50
   },
   {
+   "ItemID": 9141,
+   "Name": "Lobbybg 159",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 9142,
+   "Name": "Baseball_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9143,
+   "Name": "Floatingdamageskin 23",
+   "Kind": "Damage Font",
+   "Price": 35
+  },
+  {
    "ItemID": 9145,
    "Name": "Shark (Head)",
    "Kind": "Head",
@@ -2010,6 +4854,36 @@
    "Name": "Sheephorn (Head)",
    "Kind": "Head",
    "Price": 45
+  },
+  {
+   "ItemID": 9162,
+   "Name": "Lobbybg 176",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 9163,
+   "Name": "Lobbybg 177",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 9164,
+   "Name": "Lobbybg 178",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 9165,
+   "Name": "Lobbybg 179",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 9166,
+   "Name": "Lobbybg 180",
+   "Kind": "Nameplate",
+   "Price": 35
   },
   {
    "ItemID": 9172,
@@ -2042,6 +4916,12 @@
    "Price": 45
   },
   {
+   "ItemID": 9186,
+   "Name": "Lobbybg 187",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
    "ItemID": 9188,
    "Name": "S25-1 Head Costume",
    "Kind": "Head",
@@ -2058,6 +4938,90 @@
    "Name": "S25-1 Pelvis Costume",
    "Kind": "Pelvis",
    "Price": 35
+  },
+  {
+   "ItemID": 9191,
+   "Name": "S 1spraya",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9192,
+   "Name": "S 1sprayb",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9193,
+   "Name": "S 1sprayp",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9194,
+   "Name": "S 1normal",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 9199,
+   "Name": "Weaponpaintcookie",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 9200,
+   "Name": "Lobbybg 186",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 9201,
+   "Name": "Floatingdamageskin 24",
+   "Kind": "Damage Font",
+   "Price": 35
+  },
+  {
+   "ItemID": 9202,
+   "Name": "Floatingdamageskin 25",
+   "Kind": "Damage Font",
+   "Price": 35
+  },
+  {
+   "ItemID": 9203,
+   "Name": "Lobbybg 188",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 9205,
+   "Name": "Chefknife (Back)",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 9213,
+   "Name": "Lobbybg 189_webm",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 9216,
+   "Name": "Lobbybg 190",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 9217,
+   "Name": "Floatingdamageskin 26",
+   "Kind": "Damage Font",
+   "Price": 35
+  },
+  {
+   "ItemID": 9218,
+   "Name": "Newyearsnake_spray",
+   "Kind": "Spray",
+   "Price": 15
   },
   {
    "ItemID": 9219,
@@ -2078,10 +5042,52 @@
    "Price": 50
   },
   {
+   "ItemID": 9224,
+   "Name": "Buffclass 25s 1trspray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9225,
+   "Name": "Buffclass 25s 1ctspray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
    "ItemID": 9227,
    "Name": "Zbs 93boss (Back)",
    "Kind": "Back",
    "Price": 50
+  },
+  {
+   "ItemID": 9260,
+   "Name": "Weaponpainttranslucent",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 9265,
+   "Name": "Lobbybg 097",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 9271,
+   "Name": "Polaroid (Pelvis)",
+   "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 9272,
+   "Name": "Lobbybg 192",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 9273,
+   "Name": "Floatingdamageskin 27",
+   "Kind": "Damage Font",
+   "Price": 35
   },
   {
    "ItemID": 9274,
@@ -2102,6 +5108,36 @@
    "Price": 35
   },
   {
+   "ItemID": 9277,
+   "Name": "S 2spraya",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9278,
+   "Name": "S 2sprayb",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9279,
+   "Name": "S 2sprayp",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9280,
+   "Name": "S 2resiskin",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 9285,
+   "Name": "Weaponpaintdark",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
    "ItemID": 9287,
    "Name": "Cupidarrow (Back)",
    "Kind": "Back",
@@ -2118,6 +5154,36 @@
    "Name": "Buffclass 25s 2ct (Pet)",
    "Kind": "Pet",
    "Price": 60
+  },
+  {
+   "ItemID": 9293,
+   "Name": "Buffclass 25s 2trspray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9294,
+   "Name": "Buffclass 25s 2ctspray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9295,
+   "Name": "Event 250429_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9296,
+   "Name": "Floatingdamageskin 29",
+   "Kind": "Damage Font",
+   "Price": 35
+  },
+  {
+   "ItemID": 9297,
+   "Name": "Lobbybg 010",
+   "Kind": "Nameplate",
+   "Price": 35
   },
   {
    "ItemID": 9298,
@@ -2138,6 +5204,84 @@
    "Price": 55
   },
   {
+   "ItemID": 9378,
+   "Name": "Lobbybg 193",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 9379,
+   "Name": "Lobbybg 194",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 9380,
+   "Name": "Lobbybg 195",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 9383,
+   "Name": "Lobbybg 196",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 9385,
+   "Name": "25honoralin 01_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9386,
+   "Name": "25honoralin 02_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9387,
+   "Name": "25honoralin 03_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9388,
+   "Name": "25honoralin 04_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9389,
+   "Name": "Match 25spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9390,
+   "Name": "Weaponpaintmatch 25",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 9391,
+   "Name": "Lobbybg 197",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 9392,
+   "Name": "Goodshotspray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9393,
+   "Name": "Floatingdamageskin 30",
+   "Kind": "Damage Font",
+   "Price": 35
+  },
+  {
    "ItemID": 9396,
    "Name": "Buffclass 25s 3tr (Head)",
    "Kind": "Head",
@@ -2150,10 +5294,82 @@
    "Price": 60
   },
   {
+   "ItemID": 9398,
+   "Name": "Buffclass 25s 3trspray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9399,
+   "Name": "Buffclass 25s 3ctspray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9401,
+   "Name": "Lobbybg 198_webm",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
    "ItemID": 9403,
    "Name": "Wingcos 2 (Back)",
    "Kind": "Back",
    "Price": 50
+  },
+  {
+   "ItemID": 9405,
+   "Name": "Floatingdamageskin 31",
+   "Kind": "Damage Font",
+   "Price": 35
+  },
+  {
+   "ItemID": 9406,
+   "Name": "Event 250710_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9407,
+   "Name": "Floatingdamageskin 32",
+   "Kind": "Damage Font",
+   "Price": 35
+  },
+  {
+   "ItemID": 9408,
+   "Name": "Lobbybg 199",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 9409,
+   "Name": "Es_spotlight_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9410,
+   "Name": "KR 250710_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9413,
+   "Name": "Orientalinkfan (Back)",
+   "Kind": "Back",
+   "Price": 50
+  },
+  {
+   "ItemID": 9414,
+   "Name": "Lobbybg 209",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 9415,
+   "Name": "Floatingdamageskin 28",
+   "Kind": "Damage Font",
+   "Price": 35
   },
   {
    "ItemID": 9416,
@@ -2174,10 +5390,280 @@
    "Price": 35
   },
   {
+   "ItemID": 9419,
+   "Name": "S 3spraya",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9420,
+   "Name": "S 3sprayb",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9421,
+   "Name": "S 3sprayp",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9422,
+   "Name": "S 3psycho",
+   "Kind": "Zombie Skin",
+   "Price": 55
+  },
+  {
+   "ItemID": 9427,
+   "Name": "Weaponpaintbamboo",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 9429,
+   "Name": "Request_ 01_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9430,
+   "Name": "Request_ 02_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9431,
+   "Name": "Request_ 03_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9432,
+   "Name": "Request_ 04_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9433,
+   "Name": "Request_ 05_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9434,
+   "Name": "Request_ 06_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9435,
+   "Name": "Request_ 07_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9436,
+   "Name": "Request_ 08_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9437,
+   "Name": "Lobbybg 201",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 9438,
+   "Name": "Lobbybg 202",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 9439,
+   "Name": "Lobbybg 203",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 9440,
+   "Name": "Lobbybg 204",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 9441,
+   "Name": "Lobbybg 205",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 9442,
+   "Name": "Lobbybg 206",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 9443,
+   "Name": "Lobbybg 207",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 9444,
+   "Name": "Lobbybg 208",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 9445,
+   "Name": "Weaponpaintdominique",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 9446,
+   "Name": "Weaponpaintalin",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 9447,
+   "Name": "Weaponpaintanemo",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 9448,
+   "Name": "Weaponpaintmirajoo",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 9449,
+   "Name": "Weaponpaintmei",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 9450,
+   "Name": "Weaponpaintyuri",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 9451,
+   "Name": "Weaponpaintmiho",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 9452,
+   "Name": "Weaponpaintsiho",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 9456,
+   "Name": "Lobbybg 210",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 9457,
+   "Name": "Lobbybg 211",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 9458,
+   "Name": "Lobbybg 212",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 9459,
+   "Name": "Lobbybg 213",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 9460,
+   "Name": "Emoticon_heart_bear_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9463,
+   "Name": "Bfmarkspray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9491,
+   "Name": "Survmarkspray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9492,
+   "Name": "Weaponpaintvenomviper",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 9504,
+   "Name": "Weaponpaintlunarhalo",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 9505,
+   "Name": "Floatingdamageskin 33",
+   "Kind": "Damage Font",
+   "Price": 35
+  },
+  {
+   "ItemID": 9507,
+   "Name": "Muine_a_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9508,
+   "Name": "Muine_b_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9509,
+   "Name": "Muine_ 01_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9511,
+   "Name": "Muine_ 03_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
    "ItemID": 9525,
    "Name": "Soulreaperex (Pelvis)",
    "Kind": "Pelvis",
    "Price": 35
+  },
+  {
+   "ItemID": 9526,
+   "Name": "Floatingdamageskin 34",
+   "Kind": "Damage Font",
+   "Price": 35
+  },
+  {
+   "ItemID": 9527,
+   "Name": "Soulreaperex_spray",
+   "Kind": "Spray",
+   "Price": 15
   },
   {
    "ItemID": 9538,
@@ -2190,6 +5676,60 @@
    "Name": "Buffclass 25s 4ct (Pet)",
    "Kind": "Pet",
    "Price": 60
+  },
+  {
+   "ItemID": 9540,
+   "Name": "Buffclass 25s 4trspray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9541,
+   "Name": "Buffclass 25s 4ctspray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9542,
+   "Name": "Weaponpaintdeathrose",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 9543,
+   "Name": "Weaponpaintsweetkiller",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 9544,
+   "Name": "Floatingdamageskin 35",
+   "Kind": "Damage Font",
+   "Price": 35
+  },
+  {
+   "ItemID": 9545,
+   "Name": "Floatingdamageskin 36",
+   "Kind": "Damage Font",
+   "Price": 35
+  },
+  {
+   "ItemID": 9546,
+   "Name": "Sweetkillerspray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9573,
+   "Name": "Lobbybg 215",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 9574,
+   "Name": "Floatingdamageskin 37",
+   "Kind": "Damage Font",
+   "Price": 35
   },
   {
    "ItemID": 9575,
@@ -2210,10 +5750,112 @@
    "Price": 35
   },
   {
+   "ItemID": 9578,
+   "Name": "S 4spraya",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9579,
+   "Name": "S 4sprayb",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9580,
+   "Name": "S 4sprayp",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
    "ItemID": 9581,
    "Name": "S 4witchskin",
    "Kind": "Zombie Skin",
    "Price": 55
+  },
+  {
+   "ItemID": 9586,
+   "Name": "Coralcrown (Head)",
+   "Kind": "Head",
+   "Price": 45
+  },
+  {
+   "ItemID": 9587,
+   "Name": "Weaponpainttidal",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 9589,
+   "Name": "Muine_ 13_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9590,
+   "Name": "Muine_ 14_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9595,
+   "Name": "Rockspray 2",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9596,
+   "Name": "Paperspray 2",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9597,
+   "Name": "Scissorsspray 2",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9598,
+   "Name": "Lobbybg 216",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 9599,
+   "Name": "Lobbybg 217",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 9600,
+   "Name": "Lobbybg 218",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 9601,
+   "Name": "17thspraya",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9602,
+   "Name": "17thsprayb",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9603,
+   "Name": "Weaponpaint 17tha",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 9608,
+   "Name": "Weaponpaint 17thb",
+   "Kind": "Weapon Paint",
+   "Price": 40
   },
   {
    "ItemID": 9611,
@@ -2252,6 +5894,18 @@
    "Price": 50
   },
   {
+   "ItemID": 9626,
+   "Name": "Weaponpaintneonholytree",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
+   "ItemID": 9627,
+   "Name": "2025lucky_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
    "ItemID": 9628,
    "Name": "Wintertreecos (Head)",
    "Kind": "Head",
@@ -2270,6 +5924,12 @@
    "Price": 50
   },
   {
+   "ItemID": 9631,
+   "Name": "Weaponpaint 2025winter",
+   "Kind": "Weapon Paint",
+   "Price": 40
+  },
+  {
    "ItemID": 9636,
    "Name": "Assaultbackpack",
    "Kind": "Back",
@@ -2280,6 +5940,18 @@
    "Name": "Wingcos 1 (Back)",
    "Kind": "Back",
    "Price": 50
+  },
+  {
+   "ItemID": 9640,
+   "Name": "Lobbybg 221_webm",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 9650,
+   "Name": "Weaponpaintkronos",
+   "Kind": "Weapon Paint",
+   "Price": 40
   },
   {
    "ItemID": 9651,
@@ -2303,6 +5975,42 @@
    "ItemID": 9654,
    "Name": "S26-1 Pelvis Costume",
    "Kind": "Pelvis",
+   "Price": 35
+  },
+  {
+   "ItemID": 9655,
+   "Name": "Agenth (Pet)",
+   "Kind": "Pet",
+   "Price": 60
+  },
+  {
+   "ItemID": 9656,
+   "Name": "S 1spraya",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9657,
+   "Name": "S 1sprayb",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9658,
+   "Name": "S 1sprayp",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9659,
+   "Name": "Lobbybg 222",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
+   "ItemID": 9660,
+   "Name": "Floatingdamageskin 39",
+   "Kind": "Damage Font",
    "Price": 35
   },
   {
@@ -2342,6 +6050,30 @@
    "Price": 50
   },
   {
+   "ItemID": 9673,
+   "Name": "Domshispray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9675,
+   "Name": "Newyear 2026_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9676,
+   "Name": "Floatingdamageskin 40",
+   "Kind": "Damage Font",
+   "Price": 35
+  },
+  {
+   "ItemID": 9677,
+   "Name": "Lobbybg 223",
+   "Kind": "Nameplate",
+   "Price": 35
+  },
+  {
    "ItemID": 9678,
    "Name": "Beamguncos (Head)",
    "Kind": "Head",
@@ -2352,6 +6084,24 @@
    "Name": "Beamguncos (Pelvis)",
    "Kind": "Pelvis",
    "Price": 35
+  },
+  {
+   "ItemID": 9680,
+   "Name": "Spwinspray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9681,
+   "Name": "Spseaspray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9682,
+   "Name": "Spcliffspray",
+   "Kind": "Spray",
+   "Price": 15
   },
   {
    "ItemID": 9688,
@@ -2378,10 +6128,88 @@
    "Price": 60
   },
   {
+   "ItemID": 9694,
+   "Name": "Muine_ 15_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9695,
+   "Name": "Muine_ 16_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9696,
+   "Name": "Muine_ 17_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9697,
+   "Name": "Muine_ 18_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9698,
+   "Name": "Muine_ 19_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9699,
+   "Name": "Muine_ 20_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9700,
+   "Name": "Muine_ 21_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9701,
+   "Name": "Muine_ 22_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9702,
+   "Name": "Muine_ 23_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9703,
+   "Name": "Muine_ 24_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9704,
+   "Name": "Muine_ 25_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9705,
+   "Name": "Muine_ 26_spray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
    "ItemID": 9712,
    "Name": "Buffclass 26s 1tr (Head)",
    "Kind": "Head",
    "Price": 45
+  },
+  {
+   "ItemID": 9713,
+   "Name": "Buffclass 26s 1trspray",
+   "Kind": "Spray",
+   "Price": 15
   },
   {
    "ItemID": 9874,
@@ -2394,6 +6222,30 @@
    "Name": "Kronoskitcos (Back)",
    "Kind": "Back",
    "Price": 50
+  },
+  {
+   "ItemID": 9877,
+   "Name": "Dimensioncrackspray",
+   "Kind": "Spray",
+   "Price": 15
+  },
+  {
+   "ItemID": 9878,
+   "Name": "Floatingdamageskin 41",
+   "Kind": "Damage Font",
+   "Price": 35
+  },
+  {
+   "ItemID": 9879,
+   "Name": "Floatingdamageskin 42",
+   "Kind": "Damage Font",
+   "Price": 35
+  },
+  {
+   "ItemID": 9880,
+   "Name": "Divinespearexspray",
+   "Kind": "Spray",
+   "Price": 15
   },
   {
    "ItemID": 9881,
@@ -2418,6 +6270,12 @@
    "Name": "Buffclass 26s 2ct (Pelvis)",
    "Kind": "Pelvis",
    "Price": 35
+  },
+  {
+   "ItemID": 9891,
+   "Name": "Buffclass 26s 2ctspray",
+   "Kind": "Spray",
+   "Price": 15
   },
   {
    "ItemID": 9895,
@@ -2454,6 +6312,12 @@
    "Name": "Danocosback",
    "Kind": "Back",
    "Price": 50
+  },
+  {
+   "ItemID": 9906,
+   "Name": "Danospray",
+   "Kind": "Spray",
+   "Price": 15
   },
   {
    "ItemID": 9998,
