@@ -43,7 +43,8 @@ PROMO_DIR = os.path.join(MOD, "web", "shop", "promo")
 SOUND_DIR = os.path.join(MOD, "web", "shop", "sounds")
 # shop sound -> game file: the weapon ascend gauge while an unlock is held, a calm "task complete" for items and
 # the gachapon "weapon revealed" sting for battle passes
-SOUNDS = {"charge.wav": "sound/weaponascend/gauge2.wav", "unlock.wav": "sound/events/task_complete.wav",
+# item.wav: getting an item, the crafting window's soft "item made" chime (task_complete.wav, the old one, was too harsh)
+SOUNDS = {"charge.wav": "sound/weaponascend/gauge2.wav", "item.wav": "sound/events/create/success.wav",
           "pass.wav": "sound/gachapon/open_weapon_item_top_sss.wav"}
 DEFAULT_WEAPON = "m4a1"            # held by characters shown on their own
 WEAPON_CATEGORIES = ("1", "2", "3", "4", "5", "6", "11")

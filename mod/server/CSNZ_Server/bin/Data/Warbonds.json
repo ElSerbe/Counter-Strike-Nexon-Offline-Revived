@@ -161,9 +161,6 @@
 				] },
 				{ "Unlock": 1480, "Items": [
 					{ "ItemID": 197, "Cost": 70 }, { "ItemID": 449, "Cost": 75 }, { "ItemID": 781, "Cost": 75 }, { "ItemID": 493, "Cost": 70 }
-				] },
-				{ "Unlock": 1480, "Title": "Cosmetics", "Items": [
-					{ "ItemID": 651, "Cost": 30 }, { "ItemID": 652, "Cost": 30 }, { "ItemID": 656, "Cost": 30 }, { "ItemID": 660, "Cost": 30 }, { "ItemID": 664, "Cost": 30 }, { "ItemID": 8191, "Cost": 60 }, { "ItemID": 8421, "Cost": 50 }
 				] }
 			]
 		},
@@ -219,9 +216,6 @@
 				] },
 				{ "Unlock": 100, "Items": [
 					{ "ItemID": 725, "Cost": 65 }, { "ItemID": 901, "Cost": 100 }
-				] },
-				{ "Unlock": 100, "Title": "Cosmetics", "Items": [
-					{ "ItemID": 653, "Cost": 30 }, { "ItemID": 8346, "Cost": 50 }, { "ItemID": 8347, "Cost": 50 }, { "ItemID": 8348, "Cost": 50 }
 				] }
 			]
 		},
@@ -237,7 +231,7 @@
 					{ "ItemID": 255, "Cost": 100 }, { "ItemID": 902, "Cost": 100 }
 				] },
 				{ "Unlock": 110, "Title": "Cosmetics", "Items": [
-					{ "ItemID": 8345, "Cost": 50 }, { "ItemID": 541, "Cost": 50 }, { "ItemID": 542, "Cost": 60 }, { "ItemID": 543, "Cost": 40 }, { "ItemID": 544, "Cost": 40 }
+					{ "ItemID": 541, "Cost": 50 }
 				] }
 			]
 		},
@@ -251,9 +245,6 @@
 				] },
 				{ "Unlock": 110, "Items": [
 					{ "ItemID": 588, "Cost": 65 }, { "ItemID": 414, "Cost": 100 }, { "ItemID": 713, "Cost": 65 }, { "ItemID": 909, "Cost": 100 }
-				] },
-				{ "Unlock": 110, "Title": "Cosmetics", "Items": [
-					{ "ItemID": 654, "Cost": 30 }, { "ItemID": 657, "Cost": 30 }, { "ItemID": 374, "Cost": 30 }
 				] }
 			]
 		},
@@ -267,9 +258,6 @@
 				] },
 				{ "Unlock": 110, "Items": [
 					{ "ItemID": 442, "Cost": 75 }, { "ItemID": 355, "Cost": 100 }
-				] },
-				{ "Unlock": 110, "Title": "Cosmetics", "Items": [
-					{ "ItemID": 655, "Cost": 30 }, { "ItemID": 658, "Cost": 30 }, { "ItemID": 8400, "Cost": 50 }
 				] }
 			]
 		},
@@ -283,9 +271,6 @@
 				] },
 				{ "Unlock": 100, "Items": [
 					{ "ItemID": 423, "Cost": 70 }, { "ItemID": 430, "Cost": 70 }
-				] },
-				{ "Unlock": 100, "Title": "Cosmetics", "Items": [
-					{ "ItemID": 659, "Cost": 30 }, { "ItemID": 661, "Cost": 30 }, { "ItemID": 8355, "Cost": 50 }, { "ItemID": 8354, "Cost": 50 }
 				] }
 			]
 		},
@@ -299,9 +284,6 @@
 				] },
 				{ "Unlock": 100, "Items": [
 					{ "ItemID": 233, "Cost": 75 }
-				] },
-				{ "Unlock": 100, "Title": "Cosmetics", "Items": [
-					{ "ItemID": 662, "Cost": 30 }, { "ItemID": 663, "Cost": 30 }, { "ItemID": 8349, "Cost": 50 }
 				] }
 			]
 		},
@@ -317,7 +299,7 @@
 					{ "ItemID": 457, "Cost": 100 }, { "ItemID": 8164, "Cost": 300 }
 				] },
 				{ "Unlock": 90, "Title": "Cosmetics", "Items": [
-					{ "ItemID": 475, "Cost": 50 }, { "ItemID": 476, "Cost": 60 }, { "ItemID": 477, "Cost": 50 }, { "ItemID": 478, "Cost": 60 }, { "ItemID": 479, "Cost": 40 }, { "ItemID": 8281, "Cost": 60 }, { "ItemID": 8253, "Cost": 80 }
+					{ "ItemID": 475, "Cost": 50 }, { "ItemID": 477, "Cost": 50 }
 				] }
 			]
 		},
@@ -331,9 +313,6 @@
 				] },
 				{ "Unlock": 90, "Items": [
 					{ "ItemID": 814, "Cost": 75 }, { "ItemID": 8108, "Cost": 450 }
-				] },
-				{ "Unlock": 90, "Title": "Cosmetics", "Items": [
-					{ "ItemID": 8420, "Cost": 50 }, { "ItemID": 736, "Cost": 50 }, { "ItemID": 738, "Cost": 60 }, { "ItemID": 739, "Cost": 40 }
 				] }
 			]
 		},
@@ -347,9 +326,6 @@
 				] },
 				{ "Unlock": 90, "Items": [
 					{ "ItemID": 579, "Cost": 65 }, { "ItemID": 580, "Cost": 75 }, { "ItemID": 581, "Cost": 90 }
-				] },
-				{ "Unlock": 90, "Title": "Cosmetics", "Items": [
-					{ "ItemID": 474, "Cost": 40 }, { "ItemID": 529, "Cost": 40 }, { "ItemID": 560, "Cost": 40 }, { "ItemID": 550, "Cost": 50 }, { "ItemID": 551, "Cost": 50 }
 				] }
 			]
 		},
@@ -363,9 +339,6 @@
 				] },
 				{ "Unlock": 90, "Items": [
 					{ "ItemID": 8136, "Cost": 100 }, { "ItemID": 8133, "Cost": 450 }
-				] },
-				{ "Unlock": 90, "Title": "Cosmetics", "Items": [
-					{ "ItemID": 948, "Cost": 50 }, { "ItemID": 949, "Cost": 50 }, { "ItemID": 615, "Cost": 30 }
 				] }
 			]
 		},
@@ -379,9 +352,6 @@
 				] },
 				{ "Unlock": 90, "Items": [
 					{ "ItemID": 8179, "Cost": 120 }, { "ItemID": 609, "Cost": 125 }, { "ItemID": 556, "Cost": 100 }, { "ItemID": 8220, "Cost": 300 }
-				] },
-				{ "Unlock": 90, "Title": "Cosmetics", "Items": [
-					{ "ItemID": 963, "Cost": 60 }, { "ItemID": 900, "Cost": 60 }
 				] }
 			]
 		},
@@ -395,9 +365,6 @@
 				] },
 				{ "Unlock": 90, "Items": [
 					{ "ItemID": 347, "Cost": 90 }, { "ItemID": 364, "Cost": 80 }
-				] },
-				{ "Unlock": 90, "Title": "Cosmetics", "Items": [
-					{ "ItemID": 471, "Cost": 50 }, { "ItemID": 472, "Cost": 60 }, { "ItemID": 473, "Cost": 40 }, { "ItemID": 8278, "Cost": 40 }, { "ItemID": 8254, "Cost": 80 }, { "ItemID": 526, "Cost": 50 }, { "ItemID": 527, "Cost": 60 }, { "ItemID": 528, "Cost": 40 }
 				] }
 			]
 		},
@@ -413,7 +380,7 @@
 					{ "ItemID": 8180, "Cost": 120 }, { "ItemID": 399, "Cost": 100 }, { "ItemID": 8247, "Cost": 300 }
 				] },
 				{ "Unlock": 90, "Title": "Cosmetics", "Items": [
-					{ "ItemID": 8280, "Cost": 60 }, { "ItemID": 696, "Cost": 30 }
+					{ "ItemID": 8280, "Cost": 60 }
 				] }
 			]
 		},
@@ -424,9 +391,6 @@
 			"Pages": [
 				{ "Unlock": 0, "Items": [
 					{ "ItemID": 316, "Cost": 90 }, { "ItemID": 317, "Cost": 90 }, { "ItemID": 318, "Cost": 90 }, { "ItemID": 319, "Cost": 90 }
-				] },
-				{ "Unlock": 0, "Title": "Cosmetics", "Items": [
-					{ "ItemID": 829, "Cost": 50 }, { "ItemID": 730, "Cost": 50 }, { "ItemID": 731, "Cost": 60 }, { "ItemID": 732, "Cost": 40 }
 				] }
 			]
 		},
@@ -440,9 +404,6 @@
 				] },
 				{ "Unlock": 90, "Items": [
 					{ "ItemID": 510, "Cost": 120 }, { "ItemID": 511, "Cost": 120 }
-				] },
-				{ "Unlock": 90, "Title": "Cosmetics", "Items": [
-					{ "ItemID": 512, "Cost": 50 }, { "ItemID": 8362, "Cost": 60 }, { "ItemID": 8363, "Cost": 60 }, { "ItemID": 8364, "Cost": 50 }, { "ItemID": 8365, "Cost": 50 }, { "ItemID": 8366, "Cost": 60 }, { "ItemID": 8367, "Cost": 60 }, { "ItemID": 8368, "Cost": 60 }, { "ItemID": 8369, "Cost": 40 }
 				] }
 			]
 		},
@@ -456,9 +417,6 @@
 				] },
 				{ "Unlock": 90, "Items": [
 					{ "ItemID": 261, "Cost": 70 }, { "ItemID": 486, "Cost": 65 }, { "ItemID": 164, "Cost": 60 }
-				] },
-				{ "Unlock": 90, "Title": "Cosmetics", "Items": [
-					{ "ItemID": 779, "Cost": 50 }, { "ItemID": 386, "Cost": 30 }
 				] }
 			]
 		},
@@ -472,9 +430,6 @@
 				] },
 				{ "Unlock": 90, "Items": [
 					{ "ItemID": 903, "Cost": 100 }
-				] },
-				{ "Unlock": 90, "Title": "Cosmetics", "Items": [
-					{ "ItemID": 666, "Cost": 30 }, { "ItemID": 667, "Cost": 30 }
 				] }
 			]
 		},
@@ -488,9 +443,6 @@
 				] },
 				{ "Unlock": 90, "Items": [
 					{ "ItemID": 408, "Cost": 90 }, { "ItemID": 960, "Cost": 75 }
-				] },
-				{ "Unlock": 90, "Title": "Cosmetics", "Items": [
-					{ "ItemID": 665, "Cost": 30 }, { "ItemID": 8215, "Cost": 50 }
 				] }
 			]
 		},
@@ -506,7 +458,7 @@
 					{ "ItemID": 222, "Cost": 100 }, { "ItemID": 458, "Cost": 100 }, { "ItemID": 832, "Cost": 100 }, { "ItemID": 398, "Cost": 100 }, { "ItemID": 243, "Cost": 100 }
 				] },
 				{ "Unlock": 90, "Title": "Cosmetics", "Items": [
-					{ "ItemID": 772, "Cost": 60 }, { "ItemID": 773, "Cost": 50 }, { "ItemID": 704, "Cost": 50 }, { "ItemID": 705, "Cost": 50 }
+					{ "ItemID": 772, "Cost": 60 }
 				] }
 			]
 		},
@@ -522,7 +474,7 @@
 					{ "ItemID": 892, "Cost": 125 }, { "ItemID": 978, "Cost": 300 }
 				] },
 				{ "Unlock": 90, "Title": "Cosmetics", "Items": [
-					{ "ItemID": 785, "Cost": 50 }, { "ItemID": 786, "Cost": 40 }, { "ItemID": 8289, "Cost": 50 }
+					{ "ItemID": 786, "Cost": 40 }
 				] }
 			]
 		},
@@ -536,9 +488,6 @@
 				] },
 				{ "Unlock": 90, "Items": [
 					{ "ItemID": 463, "Cost": 100 }, { "ItemID": 250, "Cost": 100 }
-				] },
-				{ "Unlock": 90, "Title": "Cosmetics", "Items": [
-					{ "ItemID": 790, "Cost": 50 }, { "ItemID": 854, "Cost": 30 }, { "ItemID": 8403, "Cost": 60 }, { "ItemID": 851, "Cost": 30 }, { "ItemID": 852, "Cost": 30 }
 				] }
 			]
 		},
@@ -552,9 +501,6 @@
 				] },
 				{ "Unlock": 90, "Items": [
 					{ "ItemID": 440, "Cost": 75 }, { "ItemID": 421, "Cost": 75 }
-				] },
-				{ "Unlock": 90, "Title": "Cosmetics", "Items": [
-					{ "ItemID": 8244, "Cost": 50 }, { "ItemID": 8245, "Cost": 50 }, { "ItemID": 8186, "Cost": 50 }, { "ItemID": 8187, "Cost": 40 }, { "ItemID": 8188, "Cost": 50 }, { "ItemID": 8189, "Cost": 60 }, { "ItemID": 8255, "Cost": 60 }, { "ItemID": 8256, "Cost": 50 }, { "ItemID": 8257, "Cost": 50 }
 				] }
 			]
 		},
@@ -571,9 +517,6 @@
 				] },
 				{ "Unlock": 330, "Items": [
 					{ "ItemID": 466, "Cost": 175 }, { "ItemID": 327, "Cost": 175 }, { "ItemID": 483, "Cost": 90 }, { "ItemID": 154, "Cost": 155 }
-				] },
-				{ "Unlock": 330, "Title": "Cosmetics", "Items": [
-					{ "ItemID": 8197, "Cost": 50 }, { "ItemID": 8198, "Cost": 60 }, { "ItemID": 8225, "Cost": 60 }, { "ItemID": 8226, "Cost": 60 }, { "ItemID": 850, "Cost": 60 }, { "ItemID": 712, "Cost": 60 }
 				] }
 			]
 		},
@@ -587,9 +530,6 @@
 				] },
 				{ "Unlock": 340, "Items": [
 					{ "ItemID": 784, "Cost": 300 }, { "ItemID": 764, "Cost": 250 }, { "ItemID": 752, "Cost": 660 }
-				] },
-				{ "Unlock": 340, "Title": "Cosmetics", "Items": [
-					{ "ItemID": 612, "Cost": 50 }, { "ItemID": 613, "Cost": 50 }, { "ItemID": 614, "Cost": 60 }, { "ItemID": 616, "Cost": 60 }, { "ItemID": 617, "Cost": 60 }, { "ItemID": 618, "Cost": 60 }
 				] }
 			]
 		},
@@ -602,10 +542,10 @@
 					{ "ItemID": 9228, "Cost": 35, "Name": "XM1014 Snow" }, { "ItemID": 9229, "Cost": 30, "Name": "Nata Knife Snow" }, { "ItemID": 591, "Cost": 55 }, { "ItemID": 573, "Cost": 75 }
 				] },
 				{ "Unlock": 120, "Items": [
-					{ "ItemID": 424, "Cost": 85 }, { "ItemID": 268, "Cost": 150 }, { "ItemID": 267, "Cost": 175 }, { "ItemID": 840, "Cost": 190 }
+					{ "ItemID": 424, "Cost": 85 }, { "ItemID": 268, "Cost": 150 }, { "ItemID": 267, "Cost": 175 }, { "ItemID": 840, "Cost": 190 }, { "ItemID": 503, "Cost": 135 }
 				] },
 				{ "Unlock": 120, "Title": "Cosmetics", "Items": [
-					{ "ItemID": 505, "Cost": 50 }, { "ItemID": 506, "Cost": 60 }, { "ItemID": 508, "Cost": 50 }, { "ItemID": 574, "Cost": 50 }, { "ItemID": 575, "Cost": 60 }, { "ItemID": 619, "Cost": 30 }, { "ItemID": 946, "Cost": 60 }, { "ItemID": 947, "Cost": 60 }, { "ItemID": 8073, "Cost": 60 }
+					{ "ItemID": 508, "Cost": 50 }, { "ItemID": 946, "Cost": 60 }
 				] }
 			]
 		},
@@ -619,9 +559,6 @@
 				] },
 				{ "Unlock": 330, "Items": [
 					{ "ItemID": 587, "Cost": 300 }, { "ItemID": 684, "Cost": 250 }, { "ItemID": 595, "Cost": 660 }
-				] },
-				{ "Unlock": 330, "Title": "Cosmetics", "Items": [
-					{ "ItemID": 8290, "Cost": 60 }, { "ItemID": 855, "Cost": 30 }, { "ItemID": 856, "Cost": 30 }
 				] }
 			]
 		},
@@ -635,9 +572,6 @@
 				] },
 				{ "Unlock": 100, "Items": [
 					{ "ItemID": 8118, "Cost": 200 }, { "ItemID": 8193, "Cost": 305 }, { "ItemID": 8327, "Cost": 200 }
-				] },
-				{ "Unlock": 100, "Title": "Cosmetics", "Items": [
-					{ "ItemID": 8090, "Cost": 50 }, { "ItemID": 8089, "Cost": 40 }, { "ItemID": 853, "Cost": 30 }
 				] }
 			]
 		},
@@ -651,9 +585,6 @@
 				] },
 				{ "Unlock": 330, "Items": [
 					{ "ItemID": 804, "Cost": 300 }, { "ItemID": 833, "Cost": 250 }, { "ItemID": 787, "Cost": 660 }
-				] },
-				{ "Unlock": 330, "Title": "Cosmetics", "Items": [
-					{ "ItemID": 373, "Cost": 30 }, { "ItemID": 8168, "Cost": 60 }
 				] }
 			]
 		},
@@ -669,7 +600,7 @@
 					{ "ItemID": 8264, "Cost": 85 }, { "ItemID": 8263, "Cost": 85 }, { "ItemID": 8266, "Cost": 175 }, { "ItemID": 8262, "Cost": 95 }, { "ItemID": 8269, "Cost": 155 }
 				] },
 				{ "Unlock": 120, "Title": "Cosmetics", "Items": [
-					{ "ItemID": 489, "Cost": 50 }, { "ItemID": 490, "Cost": 60 }, { "ItemID": 8274, "Cost": 50 }, { "ItemID": 8275, "Cost": 50 }, { "ItemID": 8276, "Cost": 50 }, { "ItemID": 8279, "Cost": 40 }, { "ItemID": 765, "Cost": 50 }, { "ItemID": 8211, "Cost": 60 }, { "ItemID": 8340, "Cost": 60 }, { "ItemID": 8341, "Cost": 60 }
+					{ "ItemID": 489, "Cost": 50 }, { "ItemID": 8341, "Cost": 60 }
 				] }
 			]
 		},
@@ -682,10 +613,10 @@
 					{ "ItemID": 8230, "Cost": 35 }, { "ItemID": 8229, "Cost": 65 }, { "ItemID": 8232, "Cost": 65 }, { "ItemID": 8240, "Cost": 155 }
 				] },
 				{ "Unlock": 120, "Items": [
-					{ "ItemID": 8231, "Cost": 85 }, { "ItemID": 8234, "Cost": 85 }, { "ItemID": 8235, "Cost": 175 }, { "ItemID": 8239, "Cost": 155 }
+					{ "ItemID": 8231, "Cost": 85 }, { "ItemID": 8234, "Cost": 85 }, { "ItemID": 8235, "Cost": 175 }, { "ItemID": 8239, "Cost": 155 }, { "ItemID": 8233, "Cost": 160 }
 				] },
 				{ "Unlock": 120, "Title": "Cosmetics", "Items": [
-					{ "ItemID": 8241, "Cost": 50 }, { "ItemID": 8242, "Cost": 50 }, { "ItemID": 8243, "Cost": 60 }, { "ItemID": 8246, "Cost": 50 }
+					{ "ItemID": 8242, "Cost": 50 }
 				] }
 			]
 		},
@@ -701,7 +632,7 @@
 					{ "ItemID": 8200, "Cost": 75 }, { "ItemID": 8201, "Cost": 75 }, { "ItemID": 8203, "Cost": 85 }, { "ItemID": 8205, "Cost": 190 }, { "ItemID": 8209, "Cost": 155 }
 				] },
 				{ "Unlock": 110, "Title": "Cosmetics", "Items": [
-					{ "ItemID": 8212, "Cost": 60 }, { "ItemID": 8213, "Cost": 40 }, { "ItemID": 8214, "Cost": 50 }, { "ItemID": 8216, "Cost": 60 }, { "ItemID": 8217, "Cost": 40 }, { "ItemID": 8218, "Cost": 40 }, { "ItemID": 699, "Cost": 50 }, { "ItemID": 701, "Cost": 60 }, { "ItemID": 702, "Cost": 40 }
+					{ "ItemID": 8214, "Cost": 50 }
 				] }
 			]
 		},
@@ -732,7 +663,7 @@
 					{ "ItemID": 8091, "Cost": 55 }, { "ItemID": 8318, "Cost": 175 }, { "ItemID": 8111, "Cost": 55 }, { "ItemID": 376, "Cost": 170 }
 				] },
 				{ "Unlock": 1250, "Title": "Cosmetics", "Items": [
-					{ "ItemID": 8021, "Cost": 60 }, { "ItemID": 8022, "Cost": 60 }, { "ItemID": 8023, "Cost": 60 }, { "ItemID": 8024, "Cost": 60 }, { "ItemID": 8025, "Cost": 60 }, { "ItemID": 8026, "Cost": 60 }, { "ItemID": 8027, "Cost": 60 }, { "ItemID": 8028, "Cost": 60 }, { "ItemID": 8029, "Cost": 60 }, { "ItemID": 8030, "Cost": 60 }
+					{ "ItemID": 8021, "Cost": 60 }
 				] }
 			]
 		},
@@ -763,7 +694,7 @@
 					{ "ItemID": 815, "Cost": 220 }, { "ItemID": 924, "Cost": 55 }, { "ItemID": 8385, "Cost": 450 }, { "ItemID": 8288, "Cost": 170 }
 				] },
 				{ "Unlock": 1400, "Title": "Cosmetics", "Items": [
-					{ "ItemID": 8399, "Cost": 50 }, { "ItemID": 8401, "Cost": 60 }, { "ItemID": 8402, "Cost": 60 }, { "ItemID": 8404, "Cost": 80 }, { "ItemID": 8397, "Cost": 60 }, { "ItemID": 8398, "Cost": 60 }, { "ItemID": 797, "Cost": 60 }, { "ItemID": 798, "Cost": 50 }
+					{ "ItemID": 8399, "Cost": 50 }
 				] }
 			]
 		},
@@ -794,7 +725,7 @@
 					{ "ItemID": 531, "Cost": 330 }, { "ItemID": 602, "Cost": 330 }
 				] },
 				{ "Unlock": 2470, "Title": "Cosmetics", "Items": [
-					{ "ItemID": 515, "Cost": 50 }, { "ItemID": 516, "Cost": 60 }, { "ItemID": 494, "Cost": 60 }, { "ItemID": 819, "Cost": 50 }, { "ItemID": 820, "Cost": 60 }, { "ItemID": 8105, "Cost": 60 }
+					{ "ItemID": 819, "Cost": 50 }
 				] }
 			]
 		},
@@ -819,10 +750,280 @@
 					{ "ItemID": 8331, "Cost": 85 }, { "ItemID": 480, "Cost": 55 }, { "ItemID": 610, "Cost": 65 }, { "ItemID": 8328, "Cost": 55 }
 				] },
 				{ "Unlock": 870, "Items": [
-					{ "ItemID": 428, "Cost": 355 }, { "ItemID": 679, "Cost": 165 }, { "ItemID": 8143, "Cost": 900 }, { "ItemID": 959, "Cost": 440 }
+					{ "ItemID": 428, "Cost": 355 }, { "ItemID": 679, "Cost": 165 }, { "ItemID": 8143, "Cost": 900 }, { "ItemID": 959, "Cost": 440 }, { "ItemID": 929, "Cost": 100 }
 				] },
 				{ "Unlock": 870, "Title": "Cosmetics", "Items": [
-					{ "ItemID": 8342, "Cost": 50 }, { "ItemID": 8343, "Cost": 40 }, { "ItemID": 8344, "Cost": 50 }, { "ItemID": 387, "Cost": 30 }, { "ItemID": 375, "Cost": 30 }
+					{ "ItemID": 375, "Cost": 30 }
+				] }
+			]
+		},
+		{
+			"ID": 39, "Name": "Infinity Collection", "Type": "Collection", "Cost": 30,
+			"Description": "The Infinity handgun family: the original pair, the Custom and the Final, the coloured editions, the AutoMag V and the Attack M950.",
+			"Image": "", "Theme": ["#14141c", "#d8dcf0"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 242, "Cost": 45 }, { "ItemID": 245, "Cost": 45 }, { "ItemID": 270, "Cost": 45 }, { "ItemID": 308, "Cost": 35 }
+				] },
+				{ "Unlock": 60, "Items": [
+					{ "ItemID": 320, "Cost": 35 }, { "ItemID": 321, "Cost": 35 }, { "ItemID": 445, "Cost": 35 }, { "ItemID": 849, "Cost": 80 }
+				] }
+			]
+		},
+		{
+			"ID": 40, "Name": "Red & Camo", "Type": "Collection", "Cost": 60,
+			"Description": "Classic CS weapons in red and camouflage finishes: Glock, USP, Desert Eagle, XM1014, Scout, AK47, M4A1, AWP and M249.",
+			"Image": "", "Theme": ["#220c0c", "#ff5a5a"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 450, "Cost": 45 }, { "ItemID": 451, "Cost": 45 }, { "ItemID": 453, "Cost": 45 }, { "ItemID": 452, "Cost": 75 }
+				] },
+				{ "Unlock": 80, "Items": [
+					{ "ItemID": 454, "Cost": 90 }, { "ItemID": 491, "Cost": 90 }, { "ItemID": 492, "Cost": 90 }, { "ItemID": 246, "Cost": 75 }, { "ItemID": 456, "Cost": 135 }
+				] }
+			]
+		},
+		{
+			"ID": 41, "Name": "Custom Workshop", "Type": "Collection", "Cost": 90,
+			"Description": "Veteran and Maverick rebuilds and custom jobs: reworked rifles, machine guns and a crowbar with a few upgrades of its own.",
+			"Image": "", "Theme": ["#1a1610", "#d6a65a"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 698, "Cost": 60 }, { "ItemID": 726, "Cost": 75 }, { "ItemID": 697, "Cost": 90 }, { "ItemID": 539, "Cost": 90 }
+				] },
+				{ "Unlock": 120, "Items": [
+					{ "ItemID": 383, "Cost": 90 }, { "ItemID": 734, "Cost": 90 }, { "ItemID": 945, "Cost": 165 }, { "ItemID": 847, "Cost": 135 }
+				] },
+				{ "Unlock": 280, "Items": [
+					{ "ItemID": 497, "Cost": 135 }, { "ItemID": 682, "Cost": 135 }
+				] }
+			]
+		},
+		{
+			"ID": 42, "Name": "Battle Line", "Type": "Collection", "Cost": 100,
+			"Description": "The Battle series: frontline versions of familiar weapons, from the Battle Glock 18C to the Battle Hecate II.",
+			"Image": "", "Theme": ["#101a10", "#8fd66b"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 570, "Cost": 35 }, { "ItemID": 571, "Cost": 35 }, { "ItemID": 922, "Cost": 45 }, { "ItemID": 8049, "Cost": 45 }
+				] },
+				{ "Unlock": 60, "Items": [
+					{ "ItemID": 566, "Cost": 45 }, { "ItemID": 572, "Cost": 75 }, { "ItemID": 983, "Cost": 75 }, { "ItemID": 977, "Cost": 75 }
+				] },
+				{ "Unlock": 160, "Items": [
+					{ "ItemID": 567, "Cost": 90 }, { "ItemID": 568, "Cost": 90 }, { "ItemID": 968, "Cost": 200 }, { "ItemID": 569, "Cost": 135 }
+				] },
+				{ "Unlock": 300, "Items": [
+					{ "ItemID": 920, "Cost": 180 }, { "ItemID": 8054, "Cost": 180 }
+				] }
+			]
+		},
+		{
+			"ID": 43, "Name": "Skull Legion", "Type": "Collection", "Cost": 100,
+			"Description": "The SKULL series and the blue BALROG editions: weapons made to tear through zombie hordes.",
+			"Image": "", "Theme": ["#170d0d", "#e2483c"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 828, "Cost": 200 }, { "ItemID": 363, "Cost": 100 }, { "ItemID": 427, "Cost": 100 }, { "ItemID": 437, "Cost": 100 }
+				] },
+				{ "Unlock": 120, "Items": [
+					{ "ItemID": 538, "Cost": 120 }, { "ItemID": 504, "Cost": 75 }, { "ItemID": 689, "Cost": 75 }, { "ItemID": 690, "Cost": 125 }
+				] },
+				{ "Unlock": 250, "Items": [
+					{ "ItemID": 562, "Cost": 180 }, { "ItemID": 577, "Cost": 180 }, { "ItemID": 688, "Cost": 180 }
+				] }
+			]
+		},
+		{
+			"ID": 44, "Name": "Crow Squadron", "Type": "Collection", "Cost": 75,
+			"Description": "The CROW series and the CHARGER rifles: fast handling and quick reloads.",
+			"Image": "", "Theme": ["#0c0f17", "#7f9cff"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 969, "Cost": 60 }, { "ItemID": 923, "Cost": 100 }, { "ItemID": 895, "Cost": 75 }, { "ItemID": 918, "Cost": 100 }
+				] },
+				{ "Unlock": 120, "Items": [
+					{ "ItemID": 848, "Cost": 120 }, { "ItemID": 8045, "Cost": 120 }, { "ItemID": 842, "Cost": 180 }, { "ItemID": 981, "Cost": 180 }
+				] }
+			]
+		},
+		{
+			"ID": 45, "Name": "Turbulent Storm", "Type": "Collection", "Cost": 55,
+			"Description": "The TURBULENT series, six weapons that build up a storm the longer they fire.",
+			"Image": "", "Theme": ["#0b1a1d", "#4fe0e8"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 8086, "Cost": 60 }, { "ItemID": 8077, "Cost": 100 }, { "ItemID": 8041, "Cost": 100 }, { "ItemID": 8100, "Cost": 100 }
+				] },
+				{ "Unlock": 120, "Items": [
+					{ "ItemID": 962, "Cost": 120 }, { "ItemID": 934, "Cost": 180 }
+				] }
+			]
+		},
+		{
+			"ID": 46, "Name": "Legendary Heroes", "Type": "Collection", "Cost": 150,
+			"Description": "Weapons of legend: the Dark Knight, the Paladin, the Elven Ranger, the Lycanthrope, the Phoenix and the blades of the giants.",
+			"Image": "", "Theme": ["#1d1608", "#ffcf4a"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 877, "Cost": 200 }, { "ItemID": 8047, "Cost": 450 }, { "ItemID": 919, "Cost": 300 }, { "ItemID": 8383, "Cost": 300 }
+				] },
+				{ "Unlock": 180, "Items": [
+					{ "ItemID": 8426, "Cost": 300 }, { "ItemID": 841, "Cost": 300 }, { "ItemID": 809, "Cost": 360 }, { "ItemID": 810, "Cost": 360 }
+				] },
+				{ "Unlock": 440, "Items": [
+					{ "ItemID": 891, "Cost": 360 }, { "ItemID": 8033, "Cost": 450 }, { "ItemID": 825, "Cost": 225 }, { "ItemID": 8117, "Cost": 660 }, { "ItemID": 8414, "Cost": 660 }
+				] }
+			]
+		},
+		{
+			"ID": 47, "Name": "CSOGS Edition", "Type": "Collection", "Cost": 120,
+			"Description": "The championship editions of the CSO Global Series: classic weapons in tournament colours.",
+			"Image": "", "Theme": ["#0f1420", "#7fb2ff"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 8155, "Cost": 100 }, { "ItemID": 8150, "Cost": 200 }, { "ItemID": 8160, "Cost": 100 }, { "ItemID": 8157, "Cost": 125 }
+				] },
+				{ "Unlock": 100, "Items": [
+					{ "ItemID": 8154, "Cost": 200 }, { "ItemID": 8151, "Cost": 125 }, { "ItemID": 8149, "Cost": 200 }, { "ItemID": 8153, "Cost": 200 }
+				] },
+				{ "Unlock": 260, "Items": [
+					{ "ItemID": 8152, "Cost": 200 }, { "ItemID": 8162, "Cost": 150 }, { "ItemID": 8156, "Cost": 200 }, { "ItemID": 8159, "Cost": 200 }
+				] },
+				{ "Unlock": 420, "Items": [
+					{ "ItemID": 8161, "Cost": 200 }, { "ItemID": 8158, "Cost": 225 }
+				] }
+			]
+		},
+		{
+			"ID": 48, "Name": "Trans-Gear", "Type": "Collection", "Cost": 105,
+			"Description": "Transforming gear, the Tiamat plasma rifles and the Star Chaser pair.",
+			"Image": "", "Theme": ["#0d1a20", "#5fd6ff"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 8173, "Cost": 60 }, { "ItemID": 8175, "Cost": 60 }, { "ItemID": 8177, "Cost": 75 }, { "ItemID": 8172, "Cost": 100 }
+				] },
+				{ "Unlock": 110, "Items": [
+					{ "ItemID": 8176, "Cost": 100 }, { "ItemID": 8178, "Cost": 120 }, { "ItemID": 8174, "Cost": 120 }, { "ItemID": 8113, "Cost": 165 }
+				] },
+				{ "Unlock": 280, "Items": [
+					{ "ItemID": 8078, "Cost": 265 }, { "ItemID": 8395, "Cost": 165 }, { "ItemID": 8396, "Cost": 265 }
+				] }
+			]
+		},
+		{
+			"ID": 49, "Name": "Land of Oz", "Type": "Collection", "Cost": 75,
+			"Description": "Down the yellow brick road: the Tin Man's machine gun, the Lion's pistol, the Scarecrow's pickaxe and the four SCAR OZ rifles.",
+			"Image": "", "Theme": ["#0e1a0e", "#7fe07a"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 742, "Cost": 60 }, { "ItemID": 743, "Cost": 75 }, { "ItemID": 8358, "Cost": 120 }, { "ItemID": 8359, "Cost": 120 }
+				] },
+				{ "Unlock": 140, "Items": [
+					{ "ItemID": 8360, "Cost": 165 }, { "ItemID": 8361, "Cost": 265 }, { "ItemID": 741, "Cost": 180 }
+				] },
+				{ "Unlock": 140, "Title": "Cosmetics", "Items": [
+					{ "ItemID": 8364, "Cost": 50 }
+				] }
+			]
+		},
+		{
+			"ID": 50, "Name": "Arcane Arsenal", "Type": "Collection", "Cost": 150,
+			"Description": "Spells in weapon form: rods, lances, prisms, a harmonium and the spears of the gods.",
+			"Image": "", "Theme": ["#160c22", "#c08bff"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 788, "Cost": 80 }, { "ItemID": 8192, "Cost": 300 }, { "ItemID": 8248, "Cost": 450 }, { "ItemID": 8384, "Cost": 200 }
+				] },
+				{ "Unlock": 150, "Items": [
+					{ "ItemID": 8332, "Cost": 75 }, { "ItemID": 703, "Cost": 165 }, { "ItemID": 8282, "Cost": 330 }, { "ItemID": 8295, "Cost": 220 }
+				] },
+				{ "Unlock": 340, "Items": [
+					{ "ItemID": 8249, "Cost": 395 }, { "ItemID": 8356, "Cost": 600 }, { "ItemID": 8314, "Cost": 875 }, { "ItemID": 8171, "Cost": 875 }, { "ItemID": 8425, "Cost": 875 }
+				] }
+			]
+		},
+		{
+			"ID": 51, "Name": "Steam Age", "Type": "Collection", "Cost": 65,
+			"Description": "Weapons named after the pioneers of steam: Savery, Papin, Newcomen, Aeolis and Batista.",
+			"Image": "", "Theme": ["#1c140c", "#e0a060"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 727, "Cost": 100 }, { "ItemID": 771, "Cost": 135 }, { "ItemID": 875, "Cost": 170 }, { "ItemID": 601, "Cost": 265 }, { "ItemID": 691, "Cost": 245 }
+				] }
+			]
+		},
+		{
+			"ID": 52, "Name": "Demolition Crew", "Type": "Collection", "Cost": 150,
+			"Description": "Launchers, drills, mines and grenades for when the door won't open the easy way.",
+			"Image": "", "Theme": ["#1f1208", "#ff8a3a"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 845, "Cost": 225 }, { "ItemID": 8148, "Cost": 300 }, { "ItemID": 8333, "Cost": 225 }, { "ItemID": 8104, "Cost": 225 }
+				] },
+				{ "Unlock": 350, "Items": [
+					{ "ItemID": 761, "Cost": 300 }, { "ItemID": 589, "Cost": 225 }, { "ItemID": 844, "Cost": 480 }, { "ItemID": 461, "Cost": 100 }
+				] },
+				{ "Unlock": 670, "Items": [
+					{ "ItemID": 530, "Cost": 225 }, { "ItemID": 339, "Cost": 100 }, { "ItemID": 417, "Cost": 120 }, { "ItemID": 753, "Cost": 120 }
+				] },
+				{ "Unlock": 870, "Items": [
+					{ "ItemID": 984, "Cost": 225 }, { "ItemID": 8094, "Cost": 600 }, { "ItemID": 8350, "Cost": 360 }
+				] }
+			]
+		},
+		{
+			"ID": 53, "Name": "Heavy Metal", "Type": "Collection", "Cost": 150,
+			"Description": "Miniguns, gatlings and cannons: the heaviest firepower the armoury can carry.",
+			"Image": "", "Theme": ["#141414", "#c8c8c8"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 365, "Cost": 180 }, { "ItemID": 767, "Cost": 75 }, { "ItemID": 8382, "Cost": 360 }, { "ItemID": 719, "Cost": 135 }
+				] },
+				{ "Unlock": 200, "Items": [
+					{ "ItemID": 857, "Cost": 210 }, { "ItemID": 213, "Cost": 135 }, { "ItemID": 397, "Cost": 135 }, { "ItemID": 893, "Cost": 245 }
+				] },
+				{ "Unlock": 440, "Items": [
+					{ "ItemID": 717, "Cost": 150 }, { "ItemID": 792, "Cost": 120 }, { "ItemID": 8286, "Cost": 300 }
+				] }
+			]
+		},
+		{
+			"ID": 54, "Name": "Lightning Arcade", "Type": "Collection", "Cost": 50,
+			"Description": "The arcade's Lightning series: Dao and Bazzie's rifles, the BIG-EYE, the LZ-1, the HZ-1 and the Lightning Rail.",
+			"Image": "", "Theme": ["#0c1426", "#ffd84a"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 330, "Cost": 80 }, { "ItemID": 311, "Cost": 120 }, { "ItemID": 312, "Cost": 120 }, { "ItemID": 467, "Cost": 90 }
+				] },
+				{ "Unlock": 150, "Items": [
+					{ "ItemID": 468, "Cost": 90 }, { "ItemID": 766, "Cost": 90 }
+				] }
+			]
+		},
+		{
+			"ID": 55, "Name": "Hunter's Lodge", "Type": "Collection", "Cost": 90,
+			"Description": "Bows, crossbows, knives and the rifles a hunter trusts.",
+			"Image": "", "Theme": ["#141a0c", "#b8d46a"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 158, "Cost": 45 }, { "ItemID": 8051, "Cost": 100 }, { "ItemID": 8321, "Cost": 100 }, { "ItemID": 611, "Cost": 100 }
+				] },
+				{ "Unlock": 110, "Items": [
+					{ "ItemID": 283, "Cost": 225 }, { "ItemID": 763, "Cost": 225 }, { "ItemID": 582, "Cost": 165 }, { "ItemID": 6007, "Cost": 75 }, { "ItemID": 6009, "Cost": 90 }
+				] }
+			]
+		},
+		{
+			"ID": 56, "Name": "Prototype Division", "Type": "Collection", "Cost": 60,
+			"Description": "Experimental weapons that never made it to standard issue: stun rifles, bouncing shells and a gun that fires duck feet.",
+			"Image": "", "Theme": ["#0a1a16", "#4fe0b0"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 954, "Cost": 80 }, { "ItemID": 8351, "Cost": 300 }, { "ItemID": 8050, "Cost": 170 }, { "ItemID": 487, "Cost": 165 }
+				] },
+				{ "Unlock": 170, "Items": [
+					{ "ItemID": 8048, "Cost": 165 }, { "ItemID": 561, "Cost": 90 }
 				] }
 			]
 		}
