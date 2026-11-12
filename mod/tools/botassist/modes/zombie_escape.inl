@@ -26,6 +26,8 @@
 //     is jumped over instead of shot.
 //   - A new round (a human back in the first box with a later one reached): everyone's progress and the buttons start over.
 //   - Zombie modes' backing off and regrouping (zombie_humans.inl) don't run here: the way out is forward.
+//   - A barrier is shot even with zombies in sight when none is close (ZE_BARRIER_SAFE) or the bot has been held at it a
+//     while: Hitchhiking's rail on the truck (1500 HP) was never shot because some zombie was always in sight.
 //   - Progress counts box by box: the next box or the one after (a route passing the corner of a later box, Hitchhiking's
 //     box 6 beside the way from 2 to 3, made the leader "on box 6" at box 3).
 //   - Only what stands in the body's way is a barrier: a breakable under the feet (the planks over Hitchhiking's pool) is
@@ -35,7 +37,7 @@
 // The map's boxes come from its .bsp (the entity lump and the model bounds), read through the engine's file system.
 static const int MODE_ZE = 20;
 static const float ZE_HEAR = 600.0f, ZE_BUTTON_NEAR = 700.0f, ZE_BUTTON_ZONE_PAD = 350.0f, ZE_BREAK_AHEAD = 140.0f;
-static const float ZE_ZOMBIE_SEEN = 1500.0f, ZE_TRIGGER_NEAR = 260.0f, ZE_TRIGGER_BACK = 520.0f;
+static const float ZE_ZOMBIE_SEEN = 1500.0f, ZE_TRIGGER_NEAR = 260.0f, ZE_TRIGGER_BACK = 520.0f, ZE_BARRIER_SAFE = 600.0f;
 
 struct ZeBox
 {
@@ -74,6 +76,8 @@ struct ZeBot
     int task = 0;     // 0 route, 1 button, 2 barrier, 3 hold at a door, 4 follow, 5 exit
     int stuck = 0;
     float stuckAt = 0, holdUntil = 0, jumpAt = -100, dodgeUntil = 0, dodgeYaw = 0, nextLog = 0;
+    float barrierSince = 0;   // held at a barrier since (0: not at one)
+    const void* toldButton = nullptr;
     float yaw = 0;
     bool yawSet = false;
     int passSide = 1;
@@ -523,6 +527,18 @@ static bool ZeDoorAhead(void* bot, V3 me, float yaw)
     return found;
 }
 
+// a zombie within `range` (seen, or close enough to be heard): the barrier can wait
+static bool ZeZombieClose(void* bot, V3 eye, float range)
+{
+    bool close = false;
+    ForEntitiesNear(eye, range, [&](void* e) {
+        if (close || e == bot || !(F<int>(Vars(e), EV_FLAGS) & FL_CLIENT) || !Alive(e) || !ZeIsZombie(e))
+            return;
+        close = Len(Origin(e) - eye) < 250.0f || CanSee(bot, eye, e);
+    });
+    return close;
+}
+
 // a nearby visible zombie (for a human): the stock AI has it, botassist leaves the aim alone
 static bool ZeZombieInSight(void* bot, V3 eye)
 {
@@ -727,6 +743,15 @@ static bool ZeMove(void* bot, BotState& st, float& viewYaw, float& viewPitch, bo
         }
         if (button)
         {
+            if (z.toldButton != button)
+            {
+                z.toldButton = button;
+                V3 m = (button->lo + button->hi) * 0.5f;
+                static int reports = 0;
+                if (reports++ < 60)
+                    Log("ZE: '%s' goes to press the %s at (%.0f %.0f %.0f), from (%.0f %.0f %.0f)",
+                        String(F<int>(Vars(bot), EV_NETNAME)), button->cls.c_str(), m.x, m.y, m.z, me.x, me.y, me.z);
+            }
             button->claimedBy = bot;
             button->claimUntil = now + 3.0f;
             V3 mid = (button->lo + button->hi) * 0.5f;
@@ -744,8 +769,8 @@ static bool ZeMove(void* bot, BotState& st, float& viewYaw, float& viewPitch, bo
                 st.lastProgress = now;
                 static int reports = 0;
                 if (reports++ < 40)
-                    DLog("ZE: '%s' presses the %s at (%.0f %.0f %.0f)", String(F<int>(Vars(bot), EV_NETNAME)), button->cls.c_str(),
-                         mid.x, mid.y, mid.z);
+                    Log("ZE: '%s' presses the %s at (%.0f %.0f %.0f)", String(F<int>(Vars(bot), EV_NETNAME)), button->cls.c_str(),
+                        mid.x, mid.y, mid.z);
                 return true;
             }
             goal = mid;
@@ -832,6 +857,12 @@ static bool ZeMove(void* bot, BotState& st, float& viewYaw, float& viewPitch, bo
     if (!zombie)
     {
         void* barrier = ZeBarrierAhead(bot, me, wp);
+        if (!barrier && st.pathIndex < st.path.size() && Len2D(st.path[st.pathIndex] - wp) > 32.0f)
+            barrier = ZeBarrierAhead(bot, me, st.path[st.pathIndex]); // backing off: the barrier is still where the way goes
+        if (!barrier)
+            z.barrierSince = 0;
+        else if (z.barrierSince == 0)
+            z.barrierSince = now;
         if (barrier)
         {
             V3 blo = Vec((float*)(Vars(barrier) + EV_ABSMIN)), bhi = Vec((float*)(Vars(barrier) + EV_ABSMAX));
@@ -854,8 +885,17 @@ static bool ZeMove(void* bot, BotState& st, float& viewYaw, float& viewPitch, bo
                 return true;
             }
         }
-        if (barrier && !ZeZombieInSight(bot, eye))
+        bool heldLong = barrier && now - z.barrierSince > 2.5f;
+        if (barrier && (!ZeZombieInSight(bot, eye) || !ZeZombieClose(bot, eye, ZE_BARRIER_SAFE) || heldLong))
         {
+            static int reports = 0;
+            if (reports < 40 && now - z.barrierSince < 0.05f)
+            {
+                reports++;
+                V3 c = Center(barrier);
+                Log("ZE: '%s' shoots the %s at (%.0f %.0f %.0f) in its way (health %.0f)", String(F<int>(Vars(bot), EV_NETNAME)),
+                    ClassName(barrier), c.x, c.y, c.z, F<float>(Vars(barrier), EV_HEALTH));
+            }
             V3 c = Center(barrier);
             V3 d = c - eye;
             viewYaw = YawOf(d);

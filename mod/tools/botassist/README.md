@@ -1028,6 +1028,11 @@ while their row is missing ("zombie class N skill ... skipped" in botassist.log)
   either side) between a step above the feet and the head; under the feet it's floor (the planks of Hitchhiking's pool
   bridge were shot and the bots fell in). In water (`FL_INWATER`) jump is held: it swims up and climbs out at the edge.
 - `ZeRouteCost` (through `g_navRouteCost`): jump areas +150, crouch areas +80, so flat ground round a car beats climbing it.
+- A barrier is shot even with zombies in sight when none is within 600 u (seen) or 250 u, or after 2.5 s held at it, and
+  is looked for along the path's own waypoint too (the back-off point `NextWaypoint` gives while stuck points elsewhere):
+  Hitchhiking's rail on the truck (1500 HP, 68 u above the bed) was never shot because a zombie was always in sight.
+- botassist.log: `ZE: 'x' goes to press the ...` (once per bot and button), `ZE: 'x' presses the ...`, `ZE: 'x' shoots the
+  ... in its way`.
 - `ZeMove` (zombie): a human seen or within 600 u, else where the leading human is.
 - botassist.log: `ZE: <map>: N route boxes...` at load, `ZE: N humans, N zombies; the leading human is on route box N`
   every 15 s, `ZE: the func_button at ... was pressed`, `ZE: human 'x' stuck at ...`.

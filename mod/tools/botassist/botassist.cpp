@@ -145,7 +145,7 @@ static struct
     float zombieFleeDistance = 450.0f;
     std::vector<int> primaries, pistols, melees;
     int skill = -1;            // 0..7, -1: the room's bot difficulty
-    std::string voices = "radio"; // normal (their voice chatter), radio (radio commands, shown as text), off
+    std::string voices = "off"; // normal (their voice chatter), radio (radio commands, shown as text), off
     bool randomCharacters = true; // any character of the game (botassist_characters.txt)
     float refillAfter = 6.0f;  // seconds of firing that empty about half of the ammo: then buy ammo in a buy zone
     float minArmor = 50.0f;    // below this armor, buy kevlar + helmet in a buy zone
