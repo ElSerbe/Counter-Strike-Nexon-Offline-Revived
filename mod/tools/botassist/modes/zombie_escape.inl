@@ -26,6 +26,11 @@
 //     is jumped over instead of shot.
 //   - A new round (a human back in the first box with a later one reached): everyone's progress and the buttons start over.
 //   - Zombie modes' backing off and regrouping (zombie_humans.inl) don't run here: the way out is forward.
+//   - Progress counts box by box: the next box or the one after (a route passing the corner of a later box, Hitchhiking's
+//     box 6 beside the way from 2 to 3, made the leader "on box 6" at box 3).
+//   - Only what stands in the body's way is a barrier: a breakable under the feet (the planks over Hitchhiking's pool) is
+//     floor, never shot. In water a bot swims up and climbs out (jump held). Jumps and crouches cost more on the way
+//     (ZeRouteCost): flat ground round a car beats climbing over it.
 //   - Zombies chase a human they see or hear, else go where the humans are furthest along.
 // The map's boxes come from its .bsp (the entity lump and the model bounds), read through the engine's file system.
 static const int MODE_ZE = 20;
@@ -399,7 +404,7 @@ static void ZeUpdate()
         V3 p = Origin(e);
         int& z = g_zeZone[e];
         for (size_t i = 0; i < g_ze.zones.size(); i++)
-            if ((int)i + 1 > z && ZeInBox(p, g_ze.zones[i], 8.0f))
+            if ((int)i + 1 > z && (int)i + 1 <= z + 2 && ZeInBox(p, g_ze.zones[i], 8.0f))
                 z = (int)i + 1;
         if (!zombie && (z > g_ze.leadZone || !g_ze.leader))
         {
@@ -446,7 +451,8 @@ static void ZeUpdate()
     }
 }
 
-// a barrier in the way: a breakable that can be damaged, close and ahead
+// a barrier in the way: a breakable that can be damaged, where the body goes next (along the line to `toward`, the
+// body's width either side, from a step above the feet to the head). One under the feet is floor: the planks of a bridge.
 static void* ZeBarrierAhead(void* bot, V3 me, V3 toward)
 {
     V3 dir = toward - me;
@@ -455,9 +461,11 @@ static void* ZeBarrierAhead(void* bot, V3 me, V3 toward)
     if (l < 1.0f)
         return nullptr;
     dir = dir * (1.0f / l);
+    float reach = l < ZE_BREAK_AHEAD ? l + 24.0f : ZE_BREAK_AHEAD;
+    float feet = me.z - ((F<int>(Vars(bot), EV_FLAGS) & 0x4000 /* FL_DUCKING */) ? 18.0f : 36.0f);
     void* found = nullptr;
     float best = 1e9f;
-    ForEntitiesNear(me, ZE_BREAK_AHEAD + 120.0f, [&](void* e) {
+    ForEntitiesNear(me, ZE_BREAK_AHEAD + 400.0f, [&](void* e) {
         const char* cls = ClassName(e);
         if (strcmp(cls, "ze_breakable") && strcmp(cls, "func_breakable"))
             return;
@@ -465,21 +473,36 @@ static void* ZeBarrierAhead(void* bot, V3 me, V3 toward)
         if (F<float>(v, EV_HEALTH) <= 0 || F<float>(v, EV_TAKEDAMAGE) == 0.0f || !F<int>(v, EV_SOLID))
             return;
         V3 lo = Vec((float*)(v + EV_ABSMIN)), hi = Vec((float*)(v + EV_ABSMAX));
-        float d = ZeBoxDist(me, lo, hi);
-        V3 to = (lo + hi) * 0.5f - me;
-        to.z = 0;
-        float tl = Len2D(to);
-        if (d > ZE_BREAK_AHEAD || hi.z < me.z - 36.0f || lo.z > me.z + 60.0f)
-            return;
-        if (tl > 1.0f && (to.x * dir.x + to.y * dir.y) / tl < 0.3f && d > 24.0f)
-            return; // not ahead (unless the bot is against it)
-        if (d < best)
+        if (hi.z <= feet + 18.0f || lo.z >= feet + 72.0f)
+            return; // under the feet (walked over) or above the head
+        for (float s = 0; s <= reach; s += 8.0f)
         {
-            best = d;
-            found = e;
+            V3 p = me + dir * s;
+            if (p.x >= lo.x - 16.0f && p.x <= hi.x + 16.0f && p.y >= lo.y - 16.0f && p.y <= hi.y + 16.0f)
+            {
+                if (s < best)
+                {
+                    best = s;
+                    found = e;
+                }
+                break;
+            }
         }
     });
     return found;
+}
+
+// what a way costs more on Zombie Escape's meshes: jumping up (a car, a crate) and crouching, so flat ground round them wins
+static std::vector<float> g_zeCost;
+static const std::vector<float>* ZeRouteCost()
+{
+    if (g_zeCost.size() != g_nav.areas.size())
+    {
+        g_zeCost.assign(g_nav.areas.size(), 0.0f);
+        for (size_t i = 0; i < g_nav.areas.size(); i++)
+            g_zeCost[i] = ((g_nav.areas[i].attr & NAV_JUMP) ? 150.0f : 0.0f) + ((g_nav.areas[i].attr & NAV_CROUCH) ? 80.0f : 0.0f);
+    }
+    return &g_zeCost;
 }
 
 // a closed door right ahead: still at its place, solid, between the bot and where it goes
@@ -732,6 +755,7 @@ static bool ZeMove(void* bot, BotState& st, float& viewYaw, float& viewPitch, bo
     }
 
     V3 wp;
+    g_navRouteCost = ZeRouteCost();
     bool there = !NextWaypoint(bot, st, me, goal, arrive, wp, true);
     bool pathed = there || st.path.size() > 1 || AreaAt(me) == AreaAt(goal);
     if (!pathed && !zombie && z.task == 0 && g_ze.leader && g_ze.leader != bot && Len(g_ze.leadPos - me) > 200.0f)
@@ -740,6 +764,7 @@ static bool ZeMove(void* bot, BotState& st, float& viewYaw, float& viewPitch, bo
         z.task = 4;
         there = !NextWaypoint(bot, st, me, g_ze.leadPos, 120.0f, wp, true);
     }
+    g_navRouteCost = nullptr;
     if (there)
     {
         fwd = side = 0;
@@ -860,6 +885,15 @@ static bool ZeMove(void* bot, BotState& st, float& viewYaw, float& viewPitch, bo
     // bumps (the ledge's own face, a rail on it) sent the jump sideways, off it (Hitchhiking's truck)
     bool climb = now >= st.navBackUntil && wp.z > feetZ + 14.0f && wp.z < feetZ + 64.0f && Len2D(wp - me) < 96.0f;
     float wantYaw = climb ? wayYaw : WalkYaw(bot, me, wayYaw, 40.0f);
+    // in water (Hitchhiking's pool, below its edge): jump held swims up, and at the surface against the edge climbs out
+    bool inWater = (bodyFlags & 0x10 /* FL_INWATER */) != 0;
+    if (inWater)
+    {
+        buttons |= IN_JUMP;
+        st.lastProgress = now;
+        st.lastPos = me;
+        wantYaw = wayYaw;
+    }
     if (now < z.dodgeUntil && !climb)
         wantYaw = WalkYaw(bot, me, z.dodgeYaw, 40.0f);
     float maxDrop = ZCON_FREE_DROP;

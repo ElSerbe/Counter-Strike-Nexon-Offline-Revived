@@ -1022,6 +1022,12 @@ while their row is missing ("zombie class N skill ... skipped" in botassist.log)
   state and the breakables' retry times start over.
 - `zombie_humans.inl`'s backing off and regrouping (`ZombieFlee`) is off in this mode: it pulled human bots back from the
   route into corners.
+- Progress counts box by box (the next box or the one after): Hitchhiking's way from box 2 to 3 passes the corner of box 6,
+  which made the leader "on box 6" and sent everyone to box 7.
+- A barrier is a breakable where the body goes next (points every 8 u along the line to the waypoint, the body's width
+  either side) between a step above the feet and the head; under the feet it's floor (the planks of Hitchhiking's pool
+  bridge were shot and the bots fell in). In water (`FL_INWATER`) jump is held: it swims up and climbs out at the edge.
+- `ZeRouteCost` (through `g_navRouteCost`): jump areas +150, crouch areas +80, so flat ground round a car beats climbing it.
 - `ZeMove` (zombie): a human seen or within 600 u, else where the leading human is.
 - botassist.log: `ZE: <map>: N route boxes...` at load, `ZE: N humans, N zombies; the leading human is on route box N`
   every 15 s, `ZE: the func_button at ... was pressed`, `ZE: human 'x' stuck at ...`.
