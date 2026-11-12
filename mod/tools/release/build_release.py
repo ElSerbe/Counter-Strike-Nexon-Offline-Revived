@@ -163,11 +163,16 @@ def install_into_play(zpath: Path, exe: Path):
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 dest.write_bytes(z.read(entry))
                 written += 1
-        shutil.copy2(exe, play / exe.name)
     except PermissionError as e:
-        sys.exit(f"Play: {e.filename} is in use. Close the game, the launcher and the server started from Play, then run "
-                 f"build_release.py --play-only")
-    print(f"Play: installed {written} files ({kept} of the player's own kept) and the launcher, for a local test.")
+        sys.exit(f"Play: {e.filename or 'a file of the mod'} is in use. Close the game and the server started from Play, "
+                 f"then run build_release.py --play-only")
+    try:
+        shutil.copy2(exe, play / exe.name)
+        launcher = "and the launcher"
+    except PermissionError:
+        # the launcher is open (its own .exe can't be replaced while it runs): the mod's files are in all the same
+        launcher = f"but not the launcher: {exe.name} is open (close it and run build_release.py --play-only for it)"
+    print(f"Play: installed {written} files ({kept} of the player's own kept) {launcher}, for a local test.")
 
 
 if __name__ == "__main__":
