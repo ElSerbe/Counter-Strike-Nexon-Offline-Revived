@@ -372,6 +372,20 @@ automatic ones join CT. No more kicks in co-op modes.
   RoomBotQuota lets those bots in past the room's AI players.
 - The command list is checked every 2 s of server time (mp.dll's commands are registered when its bot manager starts).
 
+## Console: bot_stop, bot_resume, bot_team, bot_scramble
+
+For debugging, in the console (no sv_cheats needed):
+- `bot_stop [t|ct]`: the bots of that team (nothing: both) stop: no moving, jumping or shooting. Applied last in
+  `HookedRunPlayerMove`, over every mode's driving; it lasts until `bot_resume`, new maps included.
+- `bot_resume [t|ct]`: they play again.
+- `bot_team t|ct`: every bot to that team; `bot_team` alone: each bot to the other team.
+- `bot_scramble`: the bots dealt out at random so both teams have as many players as they can (humans count and stay).
+A team switch is the bot's own `jointeam` + `joinclass` (a character of the new team, from botassist_characters.txt):
+a living bot dies and joins the other side, as a player would; a mode that keeps everyone on one team can refuse it.
+mp.dll has a cvar `bot_stop` (all the game's bots, 1/0) and the engine won't add a command named like a cvar, so
+`BotControlCommands` links its `bot_stop` at the head of the engine's command list itself (commands are looked up before
+cvars); the other three are added with `AddServerCommand`.
+
 ## Room skill in PvP, characters half men / half women
 
 - The game's own AI (PvP modes) aims by the bot's BotProfile: CBot::m_profile at player +0x3700 (profile +0x04

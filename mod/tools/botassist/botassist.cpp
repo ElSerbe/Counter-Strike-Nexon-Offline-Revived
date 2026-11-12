@@ -4909,6 +4909,153 @@ static bool IsEmptyHandler(void (*fn)())
 
 #include "nav_tools.inl"
 
+// ---------------------------------------------------------------- console: bot_stop, bot_resume, bot_team, bot_scramble
+// For debugging. "bot_stop [t|ct]" freezes the bots of a team (no team: both): no moving, jumping or shooting, applied
+// last in HookedRunPlayerMove, so every mode's driving is overridden; "bot_resume [t|ct]" lets them go. It lasts until
+// resumed (new maps too). "bot_team t|ct" moves every bot to that team, "bot_team" alone swaps each bot to the other one;
+// "bot_scramble" deals the bots out at random so both teams have as many players as they can (humans count, they stay).
+// A switch is the bot's own "jointeam" + "joinclass" (a character of the new team): a living bot dies and joins the
+// other team, as a player would.
+// mp.dll has a cvar "bot_stop" (the game's bots, all of them, 1 / 0) and the engine won't add a command named like a cvar,
+// so botassist's "bot_stop" is put at the head of the engine's command list itself: commands are looked up before cvars.
+static bool g_botStop[3]; // by team: [1] T, [2] CT
+
+static bool BotStopped(void* bot)
+{
+    int team = TeamOf(bot);
+    return team >= 1 && team <= 2 && g_botStop[team];
+}
+
+// the team argument: 1 T, 2 CT, 0 none (both), -1 not a team
+static int ConsoleTeamArg(const char* cmd)
+{
+    const char* a = g_CmdArgv(1);
+    if (!a || !*a)
+        return 0;
+    if (!_stricmp(a, "t") || !_stricmp(a, "tr") || !_stricmp(a, "terrorist") || !_stricmp(a, "terrorists") || !strcmp(a, "1"))
+        return 1;
+    if (!_stricmp(a, "ct") || !_stricmp(a, "cts") || !strcmp(a, "2"))
+        return 2;
+    Con("%s: the team is t or ct (nothing: both)\n", cmd);
+    return -1;
+}
+
+static const char* ConsoleTeamName(int team)
+{
+    return team == 1 ? "T" : team == 2 ? "CT" : "both teams";
+}
+
+static void ConsoleBotStop(bool stop)
+{
+    const char* cmd = stop ? "bot_stop" : "bot_resume";
+    int team = ConsoleTeamArg(cmd);
+    if (team < 0)
+        return;
+    for (int t = 1; t <= 2; t++)
+        if (!team || team == t)
+            g_botStop[t] = stop;
+    Con("%s: the bots of %s %s\n", cmd, ConsoleTeamName(team), stop ? "are stopped (bot_resume to let them go)" : "play again");
+    Log("console: %s %s (T %s, CT %s)", cmd, ConsoleTeamName(team), g_botStop[1] ? "stopped" : "playing",
+        g_botStop[2] ? "stopped" : "playing");
+}
+static void CmdBotStop() { ConsoleBotStop(true); }
+static void CmdBotResume() { ConsoleBotStop(false); }
+
+static std::vector<void*> ConsoleBots()
+{
+    std::vector<void*> bots;
+    ForEntitiesNear(V3{ 0, 0, 0 }, 1e6f, [&](void* e) {
+        int flags = F<int>(Vars(e), EV_FLAGS);
+        int team = TeamOf(e);
+        if ((flags & FL_CLIENT) && (flags & FL_FAKECLIENT) && (team == 1 || team == 2))
+            bots.push_back(e);
+    });
+    return bots;
+}
+
+static void ConsoleMoveBot(void* bot, int team)
+{
+    char t[4], cls[16] = "1";
+    snprintf(t, sizeof(t), "%d", team);
+    if (!cfg.characters[team].empty())
+        snprintf(cls, sizeof(cls), "%d", cfg.characters[team][rand() % cfg.characters[team].size()]);
+    FakeCommand(bot, "jointeam", t);
+    FakeCommand(bot, "joinclass", cls);
+}
+
+static void CmdBotTeam()
+{
+    int team = ConsoleTeamArg("bot_team");
+    if (team < 0)
+        return;
+    int moved = 0;
+    for (void* b : ConsoleBots())
+    {
+        int now = TeamOf(b), want = team ? team : 3 - now;
+        if (now != want)
+            ConsoleMoveBot(b, want), moved++;
+    }
+    Con("bot_team: %d bots %s\n", moved, team ? (team == 1 ? "moved to T" : "moved to CT") : "swapped to the other team");
+    Log("console: bot_team %s: %d bots", team ? ConsoleTeamName(team) : "(swap)", moved);
+}
+
+static void CmdBotScramble()
+{
+    std::vector<void*> bots = ConsoleBots();
+    int humans[3] = {};
+    ForEntitiesNear(V3{ 0, 0, 0 }, 1e6f, [&](void* e) {
+        int flags = F<int>(Vars(e), EV_FLAGS), team = TeamOf(e);
+        if ((flags & FL_CLIENT) && !(flags & FL_FAKECLIENT) && (team == 1 || team == 2))
+            humans[team]++;
+    });
+    for (size_t i = bots.size(); i > 1; i--)
+        std::swap(bots[i - 1], bots[rand() % i]);
+    int total = (int)bots.size() + humans[1] + humans[2];
+    int wantT = total / 2 + ((total % 2) && (rand() % 2) ? 1 : 0); // an odd one out goes to a random side
+    int botsT = wantT - humans[1];
+    botsT = botsT < 0 ? 0 : botsT > (int)bots.size() ? (int)bots.size() : botsT;
+    int moved = 0;
+    for (size_t i = 0; i < bots.size(); i++)
+    {
+        int want = (int)i < botsT ? 1 : 2;
+        if (TeamOf(bots[i]) != want)
+            ConsoleMoveBot(bots[i], want), moved++;
+    }
+    Con("bot_scramble: %d bots on T, %d on CT (%d moved)\n", botsT, (int)bots.size() - botsT, moved);
+    Log("console: bot_scramble: %d bots T, %d CT, %d moved (humans T %d, CT %d)", botsT, (int)bots.size() - botsT, moved,
+        humans[1], humans[2]);
+}
+
+static void BotControlCommands()
+{
+    static CmdFunction stopNode = { nullptr, "bot_stop", CmdBotStop, 0 };
+    static const struct { const char* name; void (*fn)(); } cmds[] = {
+        { "bot_resume", CmdBotResume }, { "bot_team", CmdBotTeam }, { "bot_scramble", CmdBotScramble } };
+    CmdFunction** head = (CmdFunction**)(g_hwLo + HW_CMD_LIST);
+    bool haveStop = false, have[sizeof(cmds) / sizeof(cmds[0])] = {};
+    int n = 0;
+    for (CmdFunction* c = *head; c && n < 4096; c = c->next, n++)
+    {
+        if (!Readable(c, sizeof(*c)) || !Readable(c->name, 1))
+            return;
+        haveStop |= c == &stopNode;
+        for (size_t i = 0; i < sizeof(cmds) / sizeof(cmds[0]); i++)
+            have[i] |= !_stricmp(c->name, cmds[i].name);
+    }
+    if (!haveStop)
+    {
+        stopNode.next = *head; // ahead of everything, the cvar bot_stop included
+        *head = &stopNode;
+    }
+    auto add = (AddServerCommandFn)((void**)(MP_ENGFUNCS + g_mpDelta))[ENG_ADDSERVERCOMMAND];
+    if (add)
+        for (size_t i = 0; i < sizeof(cmds) / sizeof(cmds[0]); i++)
+            if (!have[i])
+                add(cmds[i].name, cmds[i].fn);
+    if (!haveStop)
+        Log("console: bot_stop, bot_resume, bot_team and bot_scramble set up");
+}
+
 static void InstallConsoleCommands()
 {
     static const struct { const char* name; void (*fn)(); } cheats[] = {
@@ -4936,6 +5083,7 @@ static void InstallConsoleCommands()
             add("give", CmdGive), patched++;
     }
     NavAddCommands();
+    BotControlCommands();
     if (patched)
         Log("console: %d commands set up (god, noclip, notarget, fly, kill, give, bot_add*)", patched);
 }
@@ -5911,6 +6059,19 @@ static void HookedRunPlayerMove(void* fakeclient, const float* angles, float fwd
         __try { NavTraverse(fakeclient, *dbg, aim, fwd, side, buttons); } __except (EXCEPTION_EXECUTE_HANDLER) {}
     if (dbg && Now() < dbg->duckUntil && dbg->duckUntil - Now() < 1.0f)
         buttons |= IN_DUCK;
+    // bot_stop: last, over every mode's driving
+    __try
+    {
+        if (cfg.enabled && fakeclient && g_edictToVars >= 0 && (F<int>(Vars(fakeclient), EV_FLAGS) & FL_FAKECLIENT) &&
+            BotStopped(fakeclient))
+        {
+            fwd = side = up = 0;
+            buttons = 0;
+        }
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+    }
     g_RunPlayerMove(fakeclient, aim, fwd, side, up, buttons, impulse, msec);
     if (dbg && CoopMode()) // debugging is about the scenario modes
         __try { DebugBot(fakeclient, *dbg, aim, buttons); } __except (EXCEPTION_EXECUTE_HANDLER) {}
