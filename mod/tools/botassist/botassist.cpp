@@ -908,17 +908,37 @@ struct NavRide
 };
 static std::vector<NavDeck> g_navDecks;
 static std::vector<NavRide> g_navRides;
-static const int NAV_RIDE_FLAG = 10000;
+static const int NAV_RIDE_FLAG = 10000; // and NAV_LINK_FLAG: the links drawn with wp_link
+static const int NAV_LINK_FLAG = 20000;
 static const float RIDE_COST = 300.0f;
 // the ride the bot is on or about to take: its waypoint is the way off (flagged), or the way on just before it; 0: none
 static int RideFlagAhead(const std::vector<int>& flags, size_t index)
 {
-    if (index < flags.size() && flags[index] >= NAV_RIDE_FLAG)
+    if (index < flags.size() && flags[index] >= NAV_RIDE_FLAG && flags[index] < NAV_LINK_FLAG)
         return flags[index];
-    if (index + 1 < flags.size() && flags[index] == 0 && flags[index + 1] >= NAV_RIDE_FLAG)
+    if (index + 1 < flags.size() && flags[index] == 0 && flags[index + 1] >= NAV_RIDE_FLAG && flags[index + 1] < NAV_LINK_FLAG)
         return flags[index + 1];
     return 0;
 }
+// ---- links the player draws (wp_add / wp_link, nav_tools.inl; Bin\botassist_nav\<map>.links): points on the floor joined two
+// by two, each way a path can take: walking straight, jumping, crouching, climbing or dropping from one to the other. A point
+// belongs to the mesh's area under it, or to a small area of its own where the mesh has none (the top of a tractor), so a
+// chain of points can lead where the mesh doesn't. A path through one gets two waypoints: its near point and, flagged
+// NAV_LINK_FLAG + 2 x link (+ 1 the other way), its far one; NavTraverse goes straight at it the way the link says.
+enum { LINK_WALK, LINK_JUMP, LINK_CROUCH, LINK_LADDER, LINK_DROP, LINK_KINDS };
+struct NavLinkPoint
+{
+    V3 pos{};       // on the floor
+    int area = -1;  // BuildLinkAreas
+};
+struct NavLink
+{
+    int a = -1, b = -1, kind = LINK_WALK;
+    bool oneway = false; // only from a to b (a drop always)
+};
+static std::vector<NavLinkPoint> g_linkPoints;
+static std::vector<NavLink> g_links;
+
 static int g_laddersLevel = -1;
 static std::vector<int> g_pathFlagsOut; // FindPath: per waypoint, 1 + ladder index when it is reached by that ladder, else 0
 
@@ -973,6 +993,44 @@ static int LadderTopArea(const NavLadder& l, float bottomFloor)
     return -1;
 }
 
+// each drawn point's area: the mesh's floor under it (within 24 u), else a small one of its own
+static void BuildLinkAreas()
+{
+    int made = 0;
+    for (auto& p : g_linkPoints)
+    {
+        p.area = -1;
+        float best = 24.0f;
+        for (size_t i = 0; i < g_nav.areas.size(); i++)
+        {
+            const NavArea& a = g_nav.areas[i];
+            if (p.pos.x < a.lo[0] - 1 || p.pos.x > a.hi[0] + 1 || p.pos.y < a.lo[1] - 1 || p.pos.y > a.hi[1] + 1)
+                continue;
+            float dz = fabsf(p.pos.z - AreaZ(a, p.pos.x, p.pos.y));
+            if (dz < best)
+            {
+                best = dz;
+                p.area = (int)i;
+            }
+        }
+        if (p.area >= 0)
+            continue;
+        NavArea a;
+        a.id = 0xE0000000u + (unsigned)g_nav.areas.size();
+        a.lo[0] = p.pos.x - 16.0f, a.lo[1] = p.pos.y - 16.0f, a.lo[2] = p.pos.z;
+        a.hi[0] = p.pos.x + 16.0f, a.hi[1] = p.pos.y + 16.0f, a.hi[2] = p.pos.z;
+        a.neZ = a.swZ = p.pos.z;
+        a.center = p.pos;
+        g_nav.areas.push_back(a);
+        p.area = (int)g_nav.areas.size() - 1;
+        made++;
+    }
+    static int reports = 0;
+    if (!g_linkPoints.empty() && reports++ < 40)
+        Log("links (%s): %d points, %d links, %d points off the mesh (an area of their own)", g_nav.map.c_str(),
+            (int)g_linkPoints.size(), (int)g_links.size(), made);
+}
+
 // one entry per func_ladder of the map, in the map's order (FindPath's flags point into it), linked or not; a ladder whose top
 // has no floor yet is looked at again every 20 s (built later)
 static float g_laddersRetry = 0;
@@ -1011,14 +1069,17 @@ static void BuildLadders()
             if (gap > 64.0f)
                 continue;
             float floor = AreaPointNear(a, mid, 0.0f).z;
-            if (floor > l.lo.z - 40.0f && floor < l.lo.z + 40.0f && gap + fabsf(floor - l.lo.z) < bestB)
+            // a scrap of floor linked to nothing (beside a pillar: Hitchhiking's two ladders behind the gate had one at each
+            // foot, so no path went up them) only when there's no linked floor about as close
+            float lone = a.adj[0].empty() && a.adj[1].empty() && a.adj[2].empty() && a.adj[3].empty() ? 48.0f : 0.0f;
+            if (floor > l.lo.z - 40.0f && floor < l.lo.z + 40.0f && gap + fabsf(floor - l.lo.z) + lone < bestB)
             {
-                bestB = gap + fabsf(floor - l.lo.z);
+                bestB = gap + fabsf(floor - l.lo.z) + lone;
                 l.bottom = (int)i;
             }
-            if (floor > l.hi.z - 72.0f && floor < l.hi.z + 24.0f && gap + fabsf(floor - l.hi.z) < bestT)
+            if (floor > l.hi.z - 72.0f && floor < l.hi.z + 24.0f && gap + fabsf(floor - l.hi.z) + lone < bestT)
             {
-                bestT = gap + fabsf(floor - l.hi.z);
+                bestT = gap + fabsf(floor - l.hi.z) + lone;
                 l.top = (int)i;
             }
         }
@@ -1038,6 +1099,7 @@ static void BuildLadders()
         if (l.topPoint.z - l.bottomPoint.z < 40.0f)
             l.bottom = l.top = -1; // the two floors are about level: no climbing there
     });
+    BuildLinkAreas();
     int linked = 0;
     for (auto& l : g_ladders)
         linked += l.bottom >= 0;
@@ -1119,6 +1181,29 @@ static bool FindPath(V3 from, V3 to, std::vector<V3>& out, bool partial = false)
                 open.push({ c + Len(g_nav.areas[r.to].center - to), r.to });
             }
         }
+        // a drawn link from this area (parentDir 2000 + 2 x link, + 1 the other way)
+        for (size_t li = 0; li < g_links.size(); li++)
+        {
+            const NavLink& k = g_links[li];
+            for (int back = 0; back < 2; back++)
+            {
+                if (back && (k.oneway || k.kind == LINK_DROP))
+                    break;
+                const NavLinkPoint& p = g_linkPoints[back ? k.b : k.a];
+                const NavLinkPoint& q = g_linkPoints[back ? k.a : k.b];
+                int nb = q.area;
+                if (p.area != cur || nb < 0 || nb == cur || closed[nb] || (NavAreaHurts(nb) && nb != goal))
+                    continue;
+                float c = cost[cur] + Len(q.pos - p.pos) + 16.0f + NavAvoidCost(nb, pathNow) + PoiAreaCost(nb);
+                if (c < cost[nb])
+                {
+                    cost[nb] = c;
+                    parent[nb] = cur;
+                    parentDir[nb] = 2000 + (int)li * 2 + back;
+                    open.push({ c + Len(g_nav.areas[nb].center - to), nb });
+                }
+            }
+        }
         // a ladder from this area (parentDir 4 + 2 x ladder, + 1 going down)
         for (size_t li = 0; li < g_ladders.size(); li++)
         {
@@ -1165,6 +1250,16 @@ static bool FindPath(V3 from, V3 to, std::vector<V3>& out, bool partial = false)
         {
             out.push_back(Portal(parent[chain[i]], d, chain[i]));
             g_pathFlagsOut.push_back(0);
+            continue;
+        }
+        if (d >= 2000)
+        {
+            const NavLink& k = g_links[(d - 2000) / 2];
+            bool back = (d - 2000) % 2 == 1;
+            out.push_back(g_linkPoints[back ? k.b : k.a].pos); // its near point
+            g_pathFlagsOut.push_back(0);
+            out.push_back(g_linkPoints[back ? k.a : k.b].pos); // its far point
+            g_pathFlagsOut.push_back(NAV_LINK_FLAG + (d - 2000));
             continue;
         }
         if (d >= 1000)
@@ -1233,6 +1328,7 @@ struct BotState
     float gapJumpAt = -100;      // NavTraverse: the last jump over a gap or onto a ledge
     float rideUntil = 0;         // NavRideStep: waiting for or on a lift, train or teleport: no repath, not stuck
     bool climbing = false;       // NavTraverse: on its way up or down a ladder
+    int onLink = 0;              // NavTraverse: the drawn link it is taking (its path flag), 0: none
     float steerSide = 1, steerUntil = 0; // keeps going around an obstacle by the same side
     float jumpAt = -100;
     float strafeSide = 1, nextStrafe = 0;
@@ -5675,6 +5771,65 @@ static void NavTraverse(void* bot, BotState& st, float* aim, float& fwd, float& 
     if (ride && (flag == ride || Len2D(wp - pos) < 300.0f) && ride - NAV_RIDE_FLAG < (int)g_navRides.size() &&
         NavRideStep(bot, st, g_navRides[ride - NAV_RIDE_FLAG], pos, feet, fwd, side, buttons))
         return;
+    // ---- a link drawn with wp_link: straight at its far point, jumping, crouching or climbing as it says
+    if (flag >= NAV_LINK_FLAG && (flag - NAV_LINK_FLAG) / 2 < (int)g_links.size())
+    {
+        const NavLink& k = g_links[(flag - NAV_LINK_FLAG) / 2];
+        bool back = ((flag - NAV_LINK_FLAG) & 1) != 0;
+        V3 from = g_linkPoints[back ? k.b : k.a].pos;
+        int kind = k.kind;
+        if (back && kind == LINK_JUMP && wp.z < from.z - 18.0f)
+            kind = LINK_WALK; // a jump up taken the other way: off the ledge
+        static const char* const names[] = { "walk", "jump", "crouch", "ladder", "drop" };
+        static int reports = 0, reportLevel = -1;
+        if (reportLevel != g_nav.level)
+            reportLevel = g_nav.level, reports = 0;
+        if (st.onLink != flag && reports++ < 80)
+            Log("bot %d takes a drawn %s link from (%.0f %.0f %.0f) to (%.0f %.0f %.0f)", st.slot, names[kind], from.x, from.y, from.z,
+                wp.x, wp.y, wp.z);
+        st.onLink = flag;
+        float yaw = YawOf(wp - pos);
+        if (kind == LINK_LADDER)
+        {
+            bool up = wp.z > feet.z;
+            float pitch = onLadder ? (up ? -60.0f : 60.0f) : (up ? -20.0f : 30.0f);
+            if (onLadder && up && feet.z > wp.z - 24.0f)
+                pitch = -40.0f; // at the top: over the lip
+            aim[0] = va[0] = pitch;
+            aim[1] = va[1] = AngleDiff(yaw, 0.0f);
+            va[2] = 0;
+            ang[0] = pitch / -3.0f;
+            ang[1] = va[1];
+            fwd = 250.0f;
+            side = 0;
+            buttons &= ~(IN_JUMP | IN_DUCK);
+            st.duckUntil = 0;
+            st.climbing = true;
+            return;
+        }
+        float rel = AngleDiff(yaw, aim[1]) / RAD;
+        fwd = cosf(rel) * 250.0f;
+        side = -sinf(rel) * 250.0f;
+        if (kind != LINK_JUMP)
+            buttons &= ~IN_JUMP;
+        if (kind == LINK_CROUCH)
+        {
+            buttons |= IN_DUCK;
+            st.duckUntil = now + 0.3f;
+        }
+        if (kind == LINK_JUMP && (flags & FL_ONGROUND) && now - st.jumpAt > 0.8f)
+        {
+            // at the near point (or just past it, on the way), or against the ledge it leads up to
+            V3 ab = wp - from, ap = pos - from;
+            float abl = Len2D(ab), along = abl > 1.0f ? (ap.x * ab.x + ap.y * ab.y) / abl : 0.0f;
+            bool takeoff = Len2D(ap) < 32.0f || (along > 0.0f && along < abl * 0.5f && Len2D(ap) < 80.0f);
+            bool ledge = wp.z > feet.z + 16.0f && Len2D(wp - pos) < 72.0f;
+            if (takeoff || ledge)
+                NavJump(st, buttons, now, "along a drawn link", pos);
+        }
+        return;
+    }
+    st.onLink = 0;
     // ---- a ladder
     if (flag > 0 && flag <= (int)g_ladders.size() && fabsf(feet.z - wp.z) > 24.0f)
     {

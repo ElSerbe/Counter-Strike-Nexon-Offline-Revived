@@ -25,6 +25,7 @@ static std::string CurrentMap()
 static std::string NavToolsDir() { return std::string(g_dir) + "botassist_nav\\"; }
 static std::string NavFileOf(const std::string& map) { return NavToolsDir() + map + ".nav"; }
 static std::string PoiFileOf(const std::string& map) { return NavToolsDir() + map + ".poi"; }
+static std::string LinksFileOf(const std::string& map) { return NavToolsDir() + map + ".links"; }
 static bool FileThere(const std::string& path)
 {
     DWORD a = GetFileAttributesA(path.c_str());
@@ -357,8 +358,11 @@ static void PoiRebuild()
     }
 }
 
+static void LinksLoad(const std::string& map);
+
 static void PoiLoad(const std::string& map)
 {
+    LinksLoad(map);
     g_pois.clear();
     FILE* f = fopen(PoiFileOf(map).c_str(), "r");
     if (f)
@@ -423,6 +427,296 @@ static void* NavToolsPlayer()
     if (!e)
         Con("Only in a match you host.\n");
     return e;
+}
+
+// ---------------------------------------------------------------- drawn links (see g_links in botassist.cpp)
+// Bin\botassist_nav\<map>.links: "point x y z" lines (numbered from 0 in their order), then "link a b kind [oneway]".
+static const char* const LINK_NAMES[LINK_KINDS] = { "walk", "jump", "crouch", "ladder", "drop" };
+static const float LINK_SHOW_RADIUS = 2500.0f, LINK_FIND_RADIUS = 256.0f;
+static int g_linkLast = -1, g_linkPrev = -1; // the two points added last (wp_link with no numbers joins them)
+static bool g_linksShow = false;
+
+static int LinkKindOf(const char* s)
+{
+    for (int i = 0; s && i < LINK_KINDS; i++)
+        if (!_stricmp(s, LINK_NAMES[i]))
+            return i;
+    return -1;
+}
+
+// what the height between them suggests: a jump up to 64 u, a ladder above that, a drop going down more than 64
+static int LinkKindGuess(V3 a, V3 b)
+{
+    float dz = b.z - a.z;
+    return dz > 64.0f ? LINK_LADDER : dz > 18.0f ? LINK_JUMP : dz < -64.0f ? LINK_DROP : LINK_WALK;
+}
+
+static void LinksChanged()
+{
+    g_laddersLevel = -1; // the areas of the points are made again with the ladders' (BuildLadders)
+}
+
+static void LinksLoad(const std::string& map)
+{
+    g_linkPoints.clear();
+    g_links.clear();
+    g_linkLast = g_linkPrev = -1;
+    LinksChanged();
+    FILE* f = fopen(LinksFileOf(map).c_str(), "r");
+    if (!f)
+        return;
+    char line[256], kind[16], extra[16];
+    while (fgets(line, sizeof(line), f))
+    {
+        NavLinkPoint p;
+        NavLink k;
+        extra[0] = 0;
+        if (sscanf(line, "point %f %f %f", &p.pos.x, &p.pos.y, &p.pos.z) == 3)
+            g_linkPoints.push_back(p);
+        else if (sscanf(line, "link %d %d %15s %15s", &k.a, &k.b, kind, extra) >= 3 && (k.kind = LinkKindOf(kind)) >= 0 &&
+                 k.a >= 0 && k.b >= 0 && k.a < (int)g_linkPoints.size() && k.b < (int)g_linkPoints.size() && k.a != k.b)
+        {
+            k.oneway = !_stricmp(extra, "oneway");
+            g_links.push_back(k);
+        }
+    }
+    fclose(f);
+    Log("%s: %d points, %d links", LinksFileOf(map).c_str(), (int)g_linkPoints.size(), (int)g_links.size());
+}
+
+static bool LinksSave()
+{
+    LinksChanged();
+    std::string path = LinksFileOf(CurrentMap());
+    CreateDirectoryA(NavToolsDir().c_str(), nullptr);
+    FILE* f = fopen(path.c_str(), "w");
+    if (!f)
+    {
+        Con("Can't write %s\n", path.c_str());
+        return false;
+    }
+    for (auto& p : g_linkPoints)
+        fprintf(f, "point %.1f %.1f %.1f\n", p.pos.x, p.pos.y, p.pos.z);
+    for (auto& k : g_links)
+        fprintf(f, "link %d %d %s%s\n", k.a, k.b, LINK_NAMES[k.kind], k.oneway ? " oneway" : "");
+    fclose(f);
+    return true;
+}
+
+static V3 FeetOf(void* e)
+{
+    return Origin(e) - V3{ 0, 0, (F<int>(Vars(e), EV_FLAGS) & 0x4000 /* FL_DUCKING */) ? 18.0f : 36.0f };
+}
+
+static bool IsNumber(const char* s)
+{
+    return s && *s && isdigit((unsigned char)*s);
+}
+
+static void LinkJoin(int a, int b, int kind, bool oneway)
+{
+    for (auto it = g_links.begin(); it != g_links.end(); ++it)
+        if ((it->a == a && it->b == b) || (it->a == b && it->b == a))
+        {
+            g_links.erase(it); // the pair's old link: replaced
+            break;
+        }
+    if (kind < 0)
+        kind = LinkKindGuess(g_linkPoints[a].pos, g_linkPoints[b].pos);
+    NavLink k;
+    k.a = a, k.b = b, k.kind = kind, k.oneway = oneway || kind == LINK_DROP;
+    g_links.push_back(k);
+    if (LinksSave())
+        Con("Link %d -> %d: %s%s\n", a, b, LINK_NAMES[kind], k.oneway ? ", one way" : ", both ways");
+}
+
+// wp_add [kind] [oneway]: a point at your feet; with a kind (or "link": guessed), joined from the point added before it
+static void CmdWpAdd()
+{
+    void* e = NavToolsPlayer();
+    if (!e)
+        return;
+    NavLinkPoint p;
+    p.pos = FeetOf(e);
+    g_linkPoints.push_back(p);
+    g_linkPrev = g_linkLast;
+    g_linkLast = (int)g_linkPoints.size() - 1;
+    g_linksShow = true;
+    Con("Point %d at (%.0f %.0f %.0f)\n", g_linkLast, p.pos.x, p.pos.y, p.pos.z);
+    const char* k = g_CmdArgv(1);
+    const char* o = g_CmdArgv(2);
+    if (k && *k)
+    {
+        bool guess = !_stricmp(k, "link");
+        int kind = guess ? -1 : LinkKindOf(k);
+        if ((kind >= 0 || guess) && g_linkPrev >= 0)
+        {
+            LinkJoin(g_linkPrev, g_linkLast, kind, o && !_stricmp(o, "oneway"));
+            return;
+        }
+        Con(g_linkPrev < 0 ? "No point added before this one to join it to.\n"
+                           : "Kinds: walk, jump, crouch, ladder, drop, or link (guessed from the height)\n");
+    }
+    LinksSave();
+}
+
+// wp_link [a b] [kind] [oneway]: joins two points (no numbers: the last two added)
+static void CmdWpLink()
+{
+    if (!NavToolsPlayer())
+        return;
+    int a = g_linkPrev, b = g_linkLast, next = 1;
+    if (IsNumber(g_CmdArgv(1)))
+    {
+        if (!IsNumber(g_CmdArgv(2)))
+        {
+            Con("Usage: wp_link [a b] [walk|jump|crouch|ladder|drop] [oneway]   (no numbers: the last two points added)\n");
+            return;
+        }
+        a = atoi(g_CmdArgv(1)), b = atoi(g_CmdArgv(2)), next = 3;
+    }
+    if (a < 0 || b < 0 || a >= (int)g_linkPoints.size() || b >= (int)g_linkPoints.size() || a == b)
+    {
+        Con("No such points: wp_list shows them.\n");
+        return;
+    }
+    const char* k = g_CmdArgv(next);
+    int kind = -1;
+    bool oneway = false;
+    if (k && *k)
+    {
+        oneway = !_stricmp(k, "oneway");
+        if (!oneway && (kind = LinkKindOf(k)) < 0)
+        {
+            Con("Kinds: walk, jump, crouch, ladder, drop\n");
+            return;
+        }
+        const char* o = g_CmdArgv(next + 1);
+        oneway |= o && !_stricmp(o, "oneway");
+    }
+    g_linksShow = true;
+    LinkJoin(a, b, kind, oneway);
+}
+
+static void CmdWpUnlink()
+{
+    if (!NavToolsPlayer())
+        return;
+    int a = IsNumber(g_CmdArgv(1)) ? atoi(g_CmdArgv(1)) : g_linkPrev, b = IsNumber(g_CmdArgv(2)) ? atoi(g_CmdArgv(2)) : g_linkLast;
+    for (auto it = g_links.begin(); it != g_links.end(); ++it)
+        if ((it->a == a && it->b == b) || (it->a == b && it->b == a))
+        {
+            g_links.erase(it);
+            if (LinksSave())
+                Con("Link %d - %d removed.\n", a, b);
+            return;
+        }
+    Con("No link between %d and %d.\n", a, b);
+}
+
+// wp_del [number]: a point and its links (none: the one nearest to you, within 256 u)
+static void CmdWpDel()
+{
+    void* e = NavToolsPlayer();
+    if (!e)
+        return;
+    int index = -1;
+    if (IsNumber(g_CmdArgv(1)))
+        index = atoi(g_CmdArgv(1)) < (int)g_linkPoints.size() ? atoi(g_CmdArgv(1)) : -1;
+    else
+    {
+        float best = LINK_FIND_RADIUS;
+        V3 me = FeetOf(e);
+        for (size_t i = 0; i < g_linkPoints.size(); i++)
+            if (Len(g_linkPoints[i].pos - me) < best)
+            {
+                best = Len(g_linkPoints[i].pos - me);
+                index = (int)i;
+            }
+    }
+    if (index < 0)
+    {
+        Con("No such point near you (wp_del <number> removes any of them, wp_list shows them).\n");
+        return;
+    }
+    g_linkPoints.erase(g_linkPoints.begin() + index);
+    for (size_t i = 0; i < g_links.size();)
+    {
+        NavLink& k = g_links[i];
+        if (k.a == index || k.b == index)
+        {
+            g_links.erase(g_links.begin() + i);
+            continue;
+        }
+        k.a -= k.a > index;
+        k.b -= k.b > index;
+        i++;
+    }
+    g_linkLast = g_linkPrev = -1;
+    if (LinksSave())
+        Con("Point %d and its links removed; the numbers after it moved down.\n", index);
+}
+
+static void CmdWpList()
+{
+    void* e = NavToolsPlayer();
+    if (!e)
+        return;
+    V3 me = FeetOf(e);
+    std::vector<int> order;
+    for (size_t i = 0; i < g_linkPoints.size(); i++)
+        order.push_back((int)i);
+    std::sort(order.begin(), order.end(),
+              [&](int x, int y) { return Len(g_linkPoints[x].pos - me) < Len(g_linkPoints[y].pos - me); });
+    Con("%s: %d points, %d links (the 20 nearest)\n", CurrentMap().c_str(), (int)g_linkPoints.size(), (int)g_links.size());
+    for (size_t n = 0; n < order.size() && n < 20; n++)
+    {
+        int i = order[n];
+        std::string links;
+        for (auto& k : g_links)
+            if (k.a == i || k.b == i)
+            {
+                char s[48];
+                snprintf(s, sizeof(s), " %s%d %s", k.a == i ? (k.oneway ? "->" : "-") : (k.oneway ? "<-" : "-"), k.a == i ? k.b : k.a,
+                         LINK_NAMES[k.kind]);
+                links += s;
+            }
+        Con("  %d (%.0f %.0f %.0f), %.0f u from you:%s\n", i, g_linkPoints[i].pos.x, g_linkPoints[i].pos.y, g_linkPoints[i].pos.z,
+            Len(g_linkPoints[i].pos - me), links.empty() ? " no links" : links.c_str());
+    }
+}
+
+static void CmdWpClear()
+{
+    if (!NavToolsPlayer())
+        return;
+    std::string path = LinksFileOf(CurrentMap());
+    if (FileThere(path))
+        MoveFileExA(path.c_str(), (path + ".old").c_str(), MOVEFILE_REPLACE_EXISTING);
+    g_linkPoints.clear();
+    g_links.clear();
+    g_linkLast = g_linkPrev = -1;
+    LinksChanged();
+    Con("Points and links of this map removed (a copy stays in %s.old).\n", path.c_str());
+}
+
+static void CmdWpShow()
+{
+    g_linksShow = !g_linksShow;
+    Con("Points and links %s: white post = point (cyan: the last added); lines: green walk, yellow jump, blue crouch,\n"
+        "orange ladder, purple drop; a short post at the far end = one way.\n", g_linksShow ? "shown" : "hidden");
+}
+
+static void CmdWpHelp()
+{
+    Con("Drawn links: points on the floor joined two by two, ways the bots' paths can take (Bin\\botassist_nav\\<map>.links)\n");
+    Con("  wp_add                    a point at your feet (its number is printed)\n");
+    Con("  wp_add jump [oneway]      a point joined from the one added before it: walk, jump, crouch, ladder, drop\n");
+    Con("                            (or link: guessed from the height)\n");
+    Con("  wp_link [a b] [kind] [oneway]  joins two points (no numbers: the last two added)\n");
+    Con("  wp_unlink [a b], wp_del [number] (none: the nearest), wp_list, wp_clear, wp_show\n");
+    Con("A jump: the first point where the bot takes off, the second where it lands. A ladder: at its foot, then at the top.\n");
+    Con("A point where the mesh has no floor (on a vehicle, a crate) works too: bots get there only through its links.\n");
 }
 
 static void CmdPoiAdd()
@@ -590,6 +884,7 @@ static void CmdNavHelp()
     Con("  poi_add spot [name]            a place bots like to stand\n");
     Con("  poi_add avoid [radius] [name]  a place their paths go around (radius 128)\n");
     Con("  poi_list, poi_del [number], poi_clear, poi_show (draws them)\n");
+    Con("Drawn links, the ways the mesh lacks (jumps, ladders, crouches): wp_add, wp_link... wp_help tells them all\n");
     Con("Editing the mesh:\n");
     Con("  bot_nav_edit 1 shows the areas; aim at one, then:\n");
     Con("  bot_nav_mark, then aim at another: bot_nav_connect / bot_nav_disconnect / bot_nav_merge / bot_nav_splice\n");
@@ -608,6 +903,8 @@ static void NavAddCommands()
     NavInstallSaveHook();
     static const struct { const char* name; void (*fn)(); } cmds[] = {
         { "poi_add", CmdPoiAdd }, { "poi_del", CmdPoiDel }, { "poi_list", CmdPoiList }, { "poi_clear", CmdPoiClear }, { "poi_show", CmdPoiShow },
+        { "wp_add", CmdWpAdd }, { "wp_link", CmdWpLink }, { "wp_unlink", CmdWpUnlink }, { "wp_del", CmdWpDel }, { "wp_list", CmdWpList },
+        { "wp_clear", CmdWpClear }, { "wp_show", CmdWpShow }, { "wp_help", CmdWpHelp },
         { "nav_generate", CmdNavGenerate }, { "nav_restore", CmdNavRestore }, { "nav_info", CmdNavInfo }, { "nav_binds", CmdNavBinds }, { "nav_help", CmdNavHelp } };
     void (*botCommand)() = (void (*)())(MP_BOT_COMMAND + g_mpDelta);
     bool have[sizeof(cmds) / sizeof(cmds[0])] = {};
@@ -729,8 +1026,49 @@ static void GenFrame()
     }
 }
 
+static void LinksDraw()
+{
+    static DWORD next = 0;
+    DWORD now = GetTickCount();
+    if (!g_linksShow || (int)(now - next) < 0)
+        return;
+    next = now + 1000;
+    void* e = YourEdict();
+    if (!e)
+        return;
+    V3 me = Origin(e);
+    static const int colours[LINK_KINDS][3] = { { 0, 255, 0 }, { 255, 230, 0 }, { 40, 120, 255 }, { 255, 140, 0 }, { 200, 0, 255 } };
+    int beams = 0;
+    for (size_t i = 0; i < g_linkPoints.size() && beams < 70; i++)
+    {
+        V3 p = g_linkPoints[i].pos;
+        if (Len(p - me) > LINK_SHOW_RADIUS)
+            continue;
+        bool last = (int)i == g_linkLast;
+        Beam(p, p + V3{ 0, 0, 48 }, last ? 0 : 255, 255, 255, 11);
+        beams++;
+    }
+    for (auto& k : g_links)
+    {
+        if (beams >= 70)
+            break;
+        V3 a = g_linkPoints[k.a].pos + V3{ 0, 0, 8 }, b = g_linkPoints[k.b].pos + V3{ 0, 0, 8 };
+        if (Len(a - me) > LINK_SHOW_RADIUS && Len(b - me) > LINK_SHOW_RADIUS)
+            continue;
+        const int* c = colours[k.kind];
+        Beam(a, b, c[0], c[1], c[2], 11);
+        beams++;
+        if (k.oneway || k.kind == LINK_DROP)
+        {
+            Beam(b, b + V3{ 0, 0, 24 }, c[0], c[1], c[2], 11);
+            beams++;
+        }
+    }
+}
+
 static void NavToolsFrame()
 {
     PoiDraw();
+    LinksDraw();
     GenFrame();
 }

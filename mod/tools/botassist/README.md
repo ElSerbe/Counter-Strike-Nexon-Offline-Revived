@@ -886,7 +886,7 @@ fixed spots, builds planned, sent, done or refused, unreachable resources, order
 
 ## Navigation tools (console)
 
-`nav_tools.inl`. `nav_help` lists it all in game. Files: `Bin/botassist_nav/<map>.nav` (with `.bak`, the one before the last save) and `<map>.poi`. The game's .nar files aren't touched.
+`nav_tools.inl`. `nav_help` lists it all in game. Files: `Bin/botassist_nav/<map>.nav` (with `.bak`, the one before the last save), `<map>.poi` and `<map>.links`. The game's .nar files aren't touched.
 
 - The game has Condition Zero's editor and generator, reachable once the mesh has somewhere to go. `bot_nav_edit 1` and `bot_nav_*` are the game's own (`ServerCommand` 0x11318420, edit loop 0x11322fb0, it finds your player itself at 0x1131ad30). `bot_nav_analyze` and `bot_nav_load` are
   registered but `ServerCommand` no longer handles them: `bot_nav_analyze` is `CmdNavAnalyze` here (sets flag 0x1218293e, which `CCSBot::Update` 0x1130f4e0 reads; `bot_nav_load` stays dead, a restart does it).
@@ -894,6 +894,19 @@ fixed spots, builds planned, sent, done or refused, unreachable resources, order
 - `nav_generate`: `map <map>` with the load answering "no file", then `StartLearnProcess` 0x11305230 (fastcall, the CCSBot) on the first living bot whose vtable[0] is `CCSBot::Spawn` 0x113041d0; `bot_add` if no bot shows up in 8 s. Process mode +0x5a50: 1 learn (flood fill from the bot), 2 and 3 analyse,
   4 `FUN_113057b0` saves and restarts the map. It only reaches what can be walked from that bot's spawn. `CCSBot::Spawn` starts it by itself on a map without a mesh (no area loaded, and engine function 200's interface doesn't object). `HookedSaveNav` refuses to save a mesh with no areas.
 - `nav_restore` renames the file to `.old` and restarts.
+- Drawn links (`wp_help` in game), `Bin/botassist_nav/<map>.links`: `point x y z` lines (feet, numbered from 0 in order),
+  then `link a b walk|jump|crouch|ladder|drop [oneway]`. `wp_add [kind] [oneway]` adds a point at your feet and, with a kind
+  (`link`: guessed from the height: up 18-64 jump, more ladder, down more than 64 drop), joins it from the point added before;
+  `wp_link [a b] [kind] [oneway]` (no numbers: the last two added), `wp_unlink`, `wp_del [n]` (none: nearest within 256),
+  `wp_list` (20 nearest, with their links), `wp_clear` (to `.old`), `wp_show` (beams every second: posts for points, lines
+  coloured by kind, a short post at the far end of a one-way link). `BuildLinkAreas` (run by `BuildLadders`, so every level
+  and after each change) gives each point the mesh area under it (within 24 u) or a 32 x 32 area of its own after the mesh's.
+  `FindPath` adds each link as an edge (parentDir 2000 + 2 x link + 1 backwards; a drop is one way), cost its length + 16; the
+  path gets the near point, then the far one flagged `NAV_LINK_FLAG` (20000) + that. `NavTraverse` then goes straight at the
+  far point: a jump jumps at the near point (within 32 u, or past it on the first half) or against the ledge (far point 16 u
+  above the feet, within 72 u); a crouch holds duck; a ladder looks up or down as at a `func_ladder`; a jump taken backwards
+  going down is walked. Log: `bot N takes a drawn <kind> link from ... to ...`, `links (<map>): N points, N links, N points
+  off the mesh`.
 - Points of interest: `poi_add spot [name]`, `poi_add avoid [radius] [name]`, `poi_list`, `poi_del [number]`, `poi_clear`, `poi_show`. An avoid costs its areas 3000 in `FindPath`, blocks shortcuts through it (`FloorAlong`) and `PickSpot`. A spot comes first in `PickSpot` (skipping `OpenDirections`: somebody chose it) and half of the tries of `GdmPickVia`'s random places (Gun Deathmatch, Super Soldier and the modes on its routes). Other modes choose their goals themselves and only feel the avoids.
 
 ## Getting around (every mode)
@@ -915,7 +928,9 @@ A shared change, because bots got caught on corners in every mode: `FindPath`, `
   driver walked a path through `NextWaypoint` in the last 0.3 s):
   - This game's .nav files have no ladders (de_dust2 ends right after its areas; the 96 bytes after zsh_hellride_pve's 3333
     areas are one more area). `BuildLadders` takes the map's `func_ladder` brushes: the area at the foot (floor within 40 of
-    the brush's bottom, at most 64 u beside it) and at the top (floor 72 below to 24 above its top). With no area at the top
+    the brush's bottom, at most 64 u beside it) and at the top (floor 72 below to 24 above its top); an area linked to nothing
+    counts 48 u farther (Hitchhiking's two ladders behind the gate had a scrap of floor by a pillar at each foot, so no path
+    went up them and the bots stood in a corner as close to the next box as they got). With no area at the top
     (Zombie Shelter's watchtowers aren't in the mesh) it adds a 40 x 40 area of its own on the floor found beside the ladder's
     top (after the mesh's areas, `g_navBaseAreas`; rebuilt each level and every 20 s while a ladder is unlinked). One
     `g_ladders` entry per brush, in map order: `FindPath` links foot and top both ways and flags the step-off waypoint
