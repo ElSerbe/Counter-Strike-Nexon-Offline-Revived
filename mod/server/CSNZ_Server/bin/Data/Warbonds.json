@@ -779,7 +779,7 @@
 					{ "ItemID": 450, "Cost": 45 }, { "ItemID": 451, "Cost": 45 }, { "ItemID": 453, "Cost": 45 }, { "ItemID": 452, "Cost": 75 }
 				] },
 				{ "Unlock": 80, "Items": [
-					{ "ItemID": 454, "Cost": 90 }, { "ItemID": 491, "Cost": 90 }, { "ItemID": 492, "Cost": 90 }, { "ItemID": 246, "Cost": 75 }, { "ItemID": 456, "Cost": 135 }
+					{ "ItemID": 454, "Cost": 90 }, { "ItemID": 491, "Cost": 90 }, { "ItemID": 492, "Cost": 90 }, { "ItemID": 246, "Cost": 75 }, { "ItemID": 456, "Cost": 135 }, { "ItemID": 159, "Cost": 75 }, { "ItemID": 160, "Cost": 135 }
 				] }
 			]
 		},
@@ -795,7 +795,7 @@
 					{ "ItemID": 383, "Cost": 90 }, { "ItemID": 734, "Cost": 90 }, { "ItemID": 945, "Cost": 165 }, { "ItemID": 847, "Cost": 135 }
 				] },
 				{ "Unlock": 280, "Items": [
-					{ "ItemID": 497, "Cost": 135 }, { "ItemID": 682, "Cost": 135 }
+					{ "ItemID": 497, "Cost": 135 }, { "ItemID": 682, "Cost": 135 }, { "ItemID": 171, "Cost": 75 }
 				] }
 			]
 		},
@@ -814,7 +814,7 @@
 					{ "ItemID": 567, "Cost": 90 }, { "ItemID": 568, "Cost": 90 }, { "ItemID": 968, "Cost": 200 }, { "ItemID": 569, "Cost": 135 }
 				] },
 				{ "Unlock": 300, "Items": [
-					{ "ItemID": 920, "Cost": 180 }, { "ItemID": 8054, "Cost": 180 }
+					{ "ItemID": 920, "Cost": 180 }, { "ItemID": 8054, "Cost": 180 }, { "ItemID": 928, "Cost": 75 }
 				] }
 			]
 		},
@@ -830,7 +830,7 @@
 					{ "ItemID": 538, "Cost": 120 }, { "ItemID": 504, "Cost": 75 }, { "ItemID": 689, "Cost": 75 }, { "ItemID": 690, "Cost": 125 }
 				] },
 				{ "Unlock": 250, "Items": [
-					{ "ItemID": 562, "Cost": 180 }, { "ItemID": 577, "Cost": 180 }, { "ItemID": 688, "Cost": 180 }
+					{ "ItemID": 562, "Cost": 180 }, { "ItemID": 577, "Cost": 180 }, { "ItemID": 688, "Cost": 180 }, { "ItemID": 685, "Cost": 80 }, { "ItemID": 686, "Cost": 135 }, { "ItemID": 687, "Cost": 165 }
 				] }
 			]
 		},
@@ -1024,6 +1024,26 @@
 				] },
 				{ "Unlock": 170, "Items": [
 					{ "ItemID": 8048, "Cost": 165 }, { "ItemID": 561, "Cost": 90 }
+				] }
+			]
+		},
+		{
+			"ID": 57, "Name": "VICTORY Nations", "Type": "Collection", "Cost": 65,
+			"Description": "The VICTORY machine gun in the colours of Japan, Indonesia, the United States, Canada, Turkey and Germany.",
+			"Image": "", "Theme": ["#101626", "#ffd24a"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 904, "Cost": 135 }, { "ItemID": 905, "Cost": 135 }, { "ItemID": 906, "Cost": 135 }, { "ItemID": 907, "Cost": 135 }, { "ItemID": 908, "Cost": 135 }, { "ItemID": 910, "Cost": 135 }
+				] }
+			]
+		},
+		{
+			"ID": 58, "Name": "Brick Works", "Type": "Collection", "Cost": 55,
+			"Description": "Weapons built brick by brick: the Brick Piece rifle, shotgun, machine gun and submachine gun.",
+			"Image": "", "Theme": ["#1f140a", "#ff9f3a"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 964, "Cost": 135 }, { "ItemID": 728, "Cost": 165 }, { "ItemID": 796, "Cost": 135 }, { "ItemID": 876, "Cost": 245 }
 				] }
 			]
 		}
