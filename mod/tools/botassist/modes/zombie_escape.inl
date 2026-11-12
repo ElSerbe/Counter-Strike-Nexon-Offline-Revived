@@ -24,6 +24,11 @@
 //   - A low passage (no room to stand ahead, room crouching): they crouch. A ledge to jump onto is walked at straight (no
 //     steering round what the body bumps), and a barrier low enough to clear (a rail, a fence: up to 46 u above the feet)
 //     is jumped over instead of shot.
+//   - A button counts as pressed when it moved, turned, went away (Hitchhiking's gate button drops 288 u, out of reach of
+//     the look-up), or a bot used it for 2 s (one that doesn't move: "don't move" buttons, valves whose bounds don't change
+//     as they turn). Before that, every bot near the gate went on trying to reach it, under the walkway, jumping.
+//   - A bot that gets no closer to its button in 20 s gives it up; nobody tries that one for 60 s (the steam valves under
+//     Hitchhiking's floor held two bots for minutes).
 //   - A new round (a human back in the first box with a later one reached): everyone's progress and the buttons start over.
 //   - Zombie modes' backing off and regrouping (zombie_humans.inl) don't run here: the way out is forward.
 //   - A barrier is shot even with zombies in sight when none is close (ZE_BARRIER_SAFE) or the bot has been held at it a
@@ -53,6 +58,9 @@ struct ZeButton
     float claimUntil = 0;
     bool pressed = false;
     bool seen = false;    // its entity's bounds at the start (an engine's bounds differ a little from the .bsp's)
+    V3 ang{};             // and its angles (a valve turns in place)
+    float usedSince = 0;  // a bot first used it (0: nobody yet); 2 s of use: pressed
+    float skipUntil = 0;  // given up (no way closer): nobody goes for it until then
 };
 // a breakable that opens the way when it breaks: what it fires (through multi_managers and relays) turns off walls or
 // opens doors, the blockers
@@ -78,6 +86,9 @@ struct ZeBot
     float stuckAt = 0, holdUntil = 0, jumpAt = -100, dodgeUntil = 0, dodgeYaw = 0, nextLog = 0;
     float barrierSince = 0;   // held at a barrier since (0: not at one)
     const void* toldButton = nullptr;
+    const void* toldPress = nullptr;
+    const void* buttonFor = nullptr; // the button it goes for: the closest it got and when
+    float buttonBest = 1e9f, buttonBestAt = 0;
     float yaw = 0;
     bool yawSet = false;
     int passSide = 1;
@@ -390,7 +401,7 @@ static void ZeUpdate()
         g_zeZone.clear();
         g_zeBots.clear();
         for (auto& b : g_ze.buttons)
-            b.pressed = b.seen = false, b.claimedBy = nullptr;
+            b.pressed = b.seen = false, b.claimedBy = nullptr, b.usedSince = b.skipUntil = 0;
         for (auto& t : g_ze.triggers)
             t.retryAt = 0;
         Log("ZE: a new round: the route starts over");
@@ -429,20 +440,34 @@ static void ZeUpdate()
                 ent = e;
         });
         if (!ent)
+        {
+            if (b.seen)
+            {
+                b.pressed = true; // moved off its place, out of reach of the look-up (or removed)
+                Log("ZE: the %s at (%.0f %.0f %.0f) was pressed (it moved away)", b.cls.c_str(), mid.x, mid.y, mid.z);
+            }
             continue;
+        }
         V3 lo = Vec((float*)(Vars(ent) + EV_ABSMIN)), hi = Vec((float*)(Vars(ent) + EV_ABSMAX));
+        V3 ang = Vec((float*)(Vars(ent) + EV_ANGLES));
         if (!b.seen)
         {
             // its place as the engine has it (a rotating button's box is grown to its turning radius, every box by a unit)
             b.seen = true;
             b.lo = lo;
             b.hi = hi;
+            b.ang = ang;
             continue;
         }
-        if (Len(lo - b.lo) > 3.0f || Len(hi - b.hi) > 3.0f)
+        if (Len(lo - b.lo) > 3.0f || Len(hi - b.hi) > 3.0f || Len(ang - b.ang) > 5.0f)
         {
             b.pressed = true;
             Log("ZE: the %s at (%.0f %.0f %.0f) was pressed", b.cls.c_str(), mid.x, mid.y, mid.z);
+        }
+        else if (b.usedSince > 0 && now - b.usedSince > 2.0f)
+        {
+            b.pressed = true; // used for a while and it doesn't move: done
+            Log("ZE: the %s at (%.0f %.0f %.0f) was used for 2 s: taken as pressed", b.cls.c_str(), mid.x, mid.y, mid.z);
         }
     }
     if (now >= g_ze.nextLog)
@@ -729,7 +754,7 @@ static bool ZeMove(void* bot, BotState& st, float& viewYaw, float& viewPitch, bo
         float bestButton = ZE_BUTTON_NEAR;
         for (auto& b : g_ze.buttons)
         {
-            if (b.pressed || (b.claimedBy && b.claimedBy != bot && now < b.claimUntil))
+            if (b.pressed || now < b.skipUntil || (b.claimedBy && b.claimedBy != bot && now < b.claimUntil))
                 continue;
             V3 mid = (b.lo + b.hi) * 0.5f;
             bool byRoute = (target && ZeBoxDist(mid, target->lo, target->hi) < ZE_BUTTON_ZONE_PAD) ||
@@ -739,6 +764,32 @@ static bool ZeMove(void* bot, BotState& st, float& viewYaw, float& viewPitch, bo
             {
                 bestButton = d;
                 button = &b;
+            }
+        }
+        if (button)
+        {
+            // no closer in 20 s: given up (no way there on the mesh, a valve below the floor), for everyone for a while
+            float dist = Len((button->lo + button->hi) * 0.5f - me);
+            if (z.buttonFor != button)
+            {
+                z.buttonFor = button;
+                z.buttonBest = dist;
+                z.buttonBestAt = now;
+            }
+            else if (dist < z.buttonBest - 32.0f)
+            {
+                z.buttonBest = dist;
+                z.buttonBestAt = now;
+            }
+            if (now - z.buttonBestAt > 20.0f)
+            {
+                button->skipUntil = now + 60.0f;
+                button->claimedBy = nullptr;
+                z.buttonFor = nullptr;
+                V3 m = (button->lo + button->hi) * 0.5f;
+                Log("ZE: '%s' gives up the %s at (%.0f %.0f %.0f): no closer than %.0f in 20 s", String(F<int>(Vars(bot), EV_NETNAME)),
+                    button->cls.c_str(), m.x, m.y, m.z, z.buttonBest);
+                button = nullptr;
             }
         }
         if (button)
@@ -766,9 +817,12 @@ static bool ZeMove(void* bot, BotState& st, float& viewYaw, float& viewPitch, bo
                 fwd = side = 0;
                 if (fmodf(now, 0.4f) < 0.2f)
                     buttons |= IN_USE;
+                if (button->usedSince == 0)
+                    button->usedSince = now;
                 st.lastProgress = now;
+                z.buttonBestAt = now;
                 static int reports = 0;
-                if (reports++ < 40)
+                if (z.toldPress != button && reports++ < 60 && (z.toldPress = button))
                     Log("ZE: '%s' presses the %s at (%.0f %.0f %.0f)", String(F<int>(Vars(bot), EV_NETNAME)), button->cls.c_str(),
                         mid.x, mid.y, mid.z);
                 return true;
@@ -978,7 +1032,7 @@ static bool ZeMove(void* bot, BotState& st, float& viewYaw, float& viewPitch, bo
             jump = jumpSafe;
         }
         static int reports = 0;
-        if (z.stuck >= 3 && now >= z.nextLog && reports < 80)
+        if (z.stuck >= 3 && now >= z.nextLog && reports < 400)
         {
             reports++;
             z.nextLog = now + 6.0f;

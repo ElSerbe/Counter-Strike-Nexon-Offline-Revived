@@ -1012,7 +1012,11 @@ while their row is missing ("zombie class N skill ... skipped" in botassist.log)
   Rising 1-5 / 6-13 / 14-20, Rhyzome several. There a human bot follows the human furthest along the route.
 - `ZeMove` (human): the next box after the highest it reached (`g_zeZone`, per life), then the nearest exit, where it waits.
   A button within 350 u of this box or the next, not pressed (its entity still has the bounds the map gave it), is pressed
-  by one bot (aim, `+use`). A breakable ahead within 140 u is shot when no zombie is in sight. Pushing on a closed door it
+  by one bot (aim, `+use`). Pressed means: its bounds or angles changed, its entity is no longer at its place (Hitchhiking's
+  gate button `mm_gate_open`, lip -256, drops 288 u: it was never taken as pressed, and every bot near the gate went for it,
+  ending under the walkway jumping), or a bot used it for 2 s (a "don't move" button, a valve turning in place). A bot no
+  closer to its button in 20 s gives it up and nobody tries it for 60 s (Hitchhiking's steam valves `mm_steam1_off` /
+  `mm_steam2_off`, 330 u under the floor). A breakable ahead within 140 u is shot when no zombie is in sight. Pushing on a closed door it
   holds 4 s and tries again. Aim and fire stay the stock AI's while a zombie is in sight.
   A wall or door near it that a breakable elsewhere opens is opened by shooting that breakable: `ZeLoad` follows each
   shootable `ze_breakable` / `func_breakable` with a target through what it fires (`target`, `killtarget`, a
@@ -1045,8 +1049,9 @@ while their row is missing ("zombie class N skill ... skipped" in botassist.log)
 - A barrier is shot even with zombies in sight when none is within 600 u (seen) or 250 u, or after 2.5 s held at it, and
   is looked for along the path's own waypoint too (the back-off point `NextWaypoint` gives while stuck points elsewhere):
   Hitchhiking's rail on the truck (1500 HP, 68 u above the bed) was never shot because a zombie was always in sight.
-- botassist.log: `ZE: 'x' goes to press the ...` (once per bot and button), `ZE: 'x' presses the ...`, `ZE: 'x' shoots the
-  ... in its way`.
+- botassist.log: `ZE: 'x' goes to press the ...` and `ZE: 'x' presses the ...` (once per bot and button), `ZE: 'x' gives up
+  the ...`, `ZE: the ... was pressed (it moved away)`, `... was used for 2 s: taken as pressed`, `ZE: 'x' shoots the ... in
+  its way`.
 - `ZeMove` (zombie): a human seen or within 600 u, else where the leading human is.
 - botassist.log: `ZE: <map>: N route boxes...` at load, `ZE: N humans, N zombies; the leading human is on route box N`
   every 15 s, `ZE: the func_button at ... was pressed`, `ZE: human 'x' stuck at ...`.
