@@ -1642,9 +1642,20 @@ static bool NextWaypoint(void* bot, BotState& st, V3 pos, V3 goal, float arrive,
             }
         }
         // the mesh's low areas are for crouching
+        // (and the one after this waypoint: a waypoint at the mouth of a low passage isn't passed while the bot stands, its
+        // body doesn't fit the way to the next one, so the bot has to crouch before it). One higher up (a duct in a wall) is
+        // jumped into standing and crouched in the air: crouching first, the jump wouldn't reach it.
+        int bodyFlags = F<int>(Vars(bot), EV_FLAGS);
+        float feetZ = pos.z - ((bodyFlags & 0x4000 /* FL_DUCKING */) ? 18.0f : 36.0f);
+        bool grounded = (bodyFlags & 0x200 /* FL_ONGROUND */) != 0;
+        auto low = [&](int area, float z) {
+            return area >= 0 && (g_nav.areas[area].attr & NAV_CROUCH) && (!grounded || z <= feetZ + 20.0f);
+        };
         V3 at = st.path[st.pathIndex];
         int here = AreaAt(pos), next = Len2D(at - pos) < 96.0f ? AreaAt(at) : -1;
-        if ((here >= 0 && (g_nav.areas[here].attr & NAV_CROUCH)) || (next >= 0 && (g_nav.areas[next].attr & NAV_CROUCH)))
+        int after = st.pathIndex + 1 < st.path.size() && Len2D(st.path[st.pathIndex + 1] - pos) < 128.0f
+                        ? AreaAt(st.path[st.pathIndex + 1]) : -1;
+        if (low(here, feetZ) || low(next, at.z) || (after >= 0 && low(after, st.path[st.pathIndex + 1].z)))
             st.duckUntil = now + 0.3f;
     }
     out = st.path[st.pathIndex];

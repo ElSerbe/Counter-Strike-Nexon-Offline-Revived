@@ -1000,6 +1000,17 @@ while their row is missing ("zombie class N skill ... skipped" in botassist.log)
   A button within 350 u of this box or the next, not pressed (its entity still has the bounds the map gave it), is pressed
   by one bot (aim, `+use`). A breakable ahead within 140 u is shot when no zombie is in sight. Pushing on a closed door it
   holds 4 s and tries again. Aim and fire stay the stock AI's while a zombie is in sight.
+  A wall or door near it that a breakable elsewhere opens is opened by shooting that breakable: `ZeLoad` follows each
+  shootable `ze_breakable` / `func_breakable` with a target through what it fires (`target`, `killtarget`, a
+  `multi_manager`'s keys) to the `func_wall_toggle` / `func_door` / `func_door_rotating` / `func_wall` it reaches. Within
+  260 u of one still shut, a human with no zombie in sight aims at the breakable and fires when it can see it, else backs
+  away from the wall (up to 520 u) until it shows over it. Hitchhiking: the pipe above the start wall (1500 HP, `mm_start`
+  turns `start_wall` off); Rising 2, Rhyzome 7 (panels that open doors).
+- Crouching (shared `NextWaypoint`): the bot crouches in a crouch area of the mesh, when the waypoint is in one, and when the
+  waypoint after it (within 128 u) is: the waypoint at the mouth of a low passage isn't passed standing (the body check to
+  the next one fails), so it never got in. A crouch area higher than the feet (a duct in a wall, Hitchhiking's at 44 u in
+  zone 2) isn't crouched for on the ground: it's jumped into standing (`NavTraverse`'s ledge jump) and the legs tucked in
+  the air. `ZeMove` also crouches where a standing body has no room ahead and a crouching one has (`ZeLowAhead`).
 - `ZeMove` (zombie): a human seen or within 600 u, else where the leading human is.
 - botassist.log: `ZE: <map>: N route boxes...` at load, `ZE: N humans, N zombies; the leading human is on route box N`
   every 15 s, `ZE: the func_button at ... was pressed`, `ZE: human 'x' stuck at ...`.

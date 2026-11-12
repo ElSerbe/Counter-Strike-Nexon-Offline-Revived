@@ -19,11 +19,14 @@
 //     way is shot (when no zombie is in sight). Pushing on a closed door, they turn round and hold: a defence countdown opens
 //     it. With no way on the mesh to the next box (a lift, a train, a jump the mesh lacks), they follow the human furthest
 //     along the route, and failing that walk as close as the mesh goes.
+//   - A wall or door in the way that a breakable somewhere else opens (the map fires it: Hitchhiking's start wall goes when
+//     the pipe above it is shot, through a multi_manager): they shoot that breakable, backing off until they see it.
+//   - A low passage (no room to stand ahead, room crouching): they crouch.
 //   - Zombies chase a human they see or hear, else go where the humans are furthest along.
 // The map's boxes come from its .bsp (the entity lump and the model bounds), read through the engine's file system.
 static const int MODE_ZE = 20;
 static const float ZE_HEAR = 600.0f, ZE_BUTTON_NEAR = 700.0f, ZE_BUTTON_ZONE_PAD = 350.0f, ZE_BREAK_AHEAD = 140.0f;
-static const float ZE_ZOMBIE_SEEN = 1500.0f;
+static const float ZE_ZOMBIE_SEEN = 1500.0f, ZE_TRIGGER_NEAR = 260.0f, ZE_TRIGGER_BACK = 520.0f;
 
 struct ZeBox
 {
@@ -38,6 +41,21 @@ struct ZeButton
     void* claimedBy = nullptr;
     float claimUntil = 0;
     bool pressed = false;
+    bool seen = false;    // its entity's bounds at the start (an engine's bounds differ a little from the .bsp's)
+};
+// a breakable that opens the way when it breaks: what it fires (through multi_managers and relays) turns off walls or
+// opens doors, the blockers
+struct ZeBlock
+{
+    V3 lo, hi;
+    std::string cls;
+};
+struct ZeTrigger
+{
+    V3 lo, hi;
+    std::vector<ZeBlock> blocks;
+    float retryAt = 0;    // not there (broken this round): look again later (a new round brings it back)
+    bool told = false;
 };
 struct ZeBot
 {
@@ -61,6 +79,7 @@ static struct
     std::vector<ZeBox> zones, exits;
     std::vector<V3> counters;
     std::vector<ZeButton> buttons;
+    std::vector<ZeTrigger> triggers;
     int leadZone = 0;
     V3 leadPos{};
     void* leader = nullptr;
@@ -158,6 +177,7 @@ static void ZeLoad()
     g_ze.exits.clear();
     g_ze.counters.clear();
     g_ze.buttons.clear();
+    g_ze.triggers.clear();
     g_zeZone.clear();
     g_zeBots.clear();
     std::string path = "maps/" + g_nav.map + ".bsp";
@@ -233,6 +253,70 @@ static void ZeLoad()
                 g_ze.counters.push_back(ZeParseV3(o->second));
         }
     }
+    // the breakables that open the way: follow what they fire to the walls and doors it turns off or opens
+    std::map<std::string, std::vector<size_t>> named;
+    for (size_t i = 0; i < ents.size(); i++)
+    {
+        auto t = ents[i].find("targetname");
+        if (t != ents[i].end())
+            named[t->second].push_back(i);
+    }
+    static const char* notTargets[] = { "classname", "targetname", "origin", "spawnflags", "wait", "angles", "angle", "delay",
+                                        "master", "target", "killtarget" };
+    for (auto& e : ents)
+    {
+        auto c = e.find("classname");
+        if (c == e.end() || (c->second != "ze_breakable" && c->second != "func_breakable"))
+            continue;
+        auto sf = e.find("spawnflags");
+        if (sf != e.end() && (atoi(sf->second.c_str()) & 1))
+            continue; // "only trigger": it can't be shot
+        ZeTrigger trig;
+        if (!box(e, trig.lo, trig.hi))
+            continue;
+        std::vector<std::string> todo;
+        std::set<std::string> done;
+        auto fires = [&](const std::map<std::string, std::string>& n) {
+            for (const char* k : { "target", "killtarget" })
+            {
+                auto f = n.find(k);
+                if (f != n.end() && !f->second.empty())
+                    todo.push_back(f->second);
+            }
+        };
+        fires(e);
+        while (!todo.empty() && done.size() < 64)
+        {
+            std::string name = todo.back();
+            todo.pop_back();
+            if (!done.insert(name).second)
+                continue;
+            for (size_t idx : named[name])
+            {
+                auto& n = ents[idx];
+                const std::string& cls = n.count("classname") ? n.at("classname") : std::string();
+                V3 lo, hi;
+                if ((cls == "func_wall_toggle" || cls == "func_door" || cls == "func_door_rotating" || cls == "func_wall") &&
+                    box(n, lo, hi))
+                    trig.blocks.push_back({ lo, hi, cls });
+                if (cls == "multi_manager")
+                {
+                    for (auto& kv : n)
+                    {
+                        bool skip = false;
+                        for (const char* k : notTargets)
+                            skip = skip || kv.first == k;
+                        if (!skip)
+                            todo.push_back(kv.first.substr(0, kv.first.find('#'))); // "name#2": the same target again
+                    }
+                }
+                else
+                    fires(n);
+            }
+        }
+        if (!trig.blocks.empty())
+            g_ze.triggers.push_back(trig);
+    }
     g_FreeFile(d);
     for (auto& kv : byId)
         g_ze.zones.push_back(kv.second);
@@ -242,9 +326,9 @@ static void ZeLoad()
     for (auto& x : g_ze.exits)
         spots += (x.hasSpot = ZeSpotIn(x.lo, x.hi, x.spot)) ? 1 : 0;
     g_ze.loaded = true;
-    Log("ZE: %s: %d route boxes, %d exits, %d buttons, %d defence counters; %d of them on the navigation mesh (%d areas%s)",
-        g_nav.map.c_str(), (int)g_ze.zones.size(), (int)g_ze.exits.size(), (int)g_ze.buttons.size(), (int)g_ze.counters.size(),
-        spots, (int)g_nav.areas.size(), FileThere(NavFileOf(g_nav.map)) ? ", botassist_nav" : ", the game's: not this map's");
+    Log("ZE: %s: %d route boxes, %d exits, %d buttons, %d breakables that open the way, %d defence counters; %d of them on "
+        "the navigation mesh (%d areas)", g_nav.map.c_str(), (int)g_ze.zones.size(), (int)g_ze.exits.size(),
+        (int)g_ze.buttons.size(), (int)g_ze.triggers.size(), (int)g_ze.counters.size(), spots, (int)g_nav.areas.size());
 }
 
 static bool ZeInBox(V3 p, const ZeBox& b, float pad)
@@ -315,6 +399,14 @@ static void ZeUpdate()
         if (!ent)
             continue;
         V3 lo = Vec((float*)(Vars(ent) + EV_ABSMIN)), hi = Vec((float*)(Vars(ent) + EV_ABSMAX));
+        if (!b.seen)
+        {
+            // its place as the engine has it (a rotating button's box is grown to its turning radius, every box by a unit)
+            b.seen = true;
+            b.lo = lo;
+            b.hi = hi;
+            continue;
+        }
         if (Len(lo - b.lo) > 3.0f || Len(hi - b.hi) > 3.0f)
         {
             b.pressed = true;
@@ -395,6 +487,81 @@ static bool ZeZombieInSight(void* bot, V3 eye)
         seen = CanSee(bot, eye, e);
     });
     return seen;
+}
+
+// the entity of a class at a .bsp model's place (its middle; the engine's sphere search goes by the middle too)
+static void* ZeEntityAt(V3 lo, V3 hi, const char* cls, const char* cls2 = nullptr)
+{
+    V3 c = (lo + hi) * 0.5f;
+    void* found = nullptr;
+    ForEntitiesNear(c, 48.0f, [&](void* e) {
+        const char* k = ClassName(e);
+        if (found || (strcmp(k, cls) && (!cls2 || strcmp(k, cls2))))
+            return;
+        V3 a = Vec((float*)(Vars(e) + EV_ABSMIN)), b = Vec((float*)(Vars(e) + EV_ABSMAX));
+        if (Len((a + b) * 0.5f - c) < 8.0f)
+            found = e;
+    });
+    return found;
+}
+
+// a breakable to shoot because a wall or door it opens is close by and still shut; blockAt: that blocker's middle
+static void* ZeTriggerNear(V3 me, V3& blockAt)
+{
+    float now = Now();
+    for (auto& t : g_ze.triggers)
+    {
+        if (now < t.retryAt && t.retryAt - now < 10.0f)
+            continue;
+        const ZeBlock* blocker = nullptr;
+        for (auto& b : t.blocks)
+            if (ZeBoxDist(me, b.lo, b.hi) < ZE_TRIGGER_NEAR)
+            {
+                void* be = ZeEntityAt(b.lo, b.hi, b.cls.c_str());
+                if (be && (b.cls != "func_wall_toggle" || F<int>(Vars(be), EV_SOLID)))
+                {
+                    blocker = &b;
+                    break;
+                }
+            }
+        if (!blocker)
+            continue;
+        void* e = ZeEntityAt(t.lo, t.hi, "ze_breakable", "func_breakable");
+        if (!e || F<float>(Vars(e), EV_HEALTH) <= 0 || F<float>(Vars(e), EV_TAKEDAMAGE) == 0.0f)
+        {
+            t.retryAt = now + 5.0f;
+            continue;
+        }
+        blockAt = (blocker->lo + blocker->hi) * 0.5f;
+        if (!t.told)
+        {
+            t.told = true;
+            V3 c = (t.lo + t.hi) * 0.5f;
+            Log("ZE: humans shoot the %s at (%.0f %.0f %.0f): it opens the %s at (%.0f %.0f %.0f)", ClassName(e), c.x, c.y, c.z,
+                blocker->cls.c_str(), blockAt.x, blockAt.y, blockAt.z);
+        }
+        return e;
+    }
+    return nullptr;
+}
+
+// no room to stand towards yaw but room crouching: a low passage
+static bool ZeLowAhead(void* bot, V3 me, float yaw)
+{
+    if (!g_TraceHull)
+        return false;
+    float feet = me.z - ((F<int>(Vars(bot), EV_FLAGS) & 0x4000) /* FL_DUCKING */ ? 18.0f : 36.0f);
+    V3 dir = YawDir(yaw) * 40.0f;
+    TraceResult tr;
+    float a[3] = { me.x, me.y, feet + 37.0f }, b[3] = { me.x + dir.x, me.y + dir.y, feet + 37.0f };
+    memset(&tr, 0, sizeof(tr));
+    g_TraceHull(a, b, 1, 1, bot, &tr); // standing
+    if (!tr.fStartSolid && !tr.fAllSolid && tr.flFraction >= 0.99f)
+        return false;
+    float c[3] = { me.x, me.y, feet + 19.0f }, d[3] = { me.x + dir.x, me.y + dir.y, feet + 19.0f };
+    memset(&tr, 0, sizeof(tr));
+    g_TraceHull(c, d, 1, HULL_DUCK, bot, &tr); // crouching
+    return !tr.fStartSolid && !tr.fAllSolid && tr.flFraction >= 0.99f;
 }
 
 static bool ZeMove(void* bot, BotState& st, float& viewYaw, float& viewPitch, bool& setView, float& fwd, float& side,
@@ -567,6 +734,48 @@ static bool ZeMove(void* bot, BotState& st, float& viewYaw, float& viewPitch, bo
         return true;
     }
     float wayYaw = YawOf(wp - me);
+
+    // a low passage: crouch through it
+    if (ZeLowAhead(bot, me, wayYaw))
+        st.duckUntil = now + 0.4f;
+
+    // a wall or door in the way that a breakable elsewhere opens (Hitchhiking's pipe): shoot it, from where it can be seen
+    if (!zombie && !ZeZombieInSight(bot, eye))
+    {
+        V3 blockAt;
+        void* trigger = ZeTriggerNear(me, blockAt);
+        if (trigger)
+        {
+            V3 d = Center(trigger) - eye;
+            viewYaw = YawOf(d);
+            viewPitch = PitchOf(d);
+            setView = true;
+            z.task = 7;
+            st.lastProgress = now;
+            st.lastPos = me;
+            if (CanSee(bot, eye, trigger))
+            {
+                if (fmodf(now, 0.2f) < 0.1f)
+                    buttons |= IN_ATTACK;
+                fwd = side = 0;
+                return true;
+            }
+            // hidden behind the wall it opens: back off until it shows over it
+            V3 away = me - blockAt;
+            away.z = 0;
+            if (Len2D(away) > ZE_TRIGGER_BACK)
+            {
+                fwd = side = 0;
+                return true;
+            }
+            float moveYaw = YawOf(away);
+            ZConSafeYaw(bot, me, WalkYaw(bot, me, moveYaw, 40.0f), ZCON_FREE_DROP, moveYaw);
+            float rel = (moveYaw - viewYaw) / RAD;
+            fwd = cosf(rel) * 250.0f;
+            side = -sinf(rel) * 250.0f;
+            return true;
+        }
+    }
 
     // a barrier between it and where it goes: shot down (a human with no zombie to shoot at)
     if (!zombie)
