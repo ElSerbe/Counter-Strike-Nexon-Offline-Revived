@@ -303,7 +303,9 @@ static bool ZombieGroupMove(void* bot, BotState& st, float viewYaw, float& fwd, 
 
 static bool ZombieFlee(void* bot, BotState& st, float viewYaw, float& fwd, float& side, unsigned short& buttons)
 {
-    if (!ZombieFleeMode())
+    // (Zombie Escape, mode 20: the way out is forward along the route, ZeMove's; backing off and regrouping held the bots
+    // back in corners)
+    if (!ZombieFleeMode() || GameMode() == 20)
         return false;
     return ZombieFleeMove(bot, st, viewYaw, cfg.zombieFleeDistance, fwd, side, buttons) || ZombieGroupMove(bot, st, viewYaw, fwd, side, buttons);
 }

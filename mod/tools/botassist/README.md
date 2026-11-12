@@ -1011,6 +1011,17 @@ while their row is missing ("zombie class N skill ... skipped" in botassist.log)
   the next one fails), so it never got in. A crouch area higher than the feet (a duct in a wall, Hitchhiking's at 44 u in
   zone 2) isn't crouched for on the ground: it's jumped into standing (`NavTraverse`'s ledge jump) and the legs tucked in
   the air. `ZeMove` also crouches where a standing body has no room ahead and a crouching one has (`ZeLowAhead`).
+  Crouched and stuck (a duct hardly wider than the body), it turns 25 degrees to one side then the other instead of
+  turning round and jumping.
+- Ledges and low barriers: a waypoint up to a jump above the feet within 96 u is walked at straight (steering round what the
+  body bumps sent the jump off the side of Hitchhiking's truck, whose bed has a 26 u lip under a breakable rail); a barrier
+  whose top is at most 46 u above the feet (the rail from the lip, the pool's fences) is jumped over, even with zombies in
+  sight; a taller one is shot as before.
+- A new round: a living player back in box 1 with box 3 or later reached means the round restarted (survivors respawn
+  without dying, so their progress stayed and they headed for a far box): every player's progress, the buttons' pressed
+  state and the breakables' retry times start over.
+- `zombie_humans.inl`'s backing off and regrouping (`ZombieFlee`) is off in this mode: it pulled human bots back from the
+  route into corners.
 - `ZeMove` (zombie): a human seen or within 600 u, else where the leading human is.
 - botassist.log: `ZE: <map>: N route boxes...` at load, `ZE: N humans, N zombies; the leading human is on route box N`
   every 15 s, `ZE: the func_button at ... was pressed`, `ZE: human 'x' stuck at ...`.

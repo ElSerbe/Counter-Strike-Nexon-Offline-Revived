@@ -21,7 +21,11 @@
 //     along the route, and failing that walk as close as the mesh goes.
 //   - A wall or door in the way that a breakable somewhere else opens (the map fires it: Hitchhiking's start wall goes when
 //     the pipe above it is shot, through a multi_manager): they shoot that breakable, backing off until they see it.
-//   - A low passage (no room to stand ahead, room crouching): they crouch.
+//   - A low passage (no room to stand ahead, room crouching): they crouch. A ledge to jump onto is walked at straight (no
+//     steering round what the body bumps), and a barrier low enough to clear (a rail, a fence: up to 46 u above the feet)
+//     is jumped over instead of shot.
+//   - A new round (a human back in the first box with a later one reached): everyone's progress and the buttons start over.
+//   - Zombie modes' backing off and regrouping (zombie_humans.inl) don't run here: the way out is forward.
 //   - Zombies chase a human they see or hear, else go where the humans are furthest along.
 // The map's boxes come from its .bsp (the entity lump and the model bounds), read through the engine's file system.
 static const int MODE_ZE = 20;
@@ -363,6 +367,25 @@ static void ZeUpdate()
     g_ze.leadZone = 0;
     g_ze.leader = nullptr;
     g_ze.humans = g_ze.zombies = 0;
+    // a new round: the players are back at the start (in the first box) with a later box reached; everyone starts over,
+    // and the buttons are back where the map puts them
+    bool restart = false;
+    if (!g_ze.zones.empty())
+        ForEntitiesNear(V3{ 0, 0, 0 }, 1e6f, [&](void* e) {
+            if (!restart && (F<int>(Vars(e), EV_FLAGS) & FL_CLIENT) && Alive(e) && g_zeZone.count(e) && g_zeZone[e] > 2 &&
+                ZeInBox(Origin(e), g_ze.zones[0], 0.0f))
+                restart = true;
+        });
+    if (restart)
+    {
+        g_zeZone.clear();
+        g_zeBots.clear();
+        for (auto& b : g_ze.buttons)
+            b.pressed = b.seen = false, b.claimedBy = nullptr;
+        for (auto& t : g_ze.triggers)
+            t.retryAt = 0;
+        Log("ZE: a new round: the route starts over");
+    }
     ForEntitiesNear(V3{ 0, 0, 0 }, 1e6f, [&](void* e) {
         if (!(F<int>(Vars(e), EV_FLAGS) & FL_CLIENT))
             return;
@@ -777,10 +800,35 @@ static bool ZeMove(void* bot, BotState& st, float& viewYaw, float& viewPitch, bo
         }
     }
 
-    // a barrier between it and where it goes: shot down (a human with no zombie to shoot at)
+    int bodyFlags = F<int>(Vars(bot), EV_FLAGS);
+    float feetZ = me.z - ((bodyFlags & 0x4000 /* FL_DUCKING */) ? 18.0f : 36.0f);
+    // a barrier between it and where it goes: a low one (a rail, a fence) jumped over, else shot down (a human with no
+    // zombie to shoot at)
     if (!zombie)
     {
         void* barrier = ZeBarrierAhead(bot, me, wp);
+        if (barrier)
+        {
+            V3 blo = Vec((float*)(Vars(barrier) + EV_ABSMIN)), bhi = Vec((float*)(Vars(barrier) + EV_ABSMAX));
+            float over = bhi.z - feetZ;
+            if (over > 0.0f && over <= 46.0f)
+            {
+                z.task = 2;
+                st.lastProgress = now;
+                st.lastPos = me;
+                float rel = (wayYaw - viewYaw) / RAD;
+                fwd = cosf(rel) * 250.0f;
+                side = -sinf(rel) * 250.0f;
+                if (ZeBoxDist(me, blo, bhi) < 40.0f && (bodyFlags & 0x200 /* FL_ONGROUND */) && now - z.jumpAt > 0.7f)
+                {
+                    z.jumpAt = now;
+                    buttons |= IN_JUMP;
+                }
+                if (now - z.jumpAt > 0.1f && now - z.jumpAt < 0.5f)
+                    buttons |= IN_DUCK;
+                return true;
+            }
+        }
         if (barrier && !ZeZombieInSight(bot, eye))
         {
             V3 c = Center(barrier);
@@ -808,8 +856,11 @@ static bool ZeMove(void* bot, BotState& st, float& viewYaw, float& viewPitch, bo
         return true;
     }
 
-    float wantYaw = WalkYaw(bot, me, wayYaw, 40.0f);
-    if (now < z.dodgeUntil)
+    // a ledge to jump onto (the waypoint up to a jump above the feet, close): straight at it. Steering round what the body
+    // bumps (the ledge's own face, a rail on it) sent the jump sideways, off it (Hitchhiking's truck)
+    bool climb = now >= st.navBackUntil && wp.z > feetZ + 14.0f && wp.z < feetZ + 64.0f && Len2D(wp - me) < 96.0f;
+    float wantYaw = climb ? wayYaw : WalkYaw(bot, me, wayYaw, 40.0f);
+    if (now < z.dodgeUntil && !climb)
         wantYaw = WalkYaw(bot, me, z.dodgeYaw, 40.0f);
     float maxDrop = ZCON_FREE_DROP;
     if (pathed && me.z - 36.0f - wp.z + 32.0f > maxDrop)
@@ -835,6 +886,15 @@ static bool ZeMove(void* bot, BotState& st, float& viewYaw, float& viewPitch, bo
         {
             z.holdUntil = now + 4.0f; // a door that hasn't opened yet: wait, then try again
             z.stuck = 0;
+        }
+        else if ((bodyFlags & 0x4000 /* FL_DUCKING */) || now < st.duckUntil)
+        {
+            // crouched in a low passage (Hitchhiking's diagonal duct, hardly wider than the body): turning round or jumping
+            // throws it off its line; a slight turn to one side, then the other, slides it along the wall
+            z.passSide = -z.passSide;
+            z.dodgeYaw = wayYaw + 25.0f * z.passSide;
+            z.dodgeUntil = now + 0.4f;
+            st.duckUntil = now + 0.6f;
         }
         else
         {
