@@ -458,6 +458,7 @@ struct NavArea
     V3 center;
     std::vector<int> adj[4]; // N (-y), E (+x), S (+y), W (-x): indices into g_nav.areas
 };
+static unsigned g_navGen = 0; // counts changes of g_nav.areas (AreaAt's grid)
 static size_t g_navBaseAreas = 0; // the mesh's own areas; after them, botassist's (the tops of ladders, BuildLadders)
 static struct
 {
@@ -630,45 +631,117 @@ static void LoadNav()
             }
     g_nav.ok = true;
     g_navBaseAreas = g_nav.areas.size();
+    g_navGen++;
     PoiRebuild();
     Log("%s: %u navigation areas loaded", path.c_str(), (unsigned)g_nav.areas.size());
     LoadRides(map);
 }
 
-static int AreaAt(V3 p)
+// ---- what time botassist takes (logged every 30 s while bots play: "perf: ...")
+static LARGE_INTEGER g_perfFreq;
+static double g_perfMoveSec = 0, g_perfPathSec = 0, g_perfFrameSec = 0;
+static int g_perfMoves = 0, g_perfPaths = 0, g_perfAreaAt = 0;
+static double PerfNow()
 {
-    int best = -1;
-    float bestScore = 1e30f;
+    LARGE_INTEGER t;
+    if (!g_perfFreq.QuadPart)
+        QueryPerformanceFrequency(&g_perfFreq);
+    QueryPerformanceCounter(&t);
+    return (double)t.QuadPart / (double)g_perfFreq.QuadPart;
+}
+
+// ---- which areas lie where: a grid of cells over the mesh, each with the areas over it, so AreaAt looks at a few areas
+// instead of all of them (thousands, many times per bot and frame: with many bots it was most of botassist's time). Made
+// again when the areas change (g_navGen: a new mesh, the ladders' and drawn links' areas) or their number does.
+static struct
+{
+    unsigned gen = ~0u;
+    size_t count = 0;
+    float x0 = 0, y0 = 0, cell = 128.0f;
+    int nx = 0, ny = 0;
+    std::vector<std::vector<int>> cells;
+} g_areaGrid;
+
+static void AreaGridBuild()
+{
+    auto& G = g_areaGrid;
+    G.gen = g_navGen;
+    G.count = g_nav.areas.size();
+    G.cells.clear();
+    G.nx = G.ny = 0;
+    if (g_nav.areas.empty())
+        return;
+    float x0 = 1e30f, y0 = 1e30f, x1 = -1e30f, y1 = -1e30f;
+    for (auto& a : g_nav.areas)
+    {
+        x0 = min(x0, a.lo[0] - 1), y0 = min(y0, a.lo[1] - 1);
+        x1 = max(x1, a.hi[0] + 1), y1 = max(y1, a.hi[1] + 1);
+    }
+    G.cell = max(128.0f, max(x1 - x0, y1 - y0) / 512.0f);
+    G.x0 = x0, G.y0 = y0;
+    G.nx = (int)((x1 - x0) / G.cell) + 1;
+    G.ny = (int)((y1 - y0) / G.cell) + 1;
+    G.cells.assign((size_t)G.nx * G.ny, std::vector<int>());
     for (size_t i = 0; i < g_nav.areas.size(); i++)
     {
+        const NavArea& a = g_nav.areas[i];
+        int cx0 = (int)((a.lo[0] - 1 - x0) / G.cell), cx1 = (int)((a.hi[0] + 1 - x0) / G.cell);
+        int cy0 = (int)((a.lo[1] - 1 - y0) / G.cell), cy1 = (int)((a.hi[1] + 1 - y0) / G.cell);
+        for (int y = max(cy0, 0); y <= min(cy1, G.ny - 1); y++)
+            for (int x = max(cx0, 0); x <= min(cx1, G.nx - 1); x++)
+                G.cells[(size_t)y * G.nx + x].push_back((int)i);
+    }
+}
+
+// the areas over the cells within `r` of p, each once at most per cell (an area may come from several cells)
+template <class Fn> static void AreasNear(V3 p, float r, Fn fn)
+{
+    auto& G = g_areaGrid;
+    if (G.gen != g_navGen || G.count != g_nav.areas.size())
+        AreaGridBuild();
+    if (!G.nx || !(fabsf(p.x) < 1e7f && fabsf(p.y) < 1e7f && r < 1e6f))
+        return; // (nothing sensible there, and no float too big for an int)
+    int cx0 = (int)floorf((p.x - r - G.x0) / G.cell), cx1 = (int)floorf((p.x + r - G.x0) / G.cell);
+    int cy0 = (int)floorf((p.y - r - G.y0) / G.cell), cy1 = (int)floorf((p.y + r - G.y0) / G.cell);
+    for (int y = max(cy0, 0); y <= min(cy1, G.ny - 1); y++)
+        for (int x = max(cx0, 0); x <= min(cx1, G.nx - 1); x++)
+            for (int i : G.cells[(size_t)y * G.nx + x])
+                fn(i);
+}
+
+static int AreaAt(V3 p)
+{
+    g_perfAreaAt++;
+    int best = -1;
+    float bestScore = 1e30f;
+    AreasNear(p, 0.0f, [&](int i) {
         const NavArea& a = g_nav.areas[i];
         if (p.x >= a.lo[0] - 1 && p.x <= a.hi[0] + 1 && p.y >= a.lo[1] - 1 && p.y <= a.hi[1] + 1)
         {
             // points come at floor level or at a player's origin (36 above it): the floor they belong to is the one around 18 below
             float dz = p.z - AreaZ(a, p.x, p.y), score = fabsf(dz - 18.0f);
-            if (dz > -40.0f && dz < 120.0f && score < bestScore)
+            if (dz > -40.0f && dz < 120.0f && (score < bestScore || (score == bestScore && i < best)))
             {
                 bestScore = score;
-                best = (int)i;
+                best = i;
             }
         }
-    }
+    });
     if (best >= 0)
         return best;
-    for (size_t i = 0; i < g_nav.areas.size(); i++) // off the mesh: the closest area
-    {
+    AreasNear(p, 400.0f, [&](int i) { // off the mesh: the closest area (within 400 u, the cells round it)
         // to its edge: next to a big area, its centre can be thousands of units away (hs_desertstorm has one of 2500 x 5150)
         const NavArea& a = g_nav.areas[i];
         float dx = p.x < a.lo[0] ? a.lo[0] - p.x : p.x > a.hi[0] ? p.x - a.hi[0] : 0.0f;
         float dy = p.y < a.lo[1] ? a.lo[1] - p.y : p.y > a.hi[1] ? p.y - a.hi[1] : 0.0f;
         float dz = p.z - a.center.z;
         float d = sqrtf(dx * dx + dy * dy + dz * dz);
-        if (d < bestScore)
+        if (d < bestScore || (d == bestScore && i < best))
         {
             bestScore = d;
-            best = (int)i;
+            best = i;
         }
-    }
+    });
     return bestScore < 400.0f ? best : -1;
 }
 
@@ -1100,6 +1173,7 @@ static void BuildLadders()
             l.bottom = l.top = -1; // the two floors are about level: no climbing there
     });
     BuildLinkAreas();
+    g_navGen++; // the areas after the mesh's were made again
     int linked = 0;
     for (auto& l : g_ladders)
         linked += l.bottom >= 0;
@@ -1111,7 +1185,16 @@ static void BuildLadders()
 
 // A* over areas; returns the waypoints from the bot's area to the goal. partial: when nothing connects to the goal, the way to the
 // area closest to it (not reached: false without it)
+static bool FindPathImpl(V3 from, V3 to, std::vector<V3>& out, bool partial);
 static bool FindPath(V3 from, V3 to, std::vector<V3>& out, bool partial = false)
+{
+    double t0 = PerfNow();
+    bool ok = FindPathImpl(from, to, out, partial);
+    g_perfPathSec += PerfNow() - t0;
+    g_perfPaths++;
+    return ok;
+}
+static bool FindPathImpl(V3 from, V3 to, std::vector<V3>& out, bool partial)
 {
     out.clear();
     g_pathFlagsOut.clear();
@@ -5332,9 +5415,35 @@ static void (*g_StartFrameTramp)();
 static void ConsoleFrame();
 static void CommandFile();
 
+// every 30 s with bots playing: how many bot moves, and the time botassist took in them, in paths and in the frame hook
+static void PerfReport()
+{
+    static double next = 0, since = 0;
+    double now = PerfNow();
+    if (!since)
+        since = now, next = now + 30.0;
+    if (now < next)
+        return;
+    double span = now - since;
+    if (g_perfMoves > 0 && span > 1.0)
+    {
+        static int reports = 0;
+        if (reports++ < 400)
+            Log("perf: %.0f bot moves/s, botassist %.1f ms/s in them (%.0f us each), of which paths %.1f ms/s (%.0f/s); "
+                "AreaAt %.0f/s; frame hook %.1f ms/s; %d areas, mode %d", g_perfMoves / span, g_perfMoveSec * 1000.0 / span,
+                g_perfMoveSec * 1e6 / g_perfMoves, g_perfPathSec * 1000.0 / span, g_perfPaths / span, g_perfAreaAt / span,
+                g_perfFrameSec * 1000.0 / span, (int)g_nav.areas.size(), GameMode());
+    }
+    g_perfMoves = g_perfPaths = g_perfAreaAt = 0;
+    g_perfMoveSec = g_perfPathSec = g_perfFrameSec = 0;
+    since = now;
+    next = now + 30.0;
+}
+
 static void HookedStartFrame()
 {
     g_StartFrameTramp();
+    double perfStart = PerfNow();
     __try
     {
         ConsoleFrame();
@@ -5363,6 +5472,8 @@ static void HookedStartFrame()
         if (faults++ < 5)
             Log("exception 0x%08lX in the frame hook (ignored)", GetExceptionCode());
     }
+    g_perfFrameSec += PerfNow() - perfStart;
+    PerfReport();
 }
 
 static void InstallRadioFilter(DWORD delta); // below
@@ -6012,6 +6123,7 @@ static void HookedRunPlayerMove(void* fakeclient, const float* angles, float fwd
 {
     float aim[3] = { angles[0], angles[1], angles[2] };
     BotState* dbg = nullptr;
+    double perfStart = PerfNow();
     __try
     {
         if (cfg.enabled && fakeclient && g_edictToVars >= 0)
@@ -6298,6 +6410,8 @@ static void HookedRunPlayerMove(void* fakeclient, const float* angles, float fwd
     __except (EXCEPTION_EXECUTE_HANDLER)
     {
     }
+    g_perfMoveSec += PerfNow() - perfStart;
+    g_perfMoves++;
     g_RunPlayerMove(fakeclient, aim, fwd, side, up, buttons, impulse, msec);
     if (dbg && CoopMode()) // debugging is about the scenario modes
         __try { DebugBot(fakeclient, *dbg, aim, buttons); } __except (EXCEPTION_EXECUTE_HANDLER) {}
@@ -6348,6 +6462,8 @@ static bool OnPlayerCommand(void* player)
     for (auto& ch : c)
         ch = (char)tolower(ch);
     if (ShelterPlayerCommand(player, c)) // Zombie Shelter: the orders menu
+        return true;
+    if (SoccerPlayerCommand(player, c)) // Soccer: the orders menu
         return true;
     if (c == "joinclass")
     {

@@ -26,6 +26,13 @@
 // ball and their goal in defence. With the ball a bot dribbles to the other goal, dodging whoever is in front, passes when pressed and a
 // teammate is ahead, and shoots from its range (a special shot now and then); it never keeps the ball near the 15 s penalty. Against a
 // holder it tackles. It sprints for far balls and buys upgrades with its money.
+//
+// The players' orders for their team's bots (ScOrderGive, SoccerPlayerCommand): C (radio3) opens a menu, or in the chat /attack,
+// /defend, /balanced (/free) and /pass. Attack: the bots away from the ball stay up the field, ahead of it, even when the other team
+// has it. Defend: they stay between the ball and their goal, deeper, even when their team has it. Balanced: as above (the default).
+// A pass: from the menu, /pass, or the secondary attack without the ball (the game's own "pass me the ball" call): the team's bot
+// holding a ball turns to the player and passes within 4 s (attack2 passes to the teammate most in front of the view), when the
+// player is within 1800 units.
 static const int MODE_SOCCER = 16;
 static const DWORD MP_SOCCER_RULES_VT = 0x11964f64;
 static const int SC_BALL_HOLDER = 0xd0, SC_BALL_KICKER = 0xd2, SC_BALL_ON = 0xd5, SC_BALL_PUNISH_AT = 0x158;
@@ -80,6 +87,24 @@ struct ScBot
 };
 static std::unordered_map<void*, ScBot> g_scBots;
 
+enum ScOrder
+{
+    SCO_BALANCED,
+    SCO_ATTACK,
+    SCO_DEFEND,
+};
+static ScOrder g_scOrder[3];        // by team
+static struct
+{
+    void* player = nullptr;
+    float until = 0;
+} g_scPassCall[3];                  // by team: who called for a pass, until when
+static std::set<void*> g_scMenuOpen; // players with the orders menu on screen
+static const float SC_PASS_CALL_TIME = 4.0f, SC_PASS_CALL_RANGE = 1800.0f;
+static const int SC_EV_BUTTON = 0x1a4, SC_IN_ATTACK2 = 0x800;
+static void ShMenuText(void* player, int keys, const char* text); // zombie_shelter.inl: the game's text menu
+static void ShPrint(void* player, const char* text);               // zombie_shelter.inl: a line in the middle of the screen
+
 static unsigned char* ScRules()
 {
     unsigned char* r = *(unsigned char**)(MP_GAMERULES + g_mpDelta);
@@ -125,6 +150,8 @@ static void ScScan(float now)
         g_sc = {};
         g_sc.level = g_nav.level;
         g_scBots.clear();
+        for (int t = 0; t < 3; t++)
+            g_scOrder[t] = SCO_BALANCED, g_scPassCall[t].player = nullptr;
     }
     if (now < g_sc.next && now > g_sc.next - 1.0f)
         return;
@@ -301,6 +328,29 @@ static void ScWithBall(void* bot, ScBot& z, const ScBall& ball, int team, V3 me,
         z.doing = z.kick == 1 ? "shooting" : "passing";
         return;
     }
+    // a player of its team called for a pass: turn to them and pass
+    auto& call = g_scPassCall[team];
+    const ScPlayer* caller = call.player && now < call.until && call.player != bot ? ScPlayerOf(call.player) : nullptr;
+    if (caller && Len2D(caller->pos - me) < SC_PASS_CALL_RANGE && Len2D(caller->pos - me) > 60.0f)
+    {
+        look = caller->pos;
+        hasLook = true;
+        speed = 0;
+        z.doing = "turning to pass to the player who called";
+        if (fabsf(AngleDiff(YawOf(caller->pos - me), z.yaw)) < 7.0f && now - z.kickAt > 0.5f)
+        {
+            z.kickAt = now;
+            z.kick = 2;
+            z.kickUntil = now + 0.05f;
+            b |= IN_ATTACK2;
+            call.player = nullptr;
+            static int reports = 0;
+            if (reports++ < 60)
+                Log("Soccer: bot '%s' passes to '%s', who called for it, from %.0f units", String(F<int>(Vars(bot), EV_NETNAME)),
+                    String(F<int>(Vars(caller->e), EV_NETNAME)), Len2D(caller->pos - me));
+        }
+        return;
+    }
     if (!their.ok)
     {
         z.doing = "with the ball, no goal found";
@@ -470,17 +520,28 @@ static void InstallScHooks(DWORD delta)
 // Soccer is played with the hands only (the knife, which the mode turns into CKnifeHelperSoccer), but room loadouts came on top, and with
 // a gun in hand the attack key fires it. Anybody holding more loses it all and gets the knife back (ZtHandleSet / ZtStripToKnife, the same
 // as in Zombie Tag: the slot layout and the functions are the player's, not the mode's).
+static void ScPassCall(void* player, bool quiet);
+
 static void ScFrame()
 {
     g_scActive = g_mpDelta && GameMode() == MODE_SOCCER && g_edictToPrivate >= 0 && ScRules() != nullptr;
     if (!g_scActive)
         return;
     static float nextTry[65];
+    static bool attack2Was[65];
     float now = Now();
     int n = ZtMaxClients();
     for (int i = 1; i <= n && i <= 64; i++)
     {
         void* e = ZtClient(i);
+        // a player's secondary attack without the ball: the game's "pass me the ball" call, which the bots now answer
+        if (e && Alive(e) && !(F<int>(Vars(e), EV_FLAGS) & FL_FAKECLIENT) && (F<int>(Vars(e), EV_FLAGS) & FL_CLIENT))
+        {
+            bool down = (F<int>(Vars(e), SC_EV_BUTTON) & SC_IN_ATTACK2) != 0;
+            if (down && !attack2Was[i])
+                ScPassCall(e, true);
+            attack2Was[i] = down;
+        }
         unsigned char* pl = e ? (unsigned char*)PrivateOf(e) : nullptr;
         if (!pl || !Alive(e) || !Readable(pl + ZT_PL_SLOTS, ZT_PL_KNIFE_TYPE + 4 - ZT_PL_SLOTS))
             continue;
@@ -500,6 +561,123 @@ static void ScFrame()
         if (reports++ < 40)
             Log("Soccer: '%s' had a weapon in slot %d (%s): %s", String(F<int>(Vars(e), EV_NETNAME)), other, had.c_str(), ok ? "now only the hands" : "FAILED");
     }
+}
+
+// ---------------------------------------------------------------- the players' orders
+static const char* const g_scOrderNames[] = { "balanced", "attack", "defend" };
+
+static void ScOrderGive(void* player, ScOrder order)
+{
+    int team = ScTeam(player);
+    if (team != 1 && team != 2)
+        return;
+    g_scOrder[team] = order;
+    void* answer = nullptr;
+    int n = 0;
+    for (auto& pl : g_sc.players)
+        if (pl.team == team && pl.bot)
+        {
+            n++;
+            if (!answer)
+                answer = pl.e;
+        }
+    static const char* const said[] = { "Bots: balanced, attack and defend as the ball goes", "Bots: attack, everyone up the field",
+                                        "Bots: defend, everyone back" };
+    ShPrint(player, said[order]);
+    Log("Soccer: order '%s' for team %d (%d bots)", g_scOrderNames[order], team, n);
+    if (cfg.voices != "off" && answer)
+        FakeCommand(answer, "roger");
+}
+
+// a pass for this player from the team's bot holding a ball (quiet: the game's own key, no message when nobody has it)
+static void ScPassCall(void* player, bool quiet)
+{
+    int team = ScTeam(player), index = ScIndex(player);
+    if (team != 1 && team != 2)
+        return;
+    bool mateHas = false;
+    for (auto& b : g_sc.balls)
+    {
+        if (b.holder == index)
+            return; // it has the ball itself: the key passes it
+        mateHas |= b.holderTeam == team;
+    }
+    g_scPassCall[team].player = player;
+    g_scPassCall[team].until = Now() + SC_PASS_CALL_TIME;
+    if (!quiet || mateHas)
+        ShPrint(player, mateHas ? "Pass! Your teammate passes you the ball" : "Pass! The next teammate with the ball passes it to you");
+    static int reports = 0;
+    if (reports++ < 40)
+        Log("Soccer: '%s' calls for a pass (%s)", String(F<int>(Vars(player), EV_NETNAME)), quiet ? "secondary attack" : "order");
+}
+
+static void ScShowMenu(void* player)
+{
+    int team = ScTeam(player);
+    char text[400];
+    snprintf(text, sizeof(text),
+             "Soccer orders for your team's bots\n(now: %s)\n\n1. Attack: everyone up the field\n2. Defend: everyone back\n"
+             "3. Balanced: as the ball goes\n4. Pass me the ball\n\n0. Close\n\nChat: /attack /defend /balanced /pass\n"
+             "Right click without the ball also calls for a pass",
+             g_scOrderNames[team == 1 || team == 2 ? g_scOrder[team] : 0]);
+    ShMenuText(player, (1 << 0) | (1 << 1) | (1 << 2) | (1 << 3) | (1 << 9), text);
+    g_scMenuOpen.insert(player);
+}
+
+// true: the command stops here (the orders menu took it)
+static bool SoccerPlayerCommand(void* player, const std::string& c)
+{
+    if (GameMode() != MODE_SOCCER || !ScRules())
+    {
+        g_scMenuOpen.clear();
+        return false;
+    }
+    if (c == "radio3")
+    {
+        ScShowMenu(player);
+        return true;
+    }
+    bool open = g_scMenuOpen.count(player) != 0;
+    if ((c == "menuselect" || c.compare(0, 5, "radio") == 0) && open)
+    {
+        g_scMenuOpen.erase(player);
+        if (c == "menuselect")
+        {
+            const char* a = g_CmdArgv(1);
+            int key = a ? atoi(a) : 0;
+            if (key == 1)
+                ScOrderGive(player, SCO_ATTACK);
+            else if (key == 2)
+                ScOrderGive(player, SCO_DEFEND);
+            else if (key == 3)
+                ScOrderGive(player, SCO_BALANCED);
+            else if (key == 4)
+                ScPassCall(player, false);
+            return true;
+        }
+    }
+    if (c == "say" || c == "say_team")
+    {
+        const char* a = g_CmdArgv(1);
+        std::string t = a ? a : "";
+        for (auto& ch : t)
+            ch = (char)tolower(ch);
+        while (!t.empty() && (t[0] == '/' || t[0] == '!' || t[0] == ' ' || t[0] == '"'))
+            t.erase(0, 1);
+        while (!t.empty() && (t.back() == ' ' || t.back() == '"'))
+            t.pop_back();
+        if (t == "attack" || t == "offense" || t == "offence" || t == "forward")
+            ScOrderGive(player, SCO_ATTACK);
+        else if (t == "defend" || t == "defense" || t == "defence" || t == "back")
+            ScOrderGive(player, SCO_DEFEND);
+        else if (t == "balanced" || t == "free" || t == "normal")
+            ScOrderGive(player, SCO_BALANCED);
+        else if (t == "pass" || t == "passme" || t == "pass me")
+            ScPassCall(player, false);
+        else if (t == "orders" || t == "menu" || t == "bots")
+            ScShowMenu(player);
+    }
+    return false;
 }
 
 // ---------------------------------------------------------------- every bot
@@ -663,17 +841,19 @@ static bool DriveSoccerBot(void* bot, float& yaw, float& pitch, float& fwd, floa
             axis = axis * (1.0f / (fieldLen > 1 ? fieldLen : 1));
             V3 sideV{ -axis.y, axis.x, 0 };
             V3 at;
-            if (theirs)
+            ScOrder order = g_scOrder[team];
+            bool back = order == SCO_DEFEND || (theirs && order != SCO_ATTACK);
+            if (back)
             {
-                // defending: on the way from the ball to our goal
-                at = ball->pos + (mine.center - ball->pos) * (0.35f + 0.1f * (slot % 3));
+                // defending: on the way from the ball to our goal (deeper when told to defend)
+                at = ball->pos + (mine.center - ball->pos) * ((order == SCO_DEFEND ? 0.55f : 0.35f) + 0.1f * (slot % 3));
                 lateral *= 0.6f;
-                z.doing = "defending";
+                z.doing = order == SCO_DEFEND ? "defending (told to)" : "defending";
             }
             else
             {
-                at = ball->pos + axis * (300.0f + 120.0f * (slot % 3));
-                z.doing = ours ? "running ahead for a pass" : "taking a place for the loose ball";
+                at = ball->pos + axis * ((order == SCO_ATTACK ? 450.0f : 300.0f) + (order == SCO_ATTACK ? 150.0f : 120.0f) * (slot % 3));
+                z.doing = order == SCO_ATTACK ? "up the field (told to attack)" : ours ? "running ahead for a pass" : "taking a place for the loose ball";
             }
             at = at + sideV * lateral;
             // not into the nets
@@ -685,7 +865,7 @@ static bool DriveSoccerBot(void* bot, float& yaw, float& pitch, float& fwd, floa
             speed = 240.0f;
             look = ball->pos;
             hasLook = true;
-            if (ours && Len2D(goal - me) > 600.0f)
+            if ((ours || g_scOrder[team] == SCO_ATTACK) && Len2D(goal - me) > 600.0f)
                 ScSprint(bot, z, true, now);
         }
     }

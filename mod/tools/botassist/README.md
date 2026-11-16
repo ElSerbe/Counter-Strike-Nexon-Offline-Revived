@@ -801,6 +801,14 @@ on the hands only (room loadouts came with guns). The rules count each team with
 lets a bot on team 1/2 pass (+0xe10 not 1 nor 3), and the same check then skipped bots outright (IsBot, vfunc 0x21c): its jnz at 0x1143cfa7 is
 NOPed in memory (the function is only the soccer rules'). botassist.log "Soccer:", botassist_debug.log "Soccer bot".
 
+- Orders for the team's bots (`ScOrderGive`, `SoccerPlayerCommand`): C (`radio3`) opens a text menu (Zombie Shelter's
+  `ShMenuText`), or chat `/attack`, `/defend`, `/balanced` (`/free`), `/pass`, `/orders`. Attack: the bots off the ball take
+  places 450-750 u ahead of it even when the other team has it, and sprint there; defend: 55-75% of the way from the ball to
+  their goal even when their team has it; balanced: as before. The goalkeeper and the chaser/presser are unchanged.
+- A pass call (`ScPassCall`: menu, `/pass`, or a player's secondary attack without the ball, read from pev->button 0x1a4 in
+  `ScFrame`, the game's own "pass me" key) lasts 4 s: the team's bot holding a ball within 1800 u stops, turns to the player
+  and presses attack2 (the game passes to the teammate most in front of the view). Log: `Soccer: 'x' calls for a pass`,
+  `Soccer: bot 'x' passes to 'y', who called for it`, `Soccer: order 'attack' for team N`.
 ## Zombie Shelter (mode 28) with room bots
 
 `modes/zombie_shelter.inl`, rules `CSOGameRulesSHELTERTeam` (vtable 0x117a1ba8, the event map's 0x117a2d1c; code 0x10836000-0x10846000, the
@@ -924,6 +932,13 @@ fixed spots, builds planned, sent, done or refused, unreachable resources, order
 
 A shared change, because bots got caught on corners in every mode: `FindPath`, `NextWaypoint`, `WalkYaw`, `ClearYaw`, `FormationSpot`, `AreaAt`.
 
+- Speed: `AreaAt` (where a point is on the mesh) went through every area, many times per bot and frame: with many bots
+  that was most of botassist's time. Now a grid over the mesh (cells of 128 u or more, at most 512 a side) lists the
+  areas over each cell; `AreaAt` looks only at the cell's, and off the mesh at the cells within 400 u. It is made again
+  when `g_navGen` changes (a new mesh; `BuildLadders`, which also makes the drawn links' areas) or the number of areas
+  does. Every 30 s with bots playing, botassist.log has `perf: N bot moves/s, botassist X ms/s in them (Y us each), of
+  which paths ... AreaAt N/s; frame hook X ms/s` (QueryPerformanceCounter around `HookedRunPlayerMove`'s own work,
+  `FindPath` and `HookedStartFrame`).
 - Engine `TraceHull` is index 36 of the table (`UTIL_TraceHull` 0x1151ad70: v1, v2, noMonsters, hull, skip, tr; hull 1 standing, 3 crouching). Lines had three blind spots: no width (a corner catches the 32 u
   of a player), no clip brushes (hull 0 doesn't have them), and with noMonsters the engine skips every solid that isn't SOLID_BSP (`cycler_sprite` is SOLID_SLIDEBOX). `BodyFraction` traces the crouching hull raised
   18 u (the upper half of a standing body), against everything, and ignores people and monsters. `BodyStep` tells stairs from walls: a level hull hits rising steps, but above them it's free and the floor is within 48 u.
