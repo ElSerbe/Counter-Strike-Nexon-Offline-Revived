@@ -953,6 +953,12 @@ namespace CsnzLauncher
                     for (int i = sa + 1; i < args.Length && !args[i].StartsWith("--"); i++)
                         lines.Add($"steam api {args[i]}: Valve's {SteamApi.IsValves(args[i])}");
                 }
+                if (args.Contains("--goldberg"))
+                {
+                    // the Goldberg Steam Emulator's download from GitLab into mod\tools\goldberg
+                    bool ok = SteamApi.EnsureEmulator(l => lines.Add(l));
+                    lines.Add("goldberg: " + (ok ? "ready" : "failed") + ", " + SteamApi.Emulator + (File.Exists(SteamApi.Emulator) ? $" ({new FileInfo(SteamApi.Emulator).Length} bytes)" : " (missing)"));
+                }
                 int ue = Array.IndexOf(args, "--use-emulator");
                 if (ue > 0 && ue + 1 < args.Length)
                 {

@@ -5,8 +5,10 @@
 // from the archive.org copy of the game (that one file, not the whole zip). Nothing replaces the game's own DLL.
 using System;
 using System.IO;
+using System.IO.Compression;
 using System.Net.Http;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 
 namespace CsnzLauncher
@@ -74,24 +76,70 @@ namespace CsnzLauncher
             }
         }
 
-        // the Goldberg Steam Emulator's DLL shipped with the mod (mod\tools\goldberg, LGPL)
+        // The Goldberg Steam Emulator's DLL (LGPL, https://gitlab.com/Mr_Goldberg/goldberg_emulator) isn't shipped with the
+        // mod: the launcher downloads its author's release zip from GitLab when a game needs it and takes the 32-bit
+        // steam_api.dll at the zip's root, which has to be exactly this one (SHA-256). Kept in mod\tools\goldberg.
         public static string Emulator => Path.Combine(Paths.Mod, "tools", "goldberg", "steam_api.dll");
+        public const string EmulatorZipUrl = "https://gitlab.com/Mr_Goldberg/goldberg_emulator/uploads/2524331e488ec6399c396cf48bbe9903/Goldberg_Lan_Steam_Emu_v0.2.5.zip";
+        const string EmulatorSha256 = "d45e99b9f588670a9cf8316243e98d64bce96303915ec3fa0dc2bfdb42099a45"; // v0.2.5, built 2019-08-12
+        // Goldberg builds the launcher put in a game before: the one shipped with the mod in v1.1.12 to v1.1.15 (2023-05-09)
+        static readonly string[] OlderEmulators = { "eaeaf26f60229ae4d1a9aae07d03ab4e93ea599dd883eb810d6adebcf0e52e14" };
 
-        static bool SameFile(string a, string b)
+        static string Sha256Of(string path)
         {
             try
             {
-                if (new FileInfo(a).Length != new FileInfo(b).Length)
-                    return false;
-                byte[] x = File.ReadAllBytes(a), y = File.ReadAllBytes(b);
-                if (x.Length != y.Length)
-                    return false;
-                for (int i = 0; i < x.Length; i++)
-                    if (x[i] != y[i])
-                        return false;
+                using (var sha = SHA256.Create())
+                using (var f = File.OpenRead(path))
+                    return BitConverter.ToString(sha.ComputeHash(f)).Replace("-", "").ToLowerInvariant();
+            }
+            catch { return ""; }
+        }
+
+        static bool IsEmulator(string path)
+        {
+            var h = Sha256Of(path);
+            return h == EmulatorSha256 || Array.IndexOf(OlderEmulators, h) >= 0;
+        }
+
+        // the emulator's DLL in mod\tools\goldberg, downloaded from GitLab when it isn't there yet
+        public static bool EnsureEmulator(Logger log)
+        {
+            if (Sha256Of(Emulator) == EmulatorSha256)
+                return true;
+            log("Getting the Goldberg Steam Emulator (v0.2.5, 5 MB) from gitlab.com...");
+            var part = Emulator + ".part";
+            try
+            {
+                byte[] zip;
+                using (var http = new HttpClient { Timeout = TimeSpan.FromMinutes(5) })
+                {
+                    http.DefaultRequestHeaders.UserAgent.ParseAdd("CSNZ-Offline-Revived-Launcher");
+                    zip = http.GetByteArrayAsync(EmulatorZipUrl).GetAwaiter().GetResult();
+                }
+                Directory.CreateDirectory(Path.GetDirectoryName(Emulator));
+                using (var archive = new ZipArchive(new MemoryStream(zip), ZipArchiveMode.Read))
+                {
+                    var entry = archive.GetEntry("steam_api.dll") ?? throw new Exception("the zip has no steam_api.dll");
+                    using (var from = entry.Open())
+                    using (var to = File.Create(part))
+                        from.CopyTo(to);
+                }
+                if (Sha256Of(part) != EmulatorSha256)
+                    throw new Exception("its steam_api.dll isn't the expected one");
+                if (File.Exists(Emulator))
+                    File.Delete(Emulator);
+                File.Move(part, Emulator);
+                log("The Goldberg Steam Emulator's steam_api.dll is ready.");
                 return true;
             }
-            catch { return false; }
+            catch (Exception ex)
+            {
+                try { File.Delete(part); } catch { }
+                log("Couldn't get the Goldberg Steam Emulator (" + ex.Message + "). Without the game on your Steam account, this copy " +
+                    "of the game may close at startup: put Goldberg's steam_api.dll in its Bin by hand (" + EmulatorZipUrl + ").");
+                return false;
+            }
         }
 
         // A game that isn't a Steam library install (the archive.org copy) closes at startup when the Steam account
@@ -99,16 +147,17 @@ namespace CsnzLauncher
         // A Steam install, or another DLL someone put there on purpose, is left alone.
         public static void UseEmulatorIfNotSteam(string game, Logger log)
         {
-            if (!GameLocator.IsGame(game) || !string.IsNullOrEmpty(GameLocator.BuildId(game)) || !File.Exists(Emulator))
+            if (!GameLocator.IsGame(game) || !string.IsNullOrEmpty(GameLocator.BuildId(game)))
                 return;
             var inGame = InGame(game);
-            if (File.Exists(inGame) && SameFile(inGame, Emulator))
-                return;
             if (File.Exists(inGame) && !IsValves(inGame))
             {
-                log("The game's steam_api.dll isn't Valve's nor the mod's emulator: left as it is.");
+                if (!IsEmulator(inGame))
+                    log("The game's steam_api.dll isn't Valve's nor the mod's emulator: left as it is.");
                 return;
             }
+            if (!EnsureEmulator(log))
+                return;
             try
             {
                 if (File.Exists(inGame) && !IsValves(Kept))

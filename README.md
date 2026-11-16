@@ -17,7 +17,8 @@ launcher patches *your* copy of the game, keeps a backup of every file it change
    1362486462562801379): 12.9 GB, resumable, checked against archive.org's MD5 and unpacked into the folder you
    choose (about 27 GB free needed while installing). The repository doesn't host the game. A copy that isn't a
    Steam library install gets the Goldberg Steam Emulator's `steam_api.dll` in its `Bin` on Play, so it starts without
-   the game on your Steam account (`mod\tools\goldberg`, LGPL v3; Valve's is kept for online play).
+   the game on your Steam account (the launcher downloads the emulator's v0.2.5 from its author's GitLab: see
+   `mod\tools\goldberg`, LGPL v3; Valve's is kept for online play).
 2. Download `CSNZ-Offline-Revived-Launcher.exe` from the latest release and put it in an empty folder of its own
    (the mod is installed next to it, in `mod\`). Don't open it from the browser's downloads bar: the browser runs a new temporary
    copy each time, and the launcher would ask to install everything again (it now offers to move itself to
