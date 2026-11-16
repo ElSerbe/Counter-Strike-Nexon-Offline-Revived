@@ -2201,7 +2201,7 @@ index 24d1ccc..c51929e 100644
  		if (destRoom->GetSettings()->gameModeId == 15)
  		{
 diff --git a/src/manager/itemmanager.cpp b/src/manager/itemmanager.cpp
-index ad8d88a..1707218 100644
+index ad8d88a..57e0c95 100644
 --- a/src/manager/itemmanager.cpp
 +++ b/src/manager/itemmanager.cpp
 @@ -1,9 +1,11 @@
@@ -2280,7 +2280,22 @@ index ad8d88a..1707218 100644
  int CItemManager::AddItem(int userID, IUser* user, int itemID, int count, int duration, int lockStatus)
  {
  	int itemStatus = 1;
-@@ -738,10 +769,9 @@ int CItemManager::AddItem(int userID, IUser* user, int itemID, int count, int du
+@@ -683,6 +714,14 @@ int CItemManager::AddItem(int userID, IUser* user, int itemID, int count, int du
+ 	if (duration < 0)
+ 		duration = 0;
+ 
++	// offline build: a timed copy of an item every account has for good from the start (DefaultItems: ZombieAnoWeapon 136
++	// from a reward) would only expire and bring a notice; the player keeps the default one
++	if (duration > 0 && CUserInventoryItem().IsItemDefault(itemID))
++	{
++		Logger().Info("Item %d for %d days not added for user %d: every account owns it for good\n", itemID, duration, userID);
++		return ITEM_ADD_SUCCESS;
++	}
++
+ 	// don't add PasswordBox add as separate item, increment uData->passwordBoxes value
+ 	if (itemID == 166) // PasswordBox
+ 	{
+@@ -738,10 +777,9 @@ int CItemManager::AddItem(int userID, IUser* user, int itemID, int count, int du
  		duration = currentTimestamp + duration * CSO_24_HOURS_IN_MINUTES; // !!! items must have inuse = 1 and status = 1
  
  	// Category: 1 - pistols, 2 - shotguns, 3 - SMG, 4 - rifle, 5 - machine guns, 6 - equipment,  7 - class, 12 - costume, 13 - weapon parts, 
@@ -2292,7 +2307,7 @@ index ad8d88a..1707218 100644
  	{
  		vector<CUserInventoryItem> items;
  		if (itemWithSameID.m_nItemID)
-@@ -1364,8 +1394,8 @@ int CItemManager::AddItems(int userID, IUser* user, vector<RewardItem>& items)
+@@ -1364,8 +1402,8 @@ int CItemManager::AddItems(int userID, IUser* user, vector<RewardItem>& items)
  			}
  		}
  
@@ -2303,7 +2318,7 @@ index ad8d88a..1707218 100644
  	}
  
  	if (result == ITEM_ADD_DB_ERROR)
-@@ -1450,6 +1480,8 @@ int CItemManager::UseItem(IUser* user, int slot, int additionalArg, int addition
+@@ -1450,6 +1488,8 @@ int CItemManager::UseItem(IUser* user, int slot, int additionalArg, int addition
  
  	switch (item.m_nItemID)
  	{
@@ -2312,7 +2327,7 @@ index ad8d88a..1707218 100644
  	case 676:
  	{
  		CUserInventoryItem targetItem;
-@@ -2039,18 +2071,8 @@ void CItemManager::OnNicknameChangeUse(IUser* user, string newNickname)
+@@ -2039,18 +2079,8 @@ void CItemManager::OnNicknameChangeUse(IUser* user, string newNickname)
  
  bool CItemManager::OnDailyRewardsRequest(IUser* user, int requestID)
  {
@@ -2333,7 +2348,7 @@ index ad8d88a..1707218 100644
  
  	return true;
  }
-@@ -2859,6 +2881,42 @@ bool CItemManager::OnLockItemRequest(IUser* user, CReceivePacket* msg)
+@@ -2859,6 +2889,42 @@ bool CItemManager::OnLockItemRequest(IUser* user, CReceivePacket* msg)
  
  void CItemManager::OnUserLogin(IUser* user)
  {
@@ -2376,6 +2391,18 @@ index ad8d88a..1707218 100644
  	vector<int> rewardsNotices;
  	g_UserDatabase.GetRewardNotices(user->GetID(), rewardsNotices);
  
+@@ -2874,6 +2940,11 @@ void CItemManager::OnUserLogin(IUser* user)
+ 
+ 	vector<int> expiryNotices;
+ 	g_UserDatabase.GetExpiryNotices(user->GetID(), expiryNotices);
++	// offline build: none for an item every account owns for good (queued before the minute tick kept those)
++	const vector<int>& alwaysOwned = g_pServerConfig->defUser.alwaysOwnedItems;
++	expiryNotices.erase(remove_if(expiryNotices.begin(), expiryNotices.end(), [&](int id) {
++		return CUserInventoryItem().IsItemDefaultOrPseudo(id) || find(alwaysOwned.begin(), alwaysOwned.end(), id) != alwaysOwned.end();
++	}), expiryNotices.end());
+ 	if (expiryNotices.size())
+ 	{
+ 		g_PacketManager.SendUMsgExpiryNotice(user->GetExtendedSocket(), expiryNotices);
 diff --git a/src/manager/itemmanager.h b/src/manager/itemmanager.h
 index ee188d8..6007fc4 100644
 --- a/src/manager/itemmanager.h
@@ -7079,7 +7106,7 @@ index ee72a34..6b6beac 100644
  
  	// clan related
 diff --git a/src/manager/userdatabase_sqlite.cpp b/src/manager/userdatabase_sqlite.cpp
-index ed5fefb..8d25b2b 100644
+index ed5fefb..41561d5 100644
 --- a/src/manager/userdatabase_sqlite.cpp
 +++ b/src/manager/userdatabase_sqlite.cpp
 @@ -14,6 +14,8 @@
@@ -7100,6 +7127,15 @@ index ed5fefb..8d25b2b 100644
  			return false;
  
  		DropSessions();
+@@ -3010,7 +3012,7 @@ int CUserDatabaseSQLite::GetExpiryNotices(int userID, vector<int>& notices)
+ {
+ 	try
+ 	{
+-		SQLite::Statement statement(m_Database, OBFUSCATE("SELECT itemID FROM UserExpiryNotice WHERE userID = ?"));
++		SQLite::Statement statement(m_Database, OBFUSCATE("SELECT DISTINCT itemID FROM UserExpiryNotice WHERE userID = ? LIMIT 255"));
+ 		statement.bind(1, userID);
+ 
+ 		while (statement.executeStep())
 @@ -4101,6 +4103,513 @@ int CUserDatabaseSQLite::SetAddons(int userID, vector<int>& addons)
  	return 1;
  }
@@ -7614,7 +7650,46 @@ index ed5fefb..8d25b2b 100644
  int CUserDatabaseSQLite::GetUsersAssociatedWithIP(const string& ip, vector<CUserData>& userData)
  {
  	try
-@@ -6437,7 +6946,7 @@ int CUserDatabaseSQLite::GetUserClassModLoadOut(int userID, int slot, ClassModIn
+@@ -5900,19 +6409,28 @@ void CUserDatabaseSQLite::OnMinuteTick(time_t curTime)
+ 				int userID = query.getColumn(0);
+ 
+ 				IUser* user = g_UserManager.GetUserById(userID);
+-				if (user)
+-				{
+-					g_PacketManager.SendUMsgExpiryNotice(user->GetExtendedSocket(), vector<int>{ item.m_nItemID });
+ 
+-					g_ItemManager.RemoveItem(userID, user, item);
+-				}
+-				else
++				// offline build: a timed copy of an item every account owns for good (DefaultItems, PseudoDefaultItems,
++				// AlwaysOwnedItems) stays, made permanent, with no notice. RemoveItem refuses default items, so such a copy
++				// (ZombieAnoWeapon 136 for 3 days) "expired" again every minute: a notice each time, or one more queued
++				// while offline. An item that can't be removed for another reason is kept the same way, logged.
++				const vector<int>& always = g_pServerConfig->defUser.alwaysOwnedItems;
++				bool ownedForGood = item.IsItemDefaultOrPseudo() || find(always.begin(), always.end(), item.m_nItemID) != always.end();
++				if (!ownedForGood && g_ItemManager.RemoveItem(userID, user, item))
+ 				{
+-					// add to notice list
+-					UpdateExpiryNotices(userID, item.m_nItemID);
+-
+-					g_ItemManager.RemoveItem(userID, user, item);
++					if (user)
++						g_PacketManager.SendUMsgExpiryNotice(user->GetExtendedSocket(), vector<int>{ item.m_nItemID });
++					else
++						UpdateExpiryNotices(userID, item.m_nItemID); // add to notice list
++					continue;
+ 				}
++
++				SQLite::Statement keep(m_Database, OBFUSCATE("UPDATE UserInventory SET expiryDate = 0 WHERE userID = ? AND slot = ?"));
++				keep.bind(1, userID);
++				keep.bind(2, item.m_nSlot);
++				keep.exec();
++				Logger().Info("Item %d (slot %d) of user %d expired but %s: kept, permanent\n", item.m_nItemID, item.m_nSlot, userID,
++					ownedForGood ? "every account owns it for good" : "it couldn't be removed");
+ 			}
+ 
+ 			query.reset();
+@@ -6437,7 +6955,7 @@ int CUserDatabaseSQLite::GetUserClassModLoadOut(int userID, int slot, ClassModIn
  {
  	try
  	{
