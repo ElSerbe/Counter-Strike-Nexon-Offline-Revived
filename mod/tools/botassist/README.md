@@ -201,8 +201,9 @@ automatic ones join CT. No more kicks in co-op modes.
 - Respawns in PvP modes can happen without any bot frame while dead: a new life is also a 1 s gap in its frames or
   its health back up by 30+.
 
-- "None" weapon slots: a bot's own None (-1) or a weapon filter whose primary/secondary list is [-1] (the editor's
-  None cell). The bot doesn't buy that slot (its AI's buy commands are dropped) and drops what it carries there:
+- "None" weapon slots: a bot's own None (-1) or a weapon filter whose primary/secondary/melee list is only [-1] (the
+  editor's None cell; melee: only the default knife). None with weapons in a filter is one more draw for each life
+  (4 weapons and None: about 1 bot in 5; `st.nonePrimary` / `noneSecondary`, kept on the buy retries). The bot doesn't buy that slot (its AI's buy commands are dropped) and drops what it carries there:
   "cl_drop" (CSNZ has no "drop" command) throws the weapon in hand, so every 4 s it is switched to the None slots (slot1/slot2) to drop what it
   picked up; checked every 0.6 s.
 - New rounds respawn bots with the game's default weapons without a dead frame or a health change: a jump of
@@ -386,6 +387,13 @@ mp.dll has a cvar `bot_stop` (all the game's bots, 1/0) and the engine won't add
 `BotControlCommands` links its `bot_stop` at the head of the engine's command list itself (commands are looked up before
 cvars); the other three are added with `AddServerCommand`.
 
+
+## Bots' radio: no "Get in position and wait for my go"
+
+`HookedRadio` detours `CBasePlayer::Radio` (mp.dll 0x114c7700, thiscall: message id, text, pitch, show icon; ret 0x10) and
+drops a bot's `%!MRAD_GETINPOS` (sent from 0x113f40c7 and 0x113f67ff): the game's bots repeated it all the time in every
+mode. Players' radio goes through. With that gone, `Voices` (botassist.ini) is `normal` again by default: their voice
+chatter.
 ## Room skill in PvP, characters half men / half women
 
 - The game's own AI (PvP modes) aims by the bot's BotProfile: CBot::m_profile at player +0x3700 (profile +0x04
@@ -398,7 +406,9 @@ cvars); the other three are added with `AddServerCommand`.
 - Team swaps in the middle of a match (mp.dll 0x114d66e1) give the default character of the new team (class table
   vfunc 0x24(team) -> player +0xcd4, male, player vfunc 0x220 = model). A bot whose class becomes that default
   after a team change gets a character of its new team (room character, filter, or random half men / half women)
-  the same way (ApplyTeamCharacter). Not in zombie modes (infection changes team and model).
+  the same way (ApplyTeamCharacter). A bot back on its team's default character without a team change (a new round of
+  Team Deathmatch did that) gets its own character again (at most every 2 s; log "put back on its own character").
+  Not in zombie modes (infection changes team and model).
 - Room AI players without weapons or filter buy any weapon of the game (BuyAnyWeapon=1) in every mode, melee
   included (botassist_weapons.txt category 11, from gen_weapons.py).
 - sv_cheats: hw.dll sets it to 1 at start-up with -dev, and it stays on between matches; botassist sets it to 0
@@ -559,7 +569,8 @@ each player's +0x2eec).
 
 ## Human bots back off from zombies (PvP zombie modes)
 
-`modes/zombie_humans.inl`, every mode where zombies are players (not co-op/monster modes, Zombie Giant or Manhunt):
+`modes/zombie_humans.inl`, every mode where zombies are players (`ZombieMode`: the regrouping ran in Team Deathmatch too,
+gathering every bot round one player; not co-op/monster modes, Zombie Giant or Manhunt):
 a human bot (player +0x2166 clear) with a zombie in sight within `ZombieFleeDistance` (botassist.ini, 450; any
 zombie within 200 u even unseen) keeps the stock AI's aim and fire but moves away from them, to a nav area 250 to
 900 u off in the direction away from the zombies (scored by how far it leads from them), picked again every 1.5 to

@@ -32,10 +32,14 @@ struct ZfBot
 };
 static std::map<void*, ZfBot> g_zf;
 
+static bool ZombieMode(int mode); // botassist.cpp: the modes with zombies
+
+// (only modes with zombies: the regrouping ran in Team Deathmatch too, and every bot gathered round one player)
 static bool ZombieFleeMode()
 {
     int m = GameMode();
-    return cfg.zombieFlee && !CoopMode() && m != MODE_ZOMBIE_GIANT && m != MODE_ZHE && m != MODE_ZCON && m != MODE_ZWAR;
+    return cfg.zombieFlee && ZombieMode(m) && !CoopMode() && m != MODE_ZOMBIE_GIANT && m != MODE_ZHE && m != MODE_ZCON &&
+           m != MODE_ZWAR;
 }
 
 // the living humans of the bot's side (not zombies), other than the bot, within `range`

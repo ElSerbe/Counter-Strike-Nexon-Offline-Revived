@@ -145,7 +145,7 @@ static struct
     float zombieFleeDistance = 450.0f;
     std::vector<int> primaries, pistols, melees;
     int skill = -1;            // 0..7, -1: the room's bot difficulty
-    std::string voices = "off"; // normal (their voice chatter), radio (radio commands, shown as text), off
+    std::string voices = "normal"; // normal (their voice chatter), radio (radio commands, shown as text), off
     bool randomCharacters = true; // any character of the game (botassist_characters.txt)
     float refillAfter = 6.0f;  // seconds of firing that empty about half of the ammo: then buy ammo in a buy zone
     float minArmor = 50.0f;    // below this armor, buy kevlar + helmet in a buy zone
@@ -1340,6 +1340,7 @@ struct BotState
     int roomBot = -1;            // index into g_matchBots: the room AI player this bot plays (name, weapons...)
     bool ordered = false;        // a player gave this bot an order (other modes: botassist only moves it then)
     int appliedClass = 0;        // room character already given to this bot
+    float charFixAt = -100;      // ApplyTeamCharacter: last put back (not more than every 2 s)
     unsigned char* ownProfile = nullptr; // this bot's copy of its BotProfile with its room skill (see ApplyRoomSkill)
     int ownSkill = -1;
     int charTeam = 0;            // team its character belongs to (a swap to the other team gets a new one)
@@ -1347,6 +1348,7 @@ struct BotState
     float nextLoadoutCheck = 0;  // room weapons: check what it holds now and then
     int loadoutBuys = 0;         // buys of the room's weapons in this life
     int loadoutPrimary = 0, loadoutSecondary = 0, loadoutMelee = 0; // what it buys in this life
+    bool nonePrimary = false, noneSecondary = false; // None drawn from its filter for this life: it drops what it gets
     float nextStrip = 0;         // "None" slots: drop that weapon
     int strips = 0;              // drops in this life
     int stripProbe = 0;          // next None slot to switch to (to drop what it carries there)
@@ -2028,16 +2030,18 @@ static DWORD WINAPI FetchMatchBots(LPVOID)
         m.allowSecondary = JsonInts(obj, "allowSecondary");
         m.allowMelee = JsonInts(obj, "allowMelee");
         m.allowCharacter = JsonInts(obj, "allowCharacter");
-        // a filter whose slot is "None" ([-1]): a bot with a random weapon there gets none
+        // a filter whose slot is only "None" ([-1]): a bot with a random weapon there gets none. With weapons too, None
+        // stays in the list as one more draw: with 4 weapons and None, about 1 bot in 5 gets none (a new draw each life)
         auto none = [](int& slot, std::vector<int>& allow) {
-            bool isNone = std::find(allow.begin(), allow.end(), -1) != allow.end();
-            if (isNone && slot == 0)
+            bool onlyNone = !allow.empty() && std::all_of(allow.begin(), allow.end(), [](int x) { return x == -1; });
+            if (onlyNone && slot == 0)
                 slot = -1;
-            if (isNone)
+            if (onlyNone)
                 allow.clear();
         };
         none(m.primary, m.allowPrimary);
         none(m.secondary, m.allowSecondary);
+        none(m.melee, m.allowMelee); // (melee None: only the default knife)
         bots.push_back(m);
         i = b + 1;
     }
@@ -2926,7 +2930,9 @@ static void UpdateBuying(void* bot, BotState& st)
     // "None": the bot drops its weapon of that slot (the game gives a pistol, some modes a primary, and bots pick
     // up what others drop). CSNZ's drop command is "cl_drop" (mp.dll 0x113ee0f4: game rules vfunc 0x11c), it throws
     // the weapon in hand, so the bot is switched to that slot now and then.
-    if (rb && (rb->primary < 0 || rb->secondary < 0) && now >= st.nextStrip && st.strips < 200)
+    bool noPrimary = rb && (rb->primary < 0 || (rb->primary == 0 && st.nonePrimary));
+    bool noSecondary = rb && (rb->secondary < 0 || (rb->secondary == 0 && st.noneSecondary));
+    if (rb && (noPrimary || noSecondary) && now >= st.nextStrip && st.strips < 200)
     {
         st.nextStrip = now + 0.6f;
         const char* m = String(F<int>(Vars(bot), EV_WEAPONMODEL));
@@ -2939,7 +2945,7 @@ static void UpdateBuying(void* bot, BotState& st)
         if (c == 0 && st.probedSlot && !held.empty() && held != st.probedFrom && held.find("knife") == std::string::npos)
             c = st.probedSlot == 2 ? 1 : 4;
         st.probedSlot = 0;
-        if ((rb->primary < 0 && c >= 2 && c <= 5) || (rb->secondary < 0 && c == 1))
+        if ((noPrimary && c >= 2 && c <= 5) || (noSecondary && c == 1))
         {
             DropBehind(bot);
             st.strips++;
@@ -2952,9 +2958,9 @@ static void UpdateBuying(void* bot, BotState& st)
         {
             const char* probes[2];
             int n = 0;
-            if (rb->primary < 0)
+            if (noPrimary)
                 probes[n++] = "slot1";
-            if (rb->secondary < 0)
+            if (noSecondary)
                 probes[n++] = "slot2";
             if (st.stripProbe < n)
             {
@@ -3017,6 +3023,8 @@ static void UpdateBuying(void* bot, BotState& st)
                 st.loadoutPrimary = pickAny(rb->primary, rb->allowPrimary, cfg.primaries);
                 st.loadoutSecondary = pickAny(rb->secondary, rb->allowSecondary, cfg.pistols);
                 st.loadoutMelee = pickAny(rb->melee, rb->allowMelee, cfg.melees);
+                st.nonePrimary = st.loadoutPrimary < 0;
+                st.noneSecondary = st.loadoutSecondary < 0;
             }
             st.loadoutBuys++;
             {
@@ -3081,10 +3089,19 @@ static void UpdateBuying(void* bot, BotState& st)
             return;
         }
         int roomPrimary = rb && st.buyTries == 0 ? pick(rb->primary, rb->allowPrimary) : 0;
-        if (rb && rb->primary < 0)
-            roomPrimary = -1;
-        else if (rb && !rb->allowPrimary.empty() && roomPrimary <= 0)
-            roomPrimary = rb->allowPrimary[rand() % rb->allowPrimary.size()]; // retries stay within the filter
+        if (rb && (rb->primary < 0 || (st.buyTries > 0 && st.nonePrimary)))
+            roomPrimary = -1; // (None drawn for this life stays on the retries)
+        else if (rb && !rb->allowPrimary.empty() && roomPrimary == 0)
+        {
+            std::vector<int> real; // retries stay within the filter's weapons
+            for (int x : rb->allowPrimary)
+                if (x > 0)
+                    real.push_back(x);
+            if (!real.empty())
+                roomPrimary = real[rand() % real.size()];
+        }
+        if (rb && st.buyTries == 0)
+            st.nonePrimary = roomPrimary < 0;
         st.boughtPrimary = roomPrimary > 0 ? roomPrimary : roomPrimary < 0 ? 0 : cfg.primaries[rand() % cfg.primaries.size()];
         const char* model = String(F<int>(Vars(bot), EV_WEAPONMODEL));
         st.modelBeforeBuy = model ? model : "";
@@ -3094,7 +3111,9 @@ static void UpdateBuying(void* bot, BotState& st)
         FakeCommand(bot, "client_buy_open");
         if (st.boughtPrimary > 0)
             BuyAs(bot, st.boughtPrimary);
-        int roomSecondary = rb ? pick(rb->secondary, rb->allowSecondary) : 0;
+        int roomSecondary = rb ? (st.buyTries > 1 && st.noneSecondary ? -1 : pick(rb->secondary, rb->allowSecondary)) : 0;
+        if (rb && st.buyTries == 1)
+            st.noneSecondary = roomSecondary < 0;
         if (roomSecondary >= 0 && (roomSecondary > 0 || !cfg.pistols.empty()))
             BuyAs(bot, roomSecondary > 0 ? roomSecondary : cfg.pistols[rand() % cfg.pistols.size()]);
         int roomMelee = rb ? pickAny(rb->melee, rb->allowMelee, cfg.melees) : 0;
@@ -5346,6 +5365,7 @@ static void HookedStartFrame()
     }
 }
 
+static void InstallRadioFilter(DWORD delta); // below
 static void InstallFrameHook(DWORD delta)
 {
     if (g_StartFrameTramp)
@@ -5355,6 +5375,46 @@ static void InstallFrameHook(DWORD delta)
     if (!memcmp(sf, sfCode, 2))
         g_StartFrameTramp = (void (*)())DetourCdecl(sf, 6, (void*)HookedStartFrame);
     Log("frame hook: %s", g_StartFrameTramp ? "on" : "NOT hooked (unexpected code)");
+    InstallRadioFilter(delta);
+}
+
+// ---------------------------------------------------------------- bots' radio: no "Get in position and wait for my go"
+// CBasePlayer::Radio 0x114c7700 (thiscall: message id "%!MRAD_...", text "#...", pitch, show icon; ret 0x10). The game's bots
+// send "%!MRAD_GETINPOS" (0x113f40c7, 0x113f67ff) again and again in every mode: a bot's is dropped, a player's goes through.
+typedef void(__fastcall* RadioFn)(void* player, void* edx, const char* id, const char* text, int pitch, int icon);
+static RadioFn g_RadioTramp;
+
+static void __fastcall HookedRadio(void* player, void* edx, const char* id, const char* text, int pitch, int icon)
+{
+    __try
+    {
+        if (cfg.enabled && id && !_stricmp(id, "%!MRAD_GETINPOS"))
+        {
+            unsigned char* pev = Readable((unsigned char*)player + 8, 4) ? *(unsigned char**)((unsigned char*)player + 8) : nullptr;
+            if (pev && Readable(pev + EV_FLAGS, 4) && (*(int*)(pev + EV_FLAGS) & FL_FAKECLIENT))
+            {
+                static int reports = 0;
+                if (reports++ < 3)
+                    Log("radio: a bot's \"Get in position and wait for my go\" dropped");
+                return;
+            }
+        }
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+    }
+    g_RadioTramp(player, edx, id, text, pitch, icon);
+}
+
+static void InstallRadioFilter(DWORD delta)
+{
+    if (g_RadioTramp)
+        return;
+    unsigned char* fn = (unsigned char*)(MP_PLAYER_RADIO + delta);
+    static const unsigned char code[] = { 0x55, 0x8b, 0xec, 0x6a, 0xff, 0x68 }; // push ebp; mov ebp, esp; push -1; push imm32
+    if (Readable(fn, 10) && !memcmp(fn, code, sizeof(code)))
+        g_RadioTramp = (RadioFn)DetourCdecl(fn, 10, (void*)HookedRadio);
+    Log("bots' radio filter: %s", g_RadioTramp ? "on (no \"Get in position\")" : "NOT hooked (unexpected code)");
 }
 
 // ---------------------------------------------------------------- orders in the other modes
@@ -5571,22 +5631,30 @@ static void ApplyTeamCharacter(void* bot, BotState& bs)
         bs.charTeam = team; // the character it was created with
         return;
     }
-    if (team == bs.charTeam)
-        return;
     unsigned char* player = (unsigned char*)PrivateOf(bot);
     if (!player || IsBadReadPtr(player + 0xcd4, 4) || ZombieMode(GameMode()))
     {
         bs.charTeam = team;
         return;
     }
+    float now = Now();
+    if (team == bs.charTeam && (bs.appliedClass <= 0 || now - bs.charFixAt < 2.0f))
+        return;
     int current = *(int*)(player + 0xcd4);
     int def = TeamDefaultClass(team);
     if (def <= 0 || current != def)
         return; // not swapped yet (or it already has a character of its own)
-    bs.charTeam = team;
     MatchBot* rb = RoomBotOf(bot, bs);
     int id = 0;
-    if (rb && rb->character > 0 && CharacterFits(rb->character, team) && CharacterClassNumber(rb->character))
+    if (team == bs.charTeam)
+    {
+        // same team, back on the team's default character (a new round of Team Deathmatch did it): its own again
+        int want = bs.appliedClass;
+        if (!CharacterFits(want, team) || !CharacterClassNumber(want) || CharacterClassNumber(want) == def)
+            return;
+        id = want;
+    }
+    else if (rb && rb->character > 0 && CharacterFits(rb->character, team) && CharacterClassNumber(rb->character))
         id = rb->character;
     else
     {
@@ -5603,13 +5671,16 @@ static void ApplyTeamCharacter(void* bot, BotState& bs)
     }
     int number = CharacterClassNumber(id);
     int sex = CharacterSex(id);
+    bool swapped = team != bs.charTeam;
+    bs.charTeam = team;
+    bs.charFixAt = now;
     if (!number || !SetPlayerClass(player, number, sex != 0))
         return;
     bs.appliedClass = id;
     static int reports = 0;
     if (reports++ < 60)
-        Log("bot %d '%s' swapped to team %d: character %d (class %d) instead of the team's default %d", bs.slot,
-            rb ? rb->name.c_str() : "?", team, id, number, def);
+        Log("bot %d '%s' %s team %d: character %d (class %d) instead of the team's default %d", bs.slot,
+            rb ? rb->name.c_str() : "?", swapped ? "swapped to" : "put back on its own character on", team, id, number, def);
 }
 
 // ---------------------------------------------------------------- hooks

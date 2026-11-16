@@ -255,9 +255,13 @@
   let fmSlot = "primary";
   let fmCat = "All";
   let fmOnly = false;      // show only the allowed weapons
-  // a filter's primary / secondary can be "None" ([-1]): its bots carry no weapon there (they drop the one they get)
-  const NONE_SLOTS = ["primary", "secondary"];
-  const filterNone = (p, slot) => !!p && NONE_SLOTS.includes(slot) && (p[slot] || []).includes(-1);
+  // a filter's weapon slots can hold "None" (-1): alone, its bots carry no weapon there (they drop the one they get; melee:
+  // only the default knife); with weapons, None is one more draw (4 weapons and None: about 1 bot in 5 gets none)
+  const NONE_SLOTS = ["primary", "secondary", "melee"];
+  const filterHasNone = (p, slot) => !!p && NONE_SLOTS.includes(slot) && (p[slot] || []).includes(-1);
+  const filterNone = (p, slot) => filterHasNone(p, slot) && (p[slot] || []).every(x => x === -1);
+  const filterCount = (p, slot) => (p[slot] || []).filter(x => x !== -1).length;
+  const noneWord = slot => (slot === "melee" ? "default knife" : "none");
   // characters are filtered per team (CT and T tabs): a team without any keeps every character of its team
   const teamCat = i => (i.team === 1 ? "T" : "CT");
   const filterChars = (p, team) => (p && p.character ? p.character : []).filter(id => !byId[id] || !byId[id].team || byId[id].team === team);
@@ -288,7 +292,7 @@
 
   function renderFilters() {
     $("fmlist").innerHTML = presets.map(p => `<button type="button" class="fm-item${fmSel && fmSel.id === p.id ? " on" : ""}" data-id="${p.id}">${esc(p.name)}
-      <small>${filterNone(p, "primary") ? "no" : p.primary.length} primary &middot; ${filterNone(p, "secondary") ? "no" : p.secondary.length} secondary &middot; ${p.melee.length} melee &middot; ${(p.character || []).length} characters</small></button>`).join("") ||
+      <small>${["primary", "secondary", "melee"].map(s => (filterNone(p, s) ? "no" : filterCount(p, s) + (filterHasNone(p, s) ? " + " + noneWord(s) : "")) + " " + s).join(" &middot; ")} &middot; ${(p.character || []).length} characters</small></button>`).join("") ||
       `<p class="hint">No filters yet.</p>`;
     $("fmedit").classList.toggle("hidden", !fmSel);
     if (!fmSel) return;
@@ -301,16 +305,17 @@
     const q = $("fmsearch").value.trim().toLowerCase();
     const allowed = new Set(fmSel[fmSlot]);
     const keep = $("fmgrid").scrollTop;
-    const none = filterNone(fmSel, fmSlot);
+    const none = filterNone(fmSel, fmSlot), hasNone = filterHasNone(fmSel, fmSlot);
+    const noneName = fmSlot === "melee" ? "Default knife" : "None";
     const noneCell = NONE_SLOTS.includes(fmSlot)
-      ? `<button type="button" class="cell${none ? " blocked" : ""}" data-id="-1" title="Bots with this filter carry no ${fmSlot} weapon"><span class="none">&#10005;</span><span class="cn">None</span></button>`
+      ? `<button type="button" class="cell${hasNone ? " blocked" : ""}" data-id="-1" title="${fmSlot === "melee" ? "Only the default knife" : `No ${fmSlot} weapon`}: alone, for every bot with this filter; with weapons, one more draw among them"><span class="none">&#10005;</span><span class="cn">${noneName}</span></button>`
       : "";
     $("fmgrid").classList.toggle("fm-grid-none", none);
     $("fmgrid").innerHTML = noneCell + fmShown().map(i => cellHtml(i, allowed.has(i.id) ? " allowed" : "")).join("");
     const key = fmSlot + "|" + fmCat + "|" + q;
     if (renderFilters.lastKey === key) $("fmgrid").scrollTop = keep;
     renderFilters.lastKey = key;
-    const n = fmSel[fmSlot].length;
+    const n = chars ? fmSel[fmSlot].length : filterCount(fmSel, fmSlot);
     $("fmonly").classList.toggle("on", fmOnly);
     if (chars) {
       const ct = fmSel.character.filter(id => byId[id] && byId[id].team !== 1).length, t = n - ct;
@@ -318,7 +323,9 @@
         : `${ct} CT and ${t} T character${n > 1 ? "s" : ""} allowed` + (!ct || !t ? `; ${!ct ? "CT" : "T"} bots get any character of their team` : "");
       return;
     }
-    $("fmcount").textContent = none ? `No ${fmSlot} weapon: bots don't buy one and drop the one they get` : n ? `${n} ${fmSlot} weapon${n > 1 ? "s" : ""} allowed` : `No ${fmSlot} weapon chosen: bots with this filter get any ${fmSlot} weapon`;
+    $("fmcount").textContent = none ? (fmSlot === "melee" ? "Default knife only: bots don't buy a melee weapon" : `No ${fmSlot} weapon: bots don't buy one and drop the one they get`)
+      : hasNone ? `${n} ${fmSlot} weapon${n > 1 ? "s" : ""} and ${noneName}: each life, about 1 bot in ${n + 1} gets ${noneWord(fmSlot) === "none" ? `no ${fmSlot} weapon` : "only the default knife"}`
+      : n ? `${n} ${fmSlot} weapon${n > 1 ? "s" : ""} allowed` : `No ${fmSlot} weapon chosen: bots with this filter get any ${fmSlot} weapon`;
   }
 
   async function presetCall(body) {
@@ -574,7 +581,8 @@
   $("fmonly").addEventListener("click", () => { fmOnly = !fmOnly; renderFilters(); });
   $("fmallslot").addEventListener("click", () => {
     if (!fmSel) return;
-    fmSel[fmSlot] = (catalog[fmSlot] || []).map(i => i.id);
+    const keepNone = filterHasNone(fmSel, fmSlot);
+    fmSel[fmSlot] = (catalog[fmSlot] || []).map(i => i.id).concat(keepNone ? [-1] : []);
     renderFilters();
   });
   $("fminvert").addEventListener("click", () => {
@@ -587,17 +595,15 @@
     const c = e.target.closest("[data-id]");
     if (!c || !fmSel) return;
     const id = +c.dataset.id;
-    if (id === -1) fmSel[fmSlot] = filterNone(fmSel, fmSlot) ? [] : [-1];
-    else {
-      const list = fmSel[fmSlot] = fmSel[fmSlot].filter(x => x !== -1);
-      const at = list.indexOf(id);
-      if (at >= 0) list.splice(at, 1); else list.push(id);
-    }
+    // None goes in and out of the list on its own: alone it means no weapon, with weapons one more draw
+    const list = fmSel[fmSlot];
+    const at = list.indexOf(id);
+    if (at >= 0) list.splice(at, 1); else list.push(id);
     renderFilters();
   });
   $("fmall").addEventListener("click", () => {
     if (!fmSel) return;
-    const set = new Set(fmSel[fmSlot].filter(x => x !== -1));
+    const set = new Set(fmSel[fmSlot]);
     fmShown().forEach(i => set.add(i.id));
     fmSel[fmSlot] = [...set];
     renderFilters();
