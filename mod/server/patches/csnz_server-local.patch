@@ -1308,7 +1308,7 @@ index 0000000..5c99d8e
 +
 +extern CBingoManager g_BingoManager;
 diff --git a/src/manager/channelmanager.cpp b/src/manager/channelmanager.cpp
-index 35561e8..27927aa 100644
+index 35561e8..784a108 100644
 --- a/src/manager/channelmanager.cpp
 +++ b/src/manager/channelmanager.cpp
 @@ -1,4 +1,6 @@
@@ -1318,7 +1318,199 @@ index 35561e8..27927aa 100644
  
  #include "itemmanager.h"
  #include "packetmanager.h"
-@@ -121,7 +123,20 @@ bool CChannelManager::OnRoomRequest(CReceivePacket* msg, IExtendedSocket* socket
+@@ -8,6 +10,7 @@
+ #include "dedicatedservermanager.h"
+ 
+ #include "user/userinventoryitem.h"
++#include "room/room.h"
+ 
+ #include "csvtable.h"
+ #include "serverconfig.h"
+@@ -21,7 +24,7 @@ using namespace std;
+ CChannelManager g_ChannelManager;
+ 
+ // TODO: Should we implement multi channels?
+-CChannelManager::CChannelManager() : CBaseManager("ChannelManager")
++CChannelManager::CChannelManager() : CBaseManager("ChannelManager", true) // (second tick: Quick Start's match start)
+ {
+ }
+ 
+@@ -83,6 +86,174 @@ bool CChannelManager::OnChannelListPacket(IExtendedSocket* socket)
+ 	return true;
+ }
+ 
++// ---- offline build: Quick Start (packet 86)
++// The lobby's Quick Start button sends [0][mode][option] once a mode is chosen (GameUI command "QuickStart": hw.dll
++// manager vfunc 0xa0, 0x25f17c0; the mode is the one the mode dialog set through vfunc 0x9c, shown next to the
++// button). "QuickStartBegin" sends [3] (vfunc 0xa4, 0x25f18d0), the custom start settings [1][...] (vfunc 0xa8,
++// 0x25f1990). The official server matched players into rooms; nothing answered here, so the button did nothing.
++// Now: an open room of that mode on this server (no password, a free slot), else a new room of the mode on a random
++// map with AI players, its match started a moment later. [3] uses the player's last Quick Start mode (Team
++// Deathmatch the first time).
++static std::map<int, int> g_QuickStartMode; // user ID -> its last Quick Start mode
++struct PendingQuickStart
++{
++	int userID;
++	int roomID;
++	time_t at;
++};
++static std::vector<PendingQuickStart> g_PendingQuickStarts;
++static const int QUICKSTART_PLAYERS = 10;       // the player and its AI players, at most the mode's maximum
++static const int QUICKSTART_START_DELAY = 3;    // seconds in the room before the match starts
++
++bool CChannelManager::OnQuickStartPacket(CReceivePacket* msg, IExtendedSocket* socket)
++{
++	LOG_PACKET;
++
++	IUser* user = g_UserManager.GetUserBySocket(socket);
++	if (user == NULL)
++		return false;
++
++	const std::vector<unsigned char>& raw = msg->GetData().getBuffer();
++	size_t from = (size_t)msg->GetData().getReadOffset();
++	std::string hex;
++	char h[4];
++	for (size_t i = from; i < raw.size() && i < from + 64; i++)
++	{
++		snprintf(h, sizeof(h), "%02x ", raw[i]);
++		hex += h;
++	}
++	int type = msg->ReadUInt8();
++	Logger().Info("Quick Start request from '%s': type %d (%s)\n", user->GetLogName(), type, hex.c_str());
++
++	int mode;
++	if (type == 0)
++		mode = (signed char)msg->ReadUInt8();
++	else if (type == 3)
++	{
++		auto it = g_QuickStartMode.find(user->GetID());
++		mode = it != g_QuickStartMode.end() ? it->second : 2;
++	}
++	else
++		return true; // the custom start settings: the client keeps them
++
++	return QuickStart(user, mode < 0 ? 2 : mode);
++}
++
++bool CChannelManager::QuickStart(IUser* user, int mode)
++{
++	IExtendedSocket* socket = user->GetExtendedSocket();
++	CChannel* channel = user->GetCurrentChannel();
++	if (channel == NULL)
++		return false;
++	if (user->GetCurrentRoom())
++	{
++		g_PacketManager.SendUMsgNoticeMsgBoxToUuid(socket, "Quick Start can't be used in a room.");
++		return false;
++	}
++
++	CRoomSettings probe;
++	if (g_pGameModeListTable->GetRowIdx(to_string(mode)) < 0)
++	{
++		Logger().Warn("Quick Start: '%s' asked for mode %d, which the mode list doesn't have\n", user->GetLogName(), mode);
++		g_PacketManager.SendUMsgNoticeMsgBoxToUuid(socket, "Quick Start: choose a mode first.");
++		return false;
++	}
++	if (probe.IsVoxelGameMode(mode) || mode == 38 || mode == 39)
++	{
++		g_PacketManager.SendUMsgNoticeMsgBoxToUuid(socket, "Quick Start: Studio modes need a Studio map.\nCreate their room from the room list.");
++		return false;
++	}
++	g_QuickStartMode[user->GetID()] = mode;
++
++	// an open room of the mode
++	for (IRoom* r : channel->GetRooms())
++	{
++		CRoomSettings* s = r->GetSettings();
++		if (s->gameModeId != mode || r->HasPassword() || !r->HasFreeSlots() || s->familyBattle)
++			continue;
++		Logger().Info("Quick Start: '%s' joins room %d (mode %d)\n", user->GetLogName(), r->GetID(), mode);
++		return JoinRoom(user, r->GetID(), "");
++	}
++
++	// a new one on a random map of the mode
++	vector<int> maps;
++	for (auto& id : g_pMapListTable->GetRowNames())
++	{
++		int mapId = atoi(id.c_str());
++		if (mapId > 0 && mapId != 254 && probe.IsMapValid(mode, mapId))
++			maps.push_back(mapId);
++	}
++	if (maps.empty())
++	{
++		Logger().Warn("Quick Start: no map for mode %d\n", mode);
++		g_PacketManager.SendUMsgNoticeMsgBoxToUuid(socket, "Quick Start: this mode has no map to play.");
++		return false;
++	}
++	int mapId = maps[rand() % maps.size()];
++
++	CRoomSettings* settings = new CRoomSettings();
++	int maxPlayers = g_pGameModeListTable->GetCell<int>("mode_maxplayer", to_string(mode));
++	settings->gameModeId = mode;
++	settings->mapId = mapId;
++	settings->maxPlayers = maxPlayers > 0 ? min(maxPlayers, 16) : 16;
++	settings->winLimit = 0;
++	settings->killLimit = 0;
++	settings->LoadDefaultSettings(mode, mapId);
++	settings->roomName = "Quick Start";
++	settings->password = "";
++
++	IRoom* room = channel->CreateRoom(user, settings);
++	user->SetCurrentRoom(room);
++	room->SendJoinNewRoom(user);
++	channel->UserLeft(user, true);
++
++	// AI players: half against the player, all with it in the co-op modes (CT spawns only)
++	bool coop = mode == 15 || mode == 17 || mode == 28 || mode == 52 || mode == 53 || mode == 59;
++	RoomTeamNum hostTeam = room->GetUserTeam(user);
++	if (hostTeam != RoomTeamNum::Terrorist && hostTeam != RoomTeamNum::CounterTerrorist)
++		hostTeam = RoomTeamNum::CounterTerrorist;
++	RoomTeamNum enemyTeam = hostTeam == RoomTeamNum::Terrorist ? RoomTeamNum::CounterTerrorist : RoomTeamNum::Terrorist;
++	int players = min(settings->maxPlayers, QUICKSTART_PLAYERS);
++	int bots = 0;
++	CRoom* cRoom = static_cast<CRoom*>(room);
++	for (int i = 1; i < players; i++)
++	{
++		RoomBot b;
++		b.team = coop ? hostTeam : (i % 2 ? enemyTeam : hostTeam);
++		if (!cRoom->AddBot(b))
++			break;
++		bots++;
++	}
++
++	g_PendingQuickStarts.push_back({ user->GetID(), room->GetID(), time(NULL) + QUICKSTART_START_DELAY });
++	Logger().Info("Quick Start: '%s' got a new room %d, mode %d, map %d, %d AI players; the match starts in %d s\n",
++		user->GetLogName(), room->GetID(), mode, mapId, bots, QUICKSTART_START_DELAY);
++	return true;
++}
++
++// Quick Start's new rooms: their match starts once the player has been in the room a moment (its UI loaded)
++void CChannelManager::OnSecondTick(time_t curTime)
++{
++	(void)curTime;
++	time_t now = time(NULL);
++	for (size_t i = 0; i < g_PendingQuickStarts.size();)
++	{
++		PendingQuickStart p = g_PendingQuickStarts[i];
++		if (now < p.at)
++		{
++			i++;
++			continue;
++		}
++		g_PendingQuickStarts.erase(g_PendingQuickStarts.begin() + i);
++		IUser* user = g_UserManager.GetUserById(p.userID);
++		IRoom* room = user ? user->GetCurrentRoom() : NULL;
++		if (!room || room->GetID() != p.roomID || room->GetHostUser() != user || room->GetStatus() != RoomStatus::STATUS_WAITING)
++			continue; // left, or started already
++		Logger().Info("Quick Start: room %d's match starts\n", p.roomID);
++		OnGameStartRequest(user);
++	}
++}
++
+ bool CChannelManager::OnRoomRequest(CReceivePacket* msg, IExtendedSocket* socket)
+ {
+ 	LOG_PACKET;
+@@ -121,7 +292,20 @@ bool CChannelManager::OnRoomRequest(CReceivePacket* msg, IExtendedSocket* socket
  		g_PacketManager.SendRoomListFull(socket, channelServers[0]->GetChannels()[0]->GetRooms());
  		break;
  	case 27:
@@ -1339,7 +1531,7 @@ index 35561e8..27927aa 100644
  	case InRoomType::SetZBAddonsRequest:
  		return OnRoomSetZBAddonRequest(msg, user);
  	case InRoomType::KickRequest:
-@@ -379,7 +394,12 @@ bool CChannelManager::OnCommandHandler(IExtendedSocket* socket, IUser* user, con
+@@ -379,7 +563,12 @@ bool CChannelManager::OnCommandHandler(IExtendedSocket* socket, IUser* user, con
  
  	if (!user)
  	{
@@ -1353,7 +1545,7 @@ index 35561e8..27927aa 100644
  		{
  			if (args.size() == 3)
  			{
-@@ -443,6 +463,31 @@ bool CChannelManager::OnCommandHandler(IExtendedSocket* socket, IUser* user, con
+@@ -443,6 +632,31 @@ bool CChannelManager::OnCommandHandler(IExtendedSocket* socket, IUser* user, con
  	}
  	else
  	{
@@ -1385,7 +1577,7 @@ index 35561e8..27927aa 100644
  		CUserCharacterExtended characterExtended = user->GetCharacterExtended(EXT_UFLAG_GAMEMASTER);
  		if (characterExtended.gameMaster)
  		{
-@@ -1270,10 +1315,50 @@ bool CChannelManager::OnNewRoomRequest(CReceivePacket* msg, IUser* user)
+@@ -1270,10 +1484,50 @@ bool CChannelManager::OnNewRoomRequest(CReceivePacket* msg, IUser* user)
  
  bool CChannelManager::OnJoinRoomRequest(CReceivePacket* msg, IUser* user)
  {
@@ -1437,7 +1629,7 @@ index 35561e8..27927aa 100644
  	CChannel* channel = user->GetCurrentChannel();
  	if (channel == NULL)
  	{
-@@ -1450,6 +1535,22 @@ bool CChannelManager::OnSetTeamRequest(CReceivePacket* msg, IUser* user)
+@@ -1450,6 +1704,22 @@ bool CChannelManager::OnSetTeamRequest(CReceivePacket* msg, IUser* user)
  	return true;
  }
  
@@ -1460,7 +1652,7 @@ index 35561e8..27927aa 100644
  bool CChannelManager::OnLeaveRoomRequest(IUser* user)
  {
  	IRoom* currentRoom = user->GetCurrentRoom();
-@@ -1501,6 +1602,10 @@ bool CChannelManager::OnLeaveRoomRequest(IUser* user)
+@@ -1501,6 +1771,10 @@ bool CChannelManager::OnLeaveRoomRequest(IUser* user)
  		}
  
  		currentRoom->RemoveUser(user);
@@ -1471,7 +1663,7 @@ index 35561e8..27927aa 100644
  	}
  
  	currentChannel->SendFullUpdateRoomList(user);
-@@ -1705,13 +1810,43 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
+@@ -1705,13 +1979,43 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
  		return false;
  	}
  
@@ -1515,7 +1707,7 @@ index 35561e8..27927aa 100644
  	if (newSettings.familyBattle)
  	{
  		CUserCharacter character = user->GetCharacter(UFLAG_LOW_CLAN);
-@@ -1921,7 +2056,12 @@ bool CChannelManager::OnRoomKickRequest(CReceivePacket* msg, IUser* user)
+@@ -1921,7 +2225,12 @@ bool CChannelManager::OnRoomKickRequest(CReceivePacket* msg, IUser* user)
  		return false;
  	}
  
@@ -1529,7 +1721,7 @@ index 35561e8..27927aa 100644
  	if (destUser == NULL)
  	{
  		Logger().Warn("User '%s' tried to kick a user from a room, although destUser == NULL (RID: %d)\n", user->GetLogName(), currentRoom->GetID());
-@@ -2089,7 +2229,7 @@ bool CChannelManager::OnVoxelRoomListRequest(CReceivePacket* msg, IUser* user)
+@@ -2089,7 +2398,7 @@ bool CChannelManager::OnVoxelRoomListRequest(CReceivePacket* msg, IUser* user)
  {
  	string voxel_id = msg->ReadString();
  
@@ -1539,10 +1731,19 @@ index 35561e8..27927aa 100644
  	rooms.erase(
  		remove_if(
 diff --git a/src/manager/channelmanager.h b/src/manager/channelmanager.h
-index ab4039d..decfebb 100644
+index ab4039d..cc14e51 100644
 --- a/src/manager/channelmanager.h
 +++ b/src/manager/channelmanager.h
-@@ -27,6 +27,9 @@ public:
+@@ -18,6 +18,8 @@ public:
+ 
+ 	bool OnChannelListPacket(IExtendedSocket* socket);
+ 	bool OnRoomRequest(CReceivePacket* msg, IExtendedSocket* socket);
++	bool OnQuickStartPacket(CReceivePacket* msg, IExtendedSocket* socket); // offline build: packet 86
++	virtual void OnSecondTick(time_t curTime);
+ 	bool OnRoomListPacket(CReceivePacket* msg, IExtendedSocket* socket);
+ 	bool OnLobbyMessage(CReceivePacket* msg, IExtendedSocket* socket, IUser* user);
+ 	bool OnWhisperMessage(CReceivePacket* msg, IUser* user);
+@@ -27,6 +29,9 @@ public:
  
  	class CChannelServer* GetServerByIndex(int index);
  	void JoinChannel(IUser* user, int channelServerID, int channelID, bool transfer);
@@ -1552,6 +1753,15 @@ index ab4039d..decfebb 100644
  	void EndAllGames();
  
  	std::vector<CChannelServer*> channelServers;
+@@ -49,6 +54,7 @@ private:
+ 	bool OnRoomKickClanRequest(CReceivePacket* msg, IUser* user);
+ 	bool OnRoomNoticeClanRequest(CReceivePacket* msg, IUser* user);
+ 	bool OnVoxelRoomListRequest(CReceivePacket* msg, IUser* user);
++	bool QuickStart(IUser* user, int mode);
+ };
+ 
+ extern CChannelManager g_ChannelManager;
+\ No newline at end of file
 diff --git a/src/manager/guestprofile.cpp b/src/manager/guestprofile.cpp
 new file mode 100644
 index 0000000..13016e4
@@ -11970,7 +12180,7 @@ index d2a28c1..4a0c21a 100644
  			if (jDefUser.contains("Loadouts"))
  			{
 diff --git a/src/serverinstance.cpp b/src/serverinstance.cpp
-index b7b0aaa..7ae9fc5 100644
+index b7b0aaa..a0a24e7 100644
 --- a/src/serverinstance.cpp
 +++ b/src/serverinstance.cpp
 @@ -1,4 +1,7 @@
@@ -12078,7 +12288,17 @@ index b7b0aaa..7ae9fc5 100644
  	case PacketId::RequestServerList:
  		g_ChannelManager.OnChannelListPacket(s);
  		break;
-@@ -399,6 +419,10 @@ void CServerInstance::OnPackets(IExtendedSocket* s, CReceivePacket* msg)
+@@ -374,6 +394,9 @@ void CServerInstance::OnPackets(IExtendedSocket* s, CReceivePacket* msg)
+ 	case PacketId::Room:
+ 		g_ChannelManager.OnRoomRequest(msg, s);
+ 		break;
++	case PacketId::QuickStart: // offline build: the lobby's Quick Start
++		g_ChannelManager.OnQuickStartPacket(msg, s);
++		break;
+ 	case PacketId::Shop:
+ 		g_ShopManager.OnShopPacket(msg, s);
+ 		break;
+@@ -399,6 +422,10 @@ void CServerInstance::OnPackets(IExtendedSocket* s, CReceivePacket* msg)
  		g_MiniGameManager.OnPacket(msg, s);
  		break;
  	case PacketId::MileageBingo:
