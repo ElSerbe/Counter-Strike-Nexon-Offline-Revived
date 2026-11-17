@@ -1115,3 +1115,19 @@ while their row is missing ("zombie class N skill ... skipped" in botassist.log)
 The frame hook (StartFrame 0x113f8a80 detour, `HookedStartFrame`) is shared code in botassist.cpp: it runs the
 console, the command file and each mode's watcher (ZSRiftWatch, Z4Watch, ZB2Watch, ZgFrame), each of which returns
 at once outside its mode.
+
+## Zombie Hero and its versions (modes 14, 44, 45, 58) with room bots
+
+`modes/zombie_hero.inl`: 14 Zombie Hero (CSOGameRulesZombi3), 44 Season Zombie Hero (CSOGameRulesSeasonZombieHero),
+45 Zombie Z (CSOGameRulesZombieZMode / ZombieZMutation), 58 Zombie Hero Classic (CSOGameRulesZombi3Classic).
+- The game's zombie-mode bots (ZBBot) already handle the hero's weapons (ZBBot_BT_BuyWeapon_HeroMode), Zombie Z's
+  buying and mutations (ZBBot_BT_ZModeLevelUp 0x1154bda0: "Gain Mutation" in mode 45, as the V key's `ZBZGainMut`),
+  zombie skills, bombs, evolution and morale.
+- Zombie bots: the same as Zombie 2 (`ZB2Watch`, `ZB2BotThink`). Every version's ClientCommand ends in Zombi2's
+  0x1144dcc0 (Zombi3 0x11456a80, Classic 0x10790a90, Season 0x108366e0, Zombie Z 0x10874930 / 0x107a5220), so
+  `selzmb random` and `useitem zb_skill<n>` work there. Dead zombie bots get their death think run; the game decides
+  whether they come back (not after a headshot or Concentrated Fire).
+- The hero (`HeroIsHero`: a human carrying weapon_m134hero(2), weapon_dualkrisshero(2) or weapon_herochainsaw) keeps
+  the mode's weapons: the room's loadout isn't bought over them. Its health going up when picked looked like a new
+  life, and the loadout dropped the hero's minigun. botassist.log: "Zombie Hero: bot ... is the hero".
+- A hero holding the chainsaw doesn't back off from zombies (`ZombieFlee`): the game's AI takes it to them.

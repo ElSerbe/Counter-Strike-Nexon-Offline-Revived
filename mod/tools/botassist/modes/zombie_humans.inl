@@ -33,6 +33,7 @@ struct ZfBot
 static std::map<void*, ZfBot> g_zf;
 
 static bool ZombieMode(int mode); // botassist.cpp: the modes with zombies
+static bool HeroWithChainsaw(void* bot); // modes/zombie_hero.inl
 
 // (only modes with zombies: the regrouping ran in Team Deathmatch too, and every bot gathered round one player)
 static bool ZombieFleeMode()
@@ -310,6 +311,9 @@ static bool ZombieFlee(void* bot, BotState& st, float viewYaw, float& fwd, float
     // (Zombie Escape, mode 20: the way out is forward along the route, ZeMove's; backing off and regrouping held the bots
     // back in corners)
     if (!ZombieFleeMode() || GameMode() == 20)
+        return false;
+    // (Zombie Hero: the hero with the chainsaw goes at the zombies, the game's AI moves it)
+    if (HeroWithChainsaw(bot))
         return false;
     return ZombieFleeMove(bot, st, viewYaw, cfg.zombieFleeDistance, fwd, side, buttons) || ZombieGroupMove(bot, st, viewYaw, fwd, side, buttons);
 }

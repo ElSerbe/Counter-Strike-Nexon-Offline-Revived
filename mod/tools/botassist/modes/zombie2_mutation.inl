@@ -18,6 +18,7 @@
 //     only some classes have, at some evolution levels);
 //   - a human bot with a zombie within 350 u uses its first skill (sprint where the mode has it) now and then.
 static const int MODE_ZB2 = 9;
+static bool HeroMode(int m); // modes/zombie_hero.inl: Zombie Hero's versions use this mode's commands and need the same
 
 struct ZB2Dead
 {
@@ -29,8 +30,9 @@ static std::map<void*, ZB2Dead> g_zb2Dead;
 static void ZB2Watch()
 {
     static float next = 0;
-    // (Zombie War's rules derive from this mode's)
-    if (!g_mpDelta || !g_pGlobals || !*g_pGlobals || g_edictToVars < 0 || (GameMode() != MODE_ZB2 && GameMode() != MODE_ZWAR))
+    // (Zombie War's rules derive from this mode's; Zombie Hero's versions end in its commands)
+    if (!g_mpDelta || !g_pGlobals || !*g_pGlobals || g_edictToVars < 0 ||
+        (GameMode() != MODE_ZB2 && GameMode() != MODE_ZWAR && !HeroMode(GameMode())))
     {
         g_zb2Dead.clear();
         return;

@@ -2942,6 +2942,8 @@ static const int MODE_ITEM = 19; // Item Battle: see modes/item_battle.inl
 static bool ItemHasSpecial(void* bot);
 static const int MODE_ALLSTAR = 40; // All Star: see modes/all_star.inl
 static void InstallAllStarTables(DWORD delta);
+static bool HeroMode(int m); // Zombie Hero and its versions: see modes/zombie_hero.inl
+static bool HeroIsHero(void* bot);
 static void InstallBeastBotClass(DWORD delta);
 
 static void UpdateBuying(void* bot, BotState& st)
@@ -2976,6 +2978,15 @@ static void UpdateBuying(void* bot, BotState& st)
     {
         st.buyAt = 0;
         st.checkBuyAt = 0;
+        return;
+    }
+    if (HeroIsHero(bot))
+    {
+        // Zombie Hero: the hero keeps the mode's weapons (its health going up when picked looked like a new life, and
+        // the room's loadout dropped the hero's minigun)
+        st.buyAt = 0;
+        st.checkBuyAt = 0;
+        st.nextLoadoutCheck = 0;
         return;
     }
     if (GameMode() == MODE_ZHE)
@@ -5381,6 +5392,8 @@ static void CommandFile()
 
 #include "modes/zombie2_mutation.inl"
 
+#include "modes/zombie_hero.inl"
+
 #include "modes/zombie_conquest.inl"
 
 #include "modes/zombie_war.inl"
@@ -6320,8 +6333,8 @@ static void HookedRunPlayerMove(void* fakeclient, const float* angles, float fwd
                 }
                 if (!scenario && GameMode() == MODE_Z4)
                     Z4BotSkills(fakeclient);
-                if (!scenario && GameMode() == MODE_ZB2)
-                    ZB2BotThink(fakeclient);
+                if (!scenario && (GameMode() == MODE_ZB2 || HeroMode(GameMode())))
+                    ZB2BotThink(fakeclient); // (Zombie Hero's versions too: modes/zombie_hero.inl)
                 if (!scenario && (GameMode() == MODE_ZCON || GameMode() == MODE_ZWAR || GameMode() == MODE_GDM ||
                                   GameMode() == MODE_SS || GameMode() == MODE_PTN))
                 {
