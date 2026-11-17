@@ -148,7 +148,11 @@ static void ZB2BotThink(void* bot)
     z.nextSkill = now + 4.0f + Rnd() * 4.0f;
     if (Rnd() < 0.5f)
         return;
-    const char* skill = zombie ? (Rnd() < 0.25f ? "zb_skill1" : "zb_skill0") : "hm_skill0";
+    // the second skill (some classes: heal, armour, shield, jump...) only when hurt: used freely, zombies healed each
+    // other all the time and could hardly be killed (Zombie Hero, many zombies at once)
+    float hp = F<float>(Vars(bot), EV_HEALTH), maxHp = F<float>(Vars(bot), 0x1dc);
+    bool hurt = maxHp > 0 && hp < maxHp * 0.5f;
+    const char* skill = zombie ? (hurt && Rnd() < 0.5f ? "zb_skill1" : "zb_skill0") : "hm_skill0";
     FakeCommand(bot, "useitem", skill);
     static int reports = 0;
     if (reports++ < 60)

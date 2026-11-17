@@ -128,9 +128,10 @@ SKILLS = {
     "Crazy": {"Cooltime": 10, "Endtime": (8, 10, 10), "HealthReduction": 500, "SwingDist": 0, "SwingAngle": 0,
               "DamageRadius": 0, "DamageHeight": 0},
     "JumpBuff": {"Cooltime": 15, "Endtime": 5},
-    "ArmorUp": {"Cooltime": 30, "ArmorPoint": (500, 800, 1000), "Radius": 300, "RadiusArmorPoint": (200, 300, 400)},
-    "Heal": {"Cooltime": 15, "HealthPoint": (1000, 1500, 2000), "Radius": 300, "RadiusHealthPoint": (500, 700, 1000)},
-    "ShieldBuf": {"Cooltime": 30, "Endtime": 5, "ShieldPoint": 1000, "Range": 300},
+    "ArmorUp": {"Cooltime": 30, "ArmorPoint": (200, 300, 400), "Radius": 300, "RadiusArmorPoint": (100, 150, 200)},
+    # (was 1000-2000 every 15 s, 500-1000 to the others: zombies healed each other all the time in Zombie Hero)
+    "Heal": {"Cooltime": 30, "HealthPoint": (300, 400, 500), "Radius": 300, "RadiusHealthPoint": (150, 200, 250)},
+    "ShieldBuf": {"Cooltime": 30, "Endtime": 5, "ShieldPoint": 400, "Range": 300},
     # invisible while still / walking, seen again when attacking close
     "Cloacking": {"Cooltime": 15, "Endtime": (10, 12, 15), "Alpha": 15, "RecoverSpeed": 100, "DamageRadius": 0,
                   "DamageHeight": 0, "ExposureAlpha": 80, "ExposureRadius": 100, "ExposureHeight": 50},
@@ -139,7 +140,7 @@ SKILLS = {
              "RenderAlpha": 80, "ThrowSpeed": 0, "Radius": 40},
     # a smoke cloud that blinds humans
     "Smoke": {"Cooltime": 15, "Endtime": 10, "Radius": 200, "NumSmoke": 1, "HumanSight": 100},
-    "VoodooHeal": {"Cooltime": 15, "Endtime": 5, "Distance": 300, "Amount": 500, "Tick": 1, "AmountSelf": 500,
+    "VoodooHeal": {"Cooltime": 20, "Endtime": 5, "Distance": 300, "Amount": 200, "Tick": 1, "AmountSelf": 200,
                    "HealRate": 1, "RecoverArmor": 0, "MoveSpeedBonus": 0, "MoveSpeedBonusSelf": 0},
     # a projectile that makes the human drop their weapon
     "Shock": {"Cooltime": 15, "FlyVel": 1200, "KillTime": 2, "Radius": 50, "ShockTime": 2, "Speed": 1,
@@ -159,7 +160,7 @@ SKILLS = {
                      "DamageRatioConst": 1},
     "Penetration": {"Cooltime": 15, "Distance": 300, "Damage": 100},
     "Revival": {"Cooltime": 30, "Endtime": 5, "DamageRadius": 0, "DamageHeight": 0, "MoveSpeedBonus": 0.1,
-                "Heal": 1000},
+                "Heal": 400},
     "Telleport": {"Cooltime": 20, "ThrowVelocity": 800, "DamageRadius": 0, "DamageHeight": 0},
     "Boost": {"SpeedThreshold": 250, "GaugeMax": 100, "GaugeTick": 1, "GaugeForUseMin": 30, "GaugeInterval": 0.1,
               "GaugeTimeCharge": 5, "SpeedMin": 250, "SpeedMax": 400, "SpeedMaxBonus": 50, "DamageRadius": 0,
@@ -191,9 +192,9 @@ SKILLS = {
                 "ConfuseSequenceWalkRadius": 100},
     "Defending": {"Cooltime": 15, "Endtime": 5, "DamageReduceRate": 0.5, "VelModKnockbackReduceRate": 0.5},
     # three shield charges, each one taking part of the damage
-    "Shield": {"Cooltime": 15, "Duration": 6, "Amount1": 500, "DamageReduceRate1": 0.3,
-               "VelModKnockbackReduceRate1": 0.3, "Amount2": 500, "DamageReduceRate2": 0.3,
-               "VelModKnockbackReduceRate2": 0.3, "Amount3": 500, "DamageReduceRate3": 0.3,
+    "Shield": {"Cooltime": 20, "Duration": 6, "Amount1": 300, "DamageReduceRate1": 0.2,
+               "VelModKnockbackReduceRate1": 0.3, "Amount2": 300, "DamageReduceRate2": 0.2,
+               "VelModKnockbackReduceRate2": 0.3, "Amount3": 300, "DamageReduceRate3": 0.2,
                "VelModKnockbackReduceRate3": 0.3, "MaxSpeed": 260},
 }
 

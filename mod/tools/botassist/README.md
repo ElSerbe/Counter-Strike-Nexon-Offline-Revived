@@ -392,8 +392,22 @@ cvars); the other three are added with `AddServerCommand`.
 
 `HookedRadio` detours `CBasePlayer::Radio` (mp.dll 0x114c7700, thiscall: message id, text, pitch, show icon; ret 0x10) and
 drops a bot's `%!MRAD_GETINPOS` (sent from 0x113f40c7 and 0x113f67ff): the game's bots repeated it all the time in every
-mode. Players' radio goes through. With that gone, `Voices` (botassist.ini) is `normal` again by default: their voice
-chatter.
+mode. Players' radio goes through. `Voices` (botassist.ini) is `radio` by default: the radio messages as text, not the
+voice lines (the user's choice; `normal` gives the voice chatter).
+
+## Holding the trigger (every mode)
+
+`HoldFire` (before each bot's command goes to the game): the stock AI taps the trigger, so a minigun (M134, Gatling,
+Vulcanus...: spin-up by model name) never fired, and automatic weapons gave short bursts. Attack stays pressed for 0.45 s
+after the AI lets go (1.5 s for a spin-up weapon) while an enemy is within 14 degrees of the aim and 3000 units, and the
+weapon in hand has rounds in its clip. Only SMGs (category 3), machine guns (5) and rifles (4) that aren't snipers by
+model name; semi-automatic and bolt guns keep the AI's taps. botassist.log: "holds the trigger".
+
+## botassist's time by part
+
+Every 30 s with bots, `perf:` lines: the moves per second and botassist's time in them, then "bot move hook by part
+(ms/s)": upkeep (shared updates each move), setup (characters, buying...), zombies/orders, modes (each mode's driver),
+nav (NavTraverse), fire (HoldFire).
 ## Room skill in PvP, characters half men / half women
 
 - The game's own AI (PvP modes) aims by the bot's BotProfile: CBot::m_profile at player +0x3700 (profile +0x04

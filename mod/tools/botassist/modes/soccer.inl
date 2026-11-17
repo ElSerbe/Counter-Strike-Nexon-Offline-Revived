@@ -100,7 +100,7 @@ static struct
     float until = 0;
 } g_scPassCall[3];                  // by team: who called for a pass, until when
 static std::set<void*> g_scMenuOpen; // players with the orders menu on screen
-static const float SC_PASS_CALL_TIME = 4.0f, SC_PASS_CALL_RANGE = 1800.0f;
+static const float SC_PASS_CALL_TIME = 7.0f, SC_PASS_CALL_RANGE = 2600.0f, SC_PASS_TURN = 15.0f;
 static const int SC_EV_BUTTON = 0x1a4, SC_IN_ATTACK2 = 0x800;
 static void ShMenuText(void* player, int keys, const char* text); // zombie_shelter.inl: the game's text menu
 static void ShPrint(void* player, const char* text);               // zombie_shelter.inl: a line in the middle of the screen
@@ -315,7 +315,9 @@ static void ScWithBall(void* bot, ScBot& z, const ScBall& ball, int team, V3 me,
         z.shootRange = 450.0f + skill * 350.0f + Rnd() * 200.0f;
         z.aimSide = (Rnd() - 0.5f) * 0.6f; // where across the goal mouth
     }
-    // a kick under way: keep facing where it goes until the key is let go
+    // a kick under way: keep facing where it goes until the key is let go (a pass call cuts a shot's wind-up short)
+    if (z.kick == 1 && g_scPassCall[team].player && Now() < g_scPassCall[team].until && g_scPassCall[team].player != bot)
+        z.kick = 0;
     if (z.kick)
     {
         hasLook = z.kick == 1; // (a pass went the moment the key was pressed)
@@ -337,7 +339,7 @@ static void ScWithBall(void* bot, ScBot& z, const ScBall& ball, int team, V3 me,
         hasLook = true;
         speed = 0;
         z.doing = "turning to pass to the player who called";
-        if (fabsf(AngleDiff(YawOf(caller->pos - me), z.yaw)) < 7.0f && now - z.kickAt > 0.5f)
+        if (fabsf(AngleDiff(YawOf(caller->pos - me), z.yaw)) < SC_PASS_TURN && now - z.kickAt > 0.3f)
         {
             z.kickAt = now;
             z.kick = 2;
@@ -608,7 +610,19 @@ static void ScPassCall(void* player, bool quiet)
         ShPrint(player, mateHas ? "Pass! Your teammate passes you the ball" : "Pass! The next teammate with the ball passes it to you");
     static int reports = 0;
     if (reports++ < 40)
-        Log("Soccer: '%s' calls for a pass (%s)", String(F<int>(Vars(player), EV_NETNAME)), quiet ? "secondary attack" : "order");
+    {
+        // who has a ball, for the log: a call nobody answers shows why
+        std::string holders;
+        V3 at = Origin(player);
+        for (auto& b : g_sc.balls)
+            for (auto& pl : g_sc.players)
+                if (b.holder > 0 && pl.index == b.holder)
+                    holders += std::string(holders.empty() ? "" : ", ") + String(F<int>(Vars(pl.e), EV_NETNAME)) +
+                               (pl.team == team ? " (team" : " (other team") + (pl.bot ? " bot, " : ", ") +
+                               std::to_string((int)Len2D(pl.pos - at)) + " u)";
+        Log("Soccer: '%s' calls for a pass (%s); the ball: %s", String(F<int>(Vars(player), EV_NETNAME)),
+            quiet ? "secondary attack" : "order", holders.empty() ? "nobody has it" : holders.c_str());
+    }
 }
 
 static void ScShowMenu(void* player)

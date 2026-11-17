@@ -145,7 +145,7 @@ static struct
     float zombieFleeDistance = 450.0f;
     std::vector<int> primaries, pistols, melees;
     int skill = -1;            // 0..7, -1: the room's bot difficulty
-    std::string voices = "normal"; // normal (their voice chatter), radio (radio commands, shown as text), off
+    std::string voices = "radio"; // radio (radio commands, shown as text; the default), normal (voice chatter), off
     bool randomCharacters = true; // any character of the game (botassist_characters.txt)
     float refillAfter = 6.0f;  // seconds of firing that empty about half of the ammo: then buy ammo in a buy zone
     float minArmor = 50.0f;    // below this armor, buy kevlar + helmet in a buy zone
@@ -640,6 +640,9 @@ static void LoadNav()
 // ---- what time botassist takes (logged every 30 s while bots play: "perf: ...")
 static LARGE_INTEGER g_perfFreq;
 static double g_perfMoveSec = 0, g_perfPathSec = 0, g_perfFrameSec = 0;
+// the bot move hook in parts (PerfMark): where its time goes
+static const char* const g_perfPartNames[] = { "upkeep", "setup", "zombies/orders", "modes", "nav", "fire" };
+static double g_perfPart[6] = {};
 static int g_perfMoves = 0, g_perfPaths = 0, g_perfAreaAt = 0;
 static double PerfNow()
 {
@@ -648,6 +651,12 @@ static double PerfNow()
         QueryPerformanceFrequency(&g_perfFreq);
     QueryPerformanceCounter(&t);
     return (double)t.QuadPart / (double)g_perfFreq.QuadPart;
+}
+static void PerfMark(int part, double& since)
+{
+    double now = PerfNow();
+    g_perfPart[part] += now - since;
+    since = now;
 }
 
 // ---- which areas lie where: a grid of cells over the mesh, each with the areas over it, so AreaAt looks at a few areas
@@ -1382,6 +1391,8 @@ static const char* OrderName(Order o)
 struct BotState
 {
     void* edict = nullptr;
+    float fireAt = -100;         // HoldFire: the last time the stock AI pressed attack
+    float holdLog = -100;
     int slot = 0;                // place in the formation
     Order order = ORDER_FOLLOW;
     V3 holdSpot{};
@@ -5446,7 +5457,20 @@ static void PerfReport()
                 "AreaAt %.0f/s; frame hook %.1f ms/s; %d areas, mode %d", g_perfMoves / span, g_perfMoveSec * 1000.0 / span,
                 g_perfMoveSec * 1e6 / g_perfMoves, g_perfPathSec * 1000.0 / span, g_perfPaths / span, g_perfAreaAt / span,
                 g_perfFrameSec * 1000.0 / span, (int)g_nav.areas.size(), GameMode());
+        if (reports < 400)
+        {
+            std::string parts;
+            char b[64];
+            for (int i = 0; i < 6; i++)
+            {
+                snprintf(b, sizeof(b), "%s%s %.1f", i ? ", " : "", g_perfPartNames[i], g_perfPart[i] * 1000.0 / span);
+                parts += b;
+            }
+            Log("perf: bot move hook by part (ms/s): %s", parts.c_str());
+        }
     }
+    for (double& d : g_perfPart)
+        d = 0;
     g_perfMoves = g_perfPaths = g_perfAreaAt = 0;
     g_perfMoveSec = g_perfPathSec = g_perfFrameSec = 0;
     since = now;
@@ -6131,12 +6155,104 @@ static void NavTraverse(void* bot, BotState& st, float* aim, float& fwd, float& 
         NavJump(st, buttons, now, "into a jump area", pos);
 }
 
+// ---- holding the trigger (every mode)
+// The stock AI taps the trigger: short bursts, released between them. A minigun (M134, Gatling, Vulcanus...) only
+// fires once its barrel has spun up with the trigger held, so bots spun it, let go, spun it again and never shot; the
+// automatic weapons only gave short bursts. HoldFire keeps attack pressed a moment after the AI lets go (HOLD_AUTO, a
+// spin-up weapon HOLD_SPIN) while an enemy is still in front of the aim (HOLD_CONE degrees, HOLD_RANGE units) and the
+// weapon in hand has rounds in its clip. Only automatic weapons: SMGs and machine guns, rifles that aren't snipers
+// (botassist_weapons.txt category by the model in hand) and the spin-up ones by name. Semi-automatic and bolt guns
+// need the release between shots: they're left as the AI fires them. Not for zombies or the reload key.
+static const float HOLD_AUTO = 0.45f, HOLD_SPIN = 1.5f, HOLD_CONE = 14.0f, HOLD_RANGE = 3000.0f;
+
+static bool HoldSpinWeapon(const std::string& m)
+{
+    static const char* const spin[] = { "m134", "gatling", "vulcan", "minigun", "m61", "mg3", "minigatling", "gungnir" };
+    for (const char* s : spin)
+        if (m.find(s) != std::string::npos)
+            return true;
+    return false;
+}
+
+static bool HoldSniper(const std::string& m)
+{
+    static const char* const semi[] = { "awp", "scout", "sg550", "g3sg1", "sl8", "m24", "m400", "svd", "dragunov",
+                                        "barrett", "m95", "m82", "xm2010", "as50", "trg", "m200", "tac", "crossbow",
+                                        "bow", "sniper", "kar98", "m1garand", "mosin", "railgun", "deagle", "anaconda" };
+    for (const char* s : semi)
+        if (m.find(s) != std::string::npos)
+            return true;
+    return false;
+}
+
+static void HoldFire(void* bot, BotState& st, const float* aim, unsigned short& buttons)
+{
+    float now = Now();
+    if (buttons & IN_ATTACK)
+    {
+        st.fireAt = now;
+        return;
+    }
+    if (buttons & IN_RELOAD)
+        return;
+    unsigned char* p = (unsigned char*)PrivateOf(bot);
+    if (!p || !Readable(p, 0x2170) || p[0x2166] || !Alive(bot))
+        return;
+    const char* model = String(F<int>(Vars(bot), EV_WEAPONMODEL));
+    if (!model || !*model)
+        return;
+    std::string m = model;
+    for (auto& ch : m)
+        ch = (char)tolower(ch);
+    bool spin = HoldSpinWeapon(m);
+    float window = spin ? HOLD_SPIN : HOLD_AUTO;
+    if (now - st.fireAt > window)
+        return;
+    if (!spin)
+    {
+        auto cat = cfg.weaponCategory.find(m);
+        int c = cat != cfg.weaponCategory.end() ? cat->second : 0;
+        if (!(c == 3 || c == 5 || (c == 4 && !HoldSniper(m))))
+            return;
+    }
+    // rounds in the clip of the weapon in hand (an empty one reloads instead)
+    unsigned char* w = ItemHandle(p + PLAYER_ACTIVE_ITEM);
+    if (!w || !Readable(w + 0x160, 4) || *(int*)(w + 0x160) <= 0)
+        return;
+    // an enemy still in front of the aim
+    V3 eye = Eye(bot);
+    int team = TeamOf(bot);
+    bool ahead = false;
+    ForEntitiesNear(eye, HOLD_RANGE, [&](void* e) {
+        if (ahead || e == bot)
+            return;
+        int flags = F<int>(Vars(e), EV_FLAGS);
+        bool enemy = (flags & FL_CLIENT) ? Alive(e) && TeamOf(e) != team : IsLivingMonster(e);
+        if (!enemy)
+            return;
+        V3 to = Center(e) - eye;
+        if (fabsf(AngleDiff(YawOf(to), aim[1])) < HOLD_CONE && fabsf(PitchOf(to) - aim[0]) < HOLD_CONE + 6.0f)
+            ahead = true;
+    });
+    if (!ahead)
+        return;
+    buttons |= IN_ATTACK;
+    if (now - st.holdLog > 30.0f)
+    {
+        st.holdLog = now;
+        static int reports = 0;
+        if (reports++ < 40)
+            Log("bot '%s' holds the trigger of its %s (%s)", String(F<int>(Vars(bot), EV_NETNAME)), model,
+                spin ? "spin-up weapon" : "automatic");
+    }
+}
+
 static void HookedRunPlayerMove(void* fakeclient, const float* angles, float fwd, float side, float up,
                                 unsigned short buttons, unsigned char impulse, unsigned char msec)
 {
     float aim[3] = { angles[0], angles[1], angles[2] };
     BotState* dbg = nullptr;
-    double perfStart = PerfNow();
+    double perfStart = PerfNow(), perfPart = perfStart;
     __try
     {
         if (cfg.enabled && fakeclient && g_edictToVars >= 0)
@@ -6147,6 +6263,7 @@ static void HookedRunPlayerMove(void* fakeclient, const float* angles, float fwd
             UpdateHurtZones();
             UpdateMatchBots();
             UpdateZgPlayers();
+            PerfMark(0, perfPart);
             if (F<int>(v, EV_FLAGS) & FL_FAKECLIENT)
             {
                 BotState& bs = StateFor(fakeclient);
@@ -6169,6 +6286,7 @@ static void HookedRunPlayerMove(void* fakeclient, const float* angles, float fwd
                     UpdateBarricades(fakeclient);
                 }
             }
+            PerfMark(1, perfPart);
             if ((F<int>(v, EV_FLAGS) & FL_FAKECLIENT) && Alive(fakeclient))
             {
                 LoadNav();
@@ -6217,6 +6335,7 @@ static void HookedRunPlayerMove(void* fakeclient, const float* angles, float fwd
                         buttons = bt;
                     }
                 }
+                PerfMark(2, perfPart);
                 if (!scenario && GameMode() == MODE_ZOMBIE_GIANT)
                 {
                     float y = aim[1], p = aim[0], f = fwd, sd = side;
@@ -6406,10 +6525,15 @@ static void HookedRunPlayerMove(void* fakeclient, const float* angles, float fwd
         if (faults++ < 5)
             Log("exception 0x%08lX in the bot hook (ignored)", GetExceptionCode());
     }
+    PerfMark(3, perfPart);
     if (dbg)
         __try { NavTraverse(fakeclient, *dbg, aim, fwd, side, buttons); } __except (EXCEPTION_EXECUTE_HANDLER) {}
+    PerfMark(4, perfPart);
     if (dbg && Now() < dbg->duckUntil && dbg->duckUntil - Now() < 1.0f)
         buttons |= IN_DUCK;
+    if (dbg)
+        __try { HoldFire(fakeclient, *dbg, aim, buttons); } __except (EXCEPTION_EXECUTE_HANDLER) {}
+    PerfMark(5, perfPart);
     // bot_stop: last, over every mode's driving
     __try
     {
