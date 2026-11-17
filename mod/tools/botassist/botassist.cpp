@@ -149,6 +149,7 @@ static struct
     bool randomCharacters = true; // any character of the game (botassist_characters.txt)
     float refillAfter = 6.0f;  // seconds of firing that empty about half of the ammo: then buy ammo in a buy zone
     float minArmor = 50.0f;    // below this armor, buy kevlar + helmet in a buy zone
+    float wbMin = 0.25f, wbMax = 2.0f; // weapon balance (weapon_balance.inl): the least and most a weapon's damage is scaled
     bool sameTeam = true;      // where there are monsters, every bot joins the human team (no enemy bots under the map)
     std::vector<int> characters[3]; // by team: [1] TR, [2] CT
     std::unordered_map<int, int> characterTeam; // class item id -> team
@@ -291,6 +292,8 @@ static void LoadSettings()
             cfg.weaponCategory.emplace(a.model, a.cat);
     }
     cfg.followDistance = IniFloat(ini, "FollowDistance", "180");
+    cfg.wbMin = (std::max)(0.05f, IniFloat(ini, "WeaponBalanceMin", "0.25"));
+    cfg.wbMax = (std::max)(cfg.wbMin, IniFloat(ini, "WeaponBalanceMax", "2"));
     cfg.zgPlayers = GetPrivateProfileIntA("BotAssist", "ZombieGiantPlayers", -1, ini);
     cfg.zsrEventDivisor = IniFloat(ini, "ZSRiftEventDivisor", "3");
     cfg.zsrBotMoney = GetPrivateProfileIntA("BotAssist", "ZSRiftBotMoney", 10000, ini);
@@ -2101,6 +2104,8 @@ static std::string HttpGet(const wchar_t* path)
     return body;
 }
 
+static void WbSetMatch(int on); // weapon_balance.inl: the room's weapon balance for this match
+
 static DWORD WINAPI FetchMatchBots(LPVOID)
 {
     std::string json = HttpGet(L"/api/matchbots");
@@ -2143,6 +2148,7 @@ static DWORD WINAPI FetchMatchBots(LPVOID)
     g_matchBots = bots;
     g_matchKnown = json.find("\"bots\":[") != std::string::npos;
     LeaveCriticalSection(&g_matchLock);
+    WbSetMatch(JsonInt(json, "weaponBalance", 0));
     InterlockedExchange(&g_matchFetch, 2);
     Log("room AI players for this match: %d%s", (int)bots.size(), json.empty() ? " (server not reachable)" : "");
     for (auto& m : bots)
@@ -5404,6 +5410,7 @@ static void CommandFile()
 #include "modes/zombie2_mutation.inl"
 
 #include "modes/zombie_hero.inl"
+#include "weapon_balance.inl"
 
 #include "modes/zombie_conquest.inl"
 
@@ -5502,6 +5509,7 @@ static void HookedStartFrame()
         ScFrame();
         NavToolsFrame();
         ZgFrame();
+        WbFrame();
     }
     __except (EXCEPTION_EXECUTE_HANDLER)
     {

@@ -47,7 +47,7 @@
 
   // not served by CSNZ_Server (layout preview): a fake room
   const PREVIEW = location.port !== "30080";
-  const mock = { host: true, mode: 3, maxPlayers: 10, players: 3, bots: [
+  const mock = { host: true, mode: 14, maxPlayers: 10, players: 3, weaponBalance: false, balanceMode: true, waiting: true, bots: [
     { id: 1, name: "Mike", level: 30, team: 2, primary: 0, secondary: 0, melee: 0, character: 0, skill: -1, preset: 0 },
     { id: 2, name: "Ana", level: 18, team: 1, primary: 0, secondary: 0, melee: 0, character: 0, skill: 5, preset: 0 }] };
   let mockPresets = [];
@@ -76,6 +76,7 @@
       for (let i = 0; i < n && mock.bots.length + 1 < mock.maxPlayers; i++)
         mock.bots.push({ id: Date.now() + i, name: NAMES[mock.bots.length % NAMES.length], level: 20, team: body.team || 2, primary: 0, secondary: 0, melee: 0, character: 0, skill: body.skill === undefined ? -1 : body.skill, preset: body.preset || 0 });
     }
+    if (body && body.action === "balance") mock.weaponBalance = !!body.on;
     if (body && body.action === "update") Object.assign(mock.bots.find(b => b.id === body.id), body, { action: undefined });
     if (body && body.action === "remove") mock.bots = mock.bots.filter(b => b.id !== body.id);
     if (body && body.action === "move") {
@@ -114,6 +115,15 @@
     document.querySelectorAll("#newteam button").forEach(x => x.classList.toggle("on", +x.dataset.team === newTeam));
     $("add").textContent = "+ Add " + (count > 1 ? count : "bot");
     $("roominfo").textContent = `Players ${room.players}/${room.maxPlayers}` + (room.host ? "" : " · only the host can edit");
+    // weapon balance (zombie modes): the room's toggle, off by default
+    const bal = $("balance");
+    bal.classList.toggle("hidden", !room.balanceMode);
+    bal.classList.toggle("on", !!room.weaponBalance);
+    bal.textContent = "Weapon balance: " + (room.weaponBalance ? "On" : "Off");
+    bal.disabled = !room.host || room.waiting === false;
+    bal.title = (room.weaponBalance
+      ? "On: weapon damage against zombies is evened out by weapon type (strong weapons do less, weak ones more)."
+      : "Off: every weapon does its normal damage.") + (room.host ? " Click to turn it " + (room.weaponBalance ? "off." : "on.") : " Only the host can change it.");
     const opts = `<option value="0">Any weapon</option>` + presets.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
     if (!presets.some(p => p.id === newPreset)) newPreset = 0;
     $("newpreset").innerHTML = opts;
@@ -540,6 +550,11 @@
 
   // weapon filters
   $("filters").addEventListener("click", openFilters);
+  $("balance").addEventListener("click", async () => {
+    if (!room || !room.host) return;
+    await send({ action: "balance", on: !room.weaponBalance });
+    toast(room.weaponBalance ? "Weapon balance on: damage against zombies is evened out by weapon type." : "Weapon balance off: normal weapon damage.");
+  });
   $("fmclose").addEventListener("click", () => $("fm").classList.add("hidden"));
   $("fmlist").addEventListener("click", e => {
     const it = e.target.closest("[data-id]");

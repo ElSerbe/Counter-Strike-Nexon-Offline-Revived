@@ -1308,7 +1308,7 @@ index 0000000..5c99d8e
 +
 +extern CBingoManager g_BingoManager;
 diff --git a/src/manager/channelmanager.cpp b/src/manager/channelmanager.cpp
-index 35561e8..784a108 100644
+index 35561e8..85457d8 100644
 --- a/src/manager/channelmanager.cpp
 +++ b/src/manager/channelmanager.cpp
 @@ -1,4 +1,6 @@
@@ -1629,7 +1629,17 @@ index 35561e8..784a108 100644
  	CChannel* channel = user->GetCurrentChannel();
  	if (channel == NULL)
  	{
-@@ -1450,6 +1704,22 @@ bool CChannelManager::OnSetTeamRequest(CReceivePacket* msg, IUser* user)
+@@ -1396,6 +1650,9 @@ bool CChannelManager::OnJoinRoomRequest(CReceivePacket* msg, IUser* user)
+ 
+ 	channel->SendUpdateRoomList(room);
+ 
++	// offline build: whether the room's weapon balance is on (zombie modes)
++	static_cast<CRoom*>(room)->SendWeaponBalanceNotice(user);
++
+ 	Logger().Info("User '%s' joined a room (RID: %d)\n", user->GetLogName(), room->GetID());
+ 
+ 	return true;
+@@ -1450,6 +1707,22 @@ bool CChannelManager::OnSetTeamRequest(CReceivePacket* msg, IUser* user)
  	return true;
  }
  
@@ -1652,7 +1662,7 @@ index 35561e8..784a108 100644
  bool CChannelManager::OnLeaveRoomRequest(IUser* user)
  {
  	IRoom* currentRoom = user->GetCurrentRoom();
-@@ -1501,6 +1771,10 @@ bool CChannelManager::OnLeaveRoomRequest(IUser* user)
+@@ -1501,6 +1774,10 @@ bool CChannelManager::OnLeaveRoomRequest(IUser* user)
  		}
  
  		currentRoom->RemoveUser(user);
@@ -1663,7 +1673,7 @@ index 35561e8..784a108 100644
  	}
  
  	currentChannel->SendFullUpdateRoomList(user);
-@@ -1705,13 +1979,43 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
+@@ -1705,13 +1982,43 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
  		return false;
  	}
  
@@ -1707,7 +1717,7 @@ index 35561e8..784a108 100644
  	if (newSettings.familyBattle)
  	{
  		CUserCharacter character = user->GetCharacter(UFLAG_LOW_CLAN);
-@@ -1921,7 +2225,12 @@ bool CChannelManager::OnRoomKickRequest(CReceivePacket* msg, IUser* user)
+@@ -1921,7 +2228,12 @@ bool CChannelManager::OnRoomKickRequest(CReceivePacket* msg, IUser* user)
  		return false;
  	}
  
@@ -1721,7 +1731,7 @@ index 35561e8..784a108 100644
  	if (destUser == NULL)
  	{
  		Logger().Warn("User '%s' tried to kick a user from a room, although destUser == NULL (RID: %d)\n", user->GetLogName(), currentRoom->GetID());
-@@ -2089,7 +2398,7 @@ bool CChannelManager::OnVoxelRoomListRequest(CReceivePacket* msg, IUser* user)
+@@ -2089,7 +2401,7 @@ bool CChannelManager::OnVoxelRoomListRequest(CReceivePacket* msg, IUser* user)
  {
  	string voxel_id = msg->ReadString();
  
@@ -8796,10 +8806,10 @@ index c7d2bdb..75d0ee9 100644
 +extern CVoxelManager g_VoxelManager;
 diff --git a/src/manager/warbondmanager.cpp b/src/manager/warbondmanager.cpp
 new file mode 100644
-index 0000000..651ac8f
+index 0000000..bf1e57f
 --- /dev/null
 +++ b/src/manager/warbondmanager.cpp
-@@ -0,0 +1,1099 @@
+@@ -0,0 +1,1118 @@
 +#include "channelmanager.h"
 +#include "guestprofile.h"
 +#include "transfer.h"
@@ -9004,7 +9014,8 @@ index 0000000..651ac8f
 +				}
 +			bots.push_back(bot);
 +		}
-+		result = { { "mode", g_LastMatchMode }, { "hostTeam", g_LastMatchHostTeam }, { "bots", bots } };
++		result = { { "mode", g_LastMatchMode }, { "hostTeam", g_LastMatchHostTeam }, { "bots", bots },
++			{ "weaponBalance", g_LastMatchWeaponBalance ? 1 : 0 } };
 +	}
 +	else if (req.method == "GET" && req.path == "/api/questtexts")
 +	{
@@ -9177,6 +9188,17 @@ index 0000000..651ac8f
 +			return { { "error", "The match already started." } };
 +		}
 +		string action = body.value("action", "");
++		if (action == "balance")
++		{
++			// weapon balance (the page's toggle): no AI player changes
++			if (!WeaponBalanceMode(room->GetSettings()->gameModeId))
++			{
++				status = 409;
++				return { { "error", "Weapon balance only applies to the zombie modes." } };
++			}
++			room->SetWeaponBalance(body.value("on", false));
++			return RoomBotsJson(room, host);
++		}
 +		auto read = [&](RoomBot& b) {
 +			b.name = body.value("name", b.name);
 +			b.level = body.value("level", b.level);
@@ -9235,13 +9257,20 @@ index 0000000..651ac8f
 +		for (auto u : room->GetUsers())
 +			g_PacketManager.SendRoomUpdateSettings(u->GetExtendedSocket(), room->GetSettings(), 0, ROOM_LOWMID_BOT);
 +	}
++	return RoomBotsJson(room, host);
++}
++
++json CWarbondManager::RoomBotsJson(CRoom* room, bool host)
++{
 +	json bots = json::array();
 +	for (auto& b : room->GetBots())
 +		bots.push_back({ { "id", b.id }, { "name", b.name }, { "level", b.level }, { "team", b.team }, { "primary", b.primary },
 +			{ "secondary", b.secondary }, { "melee", b.melee }, { "character", b.character }, { "skill", b.skill },
 +			{ "preset", b.preset } });
-+	return { { "host", host }, { "mode", room->GetSettings()->gameModeId }, { "maxPlayers", room->GetSettings()->maxPlayers },
-+		{ "players", room->GetNumOfPlayers() }, { "bots", bots } };
++	int mode = room->GetSettings()->gameModeId;
++	return { { "host", host }, { "mode", mode }, { "maxPlayers", room->GetSettings()->maxPlayers },
++		{ "players", room->GetNumOfPlayers() }, { "bots", bots }, { "weaponBalance", room->GetWeaponBalance() },
++		{ "balanceMode", WeaponBalanceMode(mode) }, { "waiting", room->GetStatus() == RoomStatus::STATUS_WAITING } };
 +}
 +
 +// offline build: weapon filters for the room's AI players, per account (Data/BotPresets.json)
@@ -9901,10 +9930,10 @@ index 0000000..651ac8f
 +}
 diff --git a/src/manager/warbondmanager.h b/src/manager/warbondmanager.h
 new file mode 100644
-index 0000000..1329e12
+index 0000000..8879e39
 --- /dev/null
 +++ b/src/manager/warbondmanager.h
-@@ -0,0 +1,130 @@
+@@ -0,0 +1,131 @@
 +#pragma once
 +
 +#include <string>
@@ -10010,6 +10039,7 @@ index 0000000..1329e12
 +	nlohmann::json UnlockPass(IUser* user, int warbondID, int& status);
 +	nlohmann::json RoomBotsApi(IUser* user, const WebRequest& req, int& status);
 +	nlohmann::json BotPresetsApi(IUser* user, const WebRequest& req, int& status);
++	nlohmann::json RoomBotsJson(class CRoom* room, bool host);
 +	nlohmann::json& BotPresets(int userID);
 +	void SaveBotPresets();
 +	nlohmann::json m_BotPresets;      // userID -> [{id, name, primary: [...], secondary: [...], melee: [...]}]
@@ -11451,7 +11481,7 @@ index 68a4dc7..5c924cb 100644
  	int m_nTerWinCount;
  	int m_nFirstPlaceUserId;
 diff --git a/src/room/room.cpp b/src/room/room.cpp
-index 616959e..d97c676 100644
+index 616959e..ade42ca 100644
 --- a/src/room/room.cpp
 +++ b/src/room/room.cpp
 @@ -1,4 +1,5 @@
@@ -11460,7 +11490,16 @@ index 616959e..d97c676 100644
  #include "manager/channelmanager.h"
  #include "manager/packetmanager.h"
  #include "manager/dedicatedservermanager.h"
-@@ -57,11 +58,10 @@ void CRoom::Shutdown()
+@@ -7,6 +8,8 @@
+ #include "common/utils.h"
+ 
+ #include "user/userinventoryitem.h"
++#include "manager/medalmanager.h"
++#include "channel/channel.h"
+ 
+ using namespace std;
+ 
+@@ -57,11 +60,10 @@ void CRoom::Shutdown()
  
  int CRoom::GetNumOfPlayers()
  {
@@ -11474,7 +11513,7 @@ index 616959e..d97c676 100644
  }
  
  int CRoom::GetFreeSlots()
-@@ -239,6 +239,241 @@ void CRoom::SetStatus(RoomStatus newStatus)
+@@ -239,6 +241,306 @@ void CRoom::SetStatus(RoomStatus newStatus)
  void CRoom::SendJoinNewRoom(IUser* user)
  {
  	g_PacketManager.SendRoomCreateAndJoin(user->GetExtendedSocket(), this);
@@ -11486,6 +11525,56 @@ index 616959e..d97c676 100644
 +int g_LastMatchMode = 0;
 +int g_LastMatchHostTeam = 2;
 +int g_LastMatchHostID = 0;
++bool g_LastMatchWeaponBalance = false;
++
++bool WeaponBalanceMode(int mode)
++{
++	// IsZombieModeOffline: Zombie 1/2, Zombie Hero and its versions, Darkness, Zombie Escape, Zombie War...;
++	// 15 Zombie Scenario, 28 Zombie Shelter, 59 Zombie Disaster Zone: zombie monsters
++	return IsZombieModeOffline(mode) || mode == 15 || mode == 28 || mode == 59;
++}
++
++static const char WEAPON_BALANCE_TAG[] = "[Balanced] ";
++
++// the room list shows the balance in the room's name: "[Balanced] <name>" while it's on in a mode it applies to
++bool CRoom::ApplyWeaponBalanceTag()
++{
++	string name = m_pSettings->roomName;
++	size_t tag = sizeof(WEAPON_BALANCE_TAG) - 1;
++	string bare = name.compare(0, tag, WEAPON_BALANCE_TAG) ? name : name.substr(tag);
++	string want = m_bWeaponBalance && WeaponBalanceMode(m_pSettings->gameModeId) ? WEAPON_BALANCE_TAG + bare : bare;
++	if (want == name)
++		return false;
++	m_pSettings->roomName = want;
++	return true;
++}
++
++void CRoom::SetWeaponBalance(bool on)
++{
++	if (m_bWeaponBalance == on)
++		return;
++	m_bWeaponBalance = on;
++	Logger().Info("Room %d: weapon balance %s\n", m_nID, on ? "on" : "off");
++	if (ApplyWeaponBalanceTag())
++	{
++		for (auto u : m_Users)
++			SendUpdateRoomSettings(u, m_pSettings, ROOM_LOW_ROOMNAME, 0, 0, 0);
++		if (m_pParentChannel)
++			m_pParentChannel->SendUpdateRoomList(this);
++	}
++	for (auto u : m_Users)
++		SendWeaponBalanceNotice(u);
++}
++
++// said in the room's chat when a player joins and when the host changes it (only in the modes it applies to)
++void CRoom::SendWeaponBalanceNotice(IUser* user)
++{
++	if (!WeaponBalanceMode(m_pSettings->gameModeId))
++		return;
++	g_PacketManager.SendUMsgNoticeMessageInChat(user->GetExtendedSocket(), m_bWeaponBalance
++		? "Weapon balance is ON in this room: weapon damage against zombies is evened out by weapon type."
++		: "Weapon balance is off in this room: every weapon does its normal damage. The host can turn it on with /balance or on the AI Players page.");
++}
 +
 +static int g_nNextBotID = 0x40000000;
 +static const char* const s_BotNames[] = {
@@ -11637,6 +11726,7 @@ index 616959e..d97c676 100644
 +	g_LastMatchMode = m_pSettings->gameModeId;
 +	g_LastMatchHostTeam = hostTeam;
 +	g_LastMatchHostID = m_pHostUser ? m_pHostUser->GetID() : 0;
++	g_LastMatchWeaponBalance = m_bWeaponBalance && WeaponBalanceMode(m_pSettings->gameModeId);
 +	if (m_Bots.empty())
 +		return;
 +
@@ -11661,12 +11751,26 @@ index 616959e..d97c676 100644
 +// room chat, host only: /addbot [name] [t|ct], /removebot <name>|all, /bots
 +bool CRoom::OnBotCommand(IUser* user, const string& message)
 +{
-+	if (user != m_pHostUser || message.empty() || message[0] != '/')
++	if (message.empty() || message[0] != '/')
 +		return false;
 +
 +	istringstream iss(message);
 +	vector<string> args((istream_iterator<string>(iss)), istream_iterator<string>());
 +	if (args.empty())
++		return false;
++
++	// weapon balance: /balance turns it on or off (the host, before the match), /balance on|off; others see the state
++	if (args[0] == "/balance")
++	{
++		if (!WeaponBalanceMode(m_pSettings->gameModeId))
++			g_PacketManager.SendUMsgNoticeMessageInChat(user->GetExtendedSocket(), "Weapon balance only applies to the zombie modes.");
++		else if (user != m_pHostUser || m_Status != RoomStatus::STATUS_WAITING)
++			SendWeaponBalanceNotice(user);
++		else
++			SetWeaponBalance(args.size() > 1 ? (args[1] == "on" || args[1] == "1") : !m_bWeaponBalance);
++		return true;
++	}
++	if (user != m_pHostUser)
 +		return false;
 +
 +	if (args[0] == "/addbot")
@@ -11716,7 +11820,21 @@ index 616959e..d97c676 100644
  }
  
  void CRoom::UpdateSettings(CRoomSettings& newSettings)
-@@ -575,6 +810,9 @@ void CRoom::OnUserMessage(CReceivePacket* msg, IUser* user)
+@@ -564,6 +866,13 @@ void CRoom::UpdateSettings(CRoomSettings& newSettings)
+ 	if (newSettings.highFlag & ROOM_HIGH_UNK77) {
+ 		m_pSettings->unk77 = newSettings.unk77;
+ 	}
++
++	// offline build: a new name or mode keeps the weapon balance's "[Balanced]" right
++	if (ApplyWeaponBalanceTag())
++	{
++		newSettings.lowFlag |= ROOM_LOW_ROOMNAME;
++		m_pSettings->lowFlag |= ROOM_LOW_ROOMNAME;
++	}
+ }
+ 
+ void CRoom::OnUserMessage(CReceivePacket* msg, IUser* user)
+@@ -575,6 +884,9 @@ void CRoom::OnUserMessage(CReceivePacket* msg, IUser* user)
  
  	Logger().Info("User '%s' write to room chat: '%s'\n", senderName.c_str(), message.c_str());
  
@@ -11726,7 +11844,7 @@ index 616959e..d97c676 100644
  	CUserCharacterExtended characterExtended = user->GetCharacterExtended(EXT_UFLAG_GAMEMASTER);
  	if (characterExtended.gameMaster && m_pHostUser == user)
  	{
-@@ -1052,6 +1290,8 @@ void CRoom::HostStartGame()
+@@ -1052,6 +1364,8 @@ void CRoom::HostStartGame()
  		return;
  	}
  
@@ -11735,7 +11853,7 @@ index 616959e..d97c676 100644
  	SendStartMatch(m_pHostUser);
  
  	OnGameStart();
-@@ -1092,10 +1332,16 @@ void CRoom::UserGameJoin(IUser* user)
+@@ -1092,10 +1406,16 @@ void CRoom::UserGameJoin(IUser* user)
  void CRoom::EndGame(bool forcedEnd)
  {
  	m_pGameMatch->OnGameMatchEnd();
@@ -11753,10 +11871,10 @@ index 616959e..d97c676 100644
  		g_PacketManager.SendHostStop(m_pServer->GetSocket());
  
 diff --git a/src/room/room.h b/src/room/room.h
-index 13a4ee8..c36e019 100644
+index 13a4ee8..7015264 100644
 --- a/src/room/room.h
 +++ b/src/room/room.h
-@@ -25,6 +25,28 @@ public:
+@@ -25,6 +25,33 @@ public:
  	bool m_bIsIngame;
  };
  
@@ -11781,11 +11899,16 @@ index 13a4ee8..c36e019 100644
 +extern int g_LastMatchMode;
 +extern int g_LastMatchHostTeam;
 +extern int g_LastMatchHostID;
++extern bool g_LastMatchWeaponBalance; // the room's weapon balance was on, in a mode it applies to
++
++// offline build: weapon balance (botassist.asi evens out weapon damage against zombies by weapon type): the zombie
++// modes, where humans shoot zombie players, and the co-op modes against zombie monsters
++bool WeaponBalanceMode(int mode);
 +
  class CRoom : public IRoom
  {
  public:
-@@ -103,11 +125,22 @@ public:
+@@ -103,11 +130,29 @@ public:
  
  	bool IsUserInFamilyBattleUsers(int userId);
  
@@ -11799,12 +11922,19 @@ index 13a4ee8..c36e019 100644
 +	void ApplyBotsToSettings();
 +	bool OnBotCommand(IUser* user, const std::string& message);
 +
++	// offline build: weapon balance, off by default; the host turns it on (AI Players page, /balance)
++	bool GetWeaponBalance() { return m_bWeaponBalance; }
++	void SetWeaponBalance(bool on);
++	void SendWeaponBalanceNotice(IUser* user);
++	bool ApplyWeaponBalanceTag(); // the room name's "[Balanced]"; true when the name changed
++
  private:
  	IUser* m_pHostUser;
  	class CChannel* m_pParentChannel;
  	CRoomSettings* m_pSettings;
  	std::vector<IUser*> m_Users;
 +	std::vector<RoomBot> m_Bots;
++	bool m_bWeaponBalance = false;
  	CGameMatch* m_pGameMatch;
  	std::vector<int> m_KickedUsers;
  	std::vector<int> m_FamilyBattleUsers;

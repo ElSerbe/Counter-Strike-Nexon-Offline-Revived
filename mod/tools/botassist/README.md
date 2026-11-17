@@ -408,6 +408,24 @@ model name; semi-automatic and bolt guns keep the AI's taps. botassist.log: "hol
 Every 30 s with bots, `perf:` lines: the moves per second and botassist's time in them, then "bot move hook by part
 (ms/s)": upkeep (shared updates each move), setup (characters, buying...), zombies/orders, modes (each mode's driver),
 nav (NavTraverse), fire (HoldFire).
+## Weapon balance (zombie modes, the room's option; weapon_balance.inl)
+Some weapons do many times the damage of others of their type. The room's host turns the weapon balance on or off
+(off by default) with the **Weapon balance** button of the AI Players page or `/balance` (`/balance on|off`) in the
+room's chat; players who join are told in the chat whether it's on, and the room's name shows `[Balanced] `. It only
+applies to the zombie modes (CSNZ_Server `WeaponBalanceMode`: the PvP zombie modes, Zombie Scenario, Zombie Shelter,
+Zombie Disaster Zone); `/api/matchbots` says `weaponBalance` 1 for a match with it on.
+- botassist hooks TakeDamage (vtable slot 0x44; CBasePlayer 0x114d7030, bots 0x112fd420 / 0x113172b0; in modes 15/28/59
+  also the zombie monsters' classes) of every class it sees. A human player's hit on a zombie (player +0x2166) or such a
+  monster is scaled by the weapon in hand (its entity class, `weapon_<res>`): its estimated damage per second against
+  its group's median (`botassist_balance.txt`: type x 10, +1 for slow guns), between `WeaponBalanceMin` (0.25) and
+  `WeaponBalanceMax` (2). Grenades and mode weapons (hero's, Shelter's...) aren't touched.
+- The estimates: a guess from the shop's numbers (gen_weapon_balance.py: zombie_damage x shots per second read from the
+  FiringSpeed bar), scaled to the measured numbers and corrected by what's measured in every zombie match, balance on
+  or off (runs of hits, gaps under 2.5 s, the first moment left out; `botassist_weapon_dps.txt`, at most 600 s per
+  weapon). Until a weapon has 30 s measured its scale stays within 0.6-1.5.
+- botassist.log: "weapon balance: ON/off for this match", "TakeDamage of vtable ... hooked", "<weapon> does x0.62 to
+  zombies (group 40, 85 s measured)".
+
 ## Room skill in PvP, characters half men / half women
 
 - The game's own AI (PvP modes) aims by the bot's BotProfile: CBot::m_profile at player +0x3700 (profile +0x04
