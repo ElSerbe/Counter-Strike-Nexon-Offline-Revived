@@ -413,6 +413,12 @@ First reading (Zombie Hero, 31 bots): 500-760 us per move, nearly all in setup a
 per move. It now remembers the readable regions it found for 100 ms (per thread). The zombie modes' human bots also
 list the players once per server frame (`ZfPlayers`) instead of looking over every entity up to three times per move,
 and keep a line of sight 0.15 s (`ZfSees`); the Zombie Hero check (`HeroIsHero`) runs 4 times a second per bot.
+## GameUI: bad pictures don't crash the game (gameui_guards.inl)
+A Zombie Hero Classic match crashed at its end (crash dump, 2026-11-19): a list of the results window (layout 0x10737c20)
+gave an image panel a picture pointer that was text ("anel"), and the panel's SetImage (0x10711d70) called through it.
+SetImage is detoured: a picture whose pointer or vtable isn't readable, or whose vtable isn't in a loaded module, is
+dropped (the cell shows no picture). botassist.log: "GameUI: an image panel was given a bad picture ... from <caller>".
+
 ## Weapon balance (zombie modes, the room's option; weapon_balance.inl)
 Some weapons do many times the damage of others of their type. The room's host turns the weapon balance on or off
 (off by default) with the **Weapon balance** button of the AI Players page or `/balance` (`/balance on|off`) in the

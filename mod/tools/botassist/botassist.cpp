@@ -7030,6 +7030,8 @@ static void FixScoreboard(HMODULE client)
     Log("client.dll scoreboard: team rows formatted with bounds (no crash on a bad spectators score)");
 }
 
+#include "gameui_guards.inl"
+
 static void HookAiSettingsButton(HMODULE gameUi)
 {
     g_gameUiDelta = (DWORD)gameUi - GAMEUI_PREFERRED_BASE;
@@ -7613,6 +7615,7 @@ static DWORD WINAPI Watcher(LPVOID)
         {
             uiHooked = ui;
             HookAiSettingsButton(ui);
+            GuardGameUiImages(ui);
             HookTaskbarButton(GAMEUI_VIP_PAGE, GAMEUI_VIP_RETURN, (void*)VipStub, &g_vipReturn, "VIP");
             HookTaskbarButton(GAMEUI_QUEST_PAGE, GAMEUI_QUEST_RETURN, (void*)MissionsStub, &g_questReturn, "Missions");
             HookModeDialog();

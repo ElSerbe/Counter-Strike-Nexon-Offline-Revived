@@ -746,6 +746,7 @@ namespace CsnzLauncher
                     Runner.StartGame(game, Log);
                     Runner.WaitForGame();
                     Log("The game was closed.");
+                    Leftovers.CloseAfterGame(game, Log); // (a helper left over keeps Steam showing the game as running)
                 }
                 finally
                 {
@@ -873,6 +874,10 @@ namespace CsnzLauncher
             // the hosts block, run by the launcher itself with administrator rights (Hosts.Run starts it)
             if (args.Length == 2 && args[0] == "--hosts")
                 Environment.Exit(Hosts.Edit(args[1]));
+            // the game's helpers left running after it, closed by the launcher itself with administrator rights
+            // (Leftovers.CloseAfterGame starts it)
+            if (args.Length == 2 && args[0] == "--close-leftovers")
+                Environment.Exit(Leftovers.Close(args[1], null) == 0 ? 0 : 1);
             if (args.Length > 0 && args[0] == "--check")
             {
                 // a test without the window (written to launcher-check.txt): the game's folder, the patches' state and the latest release
