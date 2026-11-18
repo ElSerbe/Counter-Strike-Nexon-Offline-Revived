@@ -47,11 +47,24 @@ static std::string HeroWeapon(void* bot)
 }
 
 static std::map<void*, bool> g_heroWas;
+struct HeroCheck
+{
+    float at = -100;
+    bool hero = false;
+};
+static std::map<void*, HeroCheck> g_heroCheck;
 
 static bool HeroIsHero(void* bot)
 {
+    // asked every move of every bot (buying): the four weapon slots are looked at 4 times a second
+    HeroCheck& c = g_heroCheck[bot];
+    float now = Now();
+    if (now >= c.at && now - c.at < 0.25f)
+        return c.hero;
+    c.at = now;
     std::string w = HeroWeapon(bot);
     bool hero = !w.empty();
+    c.hero = hero;
     bool& was = g_heroWas[bot];
     if (hero != was)
     {

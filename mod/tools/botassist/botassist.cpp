@@ -6709,12 +6709,36 @@ static void HookedClientCommand(void* player)
 }
 
 // ---------------------------------------------------------------- installation
+// VirtualQuery is a system call, and botassist checks memory before nearly every read of the game's objects: hundreds
+// of times per bot move (31 bots: 0.5-0.75 ms per move, a third of a second of every second). The readable regions it
+// finds are remembered for READABLE_KEEP_MS (per thread): the game's heap and module regions don't go away that fast,
+// and the risky reads are under __try anyway.
+static const DWORD READABLE_KEEP_MS = 100;
 static bool Readable(const void* p, size_t n)
 {
+    struct Region
+    {
+        const char* lo;
+        const char* hi;
+        DWORD at;
+    };
+    static thread_local Region known[32] = {};
+    static thread_local int next = 0;
+    const char* a = (const char*)p;
+    DWORD now = GetTickCount();
+    for (const Region& r : known)
+        if (a >= r.lo && a < r.hi && n <= (size_t)(r.hi - a) && now - r.at < READABLE_KEEP_MS)
+            return true;
     MEMORY_BASIC_INFORMATION mbi;
     if (!VirtualQuery(p, &mbi, sizeof(mbi)) || mbi.State != MEM_COMMIT || (mbi.Protect & (PAGE_GUARD | PAGE_NOACCESS)))
         return false;
-    return (const char*)p + n <= (const char*)mbi.BaseAddress + mbi.RegionSize;
+    const char* lo = (const char*)mbi.BaseAddress;
+    const char* hi = lo + mbi.RegionSize;
+    if (a + n > hi)
+        return false;
+    known[next] = { lo, hi, now };
+    next = (next + 1) % 32;
+    return true;
 }
 
 // entvars_t lives inside edict_t; pev->pContainingEntity points back to the edict

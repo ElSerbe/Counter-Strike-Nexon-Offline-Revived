@@ -408,6 +408,11 @@ model name; semi-automatic and bolt guns keep the AI's taps. botassist.log: "hol
 Every 30 s with bots, `perf:` lines: the moves per second and botassist's time in them, then "bot move hook by part
 (ms/s)": upkeep (shared updates each move), setup (characters, buying...), zombies/orders, modes (each mode's driver),
 nav (NavTraverse), fire (HoldFire).
+First reading (Zombie Hero, 31 bots): 500-760 us per move, nearly all in setup and zombies/orders. The cause was
+`Readable()`: VirtualQuery costs about 2.3 us (a test program: 0.005 us with the cache) and was asked hundreds of times
+per move. It now remembers the readable regions it found for 100 ms (per thread). The zombie modes' human bots also
+list the players once per server frame (`ZfPlayers`) instead of looking over every entity up to three times per move,
+and keep a line of sight 0.15 s (`ZfSees`); the Zombie Hero check (`HeroIsHero`) runs 4 times a second per bot.
 ## Weapon balance (zombie modes, the room's option; weapon_balance.inl)
 Some weapons do many times the damage of others of their type. The room's host turns the weapon balance on or off
 (off by default) with the **Weapon balance** button of the AI Players page or `/balance` (`/balance on|off`) in the

@@ -32,6 +32,57 @@ struct ZfBot
 };
 static std::map<void*, ZfBot> g_zf;
 
+// Every human bot looked over all the map's entities up to three times per move (backing off, regrouping, cloaked
+// zombies) and traced a line of sight to every zombie each time: most of botassist's time with many bots. Now the
+// living players are listed once per server frame (ZfPlayers) and a line of sight is kept ZF_SIGHT_KEEP s per pair.
+struct ZfPlayer
+{
+    void* e;
+    unsigned char* q; // its CBasePlayer
+    V3 at;
+    bool zombie;
+};
+static std::vector<ZfPlayer> g_zfPlayers;
+static float g_zfPlayersAt = -1;
+static const float ZF_SIGHT_KEEP = 0.15f;
+struct ZfSight
+{
+    float at;
+    bool seen;
+};
+static std::unordered_map<unsigned long long, ZfSight> g_zfSight;
+
+static const std::vector<ZfPlayer>& ZfPlayers()
+{
+    float now = Now();
+    if (now == g_zfPlayersAt)
+        return g_zfPlayers;
+    if (now < g_zfPlayersAt || g_zfSight.size() > 4096)
+        g_zfSight.clear(); // a new map, or old pairs piling up
+    g_zfPlayersAt = now;
+    g_zfPlayers.clear();
+    ForEntitiesNear(V3{ 0, 0, 0 }, 1e6f, [&](void* e) {
+        if (!(F<int>(Vars(e), EV_FLAGS) & FL_CLIENT) || !Alive(e) || F<int>(Vars(e), EV_DEADFLAG) != 0)
+            return;
+        unsigned char* q = (unsigned char*)PrivateOf(e);
+        if (q && Readable(q, 0x2170))
+            g_zfPlayers.push_back({ e, q, Origin(e), q[0x2166] != 0 });
+    });
+    return g_zfPlayers;
+}
+
+static bool ZfSees(void* bot, V3 eye, void* target)
+{
+    float now = Now();
+    unsigned long long key = ((unsigned long long)(DWORD)bot << 32) | (DWORD)target;
+    auto it = g_zfSight.find(key);
+    if (it != g_zfSight.end() && now >= it->second.at && now - it->second.at < ZF_SIGHT_KEEP)
+        return it->second.seen;
+    bool seen = CanSee(bot, eye, target);
+    g_zfSight[key] = { now, seen };
+    return seen;
+}
+
 static bool ZombieMode(int mode); // botassist.cpp: the modes with zombies
 static bool HeroWithChainsaw(void* bot); // modes/zombie_hero.inl
 
@@ -47,13 +98,10 @@ static bool ZombieFleeMode()
 static std::vector<void*> ZfHumans(void* bot, float range)
 {
     std::vector<void*> out;
-    ForEntitiesNear(Origin(bot), range, [&](void* e) {
-        if (e == bot || !(F<int>(Vars(e), EV_FLAGS) & FL_CLIENT) || !Alive(e))
-            return;
-        unsigned char* q = (unsigned char*)PrivateOf(e);
-        if (q && Readable(q, 0x2170) && !q[0x2166] && F<int>(Vars(e), EV_DEADFLAG) == 0)
-            out.push_back(e);
-    });
+    V3 me = Origin(bot);
+    for (const ZfPlayer& pl : ZfPlayers())
+        if (pl.e != bot && !pl.zombie && Len(pl.at - me) <= range)
+            out.push_back(pl.e);
     return out;
 }
 
@@ -107,21 +155,20 @@ static bool ZombieFleeMove(void* bot, BotState& st, float viewYaw, float range, 
     std::vector<V3> zombies;
     float nearest = 1e9f;
     void* nearestZ = nullptr;
-    ForEntitiesNear(me, range, [&](void* e) {
-        if (e == bot || !(F<int>(Vars(e), EV_FLAGS) & FL_CLIENT) || !Alive(e))
-            return;
-        unsigned char* q = (unsigned char*)PrivateOf(e);
-        if (!q || !Readable(q, 0x2170) || !q[0x2166])
-            return;
-        V3 at = Origin(e);
+    for (const ZfPlayer& pl : ZfPlayers())
+    {
+        void* e = pl.e;
+        if (e == bot || !pl.zombie)
+            continue;
+        V3 at = pl.at;
         float d = Len(at - me);
-        if (d > 200.0f && !CanSee(bot, eye, e))
-            return;
+        if (d > range || (d > 200.0f && !ZfSees(bot, eye, e)))
+            continue;
         V3 away = me - at;
         away.z = 0;
         float l = Len2D(away);
         if (l < 1.0f)
-            return;
+            continue;
         push = push + away * ((1.2f - d / range) / l); // the closer, the more it counts
         zombies.push_back(at);
         if (d < nearest)
@@ -129,7 +176,7 @@ static bool ZombieFleeMove(void* bot, BotState& st, float viewYaw, float range, 
             nearest = d;
             nearestZ = e;
         }
-    });
+    }
     ZfBot& z = g_zf[bot];
     if (zombies.empty() || Len2D(push) < 0.01f)
     {
@@ -262,13 +309,9 @@ static bool ZombieGroupMove(void* bot, BotState& st, float viewYaw, float& fwd, 
     if (!anchor || bestD < 350.0f)
         return false;
     bool zombieSeen = false;
-    ForEntitiesNear(me, 700.0f, [&](void* e) {
-        if (zombieSeen || !(F<int>(Vars(e), EV_FLAGS) & FL_CLIENT) || !Alive(e))
-            return;
-        unsigned char* q = (unsigned char*)PrivateOf(e);
-        if (q && Readable(q, 0x2170) && q[0x2166] && CanSee(bot, eye, e))
+    for (const ZfPlayer& pl : ZfPlayers())
+        if (!zombieSeen && pl.zombie && Len(pl.at - me) <= 700.0f && ZfSees(bot, eye, pl.e))
             zombieSeen = true;
-    });
     if (zombieSeen)
         return false;
     float now = Now();
@@ -339,20 +382,20 @@ static bool ZombieCloakAim(void* bot, float* aim, unsigned short& buttons)
     V3 me = Origin(bot), eye = Eye(bot);
     float nearest = 1e9f, nearestCloaked = 1e9f;
     void* cloaked = nullptr;
-    ForEntitiesNear(me, CLOAK_SHOOT_RANGE, [&](void* e) {
-        if (e == bot || !(F<int>(Vars(e), EV_FLAGS) & FL_CLIENT) || !Alive(e))
-            return;
-        unsigned char* q = (unsigned char*)PrivateOf(e);
-        if (!q || !Readable(q, 0x2170) || !q[0x2166] || !CanSee(bot, eye, e))
-            return;
-        float d = Len(Origin(e) - me);
+    for (const ZfPlayer& pl : ZfPlayers())
+    {
+        void* e = pl.e;
+        unsigned char* q = pl.q;
+        float d = Len(pl.at - me);
+        if (e == bot || !pl.zombie || d > CLOAK_SHOOT_RANGE || !ZfSees(bot, eye, e))
+            continue;
         nearest = min(nearest, d);
         if (d < nearestCloaked && ZombieCloaked(e, q))
         {
             nearestCloaked = d;
             cloaked = e;
         }
-    });
+    }
     ZfBot& z = g_zf[bot];
     float now = Now();
     if (!cloaked || nearest < nearestCloaked)
