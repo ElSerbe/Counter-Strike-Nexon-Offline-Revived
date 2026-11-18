@@ -108,6 +108,21 @@ static void WbSave()
     for (auto& e : list)
         fprintf(f, "%s %.0f %.2f\n", e.first.c_str(), e.second->dmg, e.second->secs);
     fclose(f);
+    // with the balance on: the scales now of the most used weapons (the first-use lines come before any measure)
+    static int reports = 0;
+    if (!g_wbOn || reports++ >= 30)
+        return;
+    std::sort(list.begin(), list.end(), [](auto& a, auto& b) { return a.second->secs > b.second->secs; });
+    std::string s;
+    char b[96];
+    for (size_t i = 0; i < list.size() && i < 12; i++)
+    {
+        const WbWeapon& w = *list[i].second;
+        snprintf(b, sizeof(b), "%s%s x%.2f (%.0f/s, %.0f s)", i ? ", " : "", list[i].first.c_str() + 7, w.scale,
+                 w.dmg / w.secs, w.secs);
+        s += b;
+    }
+    Log("weapon balance now: %s", s.c_str());
 }
 
 static float WbMedian(std::vector<float>& v)
@@ -229,7 +244,7 @@ static float WbDamage(void* self, void* inflictor, void* attacker, float damage)
         }
         else
         {
-            if (!r.key.empty() && r.last - r.start >= 0.25f && r.dmg > 0)
+            if (!r.key.empty() && r.last - r.start >= 0.5f && r.dmg > 0) // shorter runs: too noisy (12910/s over 0.3 s seen)
             {
                 WbWeapon& w = g_wb[r.key];
                 w.dmg += r.dmg;
