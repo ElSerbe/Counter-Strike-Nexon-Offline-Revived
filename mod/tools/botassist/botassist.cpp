@@ -2122,9 +2122,17 @@ static DWORD WINAPI FetchMatchBots(LPVOID)
     std::string json = HttpGet(L"/api/matchbots");
     std::vector<MatchBot> bots;
     size_t i = json.find("\"bots\":[");
+    if (i != std::string::npos)
+        i += 8;
     while (i != std::string::npos)
     {
-        size_t a = json.find('{', i), b = a == std::string::npos ? a : json.find('}', a);
+        // the list ends at its "]": the room's "options":{...} after it was read as one more bot, a nameless one
+        // with a random look and weapons (in every match since the Extra Settings page)
+        while (i < json.size() && (json[i] == ',' || json[i] == ' ' || json[i] == '\n' || json[i] == '\r' || json[i] == '\t'))
+            i++;
+        if (i >= json.size() || json[i] != '{')
+            break;
+        size_t a = i, b = json.find('}', a);
         if (a == std::string::npos || b == std::string::npos)
             break;
         std::string obj = json.substr(a, b - a + 1);
@@ -3287,6 +3295,26 @@ static void* PrivateOf(void* edict);
 // the quota of the other team is forced to 0, so the bot manager kicks them; stragglers are kicked by name.
 // The quota is given back on the next map unless the room set it again.
 static std::string g_teamsMap, g_savedMaxBotTeam, g_savedBalanceBotTeam;
+// The bot manager (mp 0x1130789f) kicks the human team's bots past bot_max_human_team (4 by default): in Zombie
+// Scenario only the last 4 of the room's AI players stayed (5 of 9, 6 of 10 kicked). Where everyone plays on one
+// team the cap is raised to the room's AI players (RaiseHumanTeamCap) and given back on the next map.
+static std::string g_savedMaxHumanTeam, g_raisedMaxHumanTeam, g_raisedMap;
+
+static void SetCvar(const char* name, const char* value);
+
+static void RaiseHumanTeamCap(int bots)
+{
+    const char* cur = g_CVarGetString("bot_max_human_team");
+    if (cur && atoi(cur) >= bots)
+        return;
+    if (g_savedMaxHumanTeam.empty())
+        g_savedMaxHumanTeam = cur && *cur ? cur : "0";
+    char v[16];
+    snprintf(v, sizeof(v), "%d", bots);
+    SetCvar("bot_max_human_team", v);
+    g_raisedMaxHumanTeam = v;
+    g_raisedMap = String(*(int*)((DWORD)*g_pGlobals + GV_MAPNAME));
+}
 static int g_wrongTeamChecks = 0;
 static int g_humanTeam = 0;
 static float g_nextKick = 0;
@@ -3323,6 +3351,15 @@ static void UpdateTeams(void* anyPlayer)
             cur = g_CVarGetString("bot_auto_balance_bot_team");
             if (cur && !strcmp(cur, "0"))
                 SetCvar("bot_auto_balance_bot_team", g_savedBalanceBotTeam.c_str());
+        }
+        // (raised for this map's bots already, before this check saw the new map: kept)
+        if (!g_savedMaxHumanTeam.empty() && g_raisedMap != map)
+        {
+            const char* cur = g_CVarGetString("bot_max_human_team");
+            if (cur && g_raisedMaxHumanTeam == cur)
+                SetCvar("bot_max_human_team", g_savedMaxHumanTeam.c_str());
+            g_savedMaxHumanTeam.clear();
+            g_raisedMaxHumanTeam.clear();
         }
         g_savedMaxBotTeam.clear();
         g_savedBalanceBotTeam.clear();
@@ -4323,6 +4360,8 @@ static int RoomBotQuota(int team, const char* which)
         }
     }
     g_matchAdded[t]++;
+    if (CoopOneTeam() || oneTeam)
+        RaiseHumanTeamCap(want[2]); // (before the bot is in: the bot manager would kick it on its next check)
     Log("the game adds a bot (%s): %s %d of %d", which, t == 1 ? "T" : "CT", g_matchAdded[t], want[t]);
     return t == 1 ? 0 : 1;
 }
