@@ -86,6 +86,13 @@ and the orders menu (6) or `/lines` turns them on and off; `Debug=2` no longer d
 
 ## Barricades and aim behaviour
 
+- 2026-11-19: barricades were left alone for good once anything else took health from them (taken for the game's own
+  zombie damage: a stray bullet or a blast did it, and in one match 15 barricades were never damaged by zombies again);
+  that check is gone, the damage runs from the frame hook (bots or not) and "touching" is 40 units. Zombies touching a
+  barricade get it as the target of their AI (CZBSEliteMonsterImprov, vtable 0x117cf2a0 at monster +0x1294; target
+  +0x1d2c, owner +0x1d4c; its attack 0x10a50190 plays the swing, vfunc 0x1a4, and the game's melee hit 0x1076fde0), so
+  they swing at it; ZbsTargetGuard clears that target every frame once the barricade is gone. botassist.log
+  "barricade: zombie ... attacks barricade".
 - Zombie scenario barricades are `zbsbreak` (CZBSBreak : CBreakable, datadesc m_playerRatio +0xe0, m_monsterRatio
   +0xe4). CZBSBreak::TakeDamage (vtable index 17, 0x11376f30, 5 args, `ret 0x14`) rewards players' hits and scales
   monster damage by m_monsterRatio - 0.1 * (upgrade level byte at gamerules+0x12c9 - 1). Offline their health

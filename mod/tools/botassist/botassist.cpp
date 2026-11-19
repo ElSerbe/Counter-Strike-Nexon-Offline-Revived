@@ -3798,14 +3798,15 @@ static const char* Str(int s);
 // (+0xe4, set by the map) minus 10% per upgrade level; offline they never lost any health, so zombies stuck
 // at one never got through. Monsters pressed against a barricade damage it here, through
 // CBreakable::TakeDamage (0x1147b850, the base class: no ratio), so it breaks and fires its targets like normal.
-// If the game damages the barricade itself, botassist leaves it alone.
+// (It used to leave a barricade alone for good once something else took health from it, taken for the game's own zombie
+// damage: a stray bullet or a blast did that, and most barricades of a match were never broken by zombies again. And it
+// only ran while there were bots: the frame hook runs it now.)
 static const DWORD MP_BREAKABLE_TAKEDAMAGE = 0x1147b850;
 typedef int(__fastcall* TakeDamageFn)(void* self, void* edx, void* inflictor, void* attacker, float damage, int bits,
                                       int extra);
 struct BarricadeState
 {
     float lastHealth = -1;
-    bool gameDamages = false;
 };
 static std::unordered_map<void*, BarricadeState> g_barricades;
 static int g_barricadeLevel = -1;
@@ -3848,7 +3849,97 @@ static DWORD SafeTakeDamage(TakeDamageFn fn, void* self, void* attacker, float d
     }
 }
 
-static void UpdateBarricades(void* anyBot)
+// The zombies' melee: Zombie Scenario's monsters (monster_entity) think through CZBSEliteMonsterImprov (vtable
+// 0x117cf2a0, at the monster's +0x1294; its owner monster at +0x1d4c). Its attack (vfunc 0x1ac, 0x10a50190) swings at
+// its target (+0x1d2c, an entity pointer) when it's within reach and in front: the attack animation (vfunc 0x1a4)
+// and the game's melee hit (0x1076fde0). Its target is a player; one behind a barricade is out of reach, so the
+// zombies only pushed against it. A zombie touching a barricade gets that barricade as its target now, so it swings
+// at it (botassist's damage above still does the breaking). When the barricade goes (broken, removed), a zombie still
+// aiming at it gets no target (ZbsTargetGuard, every frame, before the monsters think) and picks a player again.
+static const DWORD MP_ZBS_IMPROV_VT = 0x117cf2a0;
+static const int MONSTER_IMPROV = 0x1294, IMPROV_TARGET = 0x1d2c, IMPROV_OWNER = 0x1d4c;
+struct ZbsAimed
+{
+    void* improv;
+    void* monster; // edict
+    void* barricade; // edict
+    void* barricadePriv;
+};
+static std::vector<ZbsAimed> g_zbsAimed;
+
+static unsigned char* ZbsImprov(void* monsterEdict)
+{
+    unsigned char* m = (unsigned char*)PrivateOf(monsterEdict);
+    if (!m || !Readable(m + MONSTER_IMPROV, 4))
+        return nullptr;
+    unsigned char* imp = *(unsigned char**)(m + MONSTER_IMPROV);
+    if (!imp || !Readable(imp, IMPROV_OWNER + 4) || *(DWORD*)imp != MP_ZBS_IMPROV_VT + g_mpDelta ||
+        *(unsigned char**)(imp + IMPROV_OWNER) != m)
+        return nullptr;
+    return imp;
+}
+
+static bool EdictGone(void* e, void* priv)
+{
+    return !e || *(int*)e /* free */ || PrivateOf(e) != priv;
+}
+
+static void ZbsTargetGuard()
+{
+    static float last = 0;
+    float now = Now();
+    if (now + 1.0f < last)
+        g_zbsAimed.clear(); // a new map: those entities are gone with the old one
+    last = now;
+    for (size_t i = 0; i < g_zbsAimed.size();)
+    {
+        ZbsAimed& a = g_zbsAimed[i];
+        if (!Readable(a.improv, IMPROV_OWNER + 4) || !Readable(a.monster, 4) || !Readable(a.barricade, 4))
+        {
+            g_zbsAimed.erase(g_zbsAimed.begin() + i);
+            continue;
+        }
+        bool monsterGone = EdictGone(a.monster, *(void**)((unsigned char*)a.improv + IMPROV_OWNER));
+        bool barricadeGone = EdictGone(a.barricade, a.barricadePriv) || F<float>(Vars(a.barricade), EV_HEALTH) <= 0;
+        if (!monsterGone && !barricadeGone)
+        {
+            i++;
+            continue;
+        }
+        if (!monsterGone && *(void**)((unsigned char*)a.improv + IMPROV_TARGET) == a.barricadePriv)
+            *(void**)((unsigned char*)a.improv + IMPROV_TARGET) = nullptr;
+        g_zbsAimed.erase(g_zbsAimed.begin() + i);
+    }
+}
+
+static void ZbsAimAtBarricade(void* monster, void* barricade)
+{
+    unsigned char* imp = ZbsImprov(monster);
+    void* bp = PrivateOf(barricade);
+    if (!imp || !bp)
+        return;
+    void* cur = *(void**)(imp + IMPROV_TARGET);
+    if (cur == bp)
+        return;
+    *(void**)(imp + IMPROV_TARGET) = bp;
+    bool known = false;
+    for (auto& a : g_zbsAimed)
+        if (a.improv == imp)
+        {
+            a.monster = monster;
+            a.barricade = barricade;
+            a.barricadePriv = bp;
+            known = true;
+        }
+    if (!known)
+        g_zbsAimed.push_back({ imp, monster, barricade, bp });
+    static int reports = 0;
+    if (reports++ < 20)
+        Log("barricade: zombie %s attacks barricade '%s' (it was after %s)", ClassName(monster),
+            Str(F<int>(Vars(barricade), 0x1fc)), cur ? "a player" : "nothing");
+}
+
+static void UpdateBarricades()
 {
     float now = Now();
     if (cfg.barricadeDamage <= 0 || (now < g_nextBarricadeCheck && now >= g_nextBarricadeCheck - 5.0f))
@@ -3861,7 +3952,7 @@ static void UpdateBarricades(void* anyBot)
         g_barricadeLevel = g_nav.level;
     }
     std::vector<void*> list;
-    ForEntitiesNear(Origin(anyBot), 16384.0f, [&](void* e) {
+    ForEntitiesNear(V3{ 0, 0, 0 }, 1e6f, [&](void* e) {
         unsigned char* v = Vars(e);
         if (F<float>(v, EV_HEALTH) > 0 && F<float>(v, EV_TAKEDAMAGE) != 0.0f && IsBarricadeClass(ClassName(e)))
             list.push_back(e);
@@ -3872,14 +3963,9 @@ static void UpdateBarricades(void* anyBot)
         unsigned char* bv = Vars(b);
         BarricadeState& bs = g_barricades[b];
         float hp = F<float>(bv, EV_HEALTH);
-        if (bs.lastHealth >= 0 && hp < bs.lastHealth - 0.5f && !bs.gameDamages)
-        {
-            bs.gameDamages = true; // something else (the game) damages it: nothing to fix here
-            Log("barricade '%s' takes damage from the game: botassist leaves it alone", Str(F<int>(bv, 0x1fc)));
-        }
         // only what zombies may break (map keyvalue zbdmgratio > 0), scaled by that ratio
         float playerRatio = 0, monsterRatio = 0;
-        if (bs.gameDamages || !BreakRatios(b, &playerRatio, &monsterRatio) || monsterRatio <= 0.0f)
+        if (!BreakRatios(b, &playerRatio, &monsterRatio) || monsterRatio <= 0.0f)
             continue;
         V3 lo = Vec((float*)(bv + EV_ABSMIN)), hi = Vec((float*)(bv + EV_ABSMAX));
         V3 c = (lo + hi) * 0.5f;
@@ -3891,12 +3977,13 @@ static void UpdateBarricades(void* anyBot)
                 return;
             unsigned char* mv = Vars(m);
             V3 mlo = Vec((float*)(mv + EV_ABSMIN)), mhi = Vec((float*)(mv + EV_ABSMAX));
-            const float t = 24.0f; // touching, give or take
+            const float t = 40.0f; // touching, give or take (a zombie's arms reach a little past its box)
             if (mlo.x > hi.x + t || mhi.x < lo.x - t || mlo.y > hi.y + t || mhi.y < lo.y - t || mlo.z > hi.z + t ||
                 mhi.z < lo.z - t)
                 return;
             zombies++;
             attacker = m;
+            __try { ZbsAimAtBarricade(m, b); } __except (EXCEPTION_EXECUTE_HANDLER) {}
         });
         if (!zombies)
         {
@@ -5526,6 +5613,13 @@ static void HookedStartFrame()
         NavToolsFrame();
         ZgFrame();
         WbFrame();
+        if (CoopMode())
+        {
+            UpdateBarricades(); // zombies against barricades, bots or not
+            ZbsTargetGuard();
+        }
+        else
+            g_zbsAimed.clear();
     }
     __except (EXCEPTION_EXECUTE_HANDLER)
     {
@@ -6307,7 +6401,6 @@ static void HookedRunPlayerMove(void* fakeclient, const float* angles, float fwd
                 if (CoopMode() && MonsterMap())
                 {
                     UpdateRefill(fakeclient, bs);
-                    UpdateBarricades(fakeclient);
                 }
             }
             PerfMark(1, perfPart);
