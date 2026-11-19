@@ -1046,6 +1046,107 @@
 					{ "ItemID": 964, "Cost": 135 }, { "ItemID": 728, "Cost": 165 }, { "ItemID": 796, "Cost": 135 }, { "ItemID": 876, "Cost": 245 }
 				] }
 			]
+		},
+		{
+			"ID": 59, "Name": "X Weapons", "Type": "Collection", "Cost": 200,
+			"Description": "The arsenal of the Random Weapons maps that no shop sells: extremely powerful weapons, at five times the usual price.",
+			"Image": "", "Theme": ["#1a0808", "#ff4a3a"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 9119, "Cost": 300, "Name": "M1887 Craft B" }, { "ItemID": 9342, "Cost": 300, "Name": "Infinity EX2 (Hero)" }, { "ItemID": 8885, "Cost": 300, "Name": "Infinity EX2 Desert" }, { "ItemID": 9336, "Cost": 300, "Name": "Infinity EX1 (Hero)" }
+				] },
+				{ "Unlock": 480, "Items": [
+					{ "ItemID": 9362, "Cost": 300, "Name": "M79 Gold (Hero)" }, { "ItemID": 395, "Cost": 300 }, { "ItemID": 9358, "Cost": 300, "Name": "Silver Luger (Hero)" }, { "ItemID": 9335, "Cost": 300, "Name": "Infinity (Hero)" }
+				] },
+				{ "Unlock": 960, "Items": [
+					{ "ItemID": 9339, "Cost": 300, "Name": "M79 (Hero)" }, { "ItemID": 9118, "Cost": 325, "Name": "PP-2000 B" }, { "ItemID": 9058, "Cost": 325, "Name": "Dual Kriss B" }, { "ItemID": 9003, "Cost": 325, "Name": "Bizon B" }
+				] },
+				{ "Unlock": 1470, "Items": [
+					{ "ItemID": 9346, "Cost": 325, "Name": "Thompson Gold (Hero)" }, { "ItemID": 9366, "Cost": 325, "Name": "Skull-3 (Hero)" }, { "ItemID": 249, "Cost": 375 }, { "ItemID": 211, "Cost": 375 }
+				] },
+				{ "Unlock": 2030, "Items": [
+					{ "ItemID": 176, "Cost": 375 }, { "ItemID": 9005, "Cost": 375, "Name": "Hunting Dagger B" }, { "ItemID": 8874, "Cost": 375, "Name": "Hammer Desert" }, { "ItemID": 821, "Cost": 375 }
+				] },
+				{ "Unlock": 2630, "Items": [
+					{ "ItemID": 762, "Cost": 375, "Name": "Sheep Sword" }, { "ItemID": 751, "Cost": 375 }, { "ItemID": 436, "Cost": 375 }, { "ItemID": 345, "Cost": 375 }
+				] },
+				{ "Unlock": 3230, "Items": [
+					{ "ItemID": 281, "Cost": 375 }, { "ItemID": 248, "Cost": 375 }, { "ItemID": 237, "Cost": 375 }, { "ItemID": 9338, "Cost": 375, "Name": "Master Combat Knife (Hero)" }
+				] },
+				{ "Unlock": 3830, "Items": [
+					{ "ItemID": 9207, "Cost": 375, "Name": "QBS-09 B" }, { "ItemID": 7, "Cost": 375 }, { "ItemID": 8873, "Cost": 375, "Name": "SPAS-12 Desert" }, { "ItemID": 9354, "Cost": 375, "Name": "Gatling (Hero)" }
+				] },
+				{ "Unlock": 4430, "Items": [
+					{ "ItemID": 9368, "Cost": 375, "Name": "SPAS-12 EX2 (Hero)" }, { "ItemID": 9370, "Cost": 375, "Name": "Skull-11 (Hero)" }, { "ItemID": 9345, "Cost": 375, "Name": "Double Barrel (Hero)" }, { "ItemID": 9288, "Cost": 450, "Name": "Gilboa EX W" }
+				] },
+				{ "Unlock": 5060, "Items": [
+					{ "ItemID": 9324, "Cost": 450, "Name": "Bow W" }, { "ItemID": 8875, "Cost": 450, "Name": "WA2000 Desert" }, { "ItemID": 9004, "Cost": 450, "Name": "PGM B" }, { "ItemID": 8977, "Cost": 450, "Name": "Classic Crossbow" }
+				] },
+				{ "Unlock": 5780, "Items": [
+					{ "ItemID": 8944, "Cost": 450, "Name": "AK-47 L3" }, { "ItemID": 8884, "Cost": 450, "Name": "M95 Desert" }, { "ItemID": 8579, "Cost": 450, "Name": "Janus A" }, { "ItemID": 22, "Cost": 450 }
+				] },
+				{ "Unlock": 6500, "Items": [
+					{ "ItemID": 9355, "Cost": 450, "Name": "Skull-5 (Hero)" }, { "ItemID": 9365, "Cost": 450, "Name": "M95 Xmas (Hero)" }, { "ItemID": 18, "Cost": 450 }, { "ItemID": 9329, "Cost": 500 }
+				] },
+				{ "Unlock": 7240, "Items": [
+					{ "ItemID": 8767, "Cost": 500, "Name": "Rocket Pistol" }, { "ItemID": 9360, "Cost": 500, "Name": "Skull-1 (Hero)" }, { "ItemID": 9353, "Cost": 500, "Name": "Skull Axe (Hero)" }, { "ItemID": 9206, "Cost": 575, "Name": "Destroyer B" }
+				] },
+				{ "Unlock": 8070, "Items": [
+					{ "ItemID": 9007, "Cost": 600, "Name": "Divine Titan EX" }, { "ItemID": 8699, "Cost": 600, "Name": "Divine Titan" }, { "ItemID": 8483, "Cost": 600, "Name": "SB Mine" }, { "ItemID": 8114, "Cost": 600 }
+				] },
+				{ "Unlock": 9030, "Items": [
+					{ "ItemID": 31, "Cost": 600 }, { "ItemID": 313, "Cost": 600 }, { "ItemID": 215, "Cost": 600 }, { "ItemID": 212, "Cost": 600 }
+				] },
+				{ "Unlock": 9990, "Items": [
+					{ "ItemID": 26, "Cost": 600 }, { "ItemID": 9357, "Cost": 600, "Name": "Holy Bomb (Hero)" }, { "ItemID": 8955, "Cost": 750, "Name": "Spear Gun EX" }, { "ItemID": 9259, "Cost": 825, "Name": "M134 W" }
+				] },
+				{ "Unlock": 11100, "Items": [
+					{ "ItemID": 9057, "Cost": 825, "Name": "MG36 B" }, { "ItemID": 8883, "Cost": 825, "Name": "M60 Desert" }, { "ItemID": 8872, "Cost": 825, "Name": "M2 Desert" }, { "ItemID": 8871, "Cost": 825, "Name": "MG3 Desert" }
+				] },
+				{ "Unlock": 12420, "Items": [
+					{ "ItemID": 9359, "Cost": 825, "Name": "M134 EX (Hero)" }, { "ItemID": 9340, "Cost": 825, "Name": "M134 Xmas (Hero)" }, { "ItemID": 525, "Cost": 825 }, { "ItemID": 9348, "Cost": 825, "Name": "M249 EX (Hero)" }
+				] },
+				{ "Unlock": 13740, "Items": [
+					{ "ItemID": 9341, "Cost": 825, "Name": "MG3 Xmas (Hero)" }, { "ItemID": 9646, "Cost": 1000, "Name": "M32 MGL (2026)" }, { "ItemID": 9367, "Cost": 1000, "Name": "Black Dragon Cannon (Hero)" }, { "ItemID": 8568, "Cost": 1500, "Name": "Five-seveN Buff" }
+				] },
+				{ "Unlock": 15470, "Items": [
+					{ "ItemID": 9185, "Cost": 1500, "Name": "Forge Sword" }, { "ItemID": 8753, "Cost": 1500, "Name": "Bombard Sword" }, { "ItemID": 8865, "Cost": 1500, "Name": "Divine Hammer" }, { "ItemID": 9400, "Cost": 1500, "Name": "USAS-12 AS" }
+				] },
+				{ "Unlock": 17870, "Items": [
+					{ "ItemID": 8869, "Cost": 1500, "Name": "M3 Dragon EX" }, { "ItemID": 9212, "Cost": 1500, "Name": "Bizon Fox" }, { "ItemID": 9074, "Cost": 1500, "Name": "Shift EX" }, { "ItemID": 8563, "Cost": 1500, "Name": "Hunter's Bow" }
+				] },
+				{ "Unlock": 20270, "Items": [
+					{ "ItemID": 8555, "Cost": 1500, "Name": "SG552 Buff EX" }, { "ItemID": 8480, "Cost": 1500, "Name": "Crossbow EX21" }, { "ItemID": 8622, "Cost": 1500, "Name": "Piano Gun EX" }, { "ItemID": 8525, "Cost": 1650, "Name": "MG-SM" }
+				] },
+				{ "Unlock": 22730, "Items": [
+					{ "ItemID": 8530, "Cost": 2250, "Name": "Dread Axe" }, { "ItemID": 8901, "Cost": 2250, "Name": "Dread Axe EX" }, { "ItemID": 9051, "Cost": 2250, "Name": "Divine Spear" }, { "ItemID": 9669, "Cost": 2250, "Name": "Whip Flail" }
+				] },
+				{ "Unlock": 26330, "Items": [
+					{ "ItemID": 8487, "Cost": 2250, "Name": "Summon Knife EX" }, { "ItemID": 8794, "Cost": 2250, "Name": "Chain Sniper" }, { "ItemID": 8957, "Cost": 2250, "Name": "Chain MG" }, { "ItemID": 8825, "Cost": 2250, "Name": "Wing Gun EX" }
+				] },
+				{ "Unlock": 29930, "Items": [
+					{ "ItemID": 8965, "Cost": 2250, "Name": "Soul Reaper" }, { "ItemID": 8474, "Cost": 2250, "Name": "Wing Gun" }, { "ItemID": 8621, "Cost": 2250, "Name": "Revive Gun" }
+				] }
+			]
+		},
+		{
+			"ID": 60, "Name": "Space Weapons", "Type": "Collection", "Cost": 150,
+			"Description": "Beams, voids and halos: the science-fiction weapons of the Random Weapons maps, at five times the usual price.",
+			"Image": "", "Theme": ["#060a1f", "#7ad7ff"],
+			"Pages": [
+				{ "Unlock": 0, "Items": [
+					{ "ItemID": 8457, "Cost": 300, "Name": "Jet Gun MA" }, { "ItemID": 9117, "Cost": 450, "Name": "SF Sniper MB" }, { "ItemID": 8820, "Cost": 600, "Name": "SF Turret" }, { "ItemID": 9369, "Cost": 825, "Name": "SF MG (Hero)" }
+				] },
+				{ "Unlock": 870, "Items": [
+					{ "ItemID": 8460, "Cost": 1000, "Name": "Jet Gun MD" }, { "ItemID": 9384, "Cost": 1000, "Name": "Drill Vortex" }, { "ItemID": 8876, "Cost": 1500, "Name": "Leap Strike Gun" }, { "ItemID": 8720, "Cost": 1500, "Name": "Restriction Pistol" }
+				] },
+				{ "Unlock": 2870, "Items": [
+					{ "ItemID": 8663, "Cost": 1500, "Name": "Void Avenger EX" }, { "ItemID": 8666, "Cost": 1500, "Name": "Laser Shotgun" }, { "ItemID": 8891, "Cost": 1500, "Name": "Transform Gun ADV" }, { "ItemID": 9637, "Cost": 2250, "Name": "Beam Gun" }
+				] },
+				{ "Unlock": 5570, "Items": [
+					{ "ItemID": 8709, "Cost": 2250, "Name": "Heaven Splitter EX" }, { "ItemID": 9098, "Cost": 2250, "Name": "Halo Gun EX" }, { "ItemID": 8787, "Cost": 2250, "Name": "Halo Gun" }
+				] }
+			]
 		}
 	]
 }
