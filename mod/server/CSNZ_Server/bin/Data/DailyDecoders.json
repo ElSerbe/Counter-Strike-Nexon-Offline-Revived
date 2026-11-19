@@ -6,9 +6,9 @@
 	// one now, tools/gen_decoders.py give_models)
 	// Contents: ItemBox.json (tools/gen_decoders.py). Names show in the chat message.
 	"Version": 1,
-	"OrderChance": 6,
+	"OrderChance": 4,
 	"WeeklyChance": 6,
-	"RequestChance": 6,
+	"RequestChance": 4,
 	"Decoders": [
 		{ "Item": 165, "Weight": 25, "Name": "Decoder" },
 		{ "Item": 533, "Weight": 20, "Name": "Code B Decoder" },
