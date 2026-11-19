@@ -1168,6 +1168,12 @@ shoots on the way), takes its own place among the spot's areas and stands still;
 off. Alone at its spot it joins the spot with the most humans left. Ordered bots and the chainsaw hero keep their old
 behaviour. botassist.log: "holdout: N spots on <map>", "holdout: bot '...' holds spot N ...". A test of the scoring
 on de_dust, cs_estate and de_santorini (a Python copy reading their .nav) spread the spots over the whole map.
+A few bots walk the map alone instead (one per 8 humans, from 6 humans): to a random place of the mesh's main part
+700-2500 away, then another (25 s at most each). "holdout: bot '...' walks the map alone".
+Watching their back (every zombie PvP mode, `ZombieAwareAim` in zombie_humans.inl): the stock AI only sees in front of
+it, and bots backing off or walking to their spot were caught from behind. The nearest zombie in line of sight within
+650 is looked at after 0.3 s (12 degrees a move, a small aim error per zombie) and shot within 6 degrees, unless the
+stock AI already aims within 25 degrees of it; the legs keep their own way. "zombie modes: bot '...' turns to the zombie".
 
 ## Zombie Hero and its versions (modes 14, 44, 45, 58) with room bots
 

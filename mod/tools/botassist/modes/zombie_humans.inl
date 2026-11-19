@@ -29,6 +29,9 @@ struct ZfBot
     float goalUntil = 0, nextJump = 0, nextLog = 0, nextDropLog = 0, cloakSince = 0, cloakLast = 0;
     int cloakShots = 0;
     float nextGroupLog = 0;
+    void* aware = nullptr;   // ZombieAwareAim's zombie
+    float awareSince = 0, awareLast = -100, awareErr = 0;
+    int awareTurns = 0;
 };
 static std::map<void*, ZfBot> g_zf;
 
@@ -387,7 +390,7 @@ static bool ZombieCloaked(void* e, unsigned char* q)
 }
 
 // true: aim was set and the bot shoots (the caller writes it where the bot looks)
-static bool ZombieCloakAim(void* bot, float* aim, unsigned short& buttons)
+static bool ZombieCloakAimOnly(void* bot, float* aim, unsigned short& buttons)
 {
     int m = GameMode();
     if (!ZombieFleeMode() && !(cfg.zombieFlee && (m == MODE_ZCON || m == MODE_ZWAR)))
@@ -435,4 +438,81 @@ static bool ZombieCloakAim(void* bot, float* aim, unsigned short& buttons)
                 String(F<int>(Vars(cloaked), EV_NETNAME)), nearestCloaked);
     }
     return true;
+}
+
+// ---- watching their back (the zombie PvP modes)
+// The stock AI only sees what's in front of it, and a bot backing off (ZombieFleeMove walks it away, whichever way it
+// looks) or walking to its spot kept looking elsewhere while a zombie came up behind and caught it. The nearest zombie
+// in sight (line of sight, all around) within AWARE_RANGE is now looked at after AWARE_NOTICE s, turning AWARE_TURN
+// degrees a move, and shot once the aim is within AWARE_FIRE_CONE (a small aim error, new for each zombie), unless the
+// stock AI already aims within AWARE_CONE of it. The bot's legs keep their own way: backing off still backs off.
+static const float AWARE_RANGE = 650.0f, AWARE_CONE = 25.0f, AWARE_NOTICE = 0.3f, AWARE_TURN = 12.0f, AWARE_FIRE_CONE = 6.0f;
+
+static bool ZombieAwareAim(void* bot, float* aim, unsigned short& buttons)
+{
+    unsigned char* p = (unsigned char*)PrivateOf(bot);
+    if (!p || !Readable(p, 0x2170) || p[0x2166])
+        return false;
+    V3 me = Origin(bot), eye = Eye(bot);
+    void* target = nullptr;
+    float nearest = AWARE_RANGE;
+    for (const ZfPlayer& pl : ZfPlayers())
+    {
+        if (pl.e == bot || !pl.zombie)
+            continue;
+        float d = Len(pl.at - me);
+        if (d < nearest && ZfSees(bot, eye, pl.e))
+        {
+            nearest = d;
+            target = pl.e;
+        }
+    }
+    ZfBot& z = g_zf[bot];
+    float now = Now();
+    if (!target)
+    {
+        z.aware = nullptr;
+        return false;
+    }
+    V3 to = Center(target) - eye;
+    float yaw = YawOf(to), pitch = PitchOf(to);
+    if (fabsf(AngleDiff(yaw, aim[1])) < AWARE_CONE && fabsf(pitch - aim[0]) < AWARE_CONE)
+    {
+        z.awareLast = now; // the stock AI has it
+        return false;
+    }
+    if (target != z.aware || now - z.awareLast > 0.5f)
+    {
+        z.aware = target; // a new one: a moment to notice it
+        z.awareSince = now;
+        z.awareErr = (Rnd() - 0.5f) * 3.0f;
+    }
+    z.awareLast = now;
+    if (now - z.awareSince < AWARE_NOTICE)
+        return false;
+    yaw += z.awareErr;
+    float dy = AngleDiff(yaw, aim[1]), dp = pitch - aim[0];
+    aim[1] += dy > AWARE_TURN ? AWARE_TURN : dy < -AWARE_TURN ? -AWARE_TURN : dy;
+    aim[0] += dp > AWARE_TURN ? AWARE_TURN : dp < -AWARE_TURN ? -AWARE_TURN : dp;
+    if (fabsf(dy) < AWARE_FIRE_CONE && fabsf(dp) < AWARE_FIRE_CONE)
+        buttons |= IN_ATTACK;
+    if (z.awareTurns++ == 0)
+    {
+        static int reports = 0;
+        if (reports++ < 40)
+            Log("zombie modes: bot '%s' turns to the zombie '%s' %.0f u away (%.0f degrees off its aim)",
+                String(F<int>(Vars(bot), EV_NETNAME)), String(F<int>(Vars(target), EV_NETNAME)), nearest, fabsf(dy));
+    }
+    return true;
+}
+
+// true: aim was set and the bot shoots (the caller writes it where the bot looks)
+static bool ZombieCloakAim(void* bot, float* aim, unsigned short& buttons)
+{
+    if (ZombieCloakAimOnly(bot, aim, buttons))
+        return true;
+    int m = GameMode();
+    if (!ZombieFleeMode() && !(cfg.zombieFlee && (m == MODE_ZCON || m == MODE_ZWAR)))
+        return false;
+    return ZombieAwareAim(bot, aim, buttons);
 }

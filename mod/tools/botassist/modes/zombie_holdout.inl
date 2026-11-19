@@ -10,8 +10,11 @@
 //  - it walks there (shooting what it meets: only its legs are driven) and holds its own place there (the spot's
 //    areas, one per bot), standing still while it shoots; zombies closer than HOLD_FLEE make it back off a little
 //  - alone at its spot (the rest of its group turned or died), it joins the spot with the most humans left
+//  - a few bots walk the map alone instead (one per HOLD_ROAM_PER humans, from HOLD_ROAM_FROM humans): to a random
+//    place of the mesh's main part HOLD_ROAM_MIN to HOLD_ROAM_MAX away, then another
 // Under a player's orders, or the hero with the chainsaw, it's left as before. Zombie Escape has its own route.
-static const int HOLD_SPOTS = 8, HOLD_GROUP = 4;
+static const int HOLD_SPOTS = 8, HOLD_GROUP = 4, HOLD_ROAM_PER = 8, HOLD_ROAM_FROM = 6;
+static const float HOLD_ROAM_MIN = 700.0f, HOLD_ROAM_MAX = 2500.0f, HOLD_ROAM_TIME = 25.0f;
 static const float HOLD_SEPARATION = 900.0f, HOLD_RADIUS = 220.0f, HOLD_FLEE = 170.0f, HOLD_MIN_SIZE = 40.0f;
 
 struct HoldSpot
@@ -24,7 +27,11 @@ struct HoldBot
 {
     int spot = -1, place = 0;
     float nextCheck = 0, nextLog = 0;
+    bool roam = false; // walks the map alone
+    V3 roamGoal{};
+    float roamUntil = 0;
 };
+static std::vector<int> g_holdMain; // areas of the mesh's main part (where the walkers go)
 static std::vector<HoldSpot> g_holdSpots;
 static int g_holdLevel = -1;
 static std::map<void*, HoldBot> g_holdBots;
@@ -40,6 +47,7 @@ static void HoldPickSpots()
     g_holdLevel = g_nav.level;
     g_holdSpots.clear();
     g_holdBots.clear();
+    g_holdMain.clear();
     size_t n = (std::min)(g_navBaseAreas ? g_navBaseAreas : g_nav.areas.size(), g_nav.areas.size());
     if (!g_nav.ok || n < 20)
         return;
@@ -88,6 +96,9 @@ static void HoldPickSpots()
         float score;
     };
     std::vector<Cand> cands;
+    for (size_t i = 0; i < n; i++)
+        if (part[i] == best && !NavAreaHurts((int)i) && !(g_nav.areas[i].attr & (NAV_JUMP | NAV_CROUCH)))
+            g_holdMain.push_back((int)i);
     for (size_t i = 0; i < n; i++)
     {
         const NavArea& a = g_nav.areas[i];
@@ -214,6 +225,91 @@ static void HoldAssign(void* bot, HoldBot& h, bool join)
             g_holdSpots[pick].at.y, count[pick] + 1, k);
 }
 
+// a new life: a walker if there are fewer than there should be, else a spot
+static void HoldNewLife(void* bot, HoldBot& h)
+{
+    int humans = 0, walkers = 0;
+    for (const ZfPlayer& pl : ZfPlayers())
+    {
+        if (pl.zombie)
+            continue;
+        humans++;
+        auto it = g_holdBots.find(pl.e);
+        walkers += pl.e != bot && it != g_holdBots.end() && it->second.roam;
+    }
+    int want = humans >= HOLD_ROAM_FROM ? (std::max)(1, humans / HOLD_ROAM_PER) : 0;
+    h.roam = walkers < want && !g_holdMain.empty();
+    h.roamUntil = 0;
+    if (!h.roam)
+    {
+        HoldAssign(bot, h, false);
+        return;
+    }
+    h.spot = -1;
+    static int reports = 0;
+    if (reports++ < 40)
+        Log("holdout: bot '%s' walks the map alone (%d of %d walkers, %d humans)", String(F<int>(Vars(bot), EV_NETNAME)),
+            walkers + 1, want, humans);
+}
+
+// to a place on foot (path, ledges, getting unstuck); false: a drop ahead, the stock AI moves it
+static bool HoldWalk(void* bot, BotState& st, float viewYaw, V3 place, float speed, float& fwd, float& side,
+                     unsigned short& buttons)
+{
+    float now = Now();
+    V3 me = Origin(bot), wp;
+    if (!NextWaypoint(bot, st, me, place, 40.0f, wp))
+        wp = place;
+    float moveYaw = WalkYaw(bot, me, YawOf(wp - me), 40.0f);
+    if (DropAhead(bot, me, moveYaw, 72.0f, HURT_DROP_MAX))
+        return false;
+    if (LedgeAhead(bot, me, moveYaw) && !DropAhead(bot, me, moveYaw, 120.0f, FLEE_FREE_DROP))
+        buttons |= IN_JUMP;
+    if (Len2D(me - st.lastPos) > 24.0f)
+    {
+        st.lastPos = me;
+        st.lastProgress = now;
+    }
+    else if (now - st.lastProgress > 1.5f)
+    {
+        st.lastProgress = now;
+        st.nextRepath = 0;
+        buttons |= IN_JUMP;
+    }
+    float rel = (moveYaw - viewYaw) / RAD;
+    fwd = cosf(rel) * speed;
+    side = -sinf(rel) * speed;
+    return true;
+}
+
+static bool HoldRoam(void* bot, BotState& st, HoldBot& h, float viewYaw, float& fwd, float& side, unsigned short& buttons)
+{
+    float now = Now();
+    V3 me = Origin(bot);
+    if (now >= h.roamUntil || Len2D(h.roamGoal - me) < 80.0f)
+    {
+        for (int k = 0; k < 40; k++)
+        {
+            V3 at = g_nav.areas[g_holdMain[rand() % g_holdMain.size()]].center;
+            float d = Len2D(at - me);
+            if (d >= HOLD_ROAM_MIN && d <= HOLD_ROAM_MAX && !InHurtZone(at))
+            {
+                h.roamGoal = at;
+                break;
+            }
+        }
+        h.roamUntil = now + HOLD_ROAM_TIME;
+        DLog("holdout: walker '%s' goes to (%.0f %.0f), %.0f u away", String(F<int>(Vars(bot), EV_NETNAME)), h.roamGoal.x,
+             h.roamGoal.y, Len2D(h.roamGoal - me));
+    }
+    if (!HoldWalk(bot, st, viewYaw, h.roamGoal, 230.0f, fwd, side, buttons))
+    {
+        h.roamUntil = 0; // another place
+        return false;
+    }
+    return true;
+}
+
 static bool HoldoutAtSpot(void* bot)
 {
     auto it = g_holdBots.find(bot);
@@ -238,9 +334,11 @@ static bool HoldoutMove(void* bot, BotState& st, float viewYaw, float& fwd, floa
     handled = true; // (the single-group regrouping isn't used in these modes)
     HoldBot& h = g_holdBots[bot];
     float now = Now();
-    if (st.newLife || h.spot < 0 || h.spot >= (int)g_holdSpots.size())
-        HoldAssign(bot, h, false);
-    else if (now >= h.nextCheck)
+    if (st.newLife || (!h.roam && (h.spot < 0 || h.spot >= (int)g_holdSpots.size())))
+        HoldNewLife(bot, h);
+    if (h.roam)
+        return HoldRoam(bot, st, h, viewYaw, fwd, side, buttons);
+    if (now >= h.nextCheck)
     {
         h.nextCheck = now + 3.0f;
         if (HoldoutAtSpot(bot) && HoldMembers(bot)[h.spot] == 0)
@@ -257,30 +355,10 @@ static bool HoldoutMove(void* bot, BotState& st, float viewYaw, float& fwd, floa
         fwd = side = 0; // holding: the stock AI aims and shoots
         return true;
     }
-    V3 wp;
-    if (!NextWaypoint(bot, st, me, place, 40.0f, wp))
-        wp = place;
-    float moveYaw = WalkYaw(bot, me, YawOf(wp - me), 40.0f);
-    if (DropAhead(bot, me, moveYaw, 72.0f, HURT_DROP_MAX))
-        return false;
-    if (LedgeAhead(bot, me, moveYaw) && !DropAhead(bot, me, moveYaw, 120.0f, FLEE_FREE_DROP))
-        buttons |= IN_JUMP;
-    if (Len2D(me - st.lastPos) > 24.0f)
-    {
-        st.lastPos = me;
-        st.lastProgress = now;
-    }
-    else if (now - st.lastProgress > 1.5f)
-    {
-        st.lastProgress = now;
-        st.nextRepath = 0;
-        buttons |= IN_JUMP;
-    }
-    float rel = (moveYaw - viewYaw) / RAD;
     // inside its spot: no running (it may be shooting)
     float speed = Len2D(s.at - me) < HOLD_RADIUS ? 150.0f : 250.0f;
-    fwd = cosf(rel) * speed;
-    side = -sinf(rel) * speed;
+    if (!HoldWalk(bot, st, viewYaw, place, speed, fwd, side, buttons))
+        return false;
     if (now >= h.nextLog)
     {
         h.nextLog = now + 15.0f;
