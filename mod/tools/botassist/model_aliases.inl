@@ -1,6 +1,7 @@
 // ---------------------------------------------------------------- weapons this client has no model for
-// 59 weapons of Item.csv name models the game files don't have (2019-2026 season skins like y19s4hammer, the Halloween
-// Hammer; the "b" editions like bpython): drawn, they were invisible (a player hit someone with an empty hand). The
+// A few weapons of Item.csv name models the game files don't have (murasame5, sfboomerang1, y24s2mg3...): drawn, they
+// were invisible (a player hit someone with an empty hand). (The weapon skins - Trans-Gear, Halloween, the "b"
+// editions - have no model of their own either, but hw.dll's skin table shows them on the base model: not here.) The
 // game opens every file through FileSystem_Nar.dll's IFileSystem ("VFileSystem009": vtable slot 8 FileExists(name),
 // slot 10 Open(name, options, pathID), thiscall). botassist hooks both: a models/v_, p_ or w_<res>.mdl that isn't
 // there, for a <res> of botassist_model_aliases.txt (gen_model_aliases.py), is opened as the alias's model instead

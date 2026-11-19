@@ -430,12 +430,13 @@ per move. It now remembers the readable regions it found for 100 ms (per thread)
 list the players once per server frame (`ZfPlayers`) instead of looking over every entity up to three times per move,
 and keep a line of sight 0.15 s (`ZfSees`); the Zombie Hero check (`HeroIsHero`) runs 4 times a second per bot.
 ## Weapons without models of their own (model_aliases.inl)
-59 weapons of Item.csv name models the game files don't have (mp.dll asks for models/v_<res>.mdl; checked through the
-game's own file system, .nar and Data/Packer): the 2019-2026 season skins (y19s4hammer the Halloween Hammer, the
-Trans-Gear 19s1*, Elegant Frontier y19s2*...) and the "b" editions (bpython, balrog7b...). Drawn, they were invisible.
-botassist hooks FileSystem_Nar.dll's IFileSystem ("VFileSystem009", vtable slot 8 FileExists, slot 10 Open; thiscall):
-a missing models/v_, p_ or w_<res>.mdl of botassist_model_aliases.txt (gen_model_aliases.py: the base weapon, else a
-plain one of the same type) is opened as the alias's. botassist.log "model aliases: ... shown instead".
+mp.dll names models/v_<res>.mdl for every weapon, and 59 of those files don't exist. 52 are weapon skins (the
+Trans-Gear 19s1*, Halloween y19s4*, Elegant Frontier y19s2*, the "b" editions...): hw.dll's skin table shows them on
+the base weapon's model with their own textures (models/texture/@<res>_<texture>; export_shop_assets.skin_redirects),
+so they're the game's business. The other 7 (murasame5, sfboomerang1, dualuziw, huntgrenade1, y24s2mg3, y24s2skull2,
+y25s1turbulent1) were invisible. botassist hooks FileSystem_Nar.dll's IFileSystem ("VFileSystem009", vtable slot 8
+FileExists, slot 10 Open; thiscall): a missing models/v_, p_ or w_<res>.mdl of botassist_model_aliases.txt
+(gen_model_aliases.py) is opened as its base weapon's. botassist.log "model aliases: ... shown instead".
 
 ## Divine Titan EX doesn't crash the game (mp_fixes.inl)
 Drawing Divine Titan EX (weapon id 0x23e) creates its drone by name, "divinetitanex_drone", which this mp.dll doesn't
