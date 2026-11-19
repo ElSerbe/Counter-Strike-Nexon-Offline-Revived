@@ -1702,6 +1702,9 @@ static bool FloorAlong(void* bot, V3 from, V3 to)
     return true;
 }
 
+static bool CoopUnstick(void* bot, BotState& st, V3 pos); // scenario_orders.inl
+static bool CoopMode();
+
 // Every mode that walks a path goes through here, so this is where a bot that isn't getting anywhere is noticed. Moving doesn't count
 // as getting anywhere: it has to leave a circle in time (a bot rubbing a corner or bouncing off it moves all the time). Then the area it
 // was going into costs a lot for a while, so the new path takes another way if there is one, and the second time it also walks back
@@ -1733,6 +1736,8 @@ static void NavProgress(void* bot, BotState& st, V3 pos, V3 goal, float now)
     st.navAnchorAt = now;
     st.navStuck++;
     st.nextRepath = 0;
+    if (st.navStuck >= 12 && CoopMode() && CoopUnstick(bot, st, pos))
+        return; // ~20 s stuck in a co-op mode (a Zombie Shelter bot that spawned on a roof): put on the ground nearby
     V3 wp = st.pathIndex < st.path.size() ? st.path[st.pathIndex] : goal;
     int ahead = AreaAt(wp);
     if (ahead >= 0 && ahead != AreaAt(pos))

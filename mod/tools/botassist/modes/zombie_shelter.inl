@@ -360,11 +360,15 @@ static bool ShMeleeHeld(void* bot)
     if (ShWeaponId(bot) == SH_KNIFE_ID)
         return true;
     unsigned char* p = (unsigned char*)PrivateOf(bot);
-    if (p && Readable(p + 0xfb8 + 16 * 3, 8) && Readable(p + SHP_ACTIVE_ITEM, 4))
+    if (p && Readable(p + 0xfb8 + 16, 16 * 3 + 8) && Readable(p + SHP_ACTIVE_ITEM, 4))
     {
         void* inHand = *(void**)(p + SHP_ACTIVE_ITEM);
         if (inHand && inHand == *(void**)(p + 0xfb8 + 16 * 3 + 4))
             return true;
+        // the primary or pistol slot's weapon is a gun even when its model says "knife" (p_tknifeex.mdl, a throwing
+        // knife: a bot drew it, took it for its axe, drew it again and again and never threw it)
+        if (inHand && (inHand == *(void**)(p + 0xfb8 + 16 * 1 + 4) || inHand == *(void**)(p + 0xfb8 + 16 * 2 + 4)))
+            return false;
     }
     const char* m = String(F<int>(Vars(bot), EV_WEAPONMODEL));
     return m && (strstr(m, "knife") || strstr(m, "axe") || strstr(m, "machete") || strstr(m, "crowbar") || strstr(m, "hammer"));
@@ -895,10 +899,13 @@ static void ShOpenCrafts()
 // The three craft skills come with every player (people and bots), free: a living player of a team without one gets a skill
 // point and the game's skill-up for it (so the game counts it, the client's skill tree shows it and the Worktable opens), and
 // the point is taken back if the game didn't take it. A skill reset takes them away: they come back a moment later.
+// Free skills: the three crafts for everyone (the user's rule), and for the bots Beginner Harvest Mastery (9: more
+// resources per hit) and Advanced Harvest Mastery (10: the map's scrap, shelter_team_mineral, gives nothing without it):
+// they hit every car and ATM they pass anyway (the user's rule, 2026-11-19). Their own points go to their job's skills.
 static void ShGrantCrafts(float now)
 {
     static float next = 0;
-    if (!g_shCraftsOpen || (now < next && now > next - 5.0f))
+    if (now < next && now > next - 5.0f)
         return;
     next = now + 1.0f;
     ForEntitiesNear(V3{ 0, 0, 0 }, 1e6f, [&](void* e) {
@@ -907,7 +914,12 @@ static void ShGrantCrafts(float now)
         unsigned char* p = (unsigned char*)PrivateOf(e);
         if (!p || !Readable(p + SHP_SKILL_POINTS, 2))
             return;
-        for (int id = 27; id <= 29; id++)
+        std::vector<int> grants;
+        if (F<int>(Vars(e), EV_FLAGS) & FL_FAKECLIENT)
+            grants = { 9, 10 };
+        if (g_shCraftsOpen)
+            grants.insert(grants.end(), { 27, 28, 29 });
+        for (int id : grants)
         {
             if (ShSkillLevel(e, id) > 0)
                 continue;
@@ -1920,7 +1932,11 @@ static void* ShFindDamaged(int team, V3 from, V3 me, float range, float below, f
     void* damaged = nullptr;
     dist = 1e9f;
     ForEntitiesNear(from, range, [&](void* e) {
-        if (!ShBuilding(e, team) || g_shDemolishing.count(e))
+        if (!ShBuildingAny(e) || g_shDemolishing.count(e))
+            return;
+        // (the shelter's own walls and parts may carry no team: those around the team's home are its)
+        int owner = ShTeamOfEntity(e);
+        if (owner != team && !(owner == 0 && Len2D(Center(e) - from) < 900.0f))
             return;
         unsigned char* v = Vars(e);
         if (F<float>(v, EV_HEALTH) >= F<float>(v, EV_MAX_HEALTH) * below)
@@ -2287,7 +2303,11 @@ static void ShDecide(unsigned char* rules, void* bot, BotState& st, ShBot& b, V3
     else if (order == SHO_REPAIR)
         task = damaged ? SH_REPAIR : SH_DEFEND;
     else if (night && order != SHO_GATHER)
-        task = damaged && damagedDist < 1200.0f && !st.target ? SH_REPAIR : SH_DEFEND;
+    {
+        // at night the builder repairs a building that's going down even with zombies around; the others first fight
+        float frac = damaged ? F<float>(Vars(damaged), EV_HEALTH) / (std::max)(1.0f, F<float>(Vars(damaged), EV_MAX_HEALTH)) : 1.0f;
+        task = damaged && damagedDist < 1200.0f && (!st.target || (role == SHR_BUILDER && frac < 0.6f)) ? SH_REPAIR : SH_DEFEND;
+    }
     else if (b.task == SH_REST && atHome && sane < SH_SANITY_RESTED && order == SHO_FREE)
         task = SH_REST;
     else if ((wantBuild || rebuilder) && b.plan.kind == 4)
@@ -3913,6 +3933,13 @@ static void ShelterWatch()
         }
     });
     int t = 2;
+    static int shelterReports = 0;
+    if (shelterReports++ < 20)
+        for (int s = 0; s < 3; s++)
+            if (void* se = ShEdictOf(ShShelterEntity(rules, s)))
+                Log("Shelter: shelter %d is a %s: health %.0f of %.0f, takes damage %.0f, team %d", s, ClassName(se),
+                    F<float>(Vars(se), EV_HEALTH), F<float>(Vars(se), EV_MAX_HEALTH), F<float>(Vars(se), EV_TAKEDAMAGE),
+                    ShTeamOfEntity(se));
     static int clockReports = 0;
     float tick = -1, per = -1, top = -1, bottom = -1, nightLen = -1;
     if (clockReports++ < 12)

@@ -178,6 +178,47 @@ static bool SoSetOrigin(void* e, V3 at)
     }
 }
 
+// A bot stuck about 20 s in a row in a co-op mode (NavProgress: 12 times without leaving a 64-unit circle) is put on the
+// nearest free walkable place 80 to 900 units away: a Zombie Shelter bot spawned on the shelter's roof (z 145, the
+// others at 36) and stood there the whole match, "nothing in the way of its body" 37 times.
+static bool CoopUnstick(void* bot, BotState& st, V3 pos)
+{
+    if (!g_nav.ok || !g_TraceHull)
+        return false;
+    int here = AreaAt(pos);
+    float best = 1e9f;
+    V3 to{};
+    for (size_t i = 0; i < g_nav.areas.size(); i++)
+    {
+        if ((int)i == here || NavAreaHurts((int)i))
+            continue;
+        V3 at = g_nav.areas[i].center + V3{ 0, 0, 36 };
+        float d = Len(at - pos);
+        if (d < 80.0f || d > 900.0f || d >= best)
+            continue;
+        TraceResult tr;
+        float a[3] = { at.x, at.y, at.z };
+        memset(&tr, 0, sizeof(tr));
+        g_TraceHull(a, a, 0, HULL_HUMAN_SO, bot, &tr);
+        if (tr.fAllSolid || tr.fStartSolid)
+            continue;
+        best = d;
+        to = at;
+    }
+    if (best > 1e8f || !SoSetOrigin(bot, to))
+        return false;
+    F<float>(Vars(bot), EV_VELOCITY) = F<float>(Vars(bot), EV_VELOCITY + 4) = F<float>(Vars(bot), EV_VELOCITY + 8) = 0;
+    st.path.clear();
+    st.navStuck = 0;
+    st.navAnchor = to;
+    st.navCrumbs.clear();
+    static int reports = 0;
+    if (reports++ < 40)
+        Log("unstuck: bot %d '%s' stuck at (%.0f %.0f %.0f) for ~20 s: put at (%.0f %.0f %.0f), %.0f units away", st.slot,
+            String(F<int>(Vars(bot), EV_NETNAME)), pos.x, pos.y, pos.z, to.x, to.y, to.z, best);
+    return true;
+}
+
 static void SoBring(void* player)
 {
     int team = TeamOf(player);

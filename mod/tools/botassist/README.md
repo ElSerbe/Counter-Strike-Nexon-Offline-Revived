@@ -1007,6 +1007,17 @@ player, people and bots (`ShGrantCrafts`: a skill point plus the game's skill-up
 botassist.log "Shelter:" (state every 15 s with the shelter tier, each bot's job, order and task every 20 s, deposits, skills, buys, repairs,
 fixed spots, builds planned, sent, done or refused, unreachable resources, orders).
 
+- 2026-11-19 test: a bot bought a throwing knife (p_tknifeex.mdl) for its pistol slot; ShMeleeHeld read "knife" in the
+  model and took it for the axe, so the bot drew it 3 times, gave up and stared at the zombies with it. A primary or
+  pistol slot's weapon in hand is never melee now.
+- Free skills (ShGrantCrafts): the bots get Beginner and Advanced Harvest Mastery (9, 10) free, so the map's scrap
+  (shelter_team_mineral, nothing without 10) pays for the hits; their own points go to their job's skills.
+- Repairs: ShFindDamaged also takes the shelter's parts with no team (team 0) within 900 of the team's home; at night
+  the builder repairs a building under 60% even with a zombie in sight. The status lines log the shelter entity
+  itself ("shelter N is a ...: health"), to see what the game damages.
+- A bot stuck ~20 s in a co-op mode is put on the nearest free walkable place (scenario_orders.inl CoopUnstick,
+  "unstuck:" in the log): one spawned on the shelter's roof and stood there the whole match.
+
 ## Navigation tools (console)
 
 `nav_tools.inl`. `nav_help` lists it all in game. Files: `Bin/botassist_nav/<map>.nav` (with `.bak`, the one before the last save), `<map>.poi` and `<map>.links`. The game's .nar files aren't touched.
