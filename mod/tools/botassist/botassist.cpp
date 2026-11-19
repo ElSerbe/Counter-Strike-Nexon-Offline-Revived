@@ -149,7 +149,7 @@ static struct
     bool randomCharacters = true; // any character of the game (botassist_characters.txt)
     float refillAfter = 6.0f;  // seconds of firing that empty about half of the ammo: then buy ammo in a buy zone
     float minArmor = 50.0f;    // below this armor, buy kevlar + helmet in a buy zone
-    float wbMin = 0.25f, wbMax = 2.0f; // weapon balance (weapon_balance.inl): the least and most a weapon's damage is scaled
+    float wbMin = 0.5f, wbMax = 4.0f; // weapon balance (weapon_balance.inl): the least and most a weapon's damage is scaled
     bool sameTeam = true;      // where there are monsters, every bot joins the human team (no enemy bots under the map)
     std::vector<int> characters[3]; // by team: [1] TR, [2] CT
     std::unordered_map<int, int> characterTeam; // class item id -> team
@@ -294,8 +294,8 @@ static void LoadSettings()
             cfg.weaponCategory.emplace(a.model, a.cat);
     }
     cfg.followDistance = IniFloat(ini, "FollowDistance", "180");
-    cfg.wbMin = (std::max)(0.05f, IniFloat(ini, "WeaponBalanceMin", "0.25"));
-    cfg.wbMax = (std::max)(cfg.wbMin, IniFloat(ini, "WeaponBalanceMax", "2"));
+    cfg.wbMin = (std::max)(0.05f, IniFloat(ini, "WeaponBalanceMin", "0.5"));
+    cfg.wbMax = (std::max)(cfg.wbMin, IniFloat(ini, "WeaponBalanceMax", "4"));
     cfg.zgPlayers = GetPrivateProfileIntA("BotAssist", "ZombieGiantPlayers", -1, ini);
     cfg.zsrEventDivisor = IniFloat(ini, "ZSRiftEventDivisor", "3");
     cfg.zsrBotMoney = GetPrivateProfileIntA("BotAssist", "ZSRiftBotMoney", 10000, ini);

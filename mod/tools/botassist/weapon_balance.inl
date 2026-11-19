@@ -2,8 +2,11 @@
 // Some weapons do many times the damage of others of their type. With the room's weapon balance on (the host: AI
 // Players page or /balance in the room's chat; off by default; CSNZ_Server says it in /api/matchbots only for the
 // modes it applies to), the damage a human's weapon does to a zombie is scaled so that weapon's damage per second
-// comes near the median of its group (botassist_balance.txt: its type, and fast or slow firing): the strong ones do
-// less, the weak ones more, between WeaponBalanceMin and WeaponBalanceMax times. Off, nothing changes.
+// comes near the top of its group (botassist_balance.txt: its type, and fast or slow firing; WB_TARGET of the group
+// does less): the weak ones do more, only the strongest less, between WeaponBalanceMin and WeaponBalanceMax times.
+// Zombies with a lot of health (Zombie War: 22500-37500) take more besides: health / WB_HP_REF times, at most
+// WB_HP_MAX. Off, nothing changes. (Until 2026-11-20 the target was the group's median, x0.25-2 and no health factor:
+// the user saw zombies nearly immortal, 200-400 damage a second against 30000 health.)
 //
 // Where: every player's TakeDamage (CBasePlayer 0x114d7030 and the bots' overrides, vtable slot 0x44, thiscall
 // inflictor, attacker entvars, damage, bits, one more; ret 0x14) and in Zombie Scenario, Zombie Shelter and Zombie
@@ -19,7 +22,9 @@
 // measured its scale stays between WB_SOFT_MIN and WB_SOFT_MAX (the guesses can be far off).
 static const DWORD MP_PLAYER_TAKEDAMAGE = 0x114d7030;
 static const int VT_TAKEDAMAGE = 0x44 / 4;
-static const float WB_GAP = 2.5f, WB_PRIOR = 10.0f, WB_SURE = 30.0f, WB_SOFT_MIN = 0.6f, WB_SOFT_MAX = 1.5f,
+static const float WB_TARGET = 0.85f, WB_HP_REF = 10000.0f, WB_HP_MAX = 3.0f;
+static const int WB_EV_MAX_HEALTH = 0x1dc;
+static const float WB_GAP = 2.5f, WB_PRIOR = 10.0f, WB_SURE = 30.0f, WB_SOFT_MIN = 0.75f, WB_SOFT_MAX = 2.0f,
                    WB_KEEP = 600.0f; // seconds of measures kept per weapon (older ones fade)
 static const int MODE_ZOMBIE_SCENARIO_WB = 15, MODE_ZOMBIE_SHELTER_WB = 28, MODE_ZSRIFT_WB = 59;
 
@@ -161,7 +166,11 @@ static void WbCalc()
     }
     std::unordered_map<int, float> target;
     for (auto& g : groups)
-        target[g.first] = WbMedian(g.second);
+    {
+        std::vector<float>& v = g.second;
+        std::sort(v.begin(), v.end());
+        target[g.first] = v[(std::min)(v.size() - 1, (size_t)(v.size() * WB_TARGET))];
+    }
     for (auto& kv : g_wb)
     {
         WbWeapon& w = kv.second;
@@ -265,14 +274,17 @@ static float WbDamage(void* self, void* inflictor, void* attacker, float damage)
     if (!g_wbOn)
         return damage;
     WbWeapon& w = it->second;
+    float maxHp = Readable(vpev + WB_EV_MAX_HEALTH, 4) ? *(float*)(vpev + WB_EV_MAX_HEALTH) : 0;
+    float hpScale = (std::max)(1.0f, (std::min)(WB_HP_MAX, maxHp / WB_HP_REF));
     if (!w.logged)
     {
         w.logged = true;
         static int reports = 0;
         if (reports++ < 60)
-            Log("weapon balance: %s does x%.2f to zombies (group %d, %.0f s measured)", key.c_str(), w.scale, w.group, w.secs);
+            Log("weapon balance: %s does x%.2f to zombies (group %d, %.0f s measured), x%.2f more on this %.0f-health zombie",
+                key.c_str(), w.scale, w.group, w.secs, hpScale, maxHp);
     }
-    return damage * w.scale;
+    return damage * w.scale * hpScale;
 }
 
 static float SafeWbDamage(void* self, void* inflictor, void* attacker, float damage)
