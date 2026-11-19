@@ -587,7 +587,7 @@ static void ScOrderGive(void* player, ScOrder order)
                                         "Bots: defend, everyone back" };
     ShPrint(player, said[order]);
     Log("Soccer: order '%s' for team %d (%d bots)", g_scOrderNames[order], team, n);
-    if (cfg.voices != "off" && answer)
+    if (Voices() != "off" && answer)
         FakeCommand(answer, "roger");
 }
 

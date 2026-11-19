@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Room Settings</title>
+<link rel="stylesheet" href="../bots/bots.css">
+<link rel="stylesheet" href="room.css">
+</head>
+<body>
+<header class="topbar">
+  <h1>Room Settings</h1>
+  <div id="roominfo" class="roominfo"></div>
+  <button id="close" class="close" type="button" title="Close (Esc)">Close &times;</button>
+</header>
+
+<main class="room-main">
+  <section class="card">
+    <h2>Game rules</h2>
+    <p class="card-help">The game's own options for this mode.</p>
+    <div id="native" class="rows"></div>
+  </section>
+
+  <section class="card">
+    <h2>Bots</h2>
+    <p class="card-help">How the AI players behave in this room.</p>
+    <div class="rows">
+      <div class="row">
+        <div class="row-text"><span class="row-name">Skill of new bots</span><span class="row-help">The skill of the AI players you add (AI Players page, Fill room, Quick Start).</span></div>
+        <select id="newskill" class="select"></select>
+      </div>
+      <div class="row">
+        <div class="row-text"><span class="row-name">Bots that follow orders</span><span class="row-help">Who obeys your radio, chat and C-menu orders: every bot of your team, or only the ones nearest to you. Zombie Shelter's job orders always reach every bot.</span></div>
+        <select id="ordercount" class="select">
+          <option value="0">Every bot</option>
+          <option value="1">The nearest one</option>
+          <option value="2">The 2 nearest</option>
+          <option value="3">The 3 nearest</option>
+          <option value="4">The 4 nearest</option>
+          <option value="5">The 5 nearest</option>
+          <option value="8">The 8 nearest</option>
+        </select>
+      </div>
+      <div class="row">
+        <div class="row-text"><span class="row-name">Bot messages</span><span class="row-help">Radio messages as text, the game's voices, or silent bots.</span></div>
+        <select id="voices" class="select">
+          <option value="radio">Radio messages</option>
+          <option value="normal">Voices</option>
+          <option value="off">Silent</option>
+        </select>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Zombie modes</h2>
+    <p id="zombiehelp" class="card-help">Options for the zombie modes.</p>
+    <div class="rows">
+      <div class="row" id="balancerow">
+        <div class="row-text"><span class="row-name">Weapon balance</span><span class="row-help">Weapon damage against zombies is evened out by weapon type: strong weapons do less, weak ones more.</span></div>
+        <span class="onoff" id="balance"><button type="button" data-v="0">Off</button><button type="button" data-v="1">On</button></span>
+      </div>
+      <div class="row" id="groupsrow">
+        <div class="row-text"><span class="row-name">Groups</span><span class="row-help">Zombie and Zombie Hero modes: human bots hold several spots in groups. Off: they all hold the same spot.</span></div>
+        <span class="onoff" id="groups"><button type="button" data-v="0">Off</button><button type="button" data-v="1">On</button></span>
+      </div>
+      <div class="row" id="walkersrow">
+        <div class="row-text"><span class="row-name">Lone walkers</span><span class="row-help">Zombie and Zombie Hero modes: a few human bots walk the map alone.</span></div>
+        <span class="onoff" id="walkers"><button type="button" data-v="0">Off</button><button type="button" data-v="1">On</button></span>
+      </div>
+      <div class="row" id="watchrow">
+        <div class="row-text"><span class="row-name">Watch their back</span><span class="row-help">Human bots turn to the nearest zombie they see, even behind them.</span></div>
+        <span class="onoff" id="watchback"><button type="button" data-v="0">Off</button><button type="button" data-v="1">On</button></span>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="room-foot">
+  <div class="defaults">
+    <button id="save" class="cta" type="button">Save as my defaults</button>
+    <button id="forget" class="small" type="button">Forget my defaults</button>
+    <span id="defstate" class="defstate"></span>
+  </div>
+  <span class="foot-hint">Shift + Extra Settings opens the game's own window, with the mode's other options.</span>
+</footer>
+
+<div id="toast" class="toast hidden"></div>
+<script src="room.js"></script>
+</body>
+</html>

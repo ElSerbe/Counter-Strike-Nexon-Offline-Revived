@@ -1,13 +1,14 @@
 diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
-index b5e72be..2fa5d62 100644
+index b5e72be..62a2fab 100644
 --- a/src/CMakeLists.txt
 +++ b/src/CMakeLists.txt
-@@ -38,6 +38,14 @@ endif()
+@@ -38,6 +38,15 @@ endif()
  target_sources(PROJECTNAME PRIVATE "main.cpp")
  target_sources(PROJECTNAME PRIVATE "serverinstance.cpp")
  target_sources(PROJECTNAME PRIVATE "serverconfig.cpp")
 +target_sources(PROJECTNAME PRIVATE "manager/warbondmanager.cpp")
 +target_sources(PROJECTNAME PRIVATE "manager/bingomanager.cpp")
++target_sources(PROJECTNAME PRIVATE "manager/roomoptions.cpp")
 +target_sources(PROJECTNAME PRIVATE "manager/zsriftmanager.cpp")
 +target_sources(PROJECTNAME PRIVATE "manager/medalmanager.cpp")
 +target_sources(PROJECTNAME PRIVATE "manager/missionmanager.cpp")
@@ -17,7 +18,7 @@ index b5e72be..2fa5d62 100644
  target_sources(PROJECTNAME PRIVATE "command.cpp")
  target_sources(PROJECTNAME PRIVATE "common/buffer.cpp")
  target_sources(PROJECTNAME PRIVATE "common/buildnum.cpp")
-@@ -56,6 +64,8 @@ target_sources(PROJECTNAME PRIVATE "command.cpp")
+@@ -56,6 +65,8 @@ target_sources(PROJECTNAME PRIVATE "command.cpp")
  
  target_sources(PROJECTNAME PRIVATE "manager/manager.cpp")
  target_sources(PROJECTNAME PRIVATE "manager/usermanager.cpp")
@@ -26,7 +27,7 @@ index b5e72be..2fa5d62 100644
  if (SERVER_DB_PROXY)
  	target_sources(PROJECTNAME PRIVATE "manager/userdatabase.cpp")
  endif()
-@@ -74,6 +84,8 @@ target_sources(PROJECTNAME PRIVATE "manager/minigamemanager.cpp")
+@@ -74,6 +85,8 @@ target_sources(PROJECTNAME PRIVATE "manager/minigamemanager.cpp")
  target_sources(PROJECTNAME PRIVATE "manager/clanmanager.cpp")
  target_sources(PROJECTNAME PRIVATE "manager/rankmanager.cpp")
  target_sources(PROJECTNAME PRIVATE "manager/voxelmanager.cpp")
@@ -35,7 +36,7 @@ index b5e72be..2fa5d62 100644
  target_sources(PROJECTNAME PRIVATE "manager/classmodmanager.cpp")
  
  target_sources(PROJECTNAME PRIVATE "packet/packethelper_fulluserinfo.cpp")
-@@ -148,6 +160,8 @@ if (MSVC)
+@@ -148,6 +161,8 @@ if (MSVC)
  else()
  	# don't treat some warnings as errors
  	target_compile_options(PROJECTNAME PRIVATE -Wno-error=sign-compare -Wno-error=unused-variable -Wno-error=delete-non-virtual-dtor -Wno-error=unused-parameter -Wno-error=conversion-null -Wno-error=register -Wno-error=unused-value -Wno-error=reorder -Wno-error=attributes)
@@ -1308,17 +1309,18 @@ index 0000000..5c99d8e
 +
 +extern CBingoManager g_BingoManager;
 diff --git a/src/manager/channelmanager.cpp b/src/manager/channelmanager.cpp
-index 35561e8..85457d8 100644
+index 35561e8..56eda5a 100644
 --- a/src/manager/channelmanager.cpp
 +++ b/src/manager/channelmanager.cpp
-@@ -1,4 +1,6 @@
+@@ -1,4 +1,7 @@
  #include "channelmanager.h"
 +#include "transfer.h"
++#include "roomoptions.h"
 +#include "guestprofile.h"
  
  #include "itemmanager.h"
  #include "packetmanager.h"
-@@ -8,6 +10,7 @@
+@@ -8,6 +11,7 @@
  #include "dedicatedservermanager.h"
  
  #include "user/userinventoryitem.h"
@@ -1326,7 +1328,7 @@ index 35561e8..85457d8 100644
  
  #include "csvtable.h"
  #include "serverconfig.h"
-@@ -21,7 +24,7 @@ using namespace std;
+@@ -21,7 +25,7 @@ using namespace std;
  CChannelManager g_ChannelManager;
  
  // TODO: Should we implement multi channels?
@@ -1335,7 +1337,7 @@ index 35561e8..85457d8 100644
  {
  }
  
-@@ -83,6 +86,174 @@ bool CChannelManager::OnChannelListPacket(IExtendedSocket* socket)
+@@ -83,6 +87,175 @@ bool CChannelManager::OnChannelListPacket(IExtendedSocket* socket)
  	return true;
  }
  
@@ -1459,6 +1461,7 @@ index 35561e8..85457d8 100644
 +	user->SetCurrentRoom(room);
 +	room->SendJoinNewRoom(user);
 +	channel->UserLeft(user, true);
++	RoomOptionsPage::ApplyDefaults(static_cast<CRoom*>(room), user, true); // the host's saved defaults
 +
 +	// AI players: half against the player, all with it in the co-op modes (CT spawns only)
 +	bool coop = mode == 15 || mode == 17 || mode == 28 || mode == 52 || mode == 53 || mode == 59;
@@ -1510,7 +1513,7 @@ index 35561e8..85457d8 100644
  bool CChannelManager::OnRoomRequest(CReceivePacket* msg, IExtendedSocket* socket)
  {
  	LOG_PACKET;
-@@ -121,7 +292,20 @@ bool CChannelManager::OnRoomRequest(CReceivePacket* msg, IExtendedSocket* socket
+@@ -121,7 +294,20 @@ bool CChannelManager::OnRoomRequest(CReceivePacket* msg, IExtendedSocket* socket
  		g_PacketManager.SendRoomListFull(socket, channelServers[0]->GetChannels()[0]->GetRooms());
  		break;
  	case 27:
@@ -1531,7 +1534,7 @@ index 35561e8..85457d8 100644
  	case InRoomType::SetZBAddonsRequest:
  		return OnRoomSetZBAddonRequest(msg, user);
  	case InRoomType::KickRequest:
-@@ -379,7 +563,12 @@ bool CChannelManager::OnCommandHandler(IExtendedSocket* socket, IUser* user, con
+@@ -379,7 +565,12 @@ bool CChannelManager::OnCommandHandler(IExtendedSocket* socket, IUser* user, con
  
  	if (!user)
  	{
@@ -1545,7 +1548,7 @@ index 35561e8..85457d8 100644
  		{
  			if (args.size() == 3)
  			{
-@@ -443,6 +632,31 @@ bool CChannelManager::OnCommandHandler(IExtendedSocket* socket, IUser* user, con
+@@ -443,6 +634,31 @@ bool CChannelManager::OnCommandHandler(IExtendedSocket* socket, IUser* user, con
  	}
  	else
  	{
@@ -1577,7 +1580,17 @@ index 35561e8..85457d8 100644
  		CUserCharacterExtended characterExtended = user->GetCharacterExtended(EXT_UFLAG_GAMEMASTER);
  		if (characterExtended.gameMaster)
  		{
-@@ -1270,10 +1484,50 @@ bool CChannelManager::OnNewRoomRequest(CReceivePacket* msg, IUser* user)
+@@ -1246,6 +1462,9 @@ bool CChannelManager::OnNewRoomRequest(CReceivePacket* msg, IUser* user)
+ 	// hide user from channel users list
+ 	channel->UserLeft(user, true);
+ 
++	// offline build: the host's saved defaults (Extra Settings page)
++	RoomOptionsPage::ApplyDefaults(static_cast<CRoom*>(newRoom), user, true);
++
+ 	Logger().Info("User '%s' created a new room (RID: %d, name: '%s')\n", user->GetLogName(), newRoom->GetID(), roomSettings->roomName.c_str());
+ 
+ 	if (roomSettings->familyBattle)
+@@ -1270,10 +1489,50 @@ bool CChannelManager::OnNewRoomRequest(CReceivePacket* msg, IUser* user)
  
  bool CChannelManager::OnJoinRoomRequest(CReceivePacket* msg, IUser* user)
  {
@@ -1629,7 +1642,7 @@ index 35561e8..85457d8 100644
  	CChannel* channel = user->GetCurrentChannel();
  	if (channel == NULL)
  	{
-@@ -1396,6 +1650,9 @@ bool CChannelManager::OnJoinRoomRequest(CReceivePacket* msg, IUser* user)
+@@ -1396,6 +1655,9 @@ bool CChannelManager::OnJoinRoomRequest(CReceivePacket* msg, IUser* user)
  
  	channel->SendUpdateRoomList(room);
  
@@ -1639,7 +1652,7 @@ index 35561e8..85457d8 100644
  	Logger().Info("User '%s' joined a room (RID: %d)\n", user->GetLogName(), room->GetID());
  
  	return true;
-@@ -1450,6 +1707,22 @@ bool CChannelManager::OnSetTeamRequest(CReceivePacket* msg, IUser* user)
+@@ -1450,6 +1712,22 @@ bool CChannelManager::OnSetTeamRequest(CReceivePacket* msg, IUser* user)
  	return true;
  }
  
@@ -1662,7 +1675,7 @@ index 35561e8..85457d8 100644
  bool CChannelManager::OnLeaveRoomRequest(IUser* user)
  {
  	IRoom* currentRoom = user->GetCurrentRoom();
-@@ -1501,6 +1774,10 @@ bool CChannelManager::OnLeaveRoomRequest(IUser* user)
+@@ -1501,6 +1779,10 @@ bool CChannelManager::OnLeaveRoomRequest(IUser* user)
  		}
  
  		currentRoom->RemoveUser(user);
@@ -1673,7 +1686,7 @@ index 35561e8..85457d8 100644
  	}
  
  	currentChannel->SendFullUpdateRoomList(user);
-@@ -1705,13 +1982,43 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
+@@ -1705,13 +1987,43 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
  		return false;
  	}
  
@@ -1717,7 +1730,26 @@ index 35561e8..85457d8 100644
  	if (newSettings.familyBattle)
  	{
  		CUserCharacter character = user->GetCharacter(UFLAG_LOW_CLAN);
-@@ -1921,7 +2228,12 @@ bool CChannelManager::OnRoomKickRequest(CReceivePacket* msg, IUser* user)
+@@ -1787,6 +2099,7 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
+ 		}
+ 	}
+ 
++	int modeBefore = roomSettings->gameModeId;
+ 	currentRoom->UpdateSettings(newSettings);
+ 
+ 	// inform every user in the room of the changes
+@@ -1795,6 +2108,10 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
+ 		currentRoom->SendUpdateRoomSettings(u, roomSettings, newSettings.lowFlag, newSettings.lowMidFlag, newSettings.highMidFlag, newSettings.highFlag);
+ 	}
+ 
++	// offline build: a new mode starts with the host's saved game options again (Extra Settings page)
++	if (roomSettings->gameModeId != modeBefore)
++		RoomOptionsPage::ApplyDefaults(static_cast<CRoom*>(currentRoom), user, false);
++
+ 	currentChannel->SendUpdateRoomList(currentRoom);
+ 
+ 	Logger().Info("Host '%s' updated room settings (RID: %d)\n", user->GetLogName(), currentRoom->GetID());
+@@ -1921,7 +2238,12 @@ bool CChannelManager::OnRoomKickRequest(CReceivePacket* msg, IUser* user)
  		return false;
  	}
  
@@ -1731,7 +1763,7 @@ index 35561e8..85457d8 100644
  	if (destUser == NULL)
  	{
  		Logger().Warn("User '%s' tried to kick a user from a room, although destUser == NULL (RID: %d)\n", user->GetLogName(), currentRoom->GetID());
-@@ -2089,7 +2401,7 @@ bool CChannelManager::OnVoxelRoomListRequest(CReceivePacket* msg, IUser* user)
+@@ -2089,7 +2411,7 @@ bool CChannelManager::OnVoxelRoomListRequest(CReceivePacket* msg, IUser* user)
  {
  	string voxel_id = msg->ReadString();
  
@@ -5216,6 +5248,354 @@ index 223166a..9b3a5a0 100644
  		return;
  
  	user->UpdateTitles(slot, titleID);
+diff --git a/src/manager/roomoptions.cpp b/src/manager/roomoptions.cpp
+new file mode 100644
+index 0000000..0b4e139
+--- /dev/null
++++ b/src/manager/roomoptions.cpp
+@@ -0,0 +1,312 @@
++#include "roomoptions.h"
++#include "room/room.h"
++#include "room/roomsettings.h"
++#include "channel/channel.h"
++#include "interface/iuser.h"
++#include "common/logger.h"
++#include "definitions.h"
++
++#include <fstream>
++#include <vector>
++
++using namespace std;
++using json = nlohmann::json;
++
++namespace
++{
++	// the modes botassist plays these options in (botassist: zombie_holdout.inl HoldoutMode, zombie_humans.inl
++	// ZombieFleeMode + Zombie Conquest / Zombie War)
++	bool HoldoutMode(int m) { return m == 8 || m == 9 || m == 14 || m == 44 || m == 45 || m == 58; }
++	bool WatchBackMode(int m)
++	{
++		static const int modes[] = { 8, 9, 14, 20, 24, 29, 32, 35, 36, 37, 43, 44, 45, 54, 56, 57, 58 };
++		for (int x : modes)
++			if (x == m)
++				return true;
++		return false;
++	}
++	bool CoopMode(int m) { return m == 15 || m == 17 || m == 28 || m == 52 || m == 53 || m == 59; }
++	bool BombMode(int m) { return m == 0 || m == 3 || m == 23 || m == 42; }
++
++	// the game's own options of the Extra Settings window that the page shows
++	struct NativeOption
++	{
++		const char* key;
++		const char* label;
++		const char* help;
++		int CRoomSettings::*field;
++		int group; // 0 low, 1 lowMid, 2 highMid
++		int flag;
++		bool toggle;
++	};
++	const NativeOption NATIVE[] = {
++		{ "freezeTime", "Freeze time", "Seconds everyone waits at the start of a round.", &CRoomSettings::freezeTime, 0, ROOM_LOW_FREEZETIME, false },
++		{ "buyTime", "Buy time", "Seconds the buy menu stays open after a round starts.", &CRoomSettings::buyTime, 0, ROOM_LOW_BUYTIME, false },
++		{ "hostageKillLimit", "Max hostage kill count", "Hostages a player can kill before being kicked (0: no limit).", &CRoomSettings::hostageKillLimit, 0, ROOM_LOW_HOSTAGEKILLLIMIT, false },
++		{ "displayNickname", "Display nickname", "Whose names show over their heads.", &CRoomSettings::displayNickname, 0, ROOM_LOW_DISPLAYNICKNAME, false },
++		{ "mannerLimit", "Manner limit", "Manner level a player needs to join the room.", &CRoomSettings::mannerLimit, 1, ROOM_LOWMID_MANNERLIMIT, false },
++		{ "teamBalance", "Team balance", "Moves players between teams when one has too many.", &CRoomSettings::teamBalance, 0, ROOM_LOW_TEAMBALANCE, true },
++		{ "friendlyFire", "Friendly fire", "Shots hurt your own team.", &CRoomSettings::friendlyFire, 0, ROOM_LOW_FRIENDLYFIRE, true },
++		{ "c4Timer", "C4 countdown", "The countdown sound of the C4.", &CRoomSettings::c4Timer, 1, ROOM_LOWMID_C4TIMER, true },
++		{ "flashlight", "Allow flashlight", "Players can use the flashlight.", &CRoomSettings::flashlight, 0, ROOM_LOW_FLASHLIGHT, true },
++		{ "voiceChat", "Voice chat", "Players can talk by voice.", &CRoomSettings::voiceChat, 0, ROOM_LOW_VOICECHAT, true },
++		{ "kdRule", "Death > Kill rule", "The game's rule for a death that also gives a kill.", &CRoomSettings::kdRule, 1, ROOM_LOWMID_KDRULE, true },
++		{ "changeShot", "Change shot", "Players can switch their weapon's firing mode.", &CRoomSettings::changeShot, 2, ROOM_HIGHMID_CHANGESHOT, true },
++	};
++
++	// the values one option takes in a mode (empty: not in this mode); `why` says why it can't change
++	vector<pair<int, string>> Choices(const NativeOption& o, CRoomSettings* s, int mode, string& why)
++	{
++		vector<pair<int, string>> out;
++		string key = o.key;
++		if (o.toggle)
++		{
++			if (key == "teamBalance" && !s->CanChangeTeamBalance(mode))
++				why = "This mode keeps its own team balance.";
++			else if (key == "friendlyFire" && !s->CanChangeFriendlyFire(mode))
++				why = "This mode keeps its own friendly fire rule.";
++			else if (key == "c4Timer" && !BombMode(mode))
++				return out;
++			return { { 0, "Off" }, { 1, "On" } };
++		}
++		if (key == "freezeTime")
++			for (int i = 0; i <= 10; i++)
++				out.push_back({ i, to_string(i) + " s" });
++		else if (key == "buyTime")
++		{
++			if (mode == 32)
++				out = { { 17, "17" }, { 20, "20" } };
++			else
++				for (int i = 10; i <= 180; i += 10)
++					out.push_back({ i, to_string(i) + " s" });
++		}
++		else if (key == "hostageKillLimit")
++		{
++			if (!BombMode(mode))
++				return out;
++			out.push_back({ 0, "No limit" });
++			for (int i = 1; i <= 10; i++)
++				out.push_back({ i, to_string(i) });
++		}
++		else if (key == "displayNickname")
++			out = { { 0, "Do not display" }, { 1, "Display allies only" }, { 2, "Display all nicknames" } };
++		else if (key == "mannerLimit")
++			out = { { 0, "No limit" }, { 1, "Normal or above" }, { 2, "Good or above" } };
++		return out;
++	}
++
++	bool Allowed(const vector<pair<int, string>>& choices, int v)
++	{
++		for (auto& c : choices)
++			if (c.first == v)
++				return true;
++		return false;
++	}
++
++	// the user's saved defaults (Data/RoomDefaults.json: {"<user id>": {native, options, weaponBalance, newBotSkill}})
++	json g_Defaults;
++	bool g_DefaultsLoaded = false;
++	json& Defaults()
++	{
++		if (!g_DefaultsLoaded)
++		{
++			g_DefaultsLoaded = true;
++			ifstream f("Data/RoomDefaults.json");
++			g_Defaults = json::parse(f, nullptr, false);
++			if (g_Defaults.is_discarded() || !g_Defaults.is_object())
++				g_Defaults = json::object();
++		}
++		return g_Defaults;
++	}
++	void SaveDefaults()
++	{
++		ofstream f("Data/RoomDefaults.json");
++		f << Defaults().dump(1);
++	}
++
++	json OptionsJson(const RoomOptions& o)
++	{
++		return { { "orderCount", o.orderCount }, { "groups", o.groups }, { "walkers", o.walkers }, { "watchBack", o.watchBack },
++			{ "voices", o.voices } };
++	}
++	void ReadOptions(RoomOptions& o, const json& j)
++	{
++		if (!j.is_object())
++			return;
++		o.orderCount = max(0, min(31, j.value("orderCount", o.orderCount)));
++		o.groups = j.value("groups", o.groups);
++		o.walkers = j.value("walkers", o.walkers);
++		o.watchBack = j.value("watchBack", o.watchBack);
++		string v = j.value("voices", o.voices);
++		if (v == "radio" || v == "normal" || v == "off")
++			o.voices = v;
++	}
++
++	// the game's options of `values` that the room's mode has, set on the room and sent to its players
++	int SetNative(CRoom* room, const json& values, vector<string>* refused)
++	{
++		if (!values.is_object())
++			return 0;
++		CRoomSettings* s = room->GetSettings();
++		int mode = s->gameModeId;
++		CRoomSettings change;
++		int n = 0;
++		for (auto& o : NATIVE)
++		{
++			if (!values.contains(o.key) || !values[o.key].is_number_integer())
++				continue;
++			int v = values[o.key].get<int>();
++			string why;
++			auto choices = Choices(o, s, mode, why);
++			if (choices.empty() || !why.empty() || !Allowed(choices, v))
++			{
++				if (refused && !choices.empty())
++					refused->push_back(o.key);
++				continue;
++			}
++			change.*(o.field) = v;
++			(o.group == 0 ? change.lowFlag : o.group == 1 ? change.lowMidFlag : change.highMidFlag) |= o.flag;
++			n++;
++		}
++		if (!n)
++			return 0;
++		room->UpdateSettings(change);
++		for (auto u : room->GetUsers())
++			room->SendUpdateRoomSettings(u, s, change.lowFlag, change.lowMidFlag, change.highMidFlag, change.highFlag);
++		if (room->GetParentChannel())
++			room->GetParentChannel()->SendUpdateRoomList(room);
++		return n;
++	}
++
++	json PageJson(CRoom* room, IUser* user)
++	{
++		CRoomSettings* s = room->GetSettings();
++		int mode = s->gameModeId;
++		json native = json::array();
++		for (auto& o : NATIVE)
++		{
++			string why;
++			auto choices = Choices(o, s, mode, why);
++			if (choices.empty())
++				continue;
++			json opts = json::array();
++			for (auto& c : choices)
++				opts.push_back({ { "value", c.first }, { "label", c.second } });
++			native.push_back({ { "key", o.key }, { "label", o.label }, { "help", o.help }, { "toggle", o.toggle },
++				{ "value", s->*(o.field) }, { "choices", opts }, { "locked", why } });
++		}
++		bool host = room->GetHostUser() == user;
++		json& d = Defaults();
++		string key = to_string(user->GetID());
++		return { { "host", host }, { "waiting", room->GetStatus() == RoomStatus::STATUS_WAITING }, { "mode", mode },
++			{ "coop", CoopMode(mode) }, { "holdoutMode", HoldoutMode(mode) }, { "watchBackMode", WatchBackMode(mode) },
++			{ "balanceMode", WeaponBalanceMode(mode) }, { "weaponBalance", room->GetWeaponBalance() },
++			{ "newBotSkill", room->GetNewBotSkill() }, { "options", OptionsJson(room->GetOptions()) }, { "native", native },
++			{ "defaults", d.contains(key) ? d[key] : json(nullptr) } };
++	}
++}
++
++json RoomOptionsPage::MatchJson()
++{
++	return OptionsJson(g_LastMatchOptions);
++}
++
++void RoomOptionsPage::ApplyDefaults(CRoom* room, IUser* host, bool created)
++{
++	if (!room || !host)
++		return;
++	json& d = Defaults();
++	string key = to_string(host->GetID());
++	if (!d.contains(key) || !d[key].is_object())
++		return;
++	const json& mine = d[key];
++	if (created)
++	{
++		ReadOptions(room->GetOptions(), mine.value("options", json::object()));
++		room->SetNewBotSkill(mine.value("newBotSkill", room->GetNewBotSkill()));
++		if (WeaponBalanceMode(room->GetSettings()->gameModeId))
++			room->SetWeaponBalance(mine.value("weaponBalance", false));
++	}
++	int n = SetNative(room, mine.value("native", json::object()), NULL);
++	Logger().Info("Room options: room %d starts with %s's defaults (%s; %d game options)\n", room->GetID(),
++		host->GetLogName(), created ? "bots' options, skill, weapon balance" : "mode change", n);
++}
++
++json RoomOptionsPage::Api(IUser* user, const WebRequest& req, int& status)
++{
++	CRoom* room = static_cast<CRoom*>(user->GetCurrentRoom());
++	if (!room)
++	{
++		status = 409;
++		return { { "error", "You are not in a room." } };
++	}
++	if (req.method != "POST")
++		return PageJson(room, user);
++
++	json body = json::parse(req.body, nullptr, false);
++	if (body.is_discarded() || !body.is_object())
++	{
++		status = 400;
++		return { { "error", "Invalid request." } };
++	}
++	string action = body.value("action", "set");
++	string key = to_string(user->GetID());
++	if (action == "saveDefaults")
++	{
++		// what the room has now: the game's options of its mode, the bots' options, skill, weapon balance
++		CRoomSettings* s = room->GetSettings();
++		json mine = Defaults().contains(key) && Defaults()[key].is_object() ? Defaults()[key] : json::object();
++		json native = mine.value("native", json::object());
++		for (auto& o : NATIVE)
++		{
++			string why;
++			if (!Choices(o, s, s->gameModeId, why).empty() && why.empty())
++				native[o.key] = s->*(o.field); // (options this mode doesn't have keep their saved value)
++		}
++		mine["native"] = native;
++		mine["options"] = OptionsJson(room->GetOptions());
++		mine["newBotSkill"] = room->GetNewBotSkill();
++		if (WeaponBalanceMode(s->gameModeId))
++			mine["weaponBalance"] = room->GetWeaponBalance();
++		Defaults()[key] = mine;
++		SaveDefaults();
++		Logger().Info("Room options: %s saved their defaults for new rooms\n", user->GetLogName());
++		json out = PageJson(room, user);
++		out["saved"] = true;
++		return out;
++	}
++	if (action == "forgetDefaults")
++	{
++		Defaults().erase(key);
++		SaveDefaults();
++		return PageJson(room, user);
++	}
++	if (action != "set")
++	{
++		status = 400;
++		return { { "error", "Unknown action." } };
++	}
++	if (room->GetHostUser() != user)
++	{
++		status = 403;
++		return { { "error", "Only the room's host can change the room's settings." } };
++	}
++	if (room->GetStatus() != RoomStatus::STATUS_WAITING)
++	{
++		status = 409;
++		return { { "error", "The match already started." } };
++	}
++	if (body.contains("options"))
++		ReadOptions(room->GetOptions(), body["options"]);
++	if (body.contains("newBotSkill") && body["newBotSkill"].is_number_integer())
++		room->SetNewBotSkill(body["newBotSkill"].get<int>());
++	if (body.contains("weaponBalance") && body["weaponBalance"].is_boolean() && WeaponBalanceMode(room->GetSettings()->gameModeId))
++		room->SetWeaponBalance(body["weaponBalance"].get<bool>());
++	vector<string> refused;
++	if (body.contains("native"))
++		SetNative(room, body["native"], &refused);
++	json out = PageJson(room, user);
++	if (!refused.empty())
++		out["refused"] = refused;
++	return out;
++}
+diff --git a/src/manager/roomoptions.h b/src/manager/roomoptions.h
+new file mode 100644
+index 0000000..d8baaed
+--- /dev/null
++++ b/src/manager/roomoptions.h
+@@ -0,0 +1,24 @@
++#pragma once
++
++// offline build: the room's Extra Settings page (web/room). The room's Extra Settings button (botassist.asi) opens it
++// instead of the game's own window: the game's options of the room's mode (freeze time, buy time, friendly fire...),
++// the bots' options (RoomOptions: how many obey an order, the zombie modes' groups and walkers, watching their back,
++// voices), weapon balance and the skill of new AI players. The host can save it all as the defaults of the rooms they
++// create (Data/RoomDefaults.json, per account): new rooms start with them, and a mode change applies them again.
++
++#include <string>
++#include "nlohmann/json.hpp"
++#include "net/webserver.h"
++
++class IUser;
++class CRoom;
++
++namespace RoomOptionsPage
++{
++	// GET/POST /api/roomsettings
++	nlohmann::json Api(IUser* user, const WebRequest& req, int& status);
++	// the host's saved defaults on a room: created (everything) or after a mode change (the game's options only)
++	void ApplyDefaults(CRoom* room, IUser* host, bool created);
++	// /api/matchbots "options" for botassist.asi (the last match's)
++	nlohmann::json MatchJson();
++}
 diff --git a/src/manager/studio.cpp b/src/manager/studio.cpp
 new file mode 100644
 index 0000000..7ca282e
@@ -8806,10 +9186,10 @@ index c7d2bdb..75d0ee9 100644
 +extern CVoxelManager g_VoxelManager;
 diff --git a/src/manager/warbondmanager.cpp b/src/manager/warbondmanager.cpp
 new file mode 100644
-index 0000000..bf1e57f
+index 0000000..4154e8c
 --- /dev/null
 +++ b/src/manager/warbondmanager.cpp
-@@ -0,0 +1,1118 @@
+@@ -0,0 +1,1137 @@
 +#include "channelmanager.h"
 +#include "guestprofile.h"
 +#include "transfer.h"
@@ -8829,6 +9209,7 @@ index 0000000..bf1e57f
 +#include "voxelmanager.h"
 +#include "medalmanager.h"
 +#include "missionmanager.h"
++#include "roomoptions.h"
 +
 +#include <fstream>
 +#include <set>
@@ -9016,6 +9397,12 @@ index 0000000..bf1e57f
 +		}
 +		result = { { "mode", g_LastMatchMode }, { "hostTeam", g_LastMatchHostTeam }, { "bots", bots },
 +			{ "weaponBalance", g_LastMatchWeaponBalance ? 1 : 0 } };
++		// the room's options for its bots (Extra Settings page), as numbers: botassist reads them with JsonInt
++		json opts = RoomOptionsPage::MatchJson();
++		for (auto& kv : opts.items())
++			if (kv.value().is_boolean())
++				kv.value() = kv.value().get<bool>() ? 1 : 0;
++		result["options"] = opts;
 +	}
 +	else if (req.method == "GET" && req.path == "/api/questtexts")
 +	{
@@ -9118,6 +9505,11 @@ index 0000000..bf1e57f
 +	{
 +		result = RoomBotsApi(user, req, resp.status);
 +	}
++	else if (req.path == "/api/roomsettings")
++	{
++		// the room's Extra Settings page (web/room; manager/roomoptions.cpp)
++		result = RoomOptionsPage::Api(user, req, resp.status);
++	}
 +	else if (req.method == "GET" && req.path == "/api/state")
 +	{
 +		result = BuildState(user);
@@ -9199,6 +9591,12 @@ index 0000000..bf1e57f
 +			room->SetWeaponBalance(body.value("on", false));
 +			return RoomBotsJson(room, host);
 +		}
++		if (action == "newSkill")
++		{
++			// the skill of the AI players added from now on (the top bar's list; also on the Extra Settings page)
++			room->SetNewBotSkill(body.value("skill", BOT_SKILL_RANDOM));
++			return RoomBotsJson(room, host);
++		}
 +		auto read = [&](RoomBot& b) {
 +			b.name = body.value("name", b.name);
 +			b.level = body.value("level", b.level);
@@ -9270,7 +9668,8 @@ index 0000000..bf1e57f
 +	int mode = room->GetSettings()->gameModeId;
 +	return { { "host", host }, { "mode", mode }, { "maxPlayers", room->GetSettings()->maxPlayers },
 +		{ "players", room->GetNumOfPlayers() }, { "bots", bots }, { "weaponBalance", room->GetWeaponBalance() },
-+		{ "balanceMode", WeaponBalanceMode(mode) }, { "waiting", room->GetStatus() == RoomStatus::STATUS_WAITING } };
++		{ "balanceMode", WeaponBalanceMode(mode) }, { "waiting", room->GetStatus() == RoomStatus::STATUS_WAITING },
++		{ "newSkill", room->GetNewBotSkill() } };
 +}
 +
 +// offline build: weapon filters for the room's AI players, per account (Data/BotPresets.json)
@@ -11481,7 +11880,7 @@ index 68a4dc7..5c924cb 100644
  	int m_nTerWinCount;
  	int m_nFirstPlaceUserId;
 diff --git a/src/room/room.cpp b/src/room/room.cpp
-index 616959e..ade42ca 100644
+index 616959e..6cf4a86 100644
 --- a/src/room/room.cpp
 +++ b/src/room/room.cpp
 @@ -1,4 +1,5 @@
@@ -11513,7 +11912,7 @@ index 616959e..ade42ca 100644
  }
  
  int CRoom::GetFreeSlots()
-@@ -239,6 +241,306 @@ void CRoom::SetStatus(RoomStatus newStatus)
+@@ -239,6 +241,320 @@ void CRoom::SetStatus(RoomStatus newStatus)
  void CRoom::SendJoinNewRoom(IUser* user)
  {
  	g_PacketManager.SendRoomCreateAndJoin(user->GetExtendedSocket(), this);
@@ -11526,6 +11925,17 @@ index 616959e..ade42ca 100644
 +int g_LastMatchHostTeam = 2;
 +int g_LastMatchHostID = 0;
 +bool g_LastMatchWeaponBalance = false;
++RoomOptions g_LastMatchOptions;
++
++// a new AI player's skill (BOT_SKILL_ROOM_DEFAULT: the room's choice for new bots; BOT_SKILL_RANDOM: a draw)
++int CRoom::ResolveBotSkill(int skill)
++{
++	if (skill == BOT_SKILL_ROOM_DEFAULT)
++		skill = m_nNewBotSkill;
++	if (skill == BOT_SKILL_RANDOM)
++		skill = m_pSettings->gameModeId == 56 ? -1 : rand() % 8; // Zombie Conquest: botassist plays the room's skill high
++	return skill >= -1 && skill <= 7 ? skill : -1;
++}
 +
 +bool WeaponBalanceMode(int mode)
 +{
@@ -11637,6 +12047,7 @@ index 616959e..ade42ca 100644
 +		bot.name.resize(24);
 +	if (bot.level <= 0)
 +		bot.level = 10 + rand() % 51;
++	bot.skill = ResolveBotSkill(bot.skill);
 +	if (bot.team != RoomTeamNum::Terrorist && bot.team != RoomTeamNum::CounterTerrorist)
 +		bot.team = m_pHostUser ? GetUserTeam(m_pHostUser) : RoomTeamNum::CounterTerrorist;
 +	if (bot.team != RoomTeamNum::Terrorist && bot.team != RoomTeamNum::CounterTerrorist)
@@ -11672,6 +12083,7 @@ index 616959e..ade42ca 100644
 +		return false;
 +	RoomBot was = *cur;
 +	*cur = bot;
++	cur->skill = ResolveBotSkill(cur->skill);
 +	if (cur->name.empty())
 +		cur->name = "Bot";
 +	if (cur->name.size() > 24)
@@ -11727,6 +12139,7 @@ index 616959e..ade42ca 100644
 +	g_LastMatchHostTeam = hostTeam;
 +	g_LastMatchHostID = m_pHostUser ? m_pHostUser->GetID() : 0;
 +	g_LastMatchWeaponBalance = m_bWeaponBalance && WeaponBalanceMode(m_pSettings->gameModeId);
++	g_LastMatchOptions = m_Options;
 +	if (m_Bots.empty())
 +		return;
 +
@@ -11820,7 +12233,7 @@ index 616959e..ade42ca 100644
  }
  
  void CRoom::UpdateSettings(CRoomSettings& newSettings)
-@@ -564,6 +866,13 @@ void CRoom::UpdateSettings(CRoomSettings& newSettings)
+@@ -564,6 +880,13 @@ void CRoom::UpdateSettings(CRoomSettings& newSettings)
  	if (newSettings.highFlag & ROOM_HIGH_UNK77) {
  		m_pSettings->unk77 = newSettings.unk77;
  	}
@@ -11834,7 +12247,7 @@ index 616959e..ade42ca 100644
  }
  
  void CRoom::OnUserMessage(CReceivePacket* msg, IUser* user)
-@@ -575,6 +884,9 @@ void CRoom::OnUserMessage(CReceivePacket* msg, IUser* user)
+@@ -575,6 +898,9 @@ void CRoom::OnUserMessage(CReceivePacket* msg, IUser* user)
  
  	Logger().Info("User '%s' write to room chat: '%s'\n", senderName.c_str(), message.c_str());
  
@@ -11844,7 +12257,7 @@ index 616959e..ade42ca 100644
  	CUserCharacterExtended characterExtended = user->GetCharacterExtended(EXT_UFLAG_GAMEMASTER);
  	if (characterExtended.gameMaster && m_pHostUser == user)
  	{
-@@ -1052,6 +1364,8 @@ void CRoom::HostStartGame()
+@@ -1052,6 +1378,8 @@ void CRoom::HostStartGame()
  		return;
  	}
  
@@ -11853,7 +12266,7 @@ index 616959e..ade42ca 100644
  	SendStartMatch(m_pHostUser);
  
  	OnGameStart();
-@@ -1092,10 +1406,16 @@ void CRoom::UserGameJoin(IUser* user)
+@@ -1092,10 +1420,16 @@ void CRoom::UserGameJoin(IUser* user)
  void CRoom::EndGame(bool forcedEnd)
  {
  	m_pGameMatch->OnGameMatchEnd();
@@ -11871,13 +12284,29 @@ index 616959e..ade42ca 100644
  		g_PacketManager.SendHostStop(m_pServer->GetSocket());
  
 diff --git a/src/room/room.h b/src/room/room.h
-index 13a4ee8..7015264 100644
+index 13a4ee8..10bc50b 100644
 --- a/src/room/room.h
 +++ b/src/room/room.h
-@@ -25,6 +25,33 @@ public:
+@@ -25,6 +25,50 @@ public:
  	bool m_bIsIngame;
  };
  
++// offline build: a new AI player's skill: the room's choice for new bots (Extra Settings page, the AI Players page's
++// top bar), or a draw of its own (0..7; the room's AI difficulty in Zombie Conquest, where botassist plays it high)
++const int BOT_SKILL_RANDOM = -2;
++const int BOT_SKILL_ROOM_DEFAULT = -3;
++
++// offline build: the room's own options (Extra Settings page, web/room; manager/roomoptions.cpp), sent to
++// botassist.asi with the match's AI players (/api/matchbots "options")
++struct RoomOptions
++{
++	int orderCount = 0;          // bots that take an order: 0 every one of the team, else the N nearest
++	bool groups = true;          // zombie modes: human bots hold several spots in groups (off: all at one)
++	bool walkers = true;         // zombie modes: a few humans walk the map alone
++	bool watchBack = true;       // human bots turn to the nearest zombie they see
++	std::string voices = "radio"; // radio | normal | off
++};
++
 +// offline build: AI players in the room's player list; the game adds them as bots when the match starts and
 +// botassist.asi gives each one its name, character, weapons and skill (GET /api/matchbots)
 +struct RoomBot
@@ -11890,7 +12319,7 @@ index 13a4ee8..7015264 100644
 +	int secondary = 0;
 +	int melee = 0;
 +	int character = 0;
-+	int skill = -1;        // 0..7, -1: the room's AI difficulty
++	int skill = BOT_SKILL_ROOM_DEFAULT; // 0..7, -1: the room's AI difficulty (AddBot resolves the two below)
 +	int preset = 0;        // weapon filter (the host's bot presets, /api/botpresets): random weapons come from it
 +};
 +
@@ -11900,6 +12329,7 @@ index 13a4ee8..7015264 100644
 +extern int g_LastMatchHostTeam;
 +extern int g_LastMatchHostID;
 +extern bool g_LastMatchWeaponBalance; // the room's weapon balance was on, in a mode it applies to
++extern RoomOptions g_LastMatchOptions;
 +
 +// offline build: weapon balance (botassist.asi evens out weapon damage against zombies by weapon type): the zombie
 +// modes, where humans shoot zombie players, and the co-op modes against zombie monsters
@@ -11908,7 +12338,7 @@ index 13a4ee8..7015264 100644
  class CRoom : public IRoom
  {
  public:
-@@ -103,11 +130,29 @@ public:
+@@ -103,11 +147,37 @@ public:
  
  	bool IsUserInFamilyBattleUsers(int userId);
  
@@ -11928,6 +12358,12 @@ index 13a4ee8..7015264 100644
 +	void SendWeaponBalanceNotice(IUser* user);
 +	bool ApplyWeaponBalanceTag(); // the room name's "[Balanced]"; true when the name changed
 +
++	// offline build: the room's options (Extra Settings page) and the skill of the AI players added to it
++	RoomOptions& GetOptions() { return m_Options; }
++	int GetNewBotSkill() { return m_nNewBotSkill; }
++	void SetNewBotSkill(int skill) { m_nNewBotSkill = skill >= BOT_SKILL_RANDOM && skill <= 7 ? skill : BOT_SKILL_RANDOM; }
++	int ResolveBotSkill(int skill);
++
  private:
  	IUser* m_pHostUser;
  	class CChannel* m_pParentChannel;
@@ -11935,6 +12371,8 @@ index 13a4ee8..7015264 100644
  	std::vector<IUser*> m_Users;
 +	std::vector<RoomBot> m_Bots;
 +	bool m_bWeaponBalance = false;
++	RoomOptions m_Options;
++	int m_nNewBotSkill = BOT_SKILL_RANDOM;
  	CGameMatch* m_pGameMatch;
  	std::vector<int> m_KickedUsers;
  	std::vector<int> m_FamilyBattleUsers;

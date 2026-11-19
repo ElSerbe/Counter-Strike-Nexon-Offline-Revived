@@ -514,5 +514,7 @@ static bool ZombieCloakAim(void* bot, float* aim, unsigned short& buttons)
     int m = GameMode();
     if (!ZombieFleeMode() && !(cfg.zombieFlee && (m == MODE_ZCON || m == MODE_ZWAR)))
         return false;
+    if (!g_roomOpts.watchBack)
+        return false; // the room's option: human bots don't turn to zombies they see
     return ZombieAwareAim(bot, aim, buttons);
 }

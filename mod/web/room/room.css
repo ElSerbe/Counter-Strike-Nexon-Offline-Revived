@@ -1,0 +1,27 @@
+/* the room's Extra Settings page (bots.css gives the colours, top bar, buttons and selects) */
+html, body { overflow: auto; }
+.room-main { height: auto; min-height: calc(100% - 56px - 64px); display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; padding: 16px 20px; align-items: start; }
+.card { border: 1px solid var(--line); background: linear-gradient(var(--panel-2), var(--panel)); padding: 14px 16px 6px; min-width: 0; }
+.card h2 { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: 3px; text-transform: uppercase; color: var(--accent); }
+.card-help { margin: 4px 0 10px; font-size: 12px; color: var(--muted); }
+.rows { display: flex; flex-direction: column; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+.row-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.row-name { font-size: 14px; }
+.row-help { font-size: 11px; color: var(--muted); line-height: 1.4; }
+.row.off .row-name { color: var(--muted); }
+.row .select { flex: none; width: 170px; max-width: 170px; }
+.select:disabled { color: var(--muted); }
+.onoff { display: flex; flex: none; }
+.onoff button { width: 52px; padding: 7px 0; background: #0c0f13; border: 1px solid var(--line-strong); color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; }
+.onoff button + button { border-left: none; }
+.onoff button.on { background: var(--accent); border-color: var(--accent); color: #17140a; }
+.onoff button:disabled { cursor: default; }
+.onoff button.on:disabled { background: #4b4630; border-color: #4b4630; color: #17140a; }
+.note { font-size: 11px; color: var(--t); }
+.room-foot { position: sticky; bottom: 0; height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 20px; border-top: 1px solid var(--line); background: #0a0d10; }
+.defaults { display: flex; align-items: center; gap: 10px; }
+.defaults .small { padding: 8px 12px; }
+.defstate { font-size: 12px; color: var(--muted); }
+.foot-hint { font-size: 12px; color: var(--muted); text-align: right; }
+@media (max-width: 1000px) { .room-main { grid-template-columns: 1fr; } }

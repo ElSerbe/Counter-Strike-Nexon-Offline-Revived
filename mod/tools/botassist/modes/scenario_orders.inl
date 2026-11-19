@@ -131,7 +131,7 @@ static void SoFollower(void* player)
     ShPrint(player, text);
     Log("scenario orders: bot '%s' follows '%s' closely (%d with them)", name ? name : "?",
         String(F<int>(Vars(player), EV_NETNAME)), already + 1);
-    if (cfg.voices != "off")
+    if (Voices() != "off")
         FakeCommand(pick->edict, "roger");
 }
 

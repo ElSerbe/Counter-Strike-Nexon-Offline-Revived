@@ -168,6 +168,8 @@ static int HoldSpotsInUse()
         humans += !pl.zombie;
     int k = (humans + HOLD_GROUP - 1) / HOLD_GROUP;
     k = (std::max)(2, (std::min)(6, k));
+    if (!g_roomOpts.groups)
+        k = 1; // the room's option: no groups, every human bot holds the best spot
     return (std::min)(k, (int)g_holdSpots.size());
 }
 
@@ -238,7 +240,7 @@ static void HoldNewLife(void* bot, HoldBot& h)
         auto it = g_holdBots.find(pl.e);
         walkers += pl.e != bot && it != g_holdBots.end() && it->second.roam;
     }
-    int want = humans >= HOLD_ROAM_FROM ? (std::max)(1, humans / HOLD_ROAM_PER) : 0;
+    int want = humans >= HOLD_ROAM_FROM && g_roomOpts.walkers ? (std::max)(1, humans / HOLD_ROAM_PER) : 0;
     h.roam = walkers < want && !g_holdMain.empty();
     h.roamUntil = 0;
     if (!h.roam)

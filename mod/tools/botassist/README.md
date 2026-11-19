@@ -469,6 +469,24 @@ Zombie Disaster Zone); `/api/matchbots` says `weaponBalance` 1 for a match with 
 - botassist.log: "weapon balance: ON/off for this match", "TakeDamage of vtable ... hooked", "<weapon> does x0.62 to
   zombies (group 40, 85 s measured)".
 
+## The room's Extra Settings page (room_settings_button.inl, room_options.inl)
+- The room's Extra Settings button (GameUI command "DetailSetting", CRoomPanel OnCommand: the dialog code at
+  0x105b87ab, `8b 8f e4 01 00 00`) jumps to a stub: POST /api/openview {"view":"room"} and the game's browser window
+  (OpenWebEvent, like AI settings), then out through the branch's own end (0x105b8802). Holding Shift, or the server
+  not answering, runs the replaced instruction and the game's own CDetailGameOptionDlgV3 as before.
+- The page (`mod/web/room/`, CSNZ_Server `/api/roomsettings`, manager/roomoptions.cpp): the game's options of the
+  room's mode (freeze time, buy time, hostage kill count and C4 countdown in the bomb modes, nickname display, manner
+  limit, team balance and friendly fire where the mode lets them change, flashlight, voice chat, K/D rule, change
+  shot), set on the room with the game's own flags and sent to its players; the skill of new AI players (also the
+  AI Players page's top bar; random draws on the server); the bots' options; weapon balance. "Save as my defaults"
+  keeps it all per account (Data/RoomDefaults.json): new rooms start with it, and a mode change applies the game's
+  options again.
+- The bots' options come with the match's AI players (/api/matchbots "options", `SetRoomOptions`): `orderCount`
+  (GiveOrder reaches the N alive bots of the team nearest to the player; 0 every bot; Zombie Shelter's job orders
+  always reach every bot), `groups` (off: HoldSpotsInUse is 1, every human bot holds the best spot), `walkers`
+  (off: no lone walkers), `watchBack` (off: no ZombieAwareAim), `voices` (radio / normal / off, over botassist.ini
+  Voices: `Voices()`). botassist.log "room options: ...".
+
 ## Room skill in PvP, characters half men / half women
 
 - The game's own AI (PvP modes) aims by the bot's BotProfile: CBot::m_profile at player +0x3700 (profile +0x04

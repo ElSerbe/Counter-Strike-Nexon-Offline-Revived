@@ -3432,7 +3432,7 @@ static void ShGiveOrder(void* player, ShOrder order)
                                         "Bots: repairing the buildings", "Bots: building" };
     ShPrint(player, said[order]);
     Log("Shelter: order '%s' for team %d (%d bots)", g_shOrderNames[order], team, n);
-    if (cfg.voices != "off" && answer)
+    if (Voices() != "off" && answer)
         FakeCommand(answer, "roger");
 }
 

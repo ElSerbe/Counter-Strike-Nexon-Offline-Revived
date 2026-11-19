@@ -2110,6 +2110,7 @@ static std::string HttpGet(const wchar_t* path)
 }
 
 static void WbSetMatch(int on); // weapon_balance.inl: the room's weapon balance for this match
+#include "room_options.inl"
 
 static DWORD WINAPI FetchMatchBots(LPVOID)
 {
@@ -2154,6 +2155,7 @@ static DWORD WINAPI FetchMatchBots(LPVOID)
     g_matchKnown = json.find("\"bots\":[") != std::string::npos;
     LeaveCriticalSection(&g_matchLock);
     WbSetMatch(JsonInt(json, "weaponBalance", 0));
+    SetRoomOptions(json);
     InterlockedExchange(&g_matchFetch, 2);
     Log("room AI players for this match: %d%s", (int)bots.size(), json.empty() ? " (server not reachable)" : "");
     for (auto& m : bots)
@@ -3536,7 +3538,8 @@ static void UpdateCvars(void* anyPlayer)
     if (difficulty != g_difficulty)
         Log("bot_difficulty %.0f", difficulty);
     g_difficulty = difficulty;
-    const char* want = cfg.voices == "off" || GameMode() == MODE_ZHE ? "off" : cfg.voices == "normal" ? "normal" : "radio";
+    const std::string& voices = Voices();
+    const char* want = voices == "off" || GameMode() == MODE_ZHE ? "off" : voices == "normal" ? "normal" : "radio";
     const char* cur = g_CVarGetString("bot_chatter");
     if (!cur || _stricmp(cur, want))
     {
@@ -6690,15 +6693,20 @@ static std::vector<std::string> g_seenCommands;
 
 static void GiveOrder(Order order, void* by)
 {
-    g_teamOrder = order;
-    int n = 0;
+    int n = 0, all = 0;
     int team = TeamOf(by);
     void* answer = nullptr;
+    std::vector<void*> mates;
+    for (auto& b : g_bots)
+        if (b.edict && (F<int>(Vars(b.edict), EV_FLAGS) & FL_FAKECLIENT) && (!team || TeamOf(b.edict) == team))
+            mates.push_back(b.edict);
+    all = (int)mates.size();
+    std::vector<void*> reach = OrderReach(by, team, mates); // the room's option: every bot, or the N nearest
+    if ((int)reach.size() == all)
+        g_teamOrder = order;
     for (auto& b : g_bots)
     {
-        if (!b.edict || !(F<int>(Vars(b.edict), EV_FLAGS) & FL_FAKECLIENT))
-            continue;
-        if (team && TeamOf(b.edict) != team)
+        if (!b.edict || std::find(reach.begin(), reach.end(), b.edict) == reach.end())
             continue;
         if (!answer && Alive(b.edict))
             answer = b.edict;
@@ -6713,8 +6721,8 @@ static void GiveOrder(Order order, void* by)
         }
         n++;
     }
-    Log("order: %s (%d bots)", OrderName(order), n);
-    if (cfg.voices != "off" && answer)
+    Log("order: %s (%d of %d bots)", OrderName(order), n, all);
+    if (Voices() != "off" && answer)
         FakeCommand(answer, "roger");
 }
 
@@ -7178,6 +7186,8 @@ static void HookAiSettingsButton(HMODULE gameUi)
     FlushInstructionCache(GetCurrentProcess(), site, 5);
     Log("room AI settings button opens the AI player editor");
 }
+
+#include "room_settings_button.inl"
 
 // "call <page manager>" in the button's branch becomes "jmp stub"; the stub jumps back past the page call
 static void HookTaskbarButton(DWORD siteVa, DWORD returnVa, void* stub, DWORD* returnSlot, const char* what)
@@ -7739,6 +7749,7 @@ static DWORD WINAPI Watcher(LPVOID)
         {
             uiHooked = ui;
             HookAiSettingsButton(ui);
+            HookExtraSettingsButton();
             GuardGameUiImages(ui);
             HookTaskbarButton(GAMEUI_VIP_PAGE, GAMEUI_VIP_RETURN, (void*)VipStub, &g_vipReturn, "VIP");
             HookTaskbarButton(GAMEUI_QUEST_PAGE, GAMEUI_QUEST_RETURN, (void*)MissionsStub, &g_questReturn, "Missions");

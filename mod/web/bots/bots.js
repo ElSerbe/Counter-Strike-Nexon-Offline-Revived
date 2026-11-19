@@ -28,11 +28,10 @@
   const RANDOM_SKILL = -2;  // only in the top bar: every new bot draws its own skill
   // modes where a bot without a skill plays at a level of the mode (botassist's ApplyRoomSkill): no draw there
   const MODE_SKILL_MODES = [56];
+  // the room's skill for new bots (the server keeps it: this list, the Extra Settings page, the host's saved defaults)
   let newSkill = RANDOM_SKILL; // -1: the room's AI difficulty
   try {
     newPreset = +(localStorage.getItem("bots.newPreset") || 0);
-    const savedSkill = localStorage.getItem("bots.newSkillChoice");
-    if (savedSkill !== null) newSkill = +savedSkill;
   } catch (e) { /* no storage */ }
 
   function range(a, b) { const r = []; for (let i = a; i <= b; i++) r.push(i); return r; }
@@ -77,6 +76,7 @@
         mock.bots.push({ id: Date.now() + i, name: NAMES[mock.bots.length % NAMES.length], level: 20, team: body.team || 2, primary: 0, secondary: 0, melee: 0, character: 0, skill: body.skill === undefined ? -1 : body.skill, preset: body.preset || 0 });
     }
     if (body && body.action === "balance") mock.weaponBalance = !!body.on;
+    if (body && body.action === "newSkill") mock.newSkill = body.skill;
     if (body && body.action === "update") Object.assign(mock.bots.find(b => b.id === body.id), body, { action: undefined });
     if (body && body.action === "remove") mock.bots = mock.bots.filter(b => b.id !== body.id);
     if (body && body.action === "move") {
@@ -131,6 +131,8 @@
     if (!$("newskill").options.length)
       $("newskill").innerHTML = `<option value="${RANDOM_SKILL}"></option><option value="-1">Room skill</option>` + SKILLS.map((s, i) => `<option value="${i}">${s}</option>`).join("");
     $("newskill").options[0].textContent = MODE_SKILL_MODES.includes(room.mode) ? "High (this mode)" : "Random skill";
+    if (typeof room.newSkill === "number") newSkill = room.newSkill;
+    $("newskill").disabled = !room.host;
     $("newskill").value = String(newSkill === -1 || (newSkill >= 0 && newSkill < SKILLS.length) ? newSkill : RANDOM_SKILL);
   }
 
@@ -408,19 +410,9 @@
     }
   }
 
-  // adds bots; with a random skill each new one then draws its own (the server gives them all the same)
+  // adds bots with the room's skill for new bots; with a random skill the server draws one for each new bot
   async function addBots(body) {
-    const before = new Set(room.bots.map(b => b.id));
-    const draw = newSkill === RANDOM_SKILL && !MODE_SKILL_MODES.includes(room.mode);
-    await send(Object.assign(body, { team: isCoop() ? 2 : newTeam, preset: newPreset, skill: newSkill === RANDOM_SKILL ? -1 : newSkill }));
-    if (!draw) return;
-    try {
-      for (const b of room.bots.filter(x => !before.has(x.id)))
-        room = await api({ action: "update", id: b.id, skill: Math.floor(Math.random() * SKILLS.length) });
-      lastJson = JSON.stringify(room);
-    } catch (e) {
-      toast(e.message, true);
-    }
+    await send(Object.assign(body, { team: isCoop() ? 2 : newTeam, preset: newPreset, skill: newSkill }));
     renderList();
     renderEditor();
   }
@@ -499,9 +491,13 @@
     newPreset = +$("newpreset").value;
     try { localStorage.setItem("bots.newPreset", String(newPreset)); } catch (e) { /* no storage */ }
   });
-  $("newskill").addEventListener("change", () => {
+  $("newskill").addEventListener("change", async () => {
     newSkill = +$("newskill").value;
-    try { localStorage.setItem("bots.newSkillChoice", String(newSkill)); } catch (e) { /* no storage */ }
+    try {
+      room = await api({ action: "newSkill", skill: newSkill });
+    } catch (e) {
+      toast(e.message, true);
+    }
   });
   $("add").addEventListener("click", () => addBots({ action: "add", count: Math.max(1, +$("count").value || 1) }));
   $("fill").addEventListener("click", () => addBots({ action: "fill" }));

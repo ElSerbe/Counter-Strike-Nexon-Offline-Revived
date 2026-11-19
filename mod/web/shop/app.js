@@ -128,7 +128,7 @@
       const fresh = await api("/api/state");
       // the game's browser window opened by another button: the room's "AI settings" (AI player editor), the
       // taskbar's VIP (profile) and Missions buttons
-      const views = { bots: "/bots/", profile: "/profile/", missions: "/missions/" };
+      const views = { bots: "/bots/", room: "/room/", profile: "/profile/", missions: "/missions/" };
       if (views[fresh.openView]) {
         location.replace(views[fresh.openView]);
         return;
