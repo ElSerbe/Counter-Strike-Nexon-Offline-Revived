@@ -59,6 +59,7 @@ namespace CsnzLauncher
         public bool DetailedLogs = false;   // the server and the bridge log every packet (--verbose), for bug reports
         public bool MusicOff = false;       // More > the launcher music: never plays when true
         public bool PicturesAsked = false;  // the "extract the pictures?" question was shown once (yes or no): not again
+        public string PicturesRefreshAsked = ""; // the mod version whose new shop items' pictures were offered (once per version)
         public bool AntivirusInfoShown = false; // the antivirus explanation was shown on the first start (More shows it again)
 
         static readonly JavaScriptSerializer Json = new JavaScriptSerializer();
@@ -1002,6 +1003,43 @@ namespace CsnzLauncher
         public static bool Present => File.Exists(Marker) ||
                                       (HasFiles("shop", "icons") && HasFiles("shop", "models") && HasFiles("profile", "medals") && HasFiles("missions", "npc"));
 
+        // the shop's items: battle passes, Black Market, Rift Exchange ("ItemID": n in the server's data)
+        public static SortedSet<int> ShopItems()
+        {
+            var set = new SortedSet<int>();
+            var data = Path.Combine(Paths.Mod, "server", "CSNZ_Server", "bin", "Data");
+            foreach (var f in new[] { "Warbonds.json", "Missions.json", "RiftExchange.json" })
+                try
+                {
+                    foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(
+                                 File.ReadAllText(Path.Combine(data, f)), "\"ItemID\"\\s*:\\s*(\\d+)"))
+                        set.Add(int.Parse(m.Groups[1].Value));
+                }
+                catch { }
+            return set;
+        }
+
+        // shop items the pictures were never extracted for (an update brought new battle passes): those the marker's list
+        // doesn't have, or (a marker from before the list) those without an icon
+        public static int NewItemsSinceExport()
+        {
+            try
+            {
+                if (!File.Exists(Marker))
+                    return 0;
+                var current = ShopItems();
+                var m = System.Text.RegularExpressions.Regex.Match(File.ReadAllText(Marker), "\"items\":\\[([0-9,]*)\\]");
+                if (!m.Success)
+                {
+                    var icons = Path.Combine(Paths.Mod, "web", "shop", "icons");
+                    return current.Count(id => !File.Exists(Path.Combine(icons, id + ".png")));
+                }
+                var known = new HashSet<int>(m.Groups[1].Value.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries).Select(int.Parse));
+                return current.Count(id => !known.Contains(id));
+            }
+            catch { return 0; }
+        }
+
         static readonly string[] Scripts = { "export_shop_assets.py", "export_bingo_icons.py", "export_bot_catalog.py", "gen_medals.py", "gen_missions.py" };
 
         static int Run(string file, string args, Logger log, string game = null)
@@ -1172,8 +1210,9 @@ namespace CsnzLauncher
                 }
             try
             {
+                // (the shop's items at this export: an update that brings others asks to extract them)
                 File.WriteAllText(Marker, "{\"exported\":\"" + DateTime.UtcNow.ToString("o") + "\",\"mod\":\"" + Paths.InstalledVersion()?.ToString(3) +
-                                          "\",\"steamBuild\":\"" + GameLocator.BuildId(game) + "\"}");
+                                          "\",\"steamBuild\":\"" + GameLocator.BuildId(game) + "\",\"items\":[" + string.Join(",", ShopItems()) + "]}");
             }
             catch { }
             log("Shop, profile and mission pictures exported from your game.");

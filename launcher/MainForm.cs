@@ -496,6 +496,38 @@ namespace CsnzLauncher
                 Log("The item pictures weren't extracted: press Pictures to try again.");
         }
 
+        // After an update (or before Play): the shop has items the exported pictures don't (new battle passes). Asked once
+        // per mod version, only when there are such items; the Pictures button does it any time.
+        async Task OfferPicturesRefresh(bool beforePlay)
+        {
+            var version = Paths.InstalledVersion();
+            if (busy || version == null || !Assets.Present || !GameLocator.IsGame(settings.GamePath) ||
+                settings.PicturesRefreshAsked == version.ToString(3))
+                return;
+            int fresh = await Task.Run(() => Assets.NewItemsSinceExport());
+            if (fresh == 0)
+                return;
+            settings.PicturesRefreshAsked = version.ToString(3);
+            settings.Save();
+            SetBusy(true);
+            bool hasPython = await Task.Run(() => Assets.HasPython());
+            SetBusy(false);
+            var answer = DarkBox.Show(this,
+                $"The shop has {fresh} item{(fresh == 1 ? "" : "s")} your pictures don't have yet (new battle passes came with an update).\n\n" +
+                "Extract their pictures and 3D models from your game now (a few minutes)?\n\n" +
+                "Not now: the game works without them, and the Pictures button extracts them any time.",
+                "Item pictures", MessageBoxButtons.YesNo, MessageBoxIcon.Question, PicturesButtons(beforePlay));
+            if (answer != DialogResult.Yes)
+            {
+                Log("New items' pictures: not now (the Pictures button extracts them any time).");
+                return;
+            }
+            if (await ExportPictures(!hasPython))
+                Log("The new items' pictures are ready.");
+            else
+                Log("The pictures weren't extracted: press Pictures to try again.");
+        }
+
         // ------------------------------------------------------------ logs
         string BuildLogs()
         {
@@ -601,7 +633,10 @@ namespace CsnzLauncher
             if (ok && newLauncher != null && File.Exists(newLauncher))
                 SwapLauncher(newLauncher);
             else if (ok && await CheckRemoved())
+            {
                 await OfferPictures(false); // the new launcher asks before its first Play instead
+                await OfferPicturesRefresh(false);
+            }
         }
 
         // the latest release's mod package, downloaded and installed over the mod (the player's own files are kept)
@@ -718,6 +753,7 @@ namespace CsnzLauncher
                     return false;
             }
             await OfferPictures(true);
+            await OfferPicturesRefresh(true);
             if (!Assets.Present)
                 Log("Note: the shop and profile pictures aren't exported yet (the Pictures button). The game works without them.");
 

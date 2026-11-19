@@ -51,7 +51,9 @@ WEAPON_CATEGORIES = ("1", "2", "3", "4", "5", "6", "11")
 COSTUME_CLASSES = ("HeadCostume", "BackCostume", "PelvisCostume", "FaceCostume", "PetCostume", "ArmCostume")
 ARCHIVES = ("cstrike", "dstrike", "estrike", "fstrike")
 # third-person models whose names can't be derived from the item's resource name (found in mp.dll / client.dll)
-MODEL_OVERRIDES = {"ak47l": "models/p_ak47_long.mdl", "deagled": "models/p_ddeagle.mdl", "mp7a1d": "models/p_dmp7a1.mdl"}
+MODEL_OVERRIDES = {"ak47l": "models/p_ak47_long.mdl", "deagled": "models/p_ddeagle.mdl", "mp7a1d": "models/p_dmp7a1.mdl",
+                   "deserteagleg": "models/p_g_deagle.mdl", "deserteaglegzhc": "models/p_g_deagle.mdl",
+                   "qbs09b": "models/p_bqbs_09.mdl", "chinaeventbomb": "models/p_eventbomb.mdl"}
 # Weapon skins have no model of their own: hw.dll redirects them to the base weapon's model and loads its textures
 # as models/texture/<prefix><name>. resource -> (base model, archive holding the model version the skin was
 # painted for, {base texture name: skin texture}).
@@ -228,8 +230,20 @@ def weapon_pose(item, model_paths, extensions):
     return None
 
 
+# weapons with no third-person model in the game files, where a name prefix would pick another weapon (firebomb ->
+# p_firecracker)
+NO_MODEL = {"firebomb"}
+
+
 def weapon_model_candidates(res, available):
-    out = ([MODEL_OVERRIDES[res]] if res in MODEL_OVERRIDES else []) + [f"models/p_{res}.mdl", f"models/p_{res}a.mdl"]
+    if res in NO_MODEL:
+        return []
+    # the name itself, its first-of-two models (p_dgaxe_a, p_m2desert_1: weapons with two looks), then the base weapon
+    # of a Zombie Hero version (m79zhc -> m79) or of a "w" edition (boww -> bow)
+    bases = [res] + [b for b in (res[:-3] if res.endswith("zhc") else "", res[:-1] if res.endswith("w") else "") if len(b) > 2]
+    out = ([MODEL_OVERRIDES[res]] if res in MODEL_OVERRIDES else [])
+    for b in bases:
+        out += [f"models/p_{b}.mdl", f"models/p_{b}a.mdl", f"models/p_{b}_a.mdl", f"models/p_{b}_1.mdl"]
     p_models = sorted(a for a in available if a.startswith("models/p_") and a.endswith(".mdl"))
     for cut in range(len(res), 3, -1):
         hits = [a for a in p_models if a.startswith("models/p_" + res[:cut])]
@@ -335,7 +349,8 @@ def export_models(items, wanted, available, tmp):
             wanted_models = [(str(item_id), "costume", [f"models/costume/{res}.mdl"])]
         elif it["class"] == "ZombieSkinCostume":
             wanted_models = [(str(item_id), "zombie", [f"models/player/{res}_origin/{res}_origin.mdl"])]
-        elif it["class"] == "Equipment" and it["category"] in WEAPON_CATEGORIES:
+        elif it["class"] in ("Equipment", "PeriodicItem") and it["category"] in WEAPON_CATEGORIES:
+            # (knives and grenades of the shop are often PeriodicItem: Master Combat Knife, Katana, Dragon Knife...)
             wanted_models = [(str(item_id), "weapon", weapon_model_candidates(res, available))]
         else:
             continue
