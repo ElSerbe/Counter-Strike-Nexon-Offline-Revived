@@ -4855,8 +4855,11 @@ static void ScFrame();                   // modes/soccer.inl: the hands only in 
 static void InstallScHooks(DWORD delta); // modes/soccer.inl: bots count as their team's players in mode 16
 static void InstallZtHooks(DWORD delta); // modes/zombie_tag.inl: what each player looks like, bumps into and carries in mode 37
 
+#include "mp_fixes.inl"
+
 static void HookBotManager(DWORD delta)
 {
+    FixDivineTitanEx(delta);
     GuardZbSkillThinks(delta);
     FixCrossbowCls(delta);
     InstallTableOverrides();
@@ -6326,8 +6329,19 @@ static void HookedRunPlayerMove(void* fakeclient, const float* angles, float fwd
                     st.nextScan = Now() + 1.0f;
                     monsters = st.threat != nullptr;
                 }
+                float stockYaw = aim[1];
                 if (!scenario && ZombieCloakAim(fakeclient, aim, buttons))
                 {
+                    // the stock AI's move was meant for its own view: keep its direction on the ground for the new
+                    // view (turned to a zombie, a bot backing off kept "backwards" and ran into it)
+                    float speed = sqrtf(fwd * fwd + side * side);
+                    if (speed > 1.0f)
+                    {
+                        float moveYaw = stockYaw + atan2f(-side, fwd) * RAD;
+                        float rel = (moveYaw - aim[1]) / RAD;
+                        fwd = cosf(rel) * speed;
+                        side = -sinf(rel) * speed;
+                    }
                     float* va = (float*)(v + EV_VANGLE); // fixangle: see below
                     float* ang = (float*)(v + EV_ANGLES);
                     va[0] = aim[0];

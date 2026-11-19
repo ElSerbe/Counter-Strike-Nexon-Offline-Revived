@@ -420,6 +420,12 @@ First reading (Zombie Hero, 31 bots): 500-760 us per move, nearly all in setup a
 per move. It now remembers the readable regions it found for 100 ms (per thread). The zombie modes' human bots also
 list the players once per server frame (`ZfPlayers`) instead of looking over every entity up to three times per move,
 and keep a line of sight 0.15 s (`ZfSees`); the Zombie Hero check (`HeroIsHero`) runs 4 times a second per bot.
+## Divine Titan EX doesn't crash the game (mp_fixes.inl)
+Drawing Divine Titan EX (weapon id 0x23e) creates its drone by name, "divinetitanex_drone", which this mp.dll doesn't
+export (only "divinetitan_drone"): the creation gave nothing and the game crashed (0x10c6aa1b, a bot at a Zombie Hero
+round start, crash dump 2026-11-19). The two places naming it (0x10c6a9d8, 0x10c75949) now name the plain drone.
+"wolfpack_drone" (pushed at 0x11280d11) isn't exported either; not seen crashing.
+
 ## GameUI: bad pictures don't crash the game (gameui_guards.inl)
 A Zombie Hero Classic match crashed at its end (crash dump, 2026-11-19): a list of the results window (layout 0x10737c20)
 gave an image panel a picture pointer that was text ("anel"), and the panel's SetImage (0x10711d70) called through it.
@@ -1181,6 +1187,10 @@ Watching their back (every zombie PvP mode, `ZombieAwareAim` in zombie_humans.in
 it, and bots backing off or walking to their spot were caught from behind. The nearest zombie in line of sight within
 650 is looked at after 0.3 s (12 degrees a move, a small aim error per zombie) and shot within 6 degrees, unless the
 stock AI already aims within 25 degrees of it; the legs keep their own way. "zombie modes: bot '...' turns to the zombie".
+The stock AI's move is turned with the view: its direction on the ground stays the same (a bot backing off that was
+turned to the zombie kept "backwards" of its old view and ran into it, 25285f1). Holdout bots walking to their spot
+stand and shoot when a zombie in sight within 900 is within 50 degrees of their way; 5 s like that, another spot.
+Walkers pick places away from the zombies they see.
 
 ## Zombie Hero and its versions (modes 14, 44, 45, 58) with room bots
 

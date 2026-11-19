@@ -27,6 +27,7 @@ struct HoldBot
 {
     int spot = -1, place = 0;
     float nextCheck = 0, nextLog = 0;
+    float blockedSince = -1; // walking to its spot with zombies in the way
     bool roam = false; // walks the map alone
     V3 roamGoal{};
     float roamUntil = 0;
@@ -185,7 +186,7 @@ static std::vector<int> HoldMembers(void* except = nullptr)
     return count;
 }
 
-static void HoldAssign(void* bot, HoldBot& h, bool join)
+static void HoldAssign(void* bot, HoldBot& h, bool join, int avoid = -1)
 {
     int k = HoldSpotsInUse();
     if (k <= 0)
@@ -205,7 +206,7 @@ static void HoldAssign(void* bot, HoldBot& h, bool join)
     {
         float cost = join ? -1000.0f * count[i] + Len2D(g_holdSpots[i].at - me) * 0.1f // the biggest group left
                           : Len2D(g_holdSpots[i].at - me) + (count[i] >= cap ? 4000.0f * (count[i] - cap + 1) : 0.0f);
-        if (join && (count[i] == 0 || i == h.spot))
+        if ((join && (count[i] == 0 || i == h.spot)) || i == avoid)
             continue;
         if (cost < bestCost)
         {
@@ -252,15 +253,35 @@ static void HoldNewLife(void* bot, HoldBot& h)
             walkers + 1, want, humans);
 }
 
-// to a place on foot (path, ledges, getting unstuck); false: a drop ahead, the stock AI moves it
+// a zombie in sight within HOLD_DANGER whose direction is within HOLD_DANGER_CONE degrees of the way
+static const float HOLD_DANGER = 900.0f, HOLD_DANGER_CONE = 50.0f, HOLD_BLOCKED_TIME = 5.0f;
+static bool HoldZombieAhead(void* bot, V3 me, float moveYaw)
+{
+    V3 eye = Eye(bot);
+    for (const ZfPlayer& pl : ZfPlayers())
+        if (pl.zombie && Len(pl.at - me) < HOLD_DANGER && fabsf(AngleDiff(YawOf(pl.at - me), moveYaw)) < HOLD_DANGER_CONE &&
+            ZfSees(bot, eye, pl.e))
+            return true;
+    return false;
+}
+
+// to a place on foot (path, ledges, getting unstuck); false: a drop ahead, the stock AI moves it. blocked: zombies in
+// the way, it stands (and shoots: ZombieAwareAim) instead of walking into them
 static bool HoldWalk(void* bot, BotState& st, float viewYaw, V3 place, float speed, float& fwd, float& side,
-                     unsigned short& buttons)
+                     unsigned short& buttons, bool* blocked = nullptr)
 {
     float now = Now();
     V3 me = Origin(bot), wp;
     if (!NextWaypoint(bot, st, me, place, 40.0f, wp))
         wp = place;
     float moveYaw = WalkYaw(bot, me, YawOf(wp - me), 40.0f);
+    if (blocked)
+        *blocked = HoldZombieAhead(bot, me, moveYaw);
+    if (blocked && *blocked)
+    {
+        fwd = side = 0;
+        return true;
+    }
     if (DropAhead(bot, me, moveYaw, 72.0f, HURT_DROP_MAX))
         return false;
     if (LedgeAhead(bot, me, moveYaw) && !DropAhead(bot, me, moveYaw, 120.0f, FLEE_FREE_DROP))
@@ -292,7 +313,7 @@ static bool HoldRoam(void* bot, BotState& st, HoldBot& h, float viewYaw, float& 
         {
             V3 at = g_nav.areas[g_holdMain[rand() % g_holdMain.size()]].center;
             float d = Len2D(at - me);
-            if (d >= HOLD_ROAM_MIN && d <= HOLD_ROAM_MAX && !InHurtZone(at))
+            if (d >= HOLD_ROAM_MIN && d <= HOLD_ROAM_MAX && !InHurtZone(at) && (k > 30 || !HoldZombieAhead(bot, me, YawOf(at - me))))
             {
                 h.roamGoal = at;
                 break;
@@ -302,11 +323,14 @@ static bool HoldRoam(void* bot, BotState& st, HoldBot& h, float viewYaw, float& 
         DLog("holdout: walker '%s' goes to (%.0f %.0f), %.0f u away", String(F<int>(Vars(bot), EV_NETNAME)), h.roamGoal.x,
              h.roamGoal.y, Len2D(h.roamGoal - me));
     }
-    if (!HoldWalk(bot, st, viewYaw, h.roamGoal, 230.0f, fwd, side, buttons))
+    bool blocked = false;
+    if (!HoldWalk(bot, st, viewYaw, h.roamGoal, 230.0f, fwd, side, buttons, &blocked))
     {
         h.roamUntil = 0; // another place
         return false;
     }
+    if (blocked)
+        h.roamUntil = 0; // zombies that way: somewhere else
     return true;
 }
 
@@ -357,8 +381,24 @@ static bool HoldoutMove(void* bot, BotState& st, float viewYaw, float& fwd, floa
     }
     // inside its spot: no running (it may be shooting)
     float speed = Len2D(s.at - me) < HOLD_RADIUS ? 150.0f : 250.0f;
-    if (!HoldWalk(bot, st, viewYaw, place, speed, fwd, side, buttons))
+    bool blocked = false;
+    if (!HoldWalk(bot, st, viewYaw, place, speed, fwd, side, buttons, Len2D(s.at - me) < HOLD_RADIUS ? nullptr : &blocked))
         return false;
+    if (!blocked)
+        h.blockedSince = -1;
+    else if (h.blockedSince < 0 || now < h.blockedSince)
+        h.blockedSince = now;
+    else if (now - h.blockedSince > HOLD_BLOCKED_TIME)
+    {
+        // the way stays full of zombies: another spot (the nearest that isn't this one)
+        h.blockedSince = -1;
+        int was = h.spot;
+        HoldAssign(bot, h, false, was);
+        static int reports = 0;
+        if (h.spot != was && reports++ < 40)
+            Log("holdout: bot '%s' can't reach spot %d (zombies in the way): spot %d", String(F<int>(Vars(bot), EV_NETNAME)),
+                was, h.spot);
+    }
     if (now >= h.nextLog)
     {
         h.nextLog = now + 15.0f;
