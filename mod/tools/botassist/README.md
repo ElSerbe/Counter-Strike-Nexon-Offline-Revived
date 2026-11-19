@@ -70,7 +70,9 @@ Radio menus (radio1/radio2 + menuselect) and chat: `/follow`, `/hold`, `/cover`,
 The scenario modes (CoopModes but Zombie Shelter, which has its own) get an orders menu on the C key (radio3,
 modes/scenario_orders.inl): 1 a bot follows me (the nearest bot not with you yet gets "cover me" with you as its
 leader; each press one more), 2 shoot my target (what's under your crosshair, or the nearest monster within 6 degrees,
-is every bot's target while they see it, 20 s at most), 3 hold position, 4 follow me, 5 hunt freely, 6 aim lines on/off.
+is every bot's target while they see it, 20 s at most), 3 hold position, 4 follow me, 5 hunt freely, 6 aim lines on/off,
+7 bring the bots to me (every living bot of your team farther than 300 is put on a free place near you that you can
+see: a ring around you, then nav areas within 500; mp UTIL_SetOrigin 0x11519ec0, speed zeroed; `/bring`, `/tp`).
 Chat: `/follower`, `/focus`, `/lines`. Bots ordered to follow or cover follow the player who gave the order (they
 followed the nearest player).
 Bots fire only when the real line of fire (view + recoil) meets a monster first, never a wall or a teammate.

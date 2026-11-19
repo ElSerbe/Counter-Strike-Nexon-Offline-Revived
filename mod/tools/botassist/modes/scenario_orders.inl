@@ -11,7 +11,10 @@
 //   5. Hunt freely: every bot goes after the monsters
 //   6. Aim lines on/off: the lasers that show where each bot aims and what it shoots (red firing, green with a target,
 //      white none, yellow its aim point); off by default (botassist.ini AimLines=0)
-// Chat: /follower, /focus (/target), /hold, /follow, /free, /lines.
+//   7. Bring the bots to me: every living bot of your team is put next to you (bots left behind where they can't
+//      climb or jump, and where no zombie comes any more, stayed there for good): free places around you that you
+//      can see, in a ring, then the nav areas near you; mp's UTIL_SetOrigin (0x11519ec0), no speed left
+// Chat: /follower, /focus (/target), /hold, /follow, /free, /lines, /bring (/tp).
 static const float SO_FOCUS_TIME = 20.0f, SO_FOCUS_CONE = 6.0f, SO_FOCUS_RANGE = 6000.0f;
 static struct
 {
@@ -139,14 +142,108 @@ static void SoAimLines(void* player)
     Log("scenario orders: aim lines %s", g_aimLines ? "on" : "off");
 }
 
+static const DWORD SO_UTIL_SETORIGIN = 0x11519ec0;
+static const int HULL_HUMAN_SO = 1;
+
+// a place for a body at `at` (player origin height): nothing solid there, and seen from `eye`
+static bool SoFreeSpot(void* player, V3 eye, V3 at, const std::vector<V3>& taken)
+{
+    for (auto& t : taken)
+        if (Len(t - at) < 40.0f)
+            return false;
+    if (!g_TraceHull)
+        return false;
+    TraceResult tr;
+    float a[3] = { at.x, at.y, at.z };
+    memset(&tr, 0, sizeof(tr));
+    g_TraceHull(a, a, 0, HULL_HUMAN_SO, player, &tr);
+    if (tr.fAllSolid || tr.fStartSolid)
+        return false;
+    TraceResult seen;
+    return Trace(eye, at, player, 1, seen);
+}
+
+static bool SoSetOrigin(void* e, V3 at)
+{
+    float origin[3] = { at.x, at.y, at.z };
+    __try
+    {
+        typedef void(__cdecl * SetOriginFn)(void* vars, float* origin);
+        ((SetOriginFn)(SO_UTIL_SETORIGIN + g_mpDelta))(Vars(e), origin);
+        return true;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        return false;
+    }
+}
+
+static void SoBring(void* player)
+{
+    int team = TeamOf(player);
+    V3 me = Origin(player), eye = Eye(player);
+    float yaw = F<float>(Vars(player), EV_VANGLE + 4);
+    std::vector<V3> spots;
+    for (float r : { 70.0f, 120.0f, 170.0f, 230.0f })
+        for (int k = 0; k < 12; k++)
+        {
+            float a = (yaw + 180.0f + k * 30.0f) / RAD; // behind you first
+            V3 at = me + V3{ cosf(a) * r, sinf(a) * r, 0 };
+            if (SoFreeSpot(player, eye, at, spots))
+                spots.push_back(at);
+        }
+    if (g_nav.ok)
+        for (auto& area : g_nav.areas)
+        {
+            V3 at = area.center + V3{ 0, 0, 36 };
+            if (Len(at - me) < 500.0f && fabsf(at.z - me.z) < 100.0f && SoFreeSpot(player, eye, at, spots))
+                spots.push_back(at);
+        }
+    int moved = 0, left = 0;
+    size_t next = 0;
+    for (auto& b : g_bots)
+    {
+        if (!b.edict || !(F<int>(Vars(b.edict), EV_FLAGS) & FL_FAKECLIENT) || !Alive(b.edict) ||
+            (team && TeamOf(b.edict) != team))
+            continue;
+        if (Len(Origin(b.edict) - me) < 300.0f)
+            continue; // already here
+        if (next >= spots.size())
+        {
+            left++;
+            continue;
+        }
+        V3 at = spots[next++];
+        if (!SoSetOrigin(b.edict, at))
+        {
+            Log("scenario orders: bringing a bot failed");
+            return;
+        }
+        F<float>(Vars(b.edict), EV_VELOCITY) = F<float>(Vars(b.edict), EV_VELOCITY + 4) = F<float>(Vars(b.edict), EV_VELOCITY + 8) = 0;
+        b.path.clear();
+        b.lastPos = at;
+        b.lastProgress = Now();
+        b.hasRoam = false;
+        if (b.order == ORDER_HOLD)
+            b.holdSpot = at; // (holding: from here now)
+        moved++;
+    }
+    char text[160];
+    snprintf(text, sizeof(text), moved ? "Bots: %d brought to you%s" : "Bots: none to bring%s", moved,
+             left ? " (no room for all of them here)" : "");
+    ShPrint(player, text);
+    Log("scenario orders: %d bots brought to '%s' (%d free places, %d without one)", moved,
+        String(F<int>(Vars(player), EV_NETNAME)), (int)spots.size(), left);
+}
+
 static void SoShowMenu(void* player)
 {
     char text[480];
     snprintf(text, sizeof(text),
              "Orders for the bots\n(now: %s)\n\n1. A bot follows me\n2. Shoot my target\n3. Hold position\n4. Follow me\n"
-             "5. Hunt freely\n6. Aim lines: %s\n\n0. Close\n\nChat: /follower /focus /hold /follow /free /lines",
+             "5. Hunt freely\n6. Aim lines: %s\n7. Bring the bots to me\n\n0. Close\n\nChat: /follower /focus /hold /follow /free /lines /bring",
              OrderName(g_teamOrder), g_aimLines ? "on" : "off");
-    ShMenuText(player, (1 << 0) | (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4) | (1 << 5) | (1 << 9), text);
+    ShMenuText(player, (1 << 0) | (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4) | (1 << 5) | (1 << 6) | (1 << 9), text);
     g_soMenuOpen.insert(player);
 }
 
@@ -180,6 +277,8 @@ static bool ScenarioPlayerCommand(void* player, const std::string& c)
             GiveOrder(ORDER_INDEPENDENT, player);
         else if (key == 6)
             SoAimLines(player);
+        else if (key == 7)
+            SoBring(player);
         return true;
     }
     if (c.compare(0, 5, "radio") == 0)
@@ -200,6 +299,8 @@ static bool ScenarioPlayerCommand(void* player, const std::string& c)
             SoFocus(player);
         else if (t == "lines" || t == "aimlines")
             SoAimLines(player);
+        else if (t == "bring" || t == "tp" || t == "teleport" || t == "comehere")
+            SoBring(player);
         else if ((t == "orders" || t == "menu" || t == "bots") && SoMenuMode())
             SoShowMenu(player);
         // (/hold, /follow, /free: the shared chat orders)
