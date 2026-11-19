@@ -487,6 +487,17 @@ Zombie Disaster Zone); `/api/matchbots` says `weaponBalance` 1 for a match with 
   (off: no lone walkers), `watchBack` (off: no ZombieAwareAim), `voices` (radio / normal / off, over botassist.ini
   Voices: `Voices()`). botassist.log "room options: ...".
 
+## Zombie modes: the room's T only picks the look (HumansStartMode)
+In the zombie modes where every player starts human (8, 9, 14, 20, 24, 29, 35, 36, 43, 44, 45, 54, 58) the room's AI
+players on T were added as terrorists: the zombies' side from the start, and the game took them out when the round
+began (half the room gone). There `RoomBotQuota` puts every room AI player on CT (like Zombie Giant and Manhunt), and
+`BotCharacter` picks its character with the room's team: a T AI player is a human with a terrorist's look.
+
+## GameUI: a random map with no map to draw (gameui_guards.inl)
+GameUI's random map pick (0x105d8130) keeps the mode's MapList maps whose max_player fits the room's players, then
+`rand() % count`: Zombie Shelter's maps are for 4 or 8 and a room of 32 left none, divide by zero (crash choosing
+the mode). An empty list now returns -1, as when the map table isn't loaded (0x105d82ef).
+
 ## Room skill in PvP, characters half men / half women
 
 - The game's own AI (PvP modes) aims by the bot's BotProfile: CBot::m_profile at player +0x3700 (profile +0x04

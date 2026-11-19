@@ -3682,6 +3682,19 @@ static int StockBuySlot(const char* cmd)
     return cat == cfg.weaponCategory.end() ? 0 : cat->second == 1 ? 2 : cat->second >= 2 && cat->second <= 5 ? 1 : 0;
 }
 
+// zombie modes where every player starts human (CT) and the game turns some into zombies: the room's T / CT of an AI
+// player only picks its character there (a terrorist's look), it joins the humans like everyone. (A bot asked for as
+// T joined the zombies' side at once, and the game took it out at the round's start: half the room was gone.)
+static bool HumansStartMode()
+{
+    static const int modes[] = { 8, 9, 14, 20, 24, 29, 35, 36, 43, 44, 45, 54, 58 };
+    int m = GameMode();
+    for (int x : modes)
+        if (x == m)
+            return true;
+    return false;
+}
+
 // the character a bot joins as: its room AI player's (if of its team); a room AI player on Random gets one of its
 // filter's characters of its team, or any character of its team when the filter has none; other bots get a random
 // one in co-op modes, else 0. Returns the class number the game takes (InGameID).
@@ -3690,6 +3703,8 @@ static int BotCharacter(void* bot, int team)
     LoadNav();
     UpdateMatchBots();
     MatchBot* rb = RoomBotOf(bot, StateFor(bot));
+    if (rb && HumansStartMode() && (rb->team == 1 || rb->team == 2))
+        team = rb->team; // on the humans' side, with the look of the room's team
     int id = 0;
     if (rb && rb->character > 0 && CharacterFits(rb->character, team))
         id = rb->character;
@@ -4274,7 +4289,7 @@ static int RoomBotQuota(int team, const char* which)
     LeaveCriticalSection(&g_matchLock);
     // Manhunt starts when everyone in the room is in (humans on CT, the zombie is drawn from them); the game asks
     // for its bots as terrorists to balance the teams
-    bool oneTeam = GameMode() == MODE_ZOMBIE_GIANT || GameMode() == MODE_ZHE;
+    bool oneTeam = GameMode() == MODE_ZOMBIE_GIANT || GameMode() == MODE_ZHE || HumansStartMode();
     if (CoopOneTeam() || oneTeam)
     {
         want[2] += want[1]; // co-op, Zombie Giant (the giant comes from the CT players), Manhunt: everyone on CT
@@ -4283,7 +4298,7 @@ static int RoomBotQuota(int team, const char* which)
     if (CoopOneTeam() && team == 0)
         team = 2; // Zombie Disaster Zone asks for its bots as terrorists: they join CT like the others
     if (oneTeam)
-        team = 1; // Zombie Giant's soldier bots, Manhunt's players (asked for as T or CT): the room's AI players
+        team = 1; // Zombie Giant's soldier bots, Manhunt's players, the zombie modes' humans: the room's AI players
     // team index 0 (T) -> 1, 1 (CT) -> 2
     int t = team == 0 ? 1 : team == 1 ? 2 : (want[2] - g_matchAdded[2] >= want[1] - g_matchAdded[1] ? 2 : 1);
     if (g_matchAdded[t] >= want[t])
@@ -7751,6 +7766,7 @@ static DWORD WINAPI Watcher(LPVOID)
             HookAiSettingsButton(ui);
             HookExtraSettingsButton();
             GuardGameUiImages(ui);
+            GuardGameUiRandomMap(ui);
             HookTaskbarButton(GAMEUI_VIP_PAGE, GAMEUI_VIP_RETURN, (void*)VipStub, &g_vipReturn, "VIP");
             HookTaskbarButton(GAMEUI_QUEST_PAGE, GAMEUI_QUEST_RETURN, (void*)MissionsStub, &g_questReturn, "Missions");
             HookModeDialog();

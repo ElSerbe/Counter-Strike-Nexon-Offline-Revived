@@ -5,6 +5,8 @@
   "use strict";
 
   const COOP_MODES = [15, 17, 28, 52, 53, 59]; // CT spawns only: no team choice
+  // zombie modes where everyone starts human: T or CT only picks the bot's look (botassist HumansStartMode)
+  const LOOK_ONLY_MODES = [8, 9, 14, 20, 24, 29, 35, 36, 43, 44, 45, 54, 58];
   const SKILLS = ["Very easy", "Easy", "Normal", "Normal+", "Hard", "Hard+", "Very hard", "Expert"];
   const NAMES = ["Mike", "Ana", "Viktor", "Kenji", "Lucia", "Omar", "Sasha", "Diego", "Mei", "Hans", "Nadia", "Raul",
     "Yuki", "Bruno", "Elena", "Tariq", "Ivan", "Chloe", "Marco", "Aiko", "Pablo", "Ingrid", "Dmitri", "Rosa", "Felix",
@@ -112,6 +114,9 @@
     $("scramble").disabled = !room.host || room.bots.length < 2 || scrambling;
     $("scramble").classList.toggle("hidden", isCoop());
     $("newteam").classList.toggle("hidden", isCoop());
+    $("newteam").title = room && LOOK_ONLY_MODES.includes(room.mode)
+      ? "In this mode every bot starts as a human: T or CT only picks its character (a terrorist's or a counter-terrorist's look)"
+      : "Team of the bots you add";
     document.querySelectorAll("#newteam button").forEach(x => x.classList.toggle("on", +x.dataset.team === newTeam));
     $("add").textContent = "+ Add " + (count > 1 ? count : "bot");
     $("roominfo").textContent = `Players ${room.players}/${room.maxPlayers}` + (room.host ? "" : " · only the host can edit");
