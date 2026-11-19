@@ -67,6 +67,12 @@ the hooks (`HookedRunPlayerMove` per bot, `HookedStartFrame` per frame) and a fe
 ## Orders
 
 Radio menus (radio1/radio2 + menuselect) and chat: `/follow`, `/hold`, `/cover`, `/free` (say or say_team).
+The scenario modes (CoopModes but Zombie Shelter, which has its own) get an orders menu on the C key (radio3,
+modes/scenario_orders.inl): 1 a bot follows me (the nearest bot not with you yet gets "cover me" with you as its
+leader; each press one more), 2 shoot my target (what's under your crosshair, or the nearest monster within 6 degrees,
+is every bot's target while they see it, 20 s at most), 3 hold position, 4 follow me, 5 hunt freely, 6 aim lines on/off.
+Chat: `/follower`, `/focus`, `/lines`. Bots ordered to follow or cover follow the player who gave the order (they
+followed the nearest player).
 Bots fire only when the real line of fire (view + recoil) meets a monster first, never a wall or a teammate.
 
 ## Debugging (`Debug=` in botassist.ini)
@@ -74,8 +80,9 @@ Bots fire only when the real line of fire (view + recoil) meets a monster first,
 `botassist_debug.log`: every second per bot, the angles the stock AI asked for, the angles botassist sent, the
 real `v_angle` after the command, and what each line hits (class, flags, health, takedamage, team, names, model);
 its target/threat; every 5 s a census of the entities that can take damage within 1500 units of you, and every
-change of what you look at. `Debug=2` adds lasers (TE_BEAMPOINTS: engine MessageBegin 49, MessageEnd 50,
-WriteByte 51, WriteShort 53, WriteCoord 58 (float); sprite index from the short at 0x12183278).
+change of what you look at. The lasers (TE_BEAMPOINTS: engine MessageBegin 49, MessageEnd 50, WriteByte 51,
+WriteShort 53, WriteCoord 58 (float); sprite index from the short at 0x12183278) are `AimLines=1` now, off by default,
+and the orders menu (6) or `/lines` turns them on and off; `Debug=2` no longer draws them.
 
 ## Barricades and aim behaviour
 

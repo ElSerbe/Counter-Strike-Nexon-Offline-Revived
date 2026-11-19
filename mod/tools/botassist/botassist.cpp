@@ -169,6 +169,7 @@ static struct
 } cfg;
 
 static char g_dir[MAX_PATH];
+static bool g_aimLines = false; // the bots' aim lasers (botassist.ini AimLines; the scenario orders menu turns them on/off)
 static CRITICAL_SECTION g_logLock;
 
 static void Log(const char* fmt, ...)
@@ -212,6 +213,7 @@ static void LoadSettings()
     cfg.fleeDistance = IniFloat(ini, "FleeDistance", "350");
     cfg.logAim = GetPrivateProfileIntA("BotAssist", "LogAim", 1, ini) != 0;
     cfg.debug = GetPrivateProfileIntA("BotAssist", "Debug", 2, ini);
+    g_aimLines = GetPrivateProfileIntA("BotAssist", "AimLines", 0, ini) != 0;
     cfg.barricadeDamage = (float)GetPrivateProfileIntA("BotAssist", "ZombieBarricadeDamage", 40, ini);
     GetPrivateProfileStringA("BotAssist", "Barricades", "zbsbreak", buf, sizeof(buf), ini);
     cfg.barricades = buf;
@@ -1555,6 +1557,8 @@ static bool MonsterMap()
 static void* HsMissileFirst(void* bot, V3 eye, void* best);
 static bool HsNoChase(void* threat, void* target, V3 eye);
 
+static void* FocusTarget(void* bot, V3 eye, void* best); // modes/scenario_orders.inl: the players' marked target
+
 static void ScanMonsters(void* bot, BotState& st, V3 eye)
 {
     void* best = nullptr;
@@ -1613,6 +1617,7 @@ static void ScanMonsters(void* bot, BotState& st, V3 eye)
     }
     best = HsMissileFirst(bot, eye, best);
     best = ShelterTarget(bot, eye, best); // Zombie Shelter Team Match: the other team
+    best = FocusTarget(bot, eye, best);   // "shoot my target"
     st.target = best;
     st.threat = nearestDist < cfg.awareness ? nearest : (best && IsLivingMonster(best) ? best : nullptr);
     if (best)
@@ -2315,6 +2320,10 @@ static void Drive(void* bot, BotState& st, Command& cmd, float dt)
         st.nextLeaderScan = now + 0.5f;
     }
     void* leader = st.leader;
+    // ordered to follow / cover someone: that player, not just the nearest one
+    if (st.ordered && (st.order == ORDER_FOLLOW || st.order == ORDER_ESCORT) && st.commander && IsHuman(st.commander) &&
+        Alive(st.commander) && TeamOf(st.commander) == TeamOf(bot))
+        leader = st.commander;
     V3 goal = pos;
     float arrive = 60.0f;
     bool wantMove = false;
@@ -4013,12 +4022,12 @@ static void Beam(V3 a, V3 b, int r, int g, int bl, int life)
 static void DebugBot(void* bot, BotState& st, const float* sent, unsigned short buttons)
 {
     float now = Now();
-    if (!cfg.debug || !Alive(bot))
+    if ((!cfg.debug && !g_aimLines) || !Alive(bot))
         return;
     unsigned char* v = Vars(bot);
     V3 eye = Eye(bot);
     V3 va = Vec((float*)(v + EV_VANGLE)), punch = Vec((float*)(v + EV_PUNCHANGLE));
-    if (cfg.debug >= 2 && now >= st.nextBeam)
+    if (g_aimLines && now >= st.nextBeam)
     {
         st.nextBeam = now + 0.2f;
         TraceResult tr;
@@ -4031,7 +4040,7 @@ static void DebugBot(void* bot, BotState& st, const float* sent, unsigned short 
         if (st.target) // yellow: from the bot to the point it wants to hit
             Beam(eye, AimPoint(st.target), 255, 220, 0, 2);
     }
-    if (now < st.nextDebug)
+    if (!cfg.debug || now < st.nextDebug)
         return;
     st.nextDebug = now + 1.0f;
     float dView = 0, dSent = 0;
@@ -5439,6 +5448,9 @@ static void CommandFile()
 
 #include "modes/zombie_shelter.inl"
 
+static void GiveOrder(Order order, void* by); // (below)
+#include "modes/scenario_orders.inl"
+
 // ---------------------------------------------------------------- the frame hook (every mode)
 // The end of mp.dll's StartFrame (DLL function 0x113f8a80) runs botassist's per-frame work: the console, the command
 // file, and each mode's watcher (each returns at once outside its mode).
@@ -6608,6 +6620,8 @@ static bool OnPlayerCommand(void* player)
     for (auto& ch : c)
         ch = (char)tolower(ch);
     if (ShelterPlayerCommand(player, c)) // Zombie Shelter: the orders menu
+        return true;
+    if (ScenarioPlayerCommand(player, c)) // the scenario modes: the orders menu
         return true;
     if (SoccerPlayerCommand(player, c)) // Soccer: the orders menu
         return true;
