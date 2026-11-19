@@ -5406,6 +5406,7 @@ static void CommandFile()
 #include "modes/zombie4_darkness.inl"
 
 #include "modes/zombie_humans.inl"
+#include "modes/zombie_holdout.inl"
 
 #include "modes/zombie2_mutation.inl"
 

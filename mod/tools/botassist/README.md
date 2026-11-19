@@ -1159,6 +1159,16 @@ The frame hook (StartFrame 0x113f8a80 detour, `HookedStartFrame`) is shared code
 console, the command file and each mode's watcher (ZSRiftWatch, Z4Watch, ZB2Watch, ZgFrame), each of which returns
 at once outside its mode.
 
+## Holdout spots: human bots in groups (Zombie 8, Zombie 2 9, Zombie Hero 14/44/45/58; modes/zombie_holdout.inl)
+The human bots all regrouped around one player, so the whole team stood in one place. Now each map gets up to 8 holdout
+spots from its nav mesh (main part, at least 40x40, no hurt zone, no jump/crouch area; scored: few links, few areas
+within 350, higher than what's within 1000; the best ones 900 apart). Each new life a human bot picks one of the first
+K spots (one per 4 humans, 2 to 6): the nearest one that isn't full. It walks there (only its legs are driven: it
+shoots on the way), takes its own place among the spot's areas and stands still; a zombie within 170 makes it back
+off. Alone at its spot it joins the spot with the most humans left. Ordered bots and the chainsaw hero keep their old
+behaviour. botassist.log: "holdout: N spots on <map>", "holdout: bot '...' holds spot N ...". A test of the scoring
+on de_dust, cs_estate and de_santorini (a Python copy reading their .nav) spread the spots over the whole map.
+
 ## Zombie Hero and its versions (modes 14, 44, 45, 58) with room bots
 
 `modes/zombie_hero.inl`: 14 Zombie Hero (CSOGameRulesZombi3), 44 Season Zombie Hero (CSOGameRulesSeasonZombieHero),

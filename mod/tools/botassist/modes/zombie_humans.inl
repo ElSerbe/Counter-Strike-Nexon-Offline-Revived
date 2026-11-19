@@ -349,6 +349,11 @@ static bool ZombieGroupMove(void* bot, BotState& st, float viewYaw, float& fwd, 
     return true;
 }
 
+// modes/zombie_holdout.inl: Zombie, Zombie 2 and Zombie Hero's human bots hold a few spots in groups
+static bool HoldoutMode();
+static float HoldoutFleeRange(void* bot, float normal);
+static bool HoldoutMove(void* bot, BotState& st, float viewYaw, float& fwd, float& side, unsigned short& buttons, bool& handled);
+
 static bool ZombieFlee(void* bot, BotState& st, float viewYaw, float& fwd, float& side, unsigned short& buttons)
 {
     // (Zombie Escape, mode 20: the way out is forward along the route, ZeMove's; backing off and regrouping held the bots
@@ -358,6 +363,17 @@ static bool ZombieFlee(void* bot, BotState& st, float viewYaw, float& fwd, float
     // (Zombie Hero: the hero with the chainsaw goes at the zombies, the game's AI moves it)
     if (HeroWithChainsaw(bot))
         return false;
+    if (HoldoutMode())
+    {
+        // holding a spot: only a zombie right there makes it back off
+        float range = HoldoutFleeRange(bot, cfg.zombieFleeDistance);
+        if (ZombieFleeMove(bot, st, viewYaw, range, fwd, side, buttons))
+            return true;
+        bool handled = false;
+        bool moved = HoldoutMove(bot, st, viewYaw, fwd, side, buttons, handled);
+        if (handled)
+            return moved;
+    }
     return ZombieFleeMove(bot, st, viewYaw, cfg.zombieFleeDistance, fwd, side, buttons) || ZombieGroupMove(bot, st, viewYaw, fwd, side, buttons);
 }
 
