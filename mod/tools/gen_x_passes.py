@@ -24,6 +24,9 @@ import balance_prices  # noqa: E402
 X_ID, SPACE_ID = 59, 60
 FACTOR = 5
 SKIP = {214, 438}  # the plain Frag Grenade, the MP7A1 extended magazine (a part)
+# also in Space Weapons, at their usual price: the Star Chaser pair and the Tiamat plasma rifles (they were in the
+# Trans-Gear pass, now "2019 Season 1" with only that season's items)
+SPACE_EXTRA = {8113: 165, 8078: 265, 8395: 165, 8396: 265}
 SPACE = {"beamgun", "halogun", "halogunex", "lasersg", "voidpistolex", "wondercannonex", "sgdrillvortex",
          "transformgunadv", "leapstrikegun", "y21s1jetgunma", "y21s1jetgunmd", "sfturret", "sfsnipermb", "sfmgzhc",
          "restrictionpistol"}
@@ -97,7 +100,7 @@ def main():
             continue
         item = int(key)
         r = rows.get(item)
-        if not r or item in sold or item in SKIP or r[3] not in ("Equipment", "PeriodicItem"):
+        if not r or item in sold or item in SKIP or item in SPACE_EXTRA or r[3] not in ("Equipment", "PeriodicItem"):
             continue
         res = r[2].lower()
         cost, normal = price(item)
@@ -105,6 +108,9 @@ def main():
         if res in NAMES:
             entry["Name"] = NAMES[res]
         (space if res in SPACE else x).append((r[4], cost, entry))
+
+    for item, cost in SPACE_EXTRA.items():
+        space.append((rows[item][4], cost, {"ItemID": item, "Cost": cost}))
 
     def pages(entries):
         entries = sorted(entries, key=lambda e: (e[1], e[0]))
@@ -132,7 +138,7 @@ def main():
                         "The arsenal of the Random Weapons maps that no shop sells: extremely powerful weapons, at five times the usual price.",
                         ("#1a0808", "#ff4a3a"), x)
     new += ",\n" + block(SPACE_ID, "Space Weapons", 150,
-                         "Beams, voids and halos: the science-fiction weapons of the Random Weapons maps, at five times the usual price.",
+                         "Beams, voids and halos: the science-fiction weapons of the Random Weapons maps at five times the usual price, with the Star Chaser pair and the Tiamat plasma rifles.",
                          ("#060a1f", "#7ad7ff"), space)
     end = text.rfind("\t\t}\n\t]")
     if end < 0:

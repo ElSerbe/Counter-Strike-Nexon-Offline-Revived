@@ -896,18 +896,24 @@
 			]
 		},
 		{
-			"ID": 48, "Name": "Trans-Gear", "Type": "Collection", "Cost": 105,
-			"Description": "Transforming gear, the Tiamat plasma rifles and the Star Chaser pair.",
+			"ID": 48, "Name": "2019 Season 1", "Type": "Season", "Cost": 105,
+			"Description": "The first season of 2019 (January to April): the Trans-Gear weapons, converted by an unknown engineering magic. First the free rewards, then the Season Pass Compensation.",
 			"Image": "", "Theme": ["#0d1a20", "#5fd6ff"],
 			"Pages": [
 				{ "Unlock": 0, "Items": [
-					{ "ItemID": 8173, "Cost": 60 }, { "ItemID": 8175, "Cost": 60 }, { "ItemID": 8177, "Cost": 75 }, { "ItemID": 8172, "Cost": 100 }
+					{ "ItemID": 8172, "Cost": 100 }, { "ItemID": 8173, "Cost": 60 }, { "ItemID": 8186, "Cost": 50 }, { "ItemID": 8187, "Cost": 40 }
 				] },
-				{ "Unlock": 110, "Items": [
-					{ "ItemID": 8176, "Cost": 100 }, { "ItemID": 8178, "Cost": 120 }, { "ItemID": 8174, "Cost": 120 }, { "ItemID": 8113, "Cost": 165 }
+				{ "Unlock": 100, "Items": [
+					{ "ItemID": 8188, "Cost": 50 }, { "ItemID": 8189, "Cost": 60 }, { "ItemID": 8190, "Cost": 50, "Name": "Rooster Comb" }, { "ItemID": 8191, "Cost": 60 }
 				] },
-				{ "Unlock": 280, "Items": [
-					{ "ItemID": 8078, "Cost": 265 }, { "ItemID": 8395, "Cost": 165 }, { "ItemID": 8396, "Cost": 265 }
+				{ "Unlock": 180, "Items": [
+					{ "ItemID": 8174, "Cost": 120 }, { "ItemID": 8175, "Cost": 60 }, { "ItemID": 8177, "Cost": 75 }, { "ItemID": 8176, "Cost": 100 }
+				] },
+				{ "Unlock": 330, "Items": [
+					{ "ItemID": 8178, "Cost": 120 }, { "ItemID": 8181, "Cost": 2 }, { "ItemID": 8182, "Cost": 2 }, { "ItemID": 8183, "Cost": 2 }, { "ItemID": 8184, "Cost": 2 }
+				] },
+				{ "Unlock": 380, "Items": [
+					{ "ItemID": 8179, "Cost": 120 }, { "ItemID": 8180, "Cost": 120 }, { "ItemID": 8192, "Cost": 300 }
 				] }
 			]
 		},
@@ -1131,19 +1137,22 @@
 		},
 		{
 			"ID": 60, "Name": "Space Weapons", "Type": "Collection", "Cost": 150,
-			"Description": "Beams, voids and halos: the science-fiction weapons of the Random Weapons maps, at five times the usual price.",
+			"Description": "Beams, voids and halos: the science-fiction weapons of the Random Weapons maps at five times the usual price, with the Star Chaser pair and the Tiamat plasma rifles.",
 			"Image": "", "Theme": ["#060a1f", "#7ad7ff"],
 			"Pages": [
 				{ "Unlock": 0, "Items": [
+					{ "ItemID": 8113, "Cost": 165 }, { "ItemID": 8395, "Cost": 165 }, { "ItemID": 8078, "Cost": 265 }, { "ItemID": 8396, "Cost": 265 }
+				] },
+				{ "Unlock": 340, "Items": [
 					{ "ItemID": 8457, "Cost": 300, "Name": "Jet Gun MA" }, { "ItemID": 9117, "Cost": 450, "Name": "SF Sniper MB" }, { "ItemID": 8820, "Cost": 600, "Name": "SF Turret" }, { "ItemID": 9369, "Cost": 825, "Name": "SF MG (Hero)" }
 				] },
-				{ "Unlock": 870, "Items": [
+				{ "Unlock": 1210, "Items": [
 					{ "ItemID": 8460, "Cost": 1000, "Name": "Jet Gun MD" }, { "ItemID": 9384, "Cost": 1000, "Name": "Drill Vortex" }, { "ItemID": 8876, "Cost": 1500, "Name": "Leap Strike Gun" }, { "ItemID": 8720, "Cost": 1500, "Name": "Restriction Pistol" }
 				] },
-				{ "Unlock": 2870, "Items": [
+				{ "Unlock": 3210, "Items": [
 					{ "ItemID": 8663, "Cost": 1500, "Name": "Void Avenger EX" }, { "ItemID": 8666, "Cost": 1500, "Name": "Laser Shotgun" }, { "ItemID": 8891, "Cost": 1500, "Name": "Transform Gun ADV" }, { "ItemID": 9637, "Cost": 2250, "Name": "Beam Gun" }
 				] },
-				{ "Unlock": 5570, "Items": [
+				{ "Unlock": 5910, "Items": [
 					{ "ItemID": 8709, "Cost": 2250, "Name": "Heaven Splitter EX" }, { "ItemID": 9098, "Cost": 2250, "Name": "Halo Gun EX" }, { "ItemID": 8787, "Cost": 2250, "Name": "Halo Gun" }
 				] }
 			]
