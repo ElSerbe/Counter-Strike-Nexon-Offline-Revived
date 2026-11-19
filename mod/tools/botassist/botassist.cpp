@@ -4943,6 +4943,7 @@ static void InstallScHooks(DWORD delta); // modes/soccer.inl: bots count as thei
 static void InstallZtHooks(DWORD delta); // modes/zombie_tag.inl: what each player looks like, bumps into and carries in mode 37
 
 #include "mp_fixes.inl"
+#include "model_aliases.inl"
 
 static void HookBotManager(DWORD delta)
 {
@@ -7726,6 +7727,7 @@ static DWORD WINAPI Watcher(LPVOID)
     HMODULE clientFixed = NULL;
     for (;;)
     {
+        InstallModelAliases(); // weapons this client has no model for
         HMODULE client = GetModuleHandleA("client.dll");
         if (client && client != clientFixed)
         {

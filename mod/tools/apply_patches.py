@@ -29,6 +29,8 @@ EXTRA_FILES = [
     (MOD / "tools" / "botassist" / "botassist_gdm_weapons.txt", "botassist_gdm_weapons.txt", False),
     # the weapon balance's starting guesses (gen_weapon_balance.py); what it measures goes to botassist_weapon_dps.txt
     (MOD / "tools" / "botassist" / "botassist_balance.txt", "botassist_balance.txt", True),
+    # weapons this client has no model for, and the base weapon shown instead (gen_model_aliases.py)
+    (MOD / "tools" / "botassist" / "botassist_model_aliases.txt", "botassist_model_aliases.txt", True),
     # data tables botassist loads instead of the game's (gen_zsrift_waves.py: Zombie Disaster Zone's zombie mix)
     (MOD / "tools" / "botassist" / "tables" / "maps" / "ZBS_WAVE_zsrift_splinter.csv",
      "botassist_tables/maps/ZBS_WAVE_zsrift_splinter.csv", True),

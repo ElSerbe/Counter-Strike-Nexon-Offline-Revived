@@ -429,6 +429,14 @@ First reading (Zombie Hero, 31 bots): 500-760 us per move, nearly all in setup a
 per move. It now remembers the readable regions it found for 100 ms (per thread). The zombie modes' human bots also
 list the players once per server frame (`ZfPlayers`) instead of looking over every entity up to three times per move,
 and keep a line of sight 0.15 s (`ZfSees`); the Zombie Hero check (`HeroIsHero`) runs 4 times a second per bot.
+## Weapons without models of their own (model_aliases.inl)
+59 weapons of Item.csv name models the game files don't have (mp.dll asks for models/v_<res>.mdl; checked through the
+game's own file system, .nar and Data/Packer): the 2019-2026 season skins (y19s4hammer the Halloween Hammer, the
+Trans-Gear 19s1*, Elegant Frontier y19s2*...) and the "b" editions (bpython, balrog7b...). Drawn, they were invisible.
+botassist hooks FileSystem_Nar.dll's IFileSystem ("VFileSystem009", vtable slot 8 FileExists, slot 10 Open; thiscall):
+a missing models/v_, p_ or w_<res>.mdl of botassist_model_aliases.txt (gen_model_aliases.py: the base weapon, else a
+plain one of the same type) is opened as the alias's. botassist.log "model aliases: ... shown instead".
+
 ## Divine Titan EX doesn't crash the game (mp_fixes.inl)
 Drawing Divine Titan EX (weapon id 0x23e) creates its drone by name, "divinetitanex_drone", which this mp.dll doesn't
 export (only "divinetitan_drone"): the creation gave nothing and the game crashed (0x10c6aa1b, a bot at a Zombie Hero
