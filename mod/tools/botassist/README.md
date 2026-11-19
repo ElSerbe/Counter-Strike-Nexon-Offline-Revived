@@ -434,9 +434,10 @@ mp.dll names models/v_<res>.mdl for every weapon, and 59 of those files don't ex
 Trans-Gear 19s1*, Halloween y19s4*, Elegant Frontier y19s2*, the "b" editions...): hw.dll's skin table shows them on
 the base weapon's model with their own textures (models/texture/@<res>_<texture>; export_shop_assets.skin_redirects),
 so they're the game's business. The other 7 (murasame5, sfboomerang1, dualuziw, huntgrenade1, y24s2mg3, y24s2skull2,
-y25s1turbulent1) were invisible. botassist hooks FileSystem_Nar.dll's IFileSystem ("VFileSystem009", vtable slot 8
-FileExists, slot 10 Open; thiscall): a missing models/v_, p_ or w_<res>.mdl of botassist_model_aliases.txt
-(gen_model_aliases.py) is opened as its base weapon's. botassist.log "model aliases: ... shown instead".
+y25s1turbulent1) were invisible. botassist hooks Open of FileSystem_Nar.dll's IFileSystem ("VFileSystem009", vtable
+slot 12 = +0x30, thiscall; Nexon's has two more functions before it than Valve's, so slots 8 and 10 are something
+else - hooking those crashed the game in the lobby): a missing models/v_, p_ or w_<res>.mdl of
+botassist_model_aliases.txt (gen_model_aliases.py) is opened as its base weapon's. botassist.log "model aliases: ... shown instead".
 
 ## Divine Titan EX doesn't crash the game (mp_fixes.inl)
 Drawing Divine Titan EX (weapon id 0x23e) creates its drone by name, "divinetitanex_drone", which this mp.dll doesn't
