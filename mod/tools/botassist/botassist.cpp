@@ -5006,6 +5006,7 @@ static void InstallZtHooks(DWORD delta); // modes/zombie_tag.inl: what each play
 
 #include "mp_fixes.inl"
 #include "model_aliases.inl"
+#include "knife_fixes.inl"
 
 static void HookBotManager(DWORD delta)
 {
@@ -5676,6 +5677,7 @@ static void HookedStartFrame()
         NavToolsFrame();
         ZgFrame();
         WbFrame();
+        KnifeFixFrame();
         if (CoopMode())
         {
             UpdateBarricades(); // zombies against barricades, bots or not
@@ -7042,6 +7044,7 @@ static bool Install(HMODULE mp)
         base, cfg.companions ? "on" : "off (aim only)", orders ? "on" : "off", cfg.followDistance,
         cfg.buyAnyWeapon ? (int)(cfg.primaries.size() + cfg.pistols.size()) : 0);
     HookBotManager(delta);
+    FixShellKnives(delta);
     return true;
 }
 
