@@ -1006,6 +1006,12 @@ when the storage can pay for it again, by day, with heavy axe hits (TakeDamage 0
 other hits need 0x10000000 and enough "contribution"; untested which hit that is: 10 s without damage = given up, 3 such = no more
 tries that map), then builds the same row in the same place at the same angle. Nobody repairs a building being taken down.
 A rebuild refused in the old place is tried up to 3 times 60-200 u away. Anywhere-builds are sent from 70-170 u away, not on top of the place.
+Unfinished buildings (2026-11-20): an axe hit on a building being built (0x10894e40) adds to its progress (+0xe0, finished at
+setting 0x11e57840) and the same share of its health, so past 80% of the work it no longer looked damaged and the bots left it
+at 80-90%: unfinished turrets don't turn and the tier-up was refused (its check, rules vfunc 0x47c = 0x10838390: 0xf the shelter
+unfinished (+0x104, 0x1088bf70) or that tier already, 0x11 a skill, 0x10 the needed building not there finished, 0x1083c760
+counting finished ones). `ShUnfinished` makes them work for `ShFindDamaged` whatever their health, the builder plans nothing new
+while one is unfinished nearby, and the tier-up waits for the game's check ("the tier-up (row N) waits: ...").
 Progression (`ShPlanBuild`): next step = the building the next tier needs (Workroom 15 -> tier 2 -> Communication Tower 17 -> tier 3 ->
 Concrete Refinery 16 -> tier 4), else the tier itself. Its cost is reserved in the storage (`g_shReserve`): only the step itself,
 storages when the storage can't hold its cost (up to 6), the first medical facility, generators and the first two turrets ignore the

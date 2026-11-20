@@ -1557,6 +1557,49 @@ static bool ShBuiltDone(void* e)
     return p && Readable(p + 0xf4, 4) && ShSetting(MP_SHT_SET_BUILT, built) && (float)*(int*)(p + 0xe0) == built;
 }
 
+// A building of the team still being built, or a shelter not finished. A teammate's axe hit (0x10894e40) adds to the
+// progress (+0xe0, finished at setting 0x11e57840) and the same share of the health, so past 80% of the work the building
+// no longer looked damaged and the bots left it at 80-90% (2026-11-20, the user). Unfinished, a turret doesn't turn, and
+// the game refuses the shelter's next tier while the building it needs isn't finished (0x1083c760 counts finished ones)
+// or while the shelter itself isn't (its +0x104, 0x1088bf70). These count as work whatever their health.
+static bool ShUnfinished(void* e)
+{
+    unsigned char* p = (unsigned char*)PrivateOf(e);
+    float built;
+    if (!p || !Readable(p + 0x108, 4) || !ShSetting(MP_SHT_SET_BUILT, built))
+        return false;
+    if (unsigned char* rules = ShRules())
+        for (int s = 0; s < 3; s++)
+            if (ShShelterEntity(rules, s) == p)
+                return (float)*(int*)(p + 0x104) < built;
+    const ShBuildRow* r = ShRow(*(int*)(p + SH_BUILDING_ROW));
+    const char* cls = ClassName(e);
+    return r && r->cls && cls && !strcmp(cls, r->cls) && (float)*(int*)(p + 0xe0) < built;
+}
+
+// The game's own check of a shelter tier-up (rules vfunc 0x47c = 0x10838390, thiscall rules, player, building row): 0xf the
+// shelter isn't finished or already has that tier, 0x11 a skill is missing, 0x10 the building it needs isn't there
+// finished; anything else is the cost check's answer. -1: couldn't ask.
+static const int SH_UPGRADE_UNFINISHED = 0xf, SH_UPGRADE_NEEDS = 0x10, SH_UPGRADE_SKILL = 0x11;
+static int ShUpgradeCheck(unsigned char* rules, void* bot, int rowId)
+{
+    unsigned char* row = ShTableCall(SH_TABLE_BUILDING, rowId);
+    void* player = PrivateOf(bot);
+    if (!row || !player || !rules)
+        return -1;
+    int code = -1;
+    __try
+    {
+        typedef int(__fastcall * CheckFn)(void* self, void* edx, void* player, void* row);
+        code = ((CheckFn)(*(void***)rules)[0x47c / 4])(rules, nullptr, player, row);
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        code = -1;
+    }
+    return code;
+}
+
 static bool ShPlanRebuild(unsigned char* rules, void* bot, V3 home, float now, ShPlan& plan)
 {
     if (ShSkillLevel(bot, 22) <= 0 || g_shDemolishFails >= 3 || ShNight(rules))
@@ -1699,8 +1742,26 @@ static bool ShPlanBuild(unsigned char* rules, void* bot, V3 home, float now, ShP
             g_shReserve = ShReserve{ goal->wood, goal->iron, goal->power };
         if (goal == up && up && ShCanAfford(rules, bot, team, *up) && !ShBanned(up->id, 0, now))
         {
-            plan = ShPlan{ 3, up->id, -1, home };
-            return true;
+            // the game's own check first: an unfinished shelter or needed building is finished by hand first (ShFindDamaged
+            // takes it as work); the tier-up was sent again and again and refused
+            int why = ShUpgradeCheck(rules, bot, up->id);
+            if (why == SH_UPGRADE_UNFINISHED || why == SH_UPGRADE_NEEDS || why == SH_UPGRADE_SKILL)
+            {
+                static float nextLog = 0;
+                if (now >= nextLog || now < nextLog - 120.0f)
+                {
+                    nextLog = now + 60.0f;
+                    Log("Shelter: the tier-up (row %d) waits: %s", up->id,
+                        why == SH_UPGRADE_UNFINISHED ? "the shelter isn't finished (hit it with the axe)"
+                        : why == SH_UPGRADE_NEEDS    ? ShFmt("its row %d building isn't finished yet", up->needs)
+                                                     : "a skill is missing");
+                }
+            }
+            else
+            {
+                plan = ShPlan{ 3, up->id, -1, home };
+                return true;
+            }
         }
     }
     static int goalReports = 0;
@@ -1827,9 +1888,10 @@ static void ShSendBuild(unsigned char* rules, void* bot, ShBot& b, float now)
     const char* name = String(F<int>(Vars(bot), EV_NETNAME));
     if (b.plan.kind == 3)
     {
+        int check = ShUpgradeCheck(rules, bot, r->id);
         ShelterCommand(bot, "zsht_upgradeshelter", id);
-        Log("Shelter: '%s' upgrades the shelter (row %d, storage %d wood %d iron %d power)", name, r->id, ShStorage(rules, team, 0),
-            ShStorage(rules, team, 1), ShStorage(rules, team, 2));
+        Log("Shelter: '%s' upgrades the shelter (row %d, storage %d wood %d iron %d power; the game's check said 0x%x)", name, r->id,
+            ShStorage(rules, team, 0), ShStorage(rules, team, 1), ShStorage(rules, team, 2), check);
     }
     else if (b.plan.kind == 1)
     {
@@ -1939,7 +2001,7 @@ static void* ShFindDamaged(int team, V3 from, V3 me, float range, float below, f
         if (owner != team && !(owner == 0 && Len2D(Center(e) - from) < 900.0f))
             return;
         unsigned char* v = Vars(e);
-        if (F<float>(v, EV_HEALTH) >= F<float>(v, EV_MAX_HEALTH) * below)
+        if (F<float>(v, EV_HEALTH) >= F<float>(v, EV_MAX_HEALTH) * below && !ShUnfinished(e))
             return;
         float d = Len(ShClosest(me, e) - me);
         if (d < dist)
@@ -2242,7 +2304,8 @@ static void ShDecide(unsigned char* rules, void* bot, BotState& st, ShBot& b, V3
     bool wantBuild = (order == SHO_BUILD || (order == SHO_FREE && role == SHR_BUILDER)) && !night;
     // (another bot with Electric Engineering rebuilds too)
     bool rebuilder = !wantBuild && order == SHO_FREE && !night && ShSkillLevel(bot, 22) > 0;
-    if ((wantBuild || rebuilder) && b.plan.kind == 0 && now >= b.nextPlan)
+    // (an unfinished building of the team comes first: a new one isn't planned while one is being built)
+    if ((wantBuild || rebuilder) && b.plan.kind == 0 && now >= b.nextPlan && !(damaged && ShUnfinished(damaged)))
     {
         b.nextPlan = now + 3.0f;
         if (wantBuild ? ShPlanBuild(rules, bot, home, now, b.plan) : ShPlanRebuild(rules, bot, home, now, b.plan))
