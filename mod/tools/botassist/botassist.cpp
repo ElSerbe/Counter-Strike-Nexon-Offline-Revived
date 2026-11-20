@@ -5011,10 +5011,12 @@ static void InstallZtHooks(DWORD delta); // modes/zombie_tag.inl: what each play
 #include "mp_fixes.inl"
 #include "model_aliases.inl"
 #include "knife_fixes.inl"
+#include "gun_fixes.inl"
 
 static void HookBotManager(DWORD delta)
 {
     FixDivineTitanEx(delta);
+    FixArcanaII(delta);
     GuardZbSkillThinks(delta);
     FixCrossbowCls(delta);
     HsTargetBots(delta);

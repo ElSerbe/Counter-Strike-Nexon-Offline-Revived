@@ -448,6 +448,13 @@ export (only "divinetitan_drone"): the creation gave nothing and the game crashe
 round start, crash dump 2026-11-19). The two places naming it (0x10c6a9d8, 0x10c75949) now name the plain drone.
 "wolfpack_drone" (pushed at 0x11280d11) isn't exported either; not seen crashing.
 
+## Arcana II fires bullets (gun_fixes.inl)
+
+Arcana II (`weapon_burstdischarge`, also ex, adv, 1, 4, 6; one class) took a round, played the shot and the kick and hurt
+nobody: its fire function (0x10c208f0) has no `FireBullets3` call (0x113fc970), which the AK-47's (0x10f9ecc0) has. botassist
+detours it and fires the bullet the AK-47's way (gun position = player vfunc 0x210, `gpGlobals->v_forward`, 8192 units,
+penetration 2, 7.62) with damage 32 / 35 (ex, 4) / 38 (adv, 6). Its burst discharge mode still does no damage.
+
 ## GameUI: bad pictures don't crash the game (gameui_guards.inl)
 A Zombie Hero Classic match crashed at its end (crash dump, 2026-11-19): a list of the results window (layout 0x10737c20)
 gave an image panel a picture pointer that was text ("anel"), and the panel's SetImage (0x10711d70) called through it.
