@@ -124,6 +124,7 @@ static void GunStep(const char* what, const char* step)
         g_gunSteps++;
         Log("gun fix step: %s: %s", what, step);
     }
+    CrashWatchArm(); // crash_watch.inl: the exceptions of the next seconds go to the log
 }
 
 static void AimVectors(unsigned char* pev, float* fwd)
@@ -311,28 +312,25 @@ static void FixSciFiGuns()
 }
 
 // ---------------------------------------------------------------- in-game prices ($)
-// The buy price of a weapon is the first field of its record in the engine's item manager (mp.dll 0x10ab96d0: manager
-// = [0x121d3d18](), record = manager vfunc 4 (InGameID, Item.csv's 6th column); BuyWeapon 0x113eb3a0 then asks the
-// game rules (vfunc 0x400) and compares with the money, 0x114b76d0). The user (2026-11-20): the strongest weapons were
-// too cheap to equip in a match. botassist_prices.txt next to botassist.asi sets their prices: each new map, the
-// records of the listed weapons get the new price (a factor of the game's own, or dollars), up to its "cap".
-static const DWORD MP_ITEM_MANAGER = 0x121d3d18;
-typedef void* (*ItemManagerFn)();
-typedef int*(__fastcall* ItemRecordFn)(void* mgr, void* edx, int inGameId);
+// A buy asks the game rules for the price: vfunc 0x400, the same function in every mode's rules (0x11414a10,
+// thiscall rules, player, InGameID; it returns the engine's price, [0x121d3ce8]() vfunc 0xf0(id)); BuyWeapon 0x113eb3a0
+// then compares it with the money (0x114b76d0). The user (2026-11-20): the strongest weapons were too cheap to equip
+// in a match. botassist detours 0x11414a10: the weapons of botassist_prices.txt (InGameID = Item.csv's 6th column) cost
+// their factor times the game's price, or the dollars given, up to its "cap" (never less than the game's price).
+// (The first version wrote the item record's first field: that is the InGameID, not the price. Fixed the same day.)
+static const DWORD MP_RULES_ITEM_PRICE = 0x11414a10;
+typedef int(__fastcall* ItemPriceFn)(void* rules, void* edx, void* player, int inGameId);
+static ItemPriceFn g_itemPrice;
 struct GunPrice
 {
-    int id;
     float factor; // > 0: times the game's price
     int dollars;  // else this price
 };
-static std::vector<GunPrice> g_gunPrices;
-static std::map<int, int> g_gunPriceBase; // the game's own price of each listed weapon
-static int g_gunPriceCap = 16000, g_gunPriceLevel = -1;
-static bool g_gunPricesRead = false;
+static std::map<int, GunPrice> g_gunPrices;
+static int g_gunPriceCap = 16000;
 
 static void ReadGunPrices()
 {
-    g_gunPricesRead = true;
     char path[MAX_PATH];
     snprintf(path, sizeof(path), "%sbotassist_prices.txt", g_dir);
     FILE* f = fopen(path, "r");
@@ -350,76 +348,43 @@ static void ReadGunPrices()
             continue;
         if (sscanf(line, " %d %63s", &id, val) != 2 || id <= 0)
             continue;
-        GunPrice p = { id, 0, 0 };
+        GunPrice p = { 0, 0 };
         if (val[0] == 'x' || val[0] == 'X')
             p.factor = (float)atof(val + 1);
         else
             p.dollars = atoi(val);
         if (p.factor > 0 || p.dollars > 0)
-            g_gunPrices.push_back(p);
+            g_gunPrices[id] = p;
     }
     fclose(f);
-    Log("prices: %d weapons from botassist_prices.txt (cap $%d)", (int)g_gunPrices.size(), g_gunPriceCap);
 }
 
-static void LogGunPrices(void* mgr, ItemRecordFn record)
+static int __fastcall HookedItemPrice(void* rules, void* edx, void* player, int id)
 {
-    std::string list;
-    for (const GunPrice& p : g_gunPrices)
-    {
-        int* rec = record(mgr, nullptr, p.id);
-        char one[48];
-        snprintf(one, sizeof(one), "%s%d: $%d -> $%d", list.empty() ? "" : ", ", p.id, g_gunPriceBase[p.id],
-                 rec ? *rec : -1);
-        list += one;
-    }
-    Log("prices: %s", list.c_str());
+    int price = g_itemPrice(rules, edx, player, id);
+    auto it = g_gunPrices.find(id);
+    if (it == g_gunPrices.end() || price <= 0)
+        return price;
+    int want = it->second.factor > 0 ? (int)(price * it->second.factor) : it->second.dollars;
+    want = (std::max)((std::min)(want, g_gunPriceCap), price);
+    static int logs = 0;
+    if (logs++ < 20)
+        Log("prices: weapon %d costs $%d (the game's $%d)", id, want, price);
+    return want;
 }
 
-// once a map: the listed weapons' records get their price
-static void GunPricesFrame()
+static void FixGunPrices()
 {
-    if (!g_gunPricesRead)
-        ReadGunPrices();
-    if (g_gunPrices.empty() || g_gunPriceLevel == g_nav.level)
+    if (g_itemPrice)
         return;
-    g_gunPriceLevel = g_nav.level;
-    __try
-    {
-        ItemManagerFn getMgr = *(ItemManagerFn*)(MP_ITEM_MANAGER + g_mpDelta);
-        void* mgr = getMgr ? getMgr() : nullptr;
-        if (!mgr)
-            return;
-        ItemRecordFn record = (ItemRecordFn)(*(void***)mgr)[1];
-        int set = 0;
-        for (const GunPrice& p : g_gunPrices)
-        {
-            int* rec = record(mgr, nullptr, p.id);
-            if (!rec || !Readable(rec, 4))
-                continue;
-            auto it = g_gunPriceBase.find(p.id);
-            int base = it != g_gunPriceBase.end() ? it->second : *rec;
-            if (it == g_gunPriceBase.end())
-                g_gunPriceBase[p.id] = base;
-            int price = p.factor > 0 ? (int)(base * p.factor) : p.dollars;
-            price = (std::min)(price, g_gunPriceCap);
-            price = (std::max)(price, base);
-            if (*rec != price)
-            {
-                DWORD old;
-                if (VirtualProtect(rec, 4, PAGE_READWRITE, &old))
-                {
-                    *rec = price;
-                    set++;
-                }
-            }
-        }
-        static int logs = 0;
-        if (set && logs++ < 10)
-            LogGunPrices(mgr, record);
-    }
-    __except (EXCEPTION_EXECUTE_HANDLER)
-    {
-        Log("prices: exception 0x%08lX setting the weapons' prices", GetExceptionCode());
-    }
+    ReadGunPrices();
+    if (g_gunPrices.empty())
+        return;
+    const unsigned char code[] = { 0x55, 0x8b, 0xec, 0xff, 0x15, 0, 0, 0, 0 }; // push ebp; mov ebp, esp; call [engine]
+    unsigned char want[sizeof(code)];
+    memcpy(want, code, sizeof(code));
+    *(DWORD*)(want + 5) = 0x121d3ce8 + g_mpDelta;
+    g_itemPrice = (ItemPriceFn)DetourChecked(MP_RULES_ITEM_PRICE, want, sizeof(want), (void*)HookedItemPrice, "prices");
+    Log("prices: %d weapons from botassist_prices.txt (cap $%d)%s", (int)g_gunPrices.size(), g_gunPriceCap,
+        g_itemPrice ? "" : ", not applied");
 }

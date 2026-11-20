@@ -466,14 +466,16 @@ Bullets and blasts use the game's numbers per mode (iteminfo.json: Gravity Repul
 Giga Break 32 / 680 / 2400); a blast is TE_EXPLOSION + RadiusDamage 0x114040c0, the shooter not hurt by his own.
 The first test (2026-11-20) closed the server on the Gravity Repulsor's first shot with nothing in the log: the first
 60 steps of these shots are logged ("gun fix step: ..."), and `SciFiGunFixes=0` in botassist.ini turns both fixes off.
+The second test: all the steps finished and the match closed in the same second. crash_watch.inl logs hw.dll's
+Host_Error message (0x2419150) and, for 4 s after each of these shots, every exception (module+offset, stack).
 
 ## In-game prices ($) of the strongest weapons (gun_fixes.inl, botassist_prices.txt)
 
-A weapon's buy price is the first field of its record in the engine's item manager ([0x121d3d18]() vfunc 4 with the
-InGameID, as mp.dll's 0x10ab96d0 reads it; BuyWeapon 0x113eb3a0 compares it, through game rules vfunc 0x400, with the
-money 0x114b76d0). Each new map botassist writes the prices of botassist_prices.txt there (`<InGameID> x<factor>` or
-`<InGameID> <dollars>`, `cap`): Giga Break, Asura Hell Splitter, Space Arbalest, Arbalest x4; Vortex Drill, Cousteau,
-Magnum Launcher x3; at most $16000 (untested; whether the buy menu shows the new price is unknown).
+BuyWeapon (0x113eb3a0) asks the game rules for the price (vfunc 0x400 = 0x11414a10 in every mode, thiscall rules,
+player, InGameID) and compares it with the money (0x114b76d0). botassist detours 0x11414a10 for the weapons of
+botassist_prices.txt (`<InGameID> x<factor>` or `<InGameID> <dollars>`, `cap`): Giga Break, Asura Hell Splitter,
+Space Arbalest, Arbalest x4; Vortex Drill, Cousteau, Magnum Launcher x3; at most $16000 (untested; whether the buy menu
+shows the new price is unknown). The first version wrote the item record's first field, which is the InGameID.
 
 ## Grenades: Ignite Bomb, Junk Grenade drums (grenade_fixes.inl)
 
