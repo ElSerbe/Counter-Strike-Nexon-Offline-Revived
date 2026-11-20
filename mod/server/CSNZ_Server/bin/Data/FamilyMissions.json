@@ -1,0 +1,28 @@
+{
+	// Weekly family missions (manager/familymanager.cpp, the family page web/family). The progress is the family's: every
+	// member's matches count. When one is done the family gets FamilyExp and FamilyPoints once, and every member can claim
+	// Medals, Tickets (Bingo Tickets) and Items once that week from the family page. They start again every Monday.
+	// Type: Matches, Wins, Kills (GameModes: only those modes; none: all), BestKills (one member in one match), Orders
+	// (daily orders done by the members), FamilyExp (Family EXP earned this week).
+	// DecoderChance: % of claims that also give a decoder (from Data/DailyDecoders.json's list, like the orders).
+	"Version": 1,
+	"DecoderChance": 6,
+	"Missions": [
+		{ "ID": 1, "Text": "Play 40 matches as a family", "Type": "Matches", "Target": 40, "Medals": 60, "Tickets": 2, "FamilyExp": 400, "FamilyPoints": 80 },
+		{ "ID": 2, "Text": "Win 20 matches as a family", "Type": "Wins", "Target": 20, "Medals": 80, "FamilyExp": 500, "FamilyPoints": 100 },
+		{ "ID": 3, "Text": "Get 800 kills as a family", "Type": "Kills", "Target": 800, "Medals": 100, "FamilyExp": 600, "FamilyPoints": 120 },
+		{ "ID": 4, "Text": "Play 15 Zombie matches as a family", "Type": "Matches", "Target": 15, "Medals": 60, "Tickets": 2, "FamilyExp": 300, "FamilyPoints": 60,
+			"GameModes": [8, 9, 14, 15, 20, 24, 28, 29, 30, 32, 35, 37, 43, 44, 45, 54, 56, 58] },
+		{ "ID": 5, "Text": "Win 8 Zombie matches as a family", "Type": "Wins", "Target": 8, "Medals": 80, "FamilyExp": 400, "FamilyPoints": 80,
+			"GameModes": [8, 9, 14, 15, 20, 24, 28, 29, 30, 32, 35, 37, 43, 44, 45, 54, 56, 58] },
+		{ "ID": 6, "Text": "Win 8 Classic matches as a family", "Type": "Wins", "Target": 8, "Medals": 80, "FamilyExp": 400, "FamilyPoints": 80,
+			"GameModes": [0, 3, 6, 23, 42] },
+		{ "ID": 7, "Text": "Get 600 kills in Deathmatch modes as a family", "Type": "Kills", "Target": 600, "Medals": 90, "FamilyExp": 450, "FamilyPoints": 90,
+			"GameModes": [1, 2, 4, 5, 19, 22] },
+		{ "ID": 8, "Text": "Clear 5 PvE missions as a family (Zombie Scenario, Human Scenario, Zombie Files, Disaster Zone)", "Type": "Wins", "Target": 5, "Medals": 100, "FamilyExp": 500, "FamilyPoints": 100,
+			"GameModes": [15, 17, 33, 53, 59], "Items": [ { "ItemID": 173, "Count": 1, "Days": 0 } ] },
+		{ "ID": 9, "Text": "Complete 15 daily orders as a family", "Type": "Orders", "Target": 15, "Medals": 100, "Tickets": 2, "FamilyExp": 500, "FamilyPoints": 100 },
+		{ "ID": 10, "Text": "Earn 3,000 Family EXP this week", "Type": "FamilyExp", "Target": 3000, "Medals": 150, "Tickets": 3, "FamilyPoints": 150,
+			"Items": [ { "ItemID": 396, "Count": 1, "Days": 0 } ] }
+	]
+}

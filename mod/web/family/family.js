@@ -21,6 +21,11 @@
     rules: { expMatch: 20, expWin: 15, expKill: 1, expMaxKills: 60, pointsMatch: 5, pointsWin: 5, killsPerPoint: 5 },
     members: [{ name: "test1", grade: 0, online: true }, { name: "Omen", grade: 2, online: false }],
     chronicle: [{ date: 20261119, text: "Complete the Trap" }, { date: 20261120, text: "Family Level 3" }],
+    weekEnds: 20261123,
+    weekly: [
+      { id: 1, text: "Play 40 matches as a family", target: 40, progress: 40, done: true, claimed: false, medals: 60, tickets: 2, familyExp: 400, familyPoints: 80, items: [] },
+      { id: 3, text: "Get 800 kills as a family", target: 800, progress: 312, done: false, claimed: false, medals: 100, tickets: 0, familyExp: 600, familyPoints: 120, items: [] },
+      { id: 10, text: "Earn 3,000 Family EXP this week", target: 3000, progress: 3000, done: true, claimed: true, medals: 150, tickets: 3, familyExp: 0, familyPoints: 150, items: [{ id: 396, name: "Code A Decoder", count: 1, days: 0 }] }],
     achievements: [
       { id: 26, key: "cso_zbs_trap", name: "Complete the Trap", text: "Clear the mission with your family\n(every real player in the match from the family)", category: 3, parent: 30, target: 1, progress: 1, done: 20261119, score: 10, medals: 30, buff: 0, items: [{ id: 624, name: "Mid-Level Power Amplifier", count: 1, days: 30 }], children: false },
       { id: 30, key: "cso_zbs_season1", name: "Complete Zombie Scen. S1", text: "", category: 3, parent: 0, target: 6, progress: 1, done: 0, score: 70, medals: 210, buff: 0, items: [{ id: 173, name: "Advanced Decoder", count: 3, days: 0 }], children: true },
@@ -122,6 +127,71 @@
     return parts.join(", ");
   }
 
+  function renderWeekly() {
+    $("weekends").textContent = data.weekEnds ? "New missions on " + date(data.weekEnds) : "";
+    const list = $("weeklist");
+    list.innerHTML = "";
+    (data.weekly || []).forEach(m => {
+      const card = el("div", "week" + (m.done ? " done" : "") + (m.claimed ? " claimed" : ""));
+      const top = el("div", "ach-top");
+      top.appendChild(el("span", "ach-name", m.text));
+      card.appendChild(top);
+      const bar = el("div", "ach-bar");
+      const fill = el("div", "ach-fill");
+      fill.style.width = Math.min(100, 100 * m.progress / m.target) + "%";
+      bar.appendChild(fill);
+      card.appendChild(bar);
+      const parts = [fmt(m.medals) + " medals"];
+      if (m.tickets) parts.push(m.tickets + " Bingo Ticket" + (m.tickets === 1 ? "" : "s"));
+      m.items.forEach(i => parts.push(i.name + (i.count > 1 ? " x" + i.count : "") + (i.days ? " (" + i.days + " days)" : "")));
+      const rw = el("div", "ach-reward");
+      rw.appendChild(el("span", "", "You get: "));
+      rw.appendChild(document.createTextNode(parts.join(", ")));
+      card.appendChild(rw);
+      if (m.familyExp || m.familyPoints) {
+        const fam = el("div", "ach-reward");
+        fam.appendChild(el("span", "", "The family gets: "));
+        fam.appendChild(document.createTextNode([m.familyExp ? fmt(m.familyExp) + " Family EXP" : "", m.familyPoints ? fmt(m.familyPoints) + " Family Points" : ""].filter(Boolean).join(", ")));
+        card.appendChild(fam);
+      }
+      const foot = el("div", "week-foot");
+      foot.appendChild(el("span", "ach-prog", fmt(m.progress) + " / " + fmt(m.target)));
+      if (m.claimed) foot.appendChild(el("span", "week-state", "Claimed"));
+      else if (m.done) {
+        const b = el("button", "cta", "Claim");
+        b.type = "button";
+        b.addEventListener("click", () => claim(m.id, b));
+        foot.appendChild(b);
+      } else foot.appendChild(el("span", "week-state", "In progress"));
+      card.appendChild(foot);
+      list.appendChild(card);
+    });
+  }
+
+  async function claim(id, button) {
+    button.disabled = true;
+    try {
+      let fresh;
+      if (PREVIEW) {
+        mock.weekly.forEach(m => { if (m.id === id) m.claimed = true; });
+        fresh = Object.assign(JSON.parse(JSON.stringify(mock)), { claimed: true });
+      } else {
+        const res = await fetch("/api/family", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "claim", id }) });
+        fresh = await res.json();
+      }
+      if (fresh.error) toast(fresh.error, true);
+      else toast(fresh.decoder ? "Reward claimed, and a " + fresh.decoder + "!" : "Reward claimed!");
+      if (fresh.inFamily) {
+        data = fresh;
+        renderHead();
+        renderWeekly();
+      }
+    } catch (e) {
+      toast("The server didn't answer.", true);
+      button.disabled = false;
+    }
+  }
+
   function renderAchievements() {
     const list = $("achlist");
     list.innerHTML = "";
@@ -175,6 +245,7 @@
     }
     renderHead();
     renderMembers();
+    renderWeekly();
     renderTabs();
     renderAchievements();
   }

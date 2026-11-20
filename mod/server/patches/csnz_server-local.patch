@@ -1865,14 +1865,16 @@ index e4e7c83..30aa227 100644
 \ No newline at end of file
 diff --git a/src/manager/familymanager.cpp b/src/manager/familymanager.cpp
 new file mode 100644
-index 0000000..30fbf5a
+index 0000000..4c28403
 --- /dev/null
 +++ b/src/manager/familymanager.cpp
-@@ -0,0 +1,558 @@
+@@ -0,0 +1,734 @@
 +// Offline build: Family EXP, level, points and the game's Family Achievements (see familymanager.h).
 +#include "familymanager.h"
 +#include "itemmanager.h"
 +#include "warbondmanager.h"
++#include "bingomanager.h"
++#include "missionmanager.h"
 +#include "packetmanager.h"
 +#include "userdatabase.h"
 +#include "common/logger.h"
@@ -1922,7 +1924,21 @@ index 0000000..30fbf5a
 +		map<int, long long> progress;
 +		map<int, int> done; // achievement -> date (yyyymmdd)
 +		vector<ClanChronicle> chronicle;
++		int week = 0;                     // the Monday (yyyymmdd) the weekly missions below are of
++		map<int, long long> weekly;       // weekly mission -> progress
++		map<int, set<int>> claimed;       // weekly mission -> the members who claimed it
 +	};
++
++	// weekly family missions (Data/FamilyMissions.json)
++	struct WeeklyMission
++	{
++		int id = 0, target = 1, medals = 0, tickets = 0, exp = 0, points = 0;
++		string text, type;
++		vector<int> modes;
++		vector<RewardItem> items;
++	};
++	static vector<WeeklyMission> g_missions;
++	static double g_missionDecoderChance = 6; // % of claims that also give a decoder (FamilyMissions.json DecoderChance)
 +
 +	static mutex g_lock;
 +	static vector<Achievement> g_achievements;
@@ -1960,6 +1976,14 @@ index 0000000..30fbf5a
 +			c["Progress"] = p;
 +			c["Done"] = d;
 +			c["Chronicle"] = ch;
++			json w = json::object(), cl = json::object();
++			for (auto& x : kv.second.weekly)
++				w[to_string(x.first)] = x.second;
++			for (auto& x : kv.second.claimed)
++				cl[to_string(x.first)] = vector<int>(x.second.begin(), x.second.end());
++			c["Week"] = kv.second.week;
++			c["Weekly"] = w;
++			c["Claimed"] = cl;
 +			out[to_string(kv.first)] = c;
 +		}
 +		ofstream f(STATE_FILE);
@@ -2040,10 +2064,88 @@ index 0000000..30fbf5a
 +					c.done[atoi(x.key().c_str())] = x.value().get<int>();
 +				for (auto& x : kv.value().value("Chronicle", json::array()))
 +					c.chronicle.push_back({ x.value("Date", 0), x.value("Type", 2), x.value("Text", string()) });
++				c.week = kv.value().value("Week", 0);
++				json weekly = kv.value().value("Weekly", json::object()), claimed = kv.value().value("Claimed", json::object());
++				for (auto& x : weekly.items())
++					c.weekly[atoi(x.key().c_str())] = x.value().get<long long>();
++				for (auto& x : claimed.items())
++					for (int id : x.value().get<vector<int>>())
++						c.claimed[atoi(x.key().c_str())].insert(id);
 +				g_state[atoi(kv.key().c_str())] = c;
 +			}
-+		Logger().Info("Family: %d achievements, %d levels, %d families with progress\n", (int)g_achievements.size(),
-+			(int)g_levels.size(), (int)g_state.size());
++		g_missions.clear();
++		ifstream mf("Data/FamilyMissions.json");
++		json md = json::parse(mf, nullptr, false, true);
++		if (md.is_object())
++			g_missionDecoderChance = md.value("DecoderChance", 6.0);
++		if (md.is_object())
++			for (auto& m : md.value("Missions", json::array()))
++			{
++				WeeklyMission w;
++				w.id = m.value("ID", 0), w.target = max(1, m.value("Target", 1)), w.medals = m.value("Medals", 0);
++				w.tickets = m.value("Tickets", 0), w.exp = m.value("FamilyExp", 0), w.points = m.value("FamilyPoints", 0);
++				w.text = m.value("Text", string()), w.type = m.value("Type", string());
++				w.modes = m.value("GameModes", vector<int>());
++				for (auto& it : m.value("Items", json::array()))
++				{
++					RewardItem r = {};
++					r.itemID = it.value("ItemID", 0), r.count = it.value("Count", 1), r.duration = it.value("Days", 0);
++					if (r.itemID)
++						w.items.push_back(r);
++				}
++				if (w.id)
++					g_missions.push_back(w);
++			}
++		Logger().Info("Family: %d achievements, %d weekly missions, %d levels, %d families with progress\n", (int)g_achievements.size(),
++			(int)g_missions.size(), (int)g_levels.size(), (int)g_state.size());
++	}
++
++	// the Monday of this week and of the next one (yyyymmdd): the weekly missions start again on Mondays
++	static int Monday(int weeksAhead = 0)
++	{
++		time_t now = time(NULL);
++		tm local = *localtime(&now);
++		int back = (local.tm_wday + 6) % 7; // days since Monday
++		local.tm_mday += 7 * weeksAhead - back;
++		local.tm_hour = 12;
++		mktime(&local);
++		return (local.tm_year + 1900) * 10000 + (local.tm_mon + 1) * 100 + local.tm_mday;
++	}
++
++	static void CheckWeek(ClanState& c)
++	{
++		int week = Monday();
++		if (c.week == week)
++			return;
++		c.week = week;
++		c.weekly.clear();
++		c.claimed.clear();
++	}
++
++	static void Notify(int clanID, const string& text);
++
++	// one match's (or order's) worth of the family's weekly missions; `best` keeps the highest instead of adding
++	static void AdvanceWeekly(int clanID, ClanState& c, const string& type, int mode, long long amount, bool best = false)
++	{
++		if (amount <= 0)
++			return;
++		CheckWeek(c);
++		for (auto& m : g_missions)
++		{
++			if (m.type != type || (!m.modes.empty() && find(m.modes.begin(), m.modes.end(), mode) == m.modes.end()))
++				continue;
++			long long& v = c.weekly[m.id];
++			if (v >= m.target)
++				continue;
++			v = min<long long>(m.target, best ? max(v, amount) : v + amount);
++			if (v < m.target)
++				continue;
++			c.exp += m.exp;
++			c.points += m.points;
++			Notify(clanID, va("[Family] Weekly mission \"%s\" done! +%d Family EXP, +%d Family Points. Every member can claim "
++				"its reward on the family page (Family > View Benefits).", m.text.c_str(), m.exp, m.points));
++			Logger().Info("Family: clan %d did weekly mission %d\n", clanID, m.id);
++		}
 +	}
 +
 +	static int Level(long long exp, long long* into = nullptr, long long* need = nullptr)
@@ -2233,6 +2335,22 @@ index 0000000..30fbf5a
 +			c.exp += exp;
 +			c.points += points;
 +
++			// the weekly missions: every member's match counts
++			{
++				long long wins = 0, kills = 0, best = 0;
++				for (auto* p : members)
++				{
++					wins += p->won;
++					kills += p->stat->m_nKills;
++					best = max<long long>(best, p->stat->m_nKills);
++				}
++				AdvanceWeekly(clanID, c, "Matches", mode, (long long)members.size());
++				AdvanceWeekly(clanID, c, "Wins", mode, wins);
++				AdvanceWeekly(clanID, c, "Kills", mode, kills);
++				AdvanceWeekly(clanID, c, "BestKills", mode, best, true);
++				AdvanceWeekly(clanID, c, "FamilyExp", mode, exp);
++			}
++
 +			for (auto& a : g_achievements)
 +			{
 +				const Condition& k = a.cond;
@@ -2307,6 +2425,8 @@ index 0000000..30fbf5a
 +		for (auto& a : g_achievements)
 +			if (a.cond.type == "orders" && a.cond.period == period)
 +				Advance(clanID, c, a, 1, { user });
++		if (period == "Daily")
++			AdvanceWeekly(clanID, c, "Orders", -1, 1);
 +		Save();
 +	}
 +
@@ -2416,23 +2536,79 @@ index 0000000..30fbf5a
 +		json chronicle = json::array();
 +		for (auto& ch : c.chronicle)
 +			chronicle.push_back({ { "date", ch.date }, { "text", ch.str } });
++		if (c.week != Monday())
++			c.weekly.clear(), c.claimed.clear(); // (a copy: last week's progress isn't this week's)
++		json weekly = json::array();
++		for (auto& m : g_missions)
++		{
++			json items = json::array();
++			for (auto& it : m.items)
++				items.push_back({ { "id", it.itemID }, { "name", g_WarbondManager.ItemName(it.itemID) }, { "count", it.count }, { "days", it.duration } });
++			long long v = c.weekly.count(m.id) ? c.weekly[m.id] : 0;
++			bool claimed = c.claimed.count(m.id) && c.claimed[m.id].count(user->GetID());
++			weekly.push_back({ { "id", m.id }, { "text", m.text }, { "target", m.target }, { "progress", v }, { "done", v >= m.target },
++				{ "claimed", claimed }, { "medals", m.medals }, { "tickets", m.tickets }, { "familyExp", m.exp },
++				{ "familyPoints", m.points }, { "items", items } });
++		}
 +		return {
 +			{ "inFamily", true }, { "name", clan.name }, { "master", clan.clanMaster }, { "notice", clan.noticeMsg },
 +			{ "level", level }, { "maxLevel", (int)g_levels.size() + 1 }, { "expInto", into }, { "expNeed", need },
 +			{ "exp", c.exp }, { "points", c.points }, { "bonus", Buff(c) }, { "baseExpBonus", clan.expBoost },
 +			{ "basePointBonus", clan.pointBoost }, { "levelMedals", g_levelMedals * (level + 1) },
 +			{ "score", score }, { "done", done }, { "members", members }, { "achievements", list }, { "chronicle", chronicle },
++			{ "weekly", weekly }, { "weekEnds", Monday(1) },
 +			{ "rules", { { "expMatch", g_expMatch }, { "expWin", g_expWin }, { "expKill", g_expKill }, { "expMaxKills", g_expMaxKills },
 +				{ "pointsMatch", g_pointsMatch }, { "pointsWin", g_pointsWin }, { "killsPerPoint", g_killsPerPoint } } }
 +		};
 +	}
++
++	// a member claims a weekly mission's reward (POST /api/family {"action": "claim", "id": n}): "" or why not
++	string Claim(IUser* user, int id)
++	{
++		int clanID = ClanOf(user);
++		if (clanID <= 0)
++			return "You aren't in a family.";
++		WeeklyMission mission;
++		{
++			lock_guard<mutex> lock(g_lock);
++			auto m = find_if(g_missions.begin(), g_missions.end(), [id](const WeeklyMission& x) { return x.id == id; });
++			if (m == g_missions.end())
++				return "There's no such mission.";
++			ClanState& c = g_state[clanID];
++			CheckWeek(c);
++			if ((c.weekly.count(id) ? c.weekly[id] : 0) < m->target)
++				return "Your family hasn't done this mission yet.";
++			if (!c.claimed[id].insert(user->GetID()).second)
++				return "You already claimed this reward this week.";
++			mission = *m;
++			Save();
++		}
++		if (mission.medals)
++			user->UpdatePoints(mission.medals);
++		for (auto& it : mission.items)
++			g_ItemManager.AddItem(user->GetID(), user, it.itemID, it.count, it.duration);
++		if (mission.tickets)
++			g_BingoManager.GiveTickets(user, mission.tickets, NULL);
++		// now and then a decoder too, like the orders (Data/DailyDecoders.json's list)
++		string decoder = g_MissionManager.RandomDecoder(user, g_missionDecoderChance, "weekly family mission");
++		string what = va("+%d medals", mission.medals);
++		if (mission.tickets)
++			what += va(", +%d Bingo Ticket%s", mission.tickets, mission.tickets == 1 ? "" : "s");
++		if (!mission.items.empty())
++			what += ", the mission's items";
++		if (!decoder.empty())
++			what += ", and a " + decoder + " (Inventory > Decoder)";
++		g_PacketManager.SendUMsgNoticeMessageInChat(user->GetExtendedSocket(), va("[Family] Weekly mission \"%s\": %s.", mission.text.c_str(), what.c_str()));
++		Logger().Info("Family: user %d claimed weekly mission %d of clan %d\n", user->GetID(), id, clanID);
++		return decoder.empty() ? "" : "+" + decoder;
++	}
 +}
 diff --git a/src/manager/familymanager.h b/src/manager/familymanager.h
 new file mode 100644
-index 0000000..7464d91
+index 0000000..66a1504
 --- /dev/null
 +++ b/src/manager/familymanager.h
-@@ -0,0 +1,45 @@
+@@ -0,0 +1,47 @@
 +#pragma once
 +
 +// Offline build: what a family (clan) gains by playing - Family EXP and level (the game's resource/ClanLevel.csv), Family
@@ -2477,6 +2653,8 @@ index 0000000..7464d91
 +	std::string Summary(int clanID);
 +	// GET /api/family: the family page (web/family; the family window's "View Benefits" button opens it)
 +	nlohmann::json Api(IUser* user);
++	// a member claims a weekly family mission's reward (POST /api/family): "" or why not ("+<name>": done, with a decoder)
++	std::string Claim(IUser* user, int id);
 +}
 diff --git a/src/manager/guestprofile.cpp b/src/manager/guestprofile.cpp
 new file mode 100644
@@ -4396,10 +4574,10 @@ index 0000000..1a0e4c5
 +bool IsZombieModeOffline(int mode);
 diff --git a/src/manager/missionmanager.cpp b/src/manager/missionmanager.cpp
 new file mode 100644
-index 0000000..5670ac6
+index 0000000..b827ff2
 --- /dev/null
 +++ b/src/manager/missionmanager.cpp
-@@ -0,0 +1,511 @@
+@@ -0,0 +1,515 @@
 +#include "missionmanager.h"
 +#include "medalmanager.h"
 +#include "warbondmanager.h"
@@ -4627,6 +4805,11 @@ index 0000000..5670ac6
 +string CMissionManager::DailyDecoder(IUser* user, bool request, bool weekly)
 +{
 +	double chance = request ? m_RequestDecoderChance : weekly ? m_WeeklyDecoderChance : m_DailyDecoderChance;
++	return RandomDecoder(user, chance, request ? "mission request" : weekly ? "weekly order" : "daily order");
++}
++
++string CMissionManager::RandomDecoder(IUser* user, double chance, const char* from)
++{
 +	if (!user || m_DailyDecoders.empty() || chance <= 0)
 +		return "";
 +	static mt19937 rng(random_device{}());
@@ -4645,8 +4828,7 @@ index 0000000..5670ac6
 +		}
 +		if (g_ItemManager.AddItem(user->GetID(), user, d.itemID, 1, 0) != ITEM_ADD_SUCCESS)
 +			return "";
-+		Logger().Info("MissionManager: %s gets a %s (item %d) from a %s\n", user->GetUsername().c_str(), d.name.c_str(), d.itemID,
-+			request ? "mission request" : weekly ? "weekly order" : "daily order");
++		Logger().Info("MissionManager: %s gets a %s (item %d) from a %s\n", user->GetUsername().c_str(), d.name.c_str(), d.itemID, from);
 +		return d.name;
 +	}
 +	return "";
@@ -4913,10 +5095,10 @@ index 0000000..5670ac6
 +}
 diff --git a/src/manager/missionmanager.h b/src/manager/missionmanager.h
 new file mode 100644
-index 0000000..2654b08
+index 0000000..31377e4
 --- /dev/null
 +++ b/src/manager/missionmanager.h
-@@ -0,0 +1,150 @@
+@@ -0,0 +1,152 @@
 +#pragma once
 +
 +#include <string>
@@ -5022,6 +5204,8 @@ index 0000000..2654b08
 +	// for a weekly order, RequestChance % for a mission request, then one drawn by Weight. Returns its name for the chat
 +	// message ("" when none came)
 +	std::string DailyDecoder(IUser* user, bool request = false, bool weekly = false);
++	// a decoder of that list with `chance` % (the weekly family missions' DecoderChance); its name or ""
++	std::string RandomDecoder(IUser* user, double chance, const char* from);
 +
 +private:
 +	bool LoadConfig();
@@ -9936,10 +10120,10 @@ index c7d2bdb..75d0ee9 100644
 +extern CVoxelManager g_VoxelManager;
 diff --git a/src/manager/warbondmanager.cpp b/src/manager/warbondmanager.cpp
 new file mode 100644
-index 0000000..b339da2
+index 0000000..d0f3e25
 --- /dev/null
 +++ b/src/manager/warbondmanager.cpp
-@@ -0,0 +1,1147 @@
+@@ -0,0 +1,1162 @@
 +#include "channelmanager.h"
 +#include "guestprofile.h"
 +#include "transfer.h"
@@ -10239,10 +10423,25 @@ index 0000000..b339da2
 +		// the Studio maps page (web/maps): the player's maps and their share codes, the maps other players publish
 +		result = g_VoxelManager.MapsApi(user, req.method, req.query, req.body, resp.status);
 +	}
-+	else if (req.method == "GET" && req.path == "/api/family")
++	else if (req.path == "/api/family")
 +	{
-+		// the family page (web/family): level, EXP, points, bonuses, achievements, chronicle (manager/familymanager.cpp)
++		// the family page (web/family): level, EXP, points, bonuses, weekly missions (POST {"action": "claim", "id"}),
++		// achievements, chronicle (manager/familymanager.cpp)
++		string error;
++		if (req.method == "POST")
++		{
++			json body = json::parse(req.body, nullptr, false);
++			error = body.is_object() && body.value("action", string()) == "claim" ? Family::Claim(user, body.value("id", 0)) : "Invalid request.";
++		}
 +		result = Family::Api(user);
++		if (req.method == "POST")
++		{
++			// (Claim's "+<decoder>": done, and a decoder came with the reward)
++			bool decoder = !error.empty() && error[0] == '+';
++			if (decoder)
++				result["decoder"] = error.substr(1);
++			result[error.empty() || decoder ? "claimed" : "error"] = error.empty() || decoder ? json(true) : json(error);
++		}
 +	}
 +	else if (req.method == "GET" && req.path == "/api/profile")
 +	{
