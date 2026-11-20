@@ -5012,11 +5012,15 @@ static void InstallZtHooks(DWORD delta); // modes/zombie_tag.inl: what each play
 #include "model_aliases.inl"
 #include "knife_fixes.inl"
 #include "gun_fixes.inl"
+#include "grenade_fixes.inl"
 
 static void HookBotManager(DWORD delta)
 {
     FixDivineTitanEx(delta);
     FixArcanaII(delta);
+    FixSciFiGuns();
+    FixGrenades();
+    FixPrismSwordAnims(delta);
     GuardZbSkillThinks(delta);
     FixCrossbowCls(delta);
     HsTargetBots(delta);
@@ -5685,6 +5689,7 @@ static void HookedStartFrame()
         ZgFrame();
         WbFrame();
         KnifeFixFrame();
+        GrenadeFixFrame();
         if (CoopMode())
         {
             UpdateBarricades(); // zombies against barricades, bots or not

@@ -1,0 +1,10 @@
+{
+ "_why": "Fixed medal prices that balance_prices.py and gen_x_passes.py keep as they are. 2026-11-20, the user: these weapons are far too strong, raise their price a lot.",
+ "9637": 9000,
+ "8709": 9000,
+ "9098": 9000,
+ "8787": 9000,
+ "9384": 5000,
+ "8820": 4000,
+ "8094": 4000
+}

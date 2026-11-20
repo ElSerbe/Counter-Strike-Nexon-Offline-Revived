@@ -455,6 +455,26 @@ nobody: its fire function (0x10c208f0) has no `FireBullets3` call (0x113fc970), 
 detours it and fires the bullet the AK-47's way (gun position = player vfunc 0x210, `gpGlobals->v_forward`, 8192 units,
 penetration 2, 7.62) with damage 32 / 35 (ex, 4) / 38 (adv, 6). Its burst discharge mode still does no damage.
 
+The same gap in two more guns, fixed the same way (2026-11-20, untested):
+- **Gravity Repulsor** (`weapon_leapstrikegun`, sold as such; the shop had called it "Leap Strike Gun"): PrimaryAttack
+  0x10e660c0 only takes a round, animates and kicks (vfunc 0x2f4 is KickBack, not a shot). Each shot: a .50 bullet and
+  a small blast where it lands.
+- **Giga Break** (`weapon_beamgun`, the shop's old "Beam Gun"): its shot 0x10bab520 has no bullet, and the right click
+  (0x10ba0ff0, anims 2/3, 0xb charged) and the charged left click (anims 9/10) only animate. Now: bullets; right click
+  and charged shots blast where you aim.
+Bullets and blasts use the game's numbers per mode (iteminfo.json: Gravity Repulsor 16 / 176 zombie / 430 scenario,
+Giga Break 32 / 680 / 2400); a blast is TE_EXPLOSION + RadiusDamage 0x114040c0, the shooter not hurt by his own.
+
+## Grenades: Ignite Bomb, Junk Grenade drums (grenade_fixes.inl)
+
+The grenade weapon (CHEGrenade) throws through 0x11050670 (cdecl, a switch on the grenade type, +0x220): type 0x15,
+the **Ignite Bomb** (8886), returns without throwing (its code was server-only), so it's thrown as a Flame Grenade
+(type 3). The **Junk Grenade** (vxlgrenade, type 0xd; detonation CGrenade::DetonateVxlGrenade 0x11482ee0) now leaves up
+to 5 of the game's explosive drums around its blast (`func_barrelbomb`, CBarrelBomb vtable 0x119705dc, models
+zm_shoreline/drum_01/02): a shot sets one off (credited to the shooter, chain reactions), the rest go off by
+themselves after 3-5 s (credited to the thrower); 25% are the big drum (double damage). Their models are precached
+after CHEGrenade::Precache (0x110504f0) on every map load; no drums on a map loaded before botassist hooked mp.dll.
+
 ## GameUI: bad pictures don't crash the game (gameui_guards.inl)
 A Zombie Hero Classic match crashed at its end (crash dump, 2026-11-19): a list of the results window (layout 0x10737c20)
 gave an image panel a picture pointer that was text ("anel"), and the panel's SetImage (0x10711d70) called through it.
@@ -1300,6 +1320,12 @@ helpers of the Miracle Prism Sword (magicknife, 70), its Zombie Files version (1
 Runeblade are empty shells in this client (Deploy = the do-nothing 0x106581d0): the weapon was invisible and never hit.
 botassist registers for index 70 a copy of the Frostblade's helper whose data (+0x18, the knife index) says 70, so the
 sword keeps its own models; the Y25S2 SF Sword's helper is the fallback (works, looks like the Beam Sword Universe).
+
+The Frostblade's helper sends the Frostblade's animation numbers, other moves on v_magicknife.mdl (no recovery after a
+slash, a wrong charge). botassist detours SendWeaponAnim (0x1152d030) and, for a player whose view model is
+v_magicknife.mdl, translates them: draw 2 -> 6; slash 1 -> slash_1..4 in turn, then slash_end (5) half a second later
+if nothing else was played; charge 9/3/5/4/6 -> charge_start, charge_idle1, charge_finish, charge_idle2; releases 7/8
+-> charge_attack1/2 (untested).
 
 ## Family Achievements' targets (model_aliases.inl file overrides)
 

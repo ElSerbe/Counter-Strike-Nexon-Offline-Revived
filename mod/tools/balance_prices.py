@@ -26,6 +26,14 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WARBONDS = os.path.join(ROOT, "server", "CSNZ_Server", "bin", "Data", "Warbonds.json")
 INFO = os.path.join(ROOT, "web", "shop", "iteminfo.json")
 BASE = os.path.join(ROOT, "tools", "data", "warbond_base_prices.json")
+# prices set by hand (the user's), kept as they are: tools/data/price_overrides.json
+OVERRIDES = os.path.join(ROOT, "tools", "data", "price_overrides.json")
+
+
+def price_overrides():
+    if not os.path.exists(OVERRIDES):
+        return {}
+    return {int(k): int(v) for k, v in json.load(open(OVERRIDES, encoding="utf-8")).items() if k.isdigit()}
 
 TIERS = [(15, 2.5, 450), (12, 2.0, 300), (10, 1.6, 200), (8, 1.25, 100)]
 CAP = 900
@@ -59,13 +67,14 @@ def main():
             os.makedirs(os.path.dirname(BASE), exist_ok=True)
             json.dump({str(k): v for k, v in sorted(base.items())}, open(BASE, "w", encoding="utf-8"), indent=1)
     changes = []
+    fixed = price_overrides()
 
     def repl(m):
         item, cost, rest = int(m.group(2)), int(m.group(3)), m.group(4)
         entry = info.get(str(item), {})
-        if "Repeatable" in rest or entry.get("kind") != "weapon" or item not in base:
+        if "Repeatable" in rest or ((entry.get("kind") != "weapon" or item not in base) and item not in fixed):
             return m.group(0)
-        price = new_price(base[item], entry.get("grades") or [0, 0, 0])
+        price = fixed.get(item) or new_price(base[item], entry.get("grades") or [0, 0, 0])
         if price != cost:
             changes.append((item, cost, price, entry.get("grades")))
         return m.group(1) + str(price) + rest

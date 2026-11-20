@@ -30,21 +30,22 @@ SPACE_EXTRA = {8113: 165, 8078: 265, 8395: 165, 8396: 265}
 SPACE = {"beamgun", "halogun", "halogunex", "lasersg", "voidpistolex", "wondercannonex", "sgdrillvortex",
          "transformgunadv", "leapstrikegun", "y21s1jetgunma", "y21s1jetgunmd", "sfturret", "sfsnipermb", "sfmgzhc",
          "restrictionpistol"}
-# English names for the weapons the game's texts don't name
+# English names for the weapons the game's texts don't name (the game shows its names in pictures; the user read
+# Giga Break, Gravity Repulsor, Cyclops, Custos, Arbalest, Space Arbalest, Asura Hell Splitter in game, 2026-11-20)
 NAMES = {
-    "dgaxe": "Dread Axe", "dgaxeex": "Dread Axe EX", "y26s1m32": "M32 MGL (2026)", "beamgun": "Beam Gun",
+    "dgaxe": "Dread Axe", "dgaxeex": "Dread Axe EX", "y26s1m32": "M32 MGL (2026)", "beamgun": "Giga Break",
     "transformgunadv": "Transform Gun ADV", "speargunex": "Spear Gun EX", "deserteagleg": "Desert Eagle Gold",
-    "bisonfox": "Bizon Fox", "sgdrillvortex": "Drill Vortex", "asusas12": "USAS-12 AS", "wondercannonex": "Heaven Splitter EX",
-    "halogunex": "Halo Gun EX", "winggunex": "Wing Gun EX", "shiftexpar": "Shift EX", "huntbow": "Hunter's Bow",
+    "bisonfox": "Bizon Fox", "sgdrillvortex": "Vortex Drill", "asusas12": "USAS-12 AS", "wondercannonex": "Asura Hell Splitter",
+    "halogunex": "Space Arbalest", "winggunex": "Wing Gun EX", "shiftexpar": "Shift EX", "huntbow": "Hunter's Bow",
     "soulreaper": "Soul Reaper", "chainmg": "Chain MG", "mgsm": "MG-SM", "m3dragonex": "M3 Dragon EX",
-    "forgesword": "Forge Sword", "chainsr": "Chain Sniper", "halogun": "Halo Gun", "winggun": "Wing Gun",
+    "forgesword": "Forge Sword", "chainsr": "Chain Sniper", "halogun": "Arbalest", "winggun": "Wing Gun",
     "lasersg": "Laser Shotgun", "pianogunex": "Piano Gun EX", "divinespear": "Divine Spear", "revivegun": "Revive Gun",
     "buffsg552ex": "SG552 Buff EX", "swordbombard": "Bombard Sword", "crossbowex21": "Crossbow EX21",
     "rocketpistol": "Rocket Pistol", "gilboaexw": "Gilboa EX W", "bufffiveseven": "Five-seveN Buff",
-    "leapstrikegun": "Leap Strike Gun", "m1887craftb": "M1887 Craft B", "restrictionpistol": "Restriction Pistol",
+    "leapstrikegun": "Gravity Repulsor", "m1887craftb": "M1887 Craft B", "restrictionpistol": "Cyclops",
     "voidpistolex": "Void Avenger EX", "y21s1jetgunmd": "Jet Gun MD", "dvhammer": "Divine Hammer",
     "infinityex2zhc": "Infinity EX2 (Hero)", "whipflail": "Whip Flail", "summonknifeex": "Summon Knife EX",
-    "divinetitanex": "Divine Titan EX", "sfturret": "SF Turret", "divinetitan": "Divine Titan", "sbmine": "SB Mine",
+    "divinetitanex": "Divine Titan EX", "sfturret": "Custos", "divinetitan": "Divine Titan", "sbmine": "SB Mine",
     "boww": "Bow W", "m134w": "M134 W", "qbs09b": "QBS-09 B", "destroyerb": "Destroyer B", "pp2000b": "PP-2000 B",
     "sfsnipermb": "SF Sniper MB", "dualkrissb": "Dual Kriss B", "mg36b": "MG36 B", "hdaggerb": "Hunting Dagger B",
     "wa2000desert": "WA2000 Desert", "pgmb": "PGM B", "bisonb": "Bizon B", "crossbowcls": "Classic Crossbow",
@@ -84,6 +85,7 @@ def main():
         if r and r[3] in ("Equipment", "PeriodicItem"):
             by_type.setdefault(r[4], []).append(price)
     median = {t: statistics.median(v) for t, v in by_type.items()}
+    fixed = balance_prices.price_overrides()
 
     def price(item):
         r = rows[item]
@@ -92,6 +94,8 @@ def main():
         except ValueError:
             grades = [0, 0, 0]
         normal = balance_prices.new_price(median.get(r[4], 90), grades)
+        if item in fixed:  # set by hand (tools/data/price_overrides.json)
+            return fixed[item], normal
         return balance_prices.round5(normal * FACTOR), normal
 
     x, space = [], []

@@ -106,8 +106,10 @@ static void FixShellKnives(DWORD delta)
 
 // every frame (the frame hook): until the clone is in, tried again every few seconds (the Frostblade's data object is
 // made the first time the game asks for it)
+static void PrismSwordFrame();
 static void KnifeFixFrame()
 {
+    PrismSwordFrame();
     if (g_knifeFix != 1)
         return;
     float now = Now();
@@ -115,4 +117,130 @@ static void KnifeFixFrame()
         return;
     g_knifeFixNext = now + 3.0f;
     FixShellKnives(g_mpDelta);
+}
+
+// ---------------------------------------------------------------- the Miracle Prism Sword's animations
+// With the Frostblade's helper the server sends the Frostblade's animation numbers (CBasePlayerWeapon::SendWeaponAnim
+// 0x1152d030, thiscall weapon, anim, skiplocal: pev weaponanim +0x248 and SVC_WEAPONANIM), and on v_magicknife.mdl
+// they're other moves (the user, 2026-11-20: no recovery after a slash, the right click didn't look like the Prism
+// Sword). Frostblade (helper 0x11864abc): 0 idle, 1 slash (one swing every 2.03 s), 2 draw; right click held: 9 start,
+// 3, 5, 4, 6 the charge steps; released: 7 the charged swing, 8 the full charge's (state 5). v_magicknife.mdl (30 fps):
+// 0 idle, 1-4 slash_1..4 (0.53 s), 5 slash_end (0.87 s), 6 draw, 7 charge_start, 8 charge_finish, 9 charge_idle1,
+// 10 charge_idle2, 11 charge_attack1, 12 charge_attack2, 13 stab. botassist detours SendWeaponAnim: for a player whose
+// view model is v_magicknife.mdl the number is translated; the slashes take turns (1..4) and slash_end follows each
+// half a second later, unless something else was played meanwhile.
+static const DWORD MP_SEND_WEAPON_ANIM = 0x1152d030;
+static const int PL_ACTIVE_ITEM = 0x1024, EV_VIEWMODEL = 0xcc, EV_WEAPONANIM = 0x248, WPN_PLAYER_OFS = 0xd0;
+static const int MK_SLASH_END = 5, MK_DRAW = 6;
+typedef void(__fastcall* SendWeaponAnimFn)(void* weapon, void* edx, int anim, int skiplocal);
+static SendWeaponAnimFn g_sendWeaponAnim;
+
+struct PrismSwing
+{
+    void* weapon = nullptr;
+    int anim = -1;          // the slash sent
+    float endAt = 0, lastSlash = -100;
+    int combo = 0;
+};
+static PrismSwing g_prism[33];
+
+static int PrismPlayerIndex(unsigned char* player)
+{
+    unsigned char* pev = player ? *(unsigned char**)(player + 8) : nullptr;
+    if (!pev || !g_IndexOfEdict)
+        return -1;
+    int i = g_IndexOfEdict(*(void**)(pev + EV_CONTAINING_ENTITY));
+    return i >= 1 && i <= 32 ? i : -1;
+}
+
+static bool HoldsPrismSword(unsigned char* player)
+{
+    unsigned char* pev = player && Readable(player + 8, 4) ? *(unsigned char**)(player + 8) : nullptr;
+    if (!pev || !Readable(pev + EV_VIEWMODEL, 4))
+        return false;
+    const char* vm = String(*(int*)(pev + EV_VIEWMODEL));
+    return vm && strstr(vm, "v_magicknife.mdl") != nullptr;
+}
+
+static int PrismAnim(unsigned char* player, void* weapon, int anim)
+{
+    static const int map[10] = { 0, 1, MK_DRAW, 9, 10, 8, 10, 11, 12, 7 };
+    if (anim < 0 || anim > 9)
+        return anim;
+    int i = PrismPlayerIndex(player);
+    if (anim != 1)
+    {
+        if (i > 0)
+            g_prism[i].weapon = nullptr; // no slash_end after this one
+        return map[anim];
+    }
+    if (i <= 0)
+        return 1;
+    PrismSwing& s = g_prism[i];
+    float now = Now();
+    s.combo = (now - s.lastSlash < 2.6f && now >= s.lastSlash) ? s.combo % 4 + 1 : 1;
+    s.lastSlash = now;
+    s.weapon = weapon;
+    s.anim = s.combo;
+    s.endAt = now + 0.5f;
+    return s.combo;
+}
+
+static void __fastcall HookedSendWeaponAnim(void* weapon, void* edx, int anim, int skiplocal)
+{
+    __try
+    {
+        unsigned char* player = *(unsigned char**)((unsigned char*)weapon + WPN_PLAYER_OFS);
+        if (player && HoldsPrismSword(player))
+            anim = PrismAnim(player, weapon, anim);
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+    }
+    g_sendWeaponAnim(weapon, edx, anim, skiplocal);
+}
+
+// every frame: each slash is followed by slash_end, as long as the sword is still in hand and nothing else was played
+static void PrismSwordFrame()
+{
+    if (!g_sendWeaponAnim)
+        return;
+    float now = Now();
+    for (int i = 1; i <= 32; i++)
+    {
+        PrismSwing& s = g_prism[i];
+        if (!s.weapon)
+            continue;
+        if (now < s.endAt && now > s.endAt - 5.0f)
+            continue;
+        void* weapon = s.weapon;
+        s.weapon = nullptr;
+        __try
+        {
+            unsigned char* player = *(unsigned char**)((unsigned char*)weapon + WPN_PLAYER_OFS);
+            unsigned char* pev = player ? *(unsigned char**)(player + 8) : nullptr;
+            if (!pev || *(void**)(player + PL_ACTIVE_ITEM) != weapon || *(int*)(pev + EV_WEAPONANIM) != s.anim ||
+                !HoldsPrismSword(player))
+                continue;
+            g_sendWeaponAnim(weapon, nullptr, MK_SLASH_END, 0);
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+        }
+    }
+}
+
+static void FixPrismSwordAnims(DWORD delta)
+{
+    unsigned char* fn = (unsigned char*)(MP_SEND_WEAPON_ANIM + delta);
+    const unsigned char code[] = { 0x55, 0x8b, 0xec, 0x83, 0x7d, 0x0c, 0x00 }; // push ebp; mov ebp, esp; cmp [ebp+0xc], 0
+    if (!Readable(fn, sizeof(code)) || fn[0] == 0xe9)
+        return;
+    if (memcmp(fn, code, sizeof(code)))
+    {
+        Log("Prism Sword animations: mp.dll isn't the expected one, left as they are");
+        return;
+    }
+    g_sendWeaponAnim = (SendWeaponAnimFn)DetourCdecl(fn, sizeof(code), (void*)HookedSendWeaponAnim);
+    Log("Prism Sword animations: the Frostblade's moves are played with the Prism Sword's own (4 slashes + recovery, charge)");
 }
