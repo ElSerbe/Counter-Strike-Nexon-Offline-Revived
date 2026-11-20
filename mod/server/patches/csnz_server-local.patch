@@ -6129,10 +6129,10 @@ index 223166a..9b3a5a0 100644
  	user->UpdateTitles(slot, titleID);
 diff --git a/src/manager/roomoptions.cpp b/src/manager/roomoptions.cpp
 new file mode 100644
-index 0000000..868327f
+index 0000000..379e8d2
 --- /dev/null
 +++ b/src/manager/roomoptions.cpp
-@@ -0,0 +1,349 @@
+@@ -0,0 +1,351 @@
 +#include "roomoptions.h"
 +#include "room/room.h"
 +#include "room/roomsettings.h"
@@ -6298,7 +6298,7 @@ index 0000000..868327f
 +
 +	json OptionsJson(const RoomOptions& o)
 +	{
-+		return { { "orderCount", o.orderCount }, { "groups", o.groups }, { "walkers", o.walkers }, { "watchBack", o.watchBack },
++		return { { "orderCount", o.orderCount }, { "obey", o.obey }, { "farChance", o.farChance }, { "groups", o.groups }, { "walkers", o.walkers }, { "watchBack", o.watchBack },
 +			{ "voices", o.voices } };
 +	}
 +	void ReadOptions(RoomOptions& o, const json& j)
@@ -6306,6 +6306,8 @@ index 0000000..868327f
 +		if (!j.is_object())
 +			return;
 +		o.orderCount = max(0, min(31, j.value("orderCount", o.orderCount)));
++		o.obey = max(0, min(100, j.value("obey", o.obey)));
++		o.farChance = max(0, min(100, j.value("farChance", o.farChance)));
 +		o.groups = j.value("groups", o.groups);
 +		o.walkers = j.value("walkers", o.walkers);
 +		o.watchBack = j.value("watchBack", o.watchBack);
@@ -13260,10 +13262,10 @@ index 616959e..6cf4a86 100644
  		g_PacketManager.SendHostStop(m_pServer->GetSocket());
  
 diff --git a/src/room/room.h b/src/room/room.h
-index 13a4ee8..10bc50b 100644
+index 13a4ee8..8112215 100644
 --- a/src/room/room.h
 +++ b/src/room/room.h
-@@ -25,6 +25,50 @@ public:
+@@ -25,6 +25,52 @@ public:
  	bool m_bIsIngame;
  };
  
@@ -13277,6 +13279,8 @@ index 13a4ee8..10bc50b 100644
 +struct RoomOptions
 +{
 +	int orderCount = 0;          // bots that take an order: 0 every one of the team, else the N nearest
++	int obey = 100;              // % chance that each of those bots obeys
++	int farChance = 0;           // % chance that each of the others (beyond the N nearest) obeys anyway
 +	bool groups = true;          // zombie modes: human bots hold several spots in groups (off: all at one)
 +	bool walkers = true;         // zombie modes: a few humans walk the map alone
 +	bool watchBack = true;       // human bots turn to the nearest zombie they see
@@ -13314,7 +13318,7 @@ index 13a4ee8..10bc50b 100644
  class CRoom : public IRoom
  {
  public:
-@@ -103,11 +147,37 @@ public:
+@@ -103,11 +149,37 @@ public:
  
  	bool IsUserInFamilyBattleUsers(int userId);
  

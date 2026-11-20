@@ -6770,11 +6770,30 @@ static void GiveOrder(Order order, void* by)
             mates.push_back(b.edict);
     all = (int)mates.size();
     std::vector<void*> reach = OrderReach(by, team, mates); // the room's option: every bot, or the N nearest
-    if ((int)reach.size() == all)
+    // the room's chances: a bot it reaches may not obey, one further away may obey anyway (each keeps what it was doing)
+    std::vector<void*> obey;
+    void* refuser = nullptr;
+    int farOk = 0, refused = 0;
+    for (void* e : mates)
+    {
+        bool reached = std::find(reach.begin(), reach.end(), e) != reach.end();
+        if (OrderObeyed(reached))
+        {
+            obey.push_back(e);
+            farOk += !reached;
+        }
+        else if (reached)
+        {
+            refused++;
+            if (!refuser && Alive(e))
+                refuser = e;
+        }
+    }
+    if ((int)obey.size() == all)
         g_teamOrder = order;
     for (auto& b : g_bots)
     {
-        if (!b.edict || std::find(reach.begin(), reach.end(), b.edict) == reach.end())
+        if (!b.edict || std::find(obey.begin(), obey.end(), b.edict) == obey.end())
             continue;
         if (!answer && Alive(b.edict))
             answer = b.edict;
@@ -6789,9 +6808,11 @@ static void GiveOrder(Order order, void* by)
         }
         n++;
     }
-    Log("order: %s (%d of %d bots)", OrderName(order), n, all);
+    Log("order: %s (%d of %d bots: %d of them further away; %d near ones said no)", OrderName(order), n, all, farOk, refused);
     if (Voices() != "off" && answer)
         FakeCommand(answer, "roger");
+    if (Voices() != "off" && refuser)
+        FakeCommand(refuser, "negative");
 }
 
 // true: the command stops here (botassist's own menu took it)

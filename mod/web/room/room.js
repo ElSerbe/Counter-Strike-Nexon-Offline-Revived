@@ -20,7 +20,7 @@
   const PREVIEW = location.port !== "30080";
   const mock = {
     host: true, waiting: true, mode: 14, coop: false, holdoutMode: true, watchBackMode: true, balanceMode: true,
-    weaponBalance: false, newBotSkill: -2, options: { orderCount: 0, groups: true, walkers: true, watchBack: true, voices: "radio" },
+    weaponBalance: false, newBotSkill: -2, options: { orderCount: 0, obey: 100, farChance: 0, groups: true, walkers: true, watchBack: true, voices: "radio" },
     defaults: null,
     native: [
       { key: "freezeTime", label: "Freeze time", help: "Seconds everyone waits at the start of a round.", toggle: false, value: 0, locked: "", choices: [0, 1, 2, 3, 4, 5].map(i => ({ value: i, label: i + " s" })) },
@@ -99,6 +99,16 @@
       $("ordercount").insertAdjacentHTML("beforeend", `<option value="${oc}">The ${oc} nearest</option>`);
     $("ordercount").value = oc;
     $("ordercount").disabled = !edit;
+    const pick = (id, v, dflt) => {
+      const s = String(v ?? dflt);
+      if (![...$(id).options].some(o => o.value === s))
+        $(id).insertAdjacentHTML("beforeend", `<option value="${s}">${s}%</option>`);
+      $(id).value = s;
+      $(id).disabled = !edit;
+    };
+    pick("obey", room.options.obey, 100);
+    pick("farchance", room.options.farChance, 0);
+    $("farrow").classList.toggle("hidden", !room.options.orderCount);
     $("voices").value = room.options.voices || "radio";
     $("voices").disabled = !edit;
 
@@ -149,6 +159,8 @@
   });
   $("newskill").addEventListener("change", () => send({ newBotSkill: +$("newskill").value }));
   $("ordercount").addEventListener("change", () => send({ options: { orderCount: +$("ordercount").value } }));
+  $("obey").addEventListener("change", () => send({ options: { obey: +$("obey").value } }));
+  $("farchance").addEventListener("change", () => send({ options: { farChance: +$("farchance").value } }));
   $("voices").addEventListener("change", () => send({ options: { voices: $("voices").value } }));
   const flag = (id, make) => $(id).addEventListener("click", e => {
     const b = e.target.closest("button");

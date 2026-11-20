@@ -495,7 +495,8 @@ Zombie Disaster Zone); `/api/matchbots` says `weaponBalance` 1 for a match with 
   options again.
 - The bots' options come with the match's AI players (/api/matchbots "options", `SetRoomOptions`): `orderCount`
   (GiveOrder reaches the N alive bots of the team nearest to the player; 0 every bot; Zombie Shelter's job orders
-  always reach every bot), `groups` (off: HoldSpotsInUse is 1, every human bot holds the best spot), `walkers`
+  always reach every bot), `obey` (% chance each bot it reaches obeys; one that doesn't answers "negative"),
+  `farChance` (with `orderCount`: % chance each bot beyond the N nearest obeys anyway; `OrderObeyed`), `groups` (off: HoldSpotsInUse is 1, every human bot holds the best spot), `walkers`
   (off: no lone walkers), `watchBack` (off: no ZombieAwareAim), `voices` (radio / normal / off, over botassist.ini
   Voices: `Voices()`). botassist.log "room options: ...".
 
