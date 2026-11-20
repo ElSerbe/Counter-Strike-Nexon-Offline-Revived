@@ -1288,5 +1288,7 @@ the offline targets of CSNZ_Server's Family achievements (tools/gen_family_achie
 The soldiers' AI (CHumanImprov) takes a player as its target only if vtable slot 0x11c (0x11351010) says yes: the
 target's Classify() 2 or 21. Bots classify as 15 (CCSBot / ZBBot 0x107f8c40), so the soldiers shot only the player.
 botassist puts its own check in that slot (modes/human_scenario.inl HsTargetBots): 15 too. In every co-op mode, "Hunt
-freely" with nothing in sight now walks to the nearest living monster of the map that isn't an aircraft or a missile
-(scenario_orders.inl HuntGoal, looked up every 2 s); before, the bots stood still until a monster came near.
+freely" with nothing in sight now walks to the nearest living monster within 6000 units that isn't an aircraft or a
+missile (scenario_orders.inl HuntGoal: one look at the monsters every 2 s for all the bots, each bot's goal kept 2 s);
+before, the bots stood still until a monster came near. A bot strafing while it shoots no longer counts as stuck (it
+jumped all the time): the stuck jump is only for a bot on its way somewhere.

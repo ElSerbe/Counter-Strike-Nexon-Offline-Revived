@@ -219,32 +219,45 @@ static bool CoopUnstick(void* bot, BotState& st, V3 pos)
     return true;
 }
 
-// "Hunt freely" with nothing in sight: the nearest living monster of the whole map that walks (not the aircraft), so
-// the bots go and find them (Human Scenario's soldiers stay far from the players; the bots stood still). Looked up
-// every 2 s per bot.
+// "Hunt freely" with nothing in sight: the nearest living monster that walks (not the aircraft or missiles) within
+// HUNT_RANGE, so the bots go and find them (Human Scenario's soldiers stay far from the players; the bots stood still).
+// One look at the monsters every 2 s for all the bots (not one per bot), and each bot keeps its goal 2 s, so its path
+// isn't worked out again more often than when it follows a player.
+static const float HUNT_RANGE = 6000.0f, HUNT_LOOK = 2.0f;
 static bool HuntGoal(void* bot, BotState& st, V3 pos, V3& goal)
 {
     (void)bot;
     if (!CoopMode() || !g_nav.ok)
         return false;
-    static std::unordered_map<int, std::pair<float, V3>> cache; // slot -> (next look, goal; x NAN: none)
     float now = Now();
-    auto& c = cache[st.slot];
-    if (now >= c.first || now < c.first - 3.0f)
+    static std::vector<V3> monsters;
+    static float nextLook = 0;
+    if (now >= nextLook || now < nextLook - HUNT_LOOK - 1.0f)
     {
-        c.first = now + 2.0f;
-        float best = 1e18f;
-        V3 found{ NAN, 0, 0 };
-        ForEntitiesNear(pos, 16000.0f, [&](void* e) {
-            if (!IsLivingMonster(e) || HsFlying(e) || HsIsMissile(e))
-                return;
-            float d = Len(Center(e) - pos);
-            if (d < best)
-                best = d, found = Origin(e);
+        nextLook = now + HUNT_LOOK;
+        monsters.clear();
+        ForEntitiesNear(pos, 1e6f, [&](void* e) {
+            if (IsLivingMonster(e) && !HsFlying(e) && !HsIsMissile(e))
+                monsters.push_back(Origin(e));
         });
+    }
+    static std::unordered_map<int, std::pair<float, V3>> cache; // slot -> (next choice, goal; x NAN: none)
+    auto& c = cache[st.slot];
+    if (now >= c.first || now < c.first - HUNT_LOOK - 1.0f)
+    {
+        c.first = now + HUNT_LOOK;
+        float best = HUNT_RANGE * HUNT_RANGE;
+        V3 found{ NAN, 0, 0 };
+        for (auto& m : monsters)
+        {
+            V3 d = m - pos;
+            float d2 = d.x * d.x + d.y * d.y + d.z * d.z;
+            if (d2 < best)
+                best = d2, found = m;
+        }
         c.second = found;
     }
-    if (c.second.x != c.second.x) // (NAN: no monster left)
+    if (c.second.x != c.second.x) // (NAN: none within range)
         return false;
     goal = c.second;
     return true;

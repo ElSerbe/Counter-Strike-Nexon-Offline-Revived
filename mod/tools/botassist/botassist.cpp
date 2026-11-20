@@ -2466,6 +2466,7 @@ static void Drive(void* bot, BotState& st, Command& cmd, float dt)
 
     V3 waypoint;
     bool moving = wantMove && NextWaypoint(bot, st, pos, goal, arrive, waypoint, true);
+    bool walkingPath = moving; // (strafing and backing off below aren't: they don't count as being stuck)
     float moveYaw = 0;
     if (moving)
     {
@@ -2521,8 +2522,9 @@ static void Drive(void* bot, BotState& st, Command& cmd, float dt)
     if (now - st.jumpAt > 0.1f && now - st.jumpAt < 0.5f)
         cmd.buttons |= IN_DUCK;
 
-    // ---- stuck: jump and sidestep, then repath
-    if (moving)
+    // ---- stuck: jump and sidestep, then repath (only on the way somewhere: a bot strafing side to side while it shoots
+    // hardly moves, and it jumped all the time as if it were stuck)
+    if (moving && walkingPath)
     {
         if (Len2D(pos - st.lastPos) > 24.0f || fabsf(pos.z - st.lastPos.z) > 24.0f || st.climbing)
         {
