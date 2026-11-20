@@ -468,6 +468,9 @@ The first test (2026-11-20) closed the server on the Gravity Repulsor's first sh
 60 steps of these shots are logged ("gun fix step: ..."), and `SciFiGunFixes=0` in botassist.ini turns both fixes off.
 The second test: all the steps finished and the match closed in the same second. crash_watch.inl logs hw.dll's
 Host_Error message (0x2419150) and, for 4 s after each of these shots, every exception (module+offset, stack).
+Third test: "Host_Error: CL_ParseServerMessage: Bad server message". CSO's TE_EXPLOSION has one more byte than
+Half-Life's (sprite, scale, framerate, flags, and one more: the drums' blast 0x11479fc0 writes four); the blast now
+writes it too.
 
 ## In-game prices ($) of the strongest weapons (gun_fixes.inl, botassist_prices.txt)
 

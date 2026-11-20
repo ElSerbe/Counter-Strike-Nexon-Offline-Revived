@@ -182,6 +182,9 @@ static void GunBlast(const float* at, unsigned char* attackerPev, float damage, 
         g_WriteByte(scale);
         g_WriteByte(15);
         g_WriteByte(0);
+        g_WriteByte(0); // CSO's TE_EXPLOSION has one more byte than Half-Life's (the drums' blast 0x11479fc0 writes 4
+                        // after the sprite). Without it the client dropped the match: "CL_ParseServerMessage: Bad
+                        // server message" (2026-11-20, the Gravity Repulsor's first shot, twice)
         g_MessageEnd();
     }
     GunStep("blast", "RadiusDamage");
