@@ -28,7 +28,9 @@
       { key: "displayNickname", label: "Display nickname", help: "Whose names show over their heads.", toggle: false, value: 1, locked: "", choices: [{ value: 0, label: "Do not display" }, { value: 1, label: "Display allies only" }, { value: 2, label: "Display all nicknames" }] },
       { key: "teamBalance", label: "Team balance", help: "Moves players between teams.", toggle: true, value: 1, locked: "This mode keeps its own team balance.", choices: [] },
       { key: "friendlyFire", label: "Friendly fire", help: "Shots hurt your own team.", toggle: true, value: 0, locked: "", choices: [] },
-      { key: "flashlight", label: "Allow flashlight", help: "Players can use the flashlight.", toggle: true, value: 1, locked: "", choices: [] }]
+      { key: "flashlight", label: "Allow flashlight", help: "Players can use the flashlight.", toggle: true, value: 1, locked: "", choices: [] },
+      { key: "zbRespawn", label: "Zombies respawn", help: "Zombies always come back: no permanent zombie death.", toggle: true, value: 1, locked: "", choices: [] },
+      { key: "zbAutoHunting", label: "Zombie auto play", help: "A zombie player who stays idle is played by the game.", toggle: true, value: 0, locked: "", choices: [] }]
   };
 
   function previewCall(body) {
@@ -100,17 +102,16 @@
     $("voices").value = room.options.voices || "radio";
     $("voices").disabled = !edit;
 
+    // only the options this mode has (the others keep their value for the modes that have them)
     onOff($("balance"), room.weaponBalance, edit && room.balanceMode);
-    $("balancerow").classList.toggle("off", !room.balanceMode);
     onOff($("groups"), room.options.groups, edit);
     onOff($("walkers"), room.options.walkers, edit);
     onOff($("watchback"), room.options.watchBack, edit);
-    $("groupsrow").classList.toggle("off", !room.holdoutMode);
-    $("walkersrow").classList.toggle("off", !room.holdoutMode);
-    $("watchrow").classList.toggle("off", !room.watchBackMode);
-    $("zombiehelp").textContent = room.holdoutMode || room.watchBackMode || room.balanceMode
-      ? "Options for the zombie modes."
-      : "This mode isn't one of them: what you set here counts for your defaults and the zombie rooms.";
+    $("balancerow").classList.toggle("hidden", !room.balanceMode);
+    $("groupsrow").classList.toggle("hidden", !room.holdoutMode);
+    $("walkersrow").classList.toggle("hidden", !room.holdoutMode);
+    $("watchrow").classList.toggle("hidden", !room.watchBackMode);
+    $("zombiecard").classList.toggle("hidden", !(room.holdoutMode || room.watchBackMode || room.balanceMode));
 
     $("forget").disabled = !room.defaults;
     $("defstate").textContent = room.defaults ? "New rooms you create start with your saved defaults." : "No saved defaults: new rooms start with the game's.";

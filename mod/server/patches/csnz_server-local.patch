@@ -5945,10 +5945,10 @@ index 223166a..9b3a5a0 100644
  	user->UpdateTitles(slot, titleID);
 diff --git a/src/manager/roomoptions.cpp b/src/manager/roomoptions.cpp
 new file mode 100644
-index 0000000..0b4e139
+index 0000000..868327f
 --- /dev/null
 +++ b/src/manager/roomoptions.cpp
-@@ -0,0 +1,312 @@
+@@ -0,0 +1,349 @@
 +#include "roomoptions.h"
 +#include "room/room.h"
 +#include "room/roomsettings.h"
@@ -6003,21 +6003,60 @@ index 0000000..0b4e139
 +		{ "voiceChat", "Voice chat", "Players can talk by voice.", &CRoomSettings::voiceChat, 0, ROOM_LOW_VOICECHAT, true },
 +		{ "kdRule", "Death > Kill rule", "The game's rule for a death that also gives a kill.", &CRoomSettings::kdRule, 1, ROOM_LOWMID_KDRULE, true },
 +		{ "changeShot", "Change shot", "Players can switch their weapon's firing mode.", &CRoomSettings::changeShot, 2, ROOM_HIGHMID_CHANGESHOT, true },
++		// the mode-only options of the game's room panel and Extra Settings window (the modes: CRoomSettings::CheckSettings)
++		{ "teamSwitch", "Team switch", "Teams swap sides during the match.", &CRoomSettings::teamSwitch, 1, ROOM_LOWMID_TEAMSWITCH, true },
++		{ "zbRespawn", "Zombies respawn", "Zombies always come back: no permanent zombie death (in Zombie Z it also takes away the Resuscitation mutation).", &CRoomSettings::zbRespawn, 1, ROOM_LOWMID_ZBRESPAWN, true },
++		{ "zbBalance", "Automatic zombie balance", "The virus detox counter and the number of host zombies change with how each team is doing.", &CRoomSettings::zbBalance, 1, ROOM_LOWMID_ZBBALANCE, true },
++		{ "zbRebalance", "Zombie rebalance", "The game's newer zombie balance for Zombie Hero.", &CRoomSettings::zbRebalance, 2, ROOM_HIGHMID_ZBREBALANCE, true },
++		{ "zbAutoHunting", "Zombie auto play", "A zombie player who stays idle is played by the game.", &CRoomSettings::zbAutoHunting, 1, ROOM_LOWMID_ZBAUTOHUNTING, true },
++		{ "fireBomb", "Fire bombs", "Players get fire bombs.", &CRoomSettings::fireBomb, 2, ROOM_HIGHMID_FIREBOMB, true },
++		{ "integratedTeam", "Divide teams", "The game's own team split for this mode.", &CRoomSettings::integratedTeam, 1, ROOM_LOWMID_INTEGRATEDTEAM, true },
++		{ "floatingDamageSkin", "Floating damage numbers", "The damage of each hit floats over the target.", &CRoomSettings::floatingDamageSkin, 2, ROOM_HIGHMID_FLOATINGDAMAGESKIN, true },
++		{ "playerOneTeam", "Players on one team", "Every player plays on the same team, against the bots.", &CRoomSettings::playerOneTeam, 2, ROOM_HIGHMID_PLAYERONETEAM, true },
++		{ "weaponBuyCoolTime", "Weapon buy cooldown", "A wait between weapon purchases.", &CRoomSettings::weaponBuyCoolTime, 2, ROOM_HIGHMID_WEAPONBUYCOOLTIME, true },
 +	};
++
++	bool InList(int m, std::initializer_list<int> modes)
++	{
++		for (int x : modes)
++			if (x == m)
++				return true;
++		return false;
++	}
++
++	// whether the room's mode has the option (the same modes the server accepts it in, CRoomSettings::CheckSettings)
++	bool ModeHas(const string& key, CRoomSettings* s, int mode)
++	{
++		if (key == "teamSwitch") return InList(mode, { 0, 3 });
++		if (key == "zbRespawn") return s->GetDefaultZbRespawn(mode) != 0;
++		if (key == "zbBalance") return s->GetDefaultZbBalance(mode) != 0 || mode == 56;
++		if (key == "zbRebalance") return mode == 14;
++		if (key == "zbAutoHunting") return InList(mode, { 14, 45 });
++		if (key == "fireBomb") return InList(mode, { 14, 45, 55 });
++		if (key == "integratedTeam") return InList(mode, { 2, 5, 56, 57 });
++		if (key == "floatingDamageSkin") return InList(mode, { 0, 2, 3, 5 });
++		if (key == "playerOneTeam") return InList(mode, { 3, 5 });
++		if (key == "weaponBuyCoolTime") return s->IsWeaponBuyCoolTimeAllowed(mode);
++		if (key == "changeShot") return mode == 58;
++		if (key == "c4Timer" || key == "hostageKillLimit") return BombMode(mode);
++		return true;
++	}
 +
 +	// the values one option takes in a mode (empty: not in this mode); `why` says why it can't change
 +	vector<pair<int, string>> Choices(const NativeOption& o, CRoomSettings* s, int mode, string& why)
 +	{
 +		vector<pair<int, string>> out;
 +		string key = o.key;
++		if (!ModeHas(key, s, mode))
++			return out; // (not shown for this mode)
 +		if (o.toggle)
 +		{
 +			if (key == "teamBalance" && !s->CanChangeTeamBalance(mode))
 +				why = "This mode keeps its own team balance.";
 +			else if (key == "friendlyFire" && !s->CanChangeFriendlyFire(mode))
 +				why = "This mode keeps its own friendly fire rule.";
-+			else if (key == "c4Timer" && !BombMode(mode))
-+				return out;
++			else if (key == "zbRespawn" && mode == 56)
++				why = "Zombies always respawn in this mode.";
 +			return { { 0, "Off" }, { 1, "On" } };
 +		}
 +		if (key == "freezeTime")
@@ -6033,8 +6072,6 @@ index 0000000..0b4e139
 +		}
 +		else if (key == "hostageKillLimit")
 +		{
-+			if (!BombMode(mode))
-+				return out;
 +			out.push_back({ 0, "No limit" });
 +			for (int i = 1; i <= 10; i++)
 +				out.push_back({ i, to_string(i) });
