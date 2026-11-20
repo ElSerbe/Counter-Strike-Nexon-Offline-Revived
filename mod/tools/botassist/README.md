@@ -149,7 +149,10 @@ automatic ones join CT. No more kicks in co-op modes.
 - At match start the server sets friendly/enemy bot counts from the list (botAdd 1).
 - botassist fetches `/api/matchbots` (WinHTTP, `ApiPort`) on each new map; every bot that joins takes the next AI
   player of its team: renamed through SetClientKeyValue (engine 115; IndexOfEdict 76, GetInfoKeyBuffer 113),
-  its character on joinclass, its weapons when buying (melee too), its skill.
+  its character on joinclass, its weapons when buying (melee too), its skill. Each new map also empties botassist's
+  state of every bot (`UpdateMatchBots`): before 2026-11-20 the last match's bots stayed in it, so after a Gun Deathmatch
+  with 18 bots, Zombie Shelter's were bots 18-20 and orders read the old bots' edicts (access violations: the bots took
+  no order and did no job).
 - Fixes after the first test: GetInfoKeyBuffer is engine function 112 (113 is InfoKeyValue: renaming crashed);
   the "monsters seen" time is per map (gpGlobals->time restarts with each map, an old time looked recent and the
   removal of "other team" bots ran in a zombie-escape room: kicked bots kept coming back, now removed entirely);
@@ -769,10 +772,17 @@ time; zombies wait for a countdown at the start and get stronger in the last 30 
 `modes/gun_deathmatch.inl` (rules CSOGameRulesGunDeath, vtable 0x11961354). Two teams, respawns, a new weapon every few kills
 from strong to weak: 18 levels, 60 kills to the Glock 18, then an HE grenade whose kill wins. Levels from
 `resource/GDMWeaponList.cso` (`GDMWeaponListCash.cso` with Lucky Gunman), which name weapon ids (Item.csv column 5, not item ids).
-- More weapons: those tables name only 2 or 3 weapons a level. `GdmWatch` rewrites the server's rows (rules +0x2e0 and
-  +0x2ec, 0x24 bytes each: level, type, kills, 3 ids, 3 chances) every 2 s with 3 weapons of the level's kind (`GDM_TIERS`, the
-  game's order) from `botassist_gdm_weapons.txt` (`gen_gdm_weapons.py`), so any weapon can come at any level up. The last level
-  stays the Glock 18. Delete lines from that file to keep a weapon out.
+- Random weapons: those tables name only 2 or 3 weapons a level. botassist detours the level-up draw (0x114285c0, thiscall
+  rules, player, rows; player +0x2f88 kills, +0x2f8c level, +0x2f90 weapon id): just before it, the row the player reaches
+  (rules +0x2e0 / +0x2ec, 0x24 bytes each: level, type, kills, 3 ids, 3 chances) names one weapon drawn for that player from
+  all of `botassist_gdm_weapons.txt` (`gen_gdm_weapons.py`), any kind at any level, none the player already had this match.
+  The Glock 18 and the grenade at the end stay. Without the detour, `GdmWatch` refills the rows by kind every 2 s (`GDM_TIERS`;
+  before 2026-11-20 that was the only way, and players levelling up in the same 2 s drew from the same 3 weapons). Delete
+  lines from that file to keep a weapon out. botassist.log: "GDM: '<name>' level N draws weapon ...".
+- Broken weapons: some weapons have no working server code in this mp.dll (the shot plays, nothing comes out). `GdmTrack`
+  watches every hand (clip at item +0x160, trigger at pev +0x1a4): 4 s of trigger over 4 presses with rounds and not one round
+  used or hit, or 40 rounds by everyone and no hit (`GdmOnDamage`, from weapon_balance.inl's TakeDamage hook), and the weapon
+  goes into `botassist_gdm_broken.txt` (never drawn again) while its holders get another one ("GDM: weapon_... fires nothing").
 - Bots' weapons: the rules run the buy command as the player with the internal-buy flag (+0x18b4) set. botassist dropped
   that for room AI players and bought the room's weapons (1443 purchases in one test), so bots didn't play the levels. Now
   `UpdateBuying` skips the mode and only the stock AI's own purchases are dropped. botassist.log: "GDM: bot ... reaches level".

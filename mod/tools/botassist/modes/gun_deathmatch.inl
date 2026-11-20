@@ -9,10 +9,19 @@
 // draws from a level's row when a player reaches it.
 //
 // What botassist does:
-//   - GdmWatch: those rows only name 2 or 3 weapons (about 45 in all, of the game's hundreds). Now every 2 s each row but the
-//     last gets 3 new weapons of its level's kind (rifles, sniper rifles... as in the game's order) from
-//     botassist_gdm_weapons.txt, so any weapon can come up at any level up. The vectors are the server's: the client's
-//     table isn't touched, a player's weapon goes to its HUD by id.
+//   - Weapons: those rows only name 2 or 3 weapons (about 45 in all, of the game's hundreds). botassist detours the draw
+//     (FUN_114285c0, thiscall rules, player, rows; player +0x2f88 kills, +0x2f8c level, +0x2f90 weapon id): just before
+//     it, the row the player is reaching gets one weapon drawn for that player alone from the whole of
+//     botassist_gdm_weapons.txt, any kind at any level, never one the player already had this match (2026-11-20, the
+//     user: the same weapons came up again and again; the rows used to be refilled every 2 s by kind, so everybody
+//     levelling up in those 2 s drew from the same 3). The Glock 18 and the grenade at the end stay as the game has them.
+//     If the detour can't go in, GdmWatch still fills the rows every 2 s by kind. The vectors are the server's: the
+//     client's table isn't touched, a player's weapon goes to its HUD by id.
+//   - Broken weapons: some weapons of this client's mp.dll have no working server code: the shot plays on the client and
+//     nothing comes out (the user's "Arcana 2", and bots shooting without hurting anyone). GdmTrack watches the weapon in
+//     every player's hand: 4 s of trigger over 4 presses with rounds in the clip, not one round used and no hit; or 40
+//     rounds fired by everyone with it and not one hit. That weapon goes into botassist_gdm_broken.txt (never drawn again,
+//     in every match; delete a line to try it again) and whoever holds it gets another weapon at once.
 //   - Bots' weapons: the rules give them by running the buy command as the player (FUN_113166e0, internal-buy flag +0x18b4
 //     set), and botassist's rule for room AI players dropped it (see OnBotCommand) while UpdateBuying bought the room's
 //     weapons, so bots didn't play the levels at all. Here room weapons are skipped, and only the stock AI's own
@@ -22,34 +31,334 @@
 //   - Routes: going for the closest enemy made one big group. Enemies somebody already goes for count as farther, and on the way
 //     most bots go through a place of their own first (GdmPickVia: away from teammates and from where they're heading, not too
 //     far off), hunting straight only for a while after it or once an enemy is in sight and near. Super Soldier moves the same.
-static const DWORD MP_GDM_RULES_VT = 0x11961354;
+static const DWORD MP_GDM_RULES_VT = 0x11961354, MP_GDM_GIVE = 0x114285c0;
 static const float GDM_REDRAW = 2.0f, GDM_RETARGET = 1.0f, GDM_CLOSE = 320.0f, GDM_TOO_CLOSE = 140.0f, GDM_STRAFE = 0.9f;
 static const float GDM_ENGAGE = 900.0f, GDM_VIA_REACHED = 180.0f, GDM_VIA_TIME = 20.0f, GDM_SHARED_TARGET = 500.0f;
 static const int GDM_TIERS[] = { 4, 6, 4, 4, 4, 6, 4, 4, 3, 3, 2, 5, 6, 3, 1, 3, 1 }; // level 1.., the game's kinds; 18: Glock 18
+static const int GDM_DRAWN_LEVELS = sizeof(GDM_TIERS) / sizeof(GDM_TIERS[0]); // the rows botassist draws (not the Glock, grenade)
+static const int GDM_ROW = 0x24, GDM_KILLS = 0x2f88, GDM_LEVEL = 0x2f8c, GDM_WEAPON = 0x2f90;
+static const int GDM_EV_BUTTON = 0x1a4, GDM_ITEM_CLIP = 0x160; // entvars button (mp.dll's save table), weapon's clip
+static const float GDM_DEAD_HELD = 4.0f;
+static const int GDM_DEAD_PRESSES = 4, GDM_DEAD_SHOTS = 40;
 
-static std::map<int, std::vector<int>> g_gdmPool; // tier -> weapon ids
+struct GdmWeapon
+{
+    int id, tier;
+    std::string cls; // weapon_<name>, lower case
+};
+static std::vector<GdmWeapon> g_gdmAll;              // every weapon that can be drawn
+static std::map<int, std::vector<int>> g_gdmPool;    // tier -> weapon ids (the rows filled by kind, without the detour)
+static std::set<std::string> g_gdmBroken;            // weapons that do nothing (botassist_gdm_broken.txt)
+static std::map<void*, std::set<int>> g_gdmHad;      // player -> weapons it got this match
+static void* g_gdmRules = nullptr;                   // the draw's last arguments (to give another weapon)
+static int* g_gdmRows = nullptr;
+
+static std::string GdmLower(std::string s)
+{
+    for (auto& ch : s)
+        ch = (char)tolower((unsigned char)ch);
+    return s;
+}
+
+static void GdmBrokenPath(char* path, size_t n)
+{
+    snprintf(path, n, "%sbotassist_gdm_broken.txt", g_dir);
+}
 
 static void GdmLoadPool()
 {
     char path[MAX_PATH];
+    GdmBrokenPath(path, sizeof(path));
+    if (FILE* f = fopen(path, "r"))
+    {
+        char line[256], cls[128];
+        while (fgets(line, sizeof(line), f))
+            if (line[0] != ';' && sscanf(line, "%127s", cls) == 1)
+                g_gdmBroken.insert(GdmLower(cls));
+        fclose(f);
+    }
     snprintf(path, sizeof(path), "%sbotassist_gdm_weapons.txt", g_dir);
     FILE* f = fopen(path, "r");
-    int total = 0;
+    int total = 0, broken = 0;
     if (f)
     {
         char line[256];
         while (fgets(line, sizeof(line), f))
         {
             int id, tier;
-            if (line[0] != ';' && sscanf(line, "%d %d", &id, &tier) == 2)
+            char res[128] = "";
+            if (line[0] == ';' || sscanf(line, "%d %d ; %127s", &id, &tier, res) < 2)
+                continue;
+            std::string cls = res[0] ? "weapon_" + GdmLower(res) : "";
+            if (!cls.empty() && g_gdmBroken.count(cls))
             {
-                g_gdmPool[tier].push_back(id);
-                total++;
+                broken++;
+                continue;
             }
+            g_gdmAll.push_back({ id, tier, cls });
+            g_gdmPool[tier].push_back(id);
+            total++;
         }
         fclose(f);
     }
-    Log("GDM: %d weapons in botassist_gdm_weapons.txt%s", total, total ? "" : ": the mode keeps the game's own list");
+    Log("GDM: %d weapons in botassist_gdm_weapons.txt (%d left out: botassist_gdm_broken.txt)%s", total, broken,
+        total ? "" : ": the mode keeps the game's own list");
+}
+
+static const char* GdmClassOf(int id)
+{
+    for (auto& w : g_gdmAll)
+        if (w.id == id)
+            return w.cls.c_str();
+    return "?";
+}
+
+// one weapon for this player: any of the list it hasn't had this match (all of them again once it had them all)
+static int GdmDrawFor(void* player)
+{
+    std::set<int>& had = g_gdmHad[player];
+    for (int pass = 0; pass < 2; pass++)
+    {
+        std::vector<int> can;
+        for (auto& w : g_gdmAll)
+            if (!had.count(w.id))
+                can.push_back(w.id);
+        if (!can.empty())
+        {
+            int id = can[((unsigned)rand() * 32768u + (unsigned)rand()) % can.size()];
+            had.insert(id);
+            return id;
+        }
+        had.clear();
+    }
+    return 0;
+}
+
+// just before the game's draw: the row the player is reaching names one weapon, drawn for this player
+static void GdmPickFor(unsigned char* player, int* rows)
+{
+    if (g_gdmAll.empty() || !Readable(player, GDM_WEAPON + 4) || !Readable(rows, 8))
+        return;
+    unsigned char* first = (unsigned char*)rows[0];
+    int count = first && rows[1] > rows[0] ? (rows[1] - rows[0]) / GDM_ROW : 0;
+    if (count < 2 || !Readable(first, count * GDM_ROW))
+        return;
+    int kills = *(int*)(player + GDM_KILLS), i = count - 1;
+    while (i >= 0 && kills < *(int*)(first + i * GDM_ROW + 8))
+        i--;
+    if (i < 0 || i >= GDM_DRAWN_LEVELS || i >= count - 1)
+        return; // before level 1, or the Glock and the grenade at the end
+    unsigned char* row = first + i * GDM_ROW;
+    if (*(int*)(row + 4) != 1 || *(int*)row == *(int*)(player + GDM_LEVEL))
+        return; // a fixed level, or no level up (nothing is given)
+    int id = GdmDrawFor(player);
+    if (!id)
+        return;
+    for (int k = 0; k < 3; k++)
+    {
+        *(int*)(row + 0xc + k * 4) = id;
+        *(float*)(row + 0x18 + k * 4) = k == 2 ? 34.0f : 33.0f;
+    }
+    unsigned char* pev = Readable(player + 8, 4) ? *(unsigned char**)(player + 8) : nullptr;
+    const char* name = pev && Readable(pev + EV_NETNAME, 4) ? String(*(int*)(pev + EV_NETNAME)) : nullptr;
+    bool human = pev && !(*(int*)(pev + EV_FLAGS) & FL_FAKECLIENT);
+    static int reports = 0;
+    if (human || reports++ < 40)
+        Log("GDM: '%s' level %d draws weapon %d (%s), %d had this match", name ? name : "?", *(int*)row, id, GdmClassOf(id),
+            (int)g_gdmHad[player].size());
+}
+
+typedef void*(__fastcall* GdmGiveFn)(void* rules, void* edx, unsigned char* player, int* rows);
+static GdmGiveFn g_gdmGive;
+
+static void SafeGdmPickFor(unsigned char* player, int* rows)
+{
+    __try
+    {
+        GdmPickFor(player, rows);
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        static int faults = 0;
+        if (faults++ < 5)
+            Log("GDM: exception 0x%08lX drawing a weapon (the game's row used)", GetExceptionCode());
+    }
+}
+
+static void* __fastcall HookedGdmGive(void* rules, void* edx, unsigned char* player, int* rows)
+{
+    if (GameMode() == MODE_GDM)
+    {
+        g_gdmRules = rules;
+        g_gdmRows = rows;
+        SafeGdmPickFor(player, rows);
+    }
+    return g_gdmGive(rules, edx, player, rows);
+}
+
+static void GdmHookGive()
+{
+    unsigned char* fn = (unsigned char*)(MP_GDM_GIVE + g_mpDelta);
+    const unsigned char code[] = { 0x55, 0x8b, 0xec, 0x83, 0xec, 0x08 }; // push ebp; mov ebp, esp; sub esp, 8
+    if (!Readable(fn, sizeof(code)) || (fn[0] == 0xe9 && g_gdmGive))
+        return;
+    static DWORD warned = 0;
+    if (memcmp(fn, code, sizeof(code)))
+    {
+        if (warned != g_mpDelta + 1)
+            Log("GDM: the level-up draw has unexpected code: rows filled by kind every 2 s instead");
+        warned = g_mpDelta + 1;
+        return;
+    }
+    g_gdmGive = (GdmGiveFn)DetourCdecl(fn, sizeof(code), (void*)HookedGdmGive);
+    Log("GDM: level-up draw detoured: every player draws its own weapon from the whole list, no repeats");
+}
+
+// ---- weapons that do nothing
+static void ShPrint(void* player, const char* text); // zombie_shelter.inl: a line in the middle of the screen
+
+struct GdmHand
+{
+    std::string cls;
+    int clip = -1, presses = 0;
+    float held = 0, last = 0;
+    bool down = false, fired = false;
+};
+static GdmHand g_gdmHands[65]; // by client index
+struct GdmUse
+{
+    int shots = 0, hits = 0;
+};
+static std::map<std::string, GdmUse> g_gdmUse; // weapon -> rounds fired and hits by everyone this match
+
+// another weapon for a player now (its level drawn again)
+static void GdmRegive(void* e, unsigned char* p)
+{
+    if (!g_gdmGive || !g_gdmRules || !g_gdmRows || !Readable(p, GDM_WEAPON + 4))
+        return;
+    int keep = *(int*)(p + GDM_LEVEL);
+    *(int*)(p + GDM_LEVEL) = -1;
+    HookedGdmGive(g_gdmRules, nullptr, p, g_gdmRows);
+    if (*(int*)(p + GDM_LEVEL) == -1)
+        *(int*)(p + GDM_LEVEL) = keep; // nothing given
+    else if (!(F<int>(Vars(e), EV_FLAGS) & FL_FAKECLIENT))
+        ShPrint(e, "That weapon doesn't work in offline play: here's another one");
+}
+
+static void GdmBroken(const std::string& cls, const char* why)
+{
+    if (!g_gdmBroken.insert(cls).second)
+        return;
+    char path[MAX_PATH];
+    GdmBrokenPath(path, sizeof(path));
+    bool fresh = GetFileAttributesA(path) == INVALID_FILE_ATTRIBUTES;
+    if (FILE* f = fopen(path, "a"))
+    {
+        if (fresh)
+            fputs("; Gun Deathmatch: weapons that do nothing in offline play (found by botassist); never drawn. Delete a line "
+                  "to try that weapon again\n", f);
+        fprintf(f, "%s ; %s\n", cls.c_str(), why);
+        fclose(f);
+    }
+    g_gdmAll.erase(std::remove_if(g_gdmAll.begin(), g_gdmAll.end(), [&](const GdmWeapon& w) { return w.cls == cls; }),
+                   g_gdmAll.end());
+    g_gdmPool.clear();
+    for (auto& w : g_gdmAll)
+        g_gdmPool[w.tier].push_back(w.id);
+    Log("GDM: %s %s: never drawn again (botassist_gdm_broken.txt), whoever holds it gets another weapon", cls.c_str(), why);
+    auto entOf = (EntityOfIndexFn)((void**)(MP_ENGFUNCS + g_mpDelta))[ENG_PENTITYOFENTINDEX];
+    for (int i = 1; i <= 64; i++)
+        if (g_gdmHands[i].cls == cls)
+        {
+            void* e = entOf(i);
+            unsigned char* p = e ? (unsigned char*)PrivateOf(e) : nullptr;
+            g_gdmHands[i] = GdmHand();
+            if (p)
+                GdmRegive(e, p);
+        }
+}
+
+// every frame: the weapon in each player's hand, its clip and the trigger
+static void GdmTrack()
+{
+    float now = Now();
+    auto entOf = (EntityOfIndexFn)((void**)(MP_ENGFUNCS + g_mpDelta))[ENG_PENTITYOFENTINDEX];
+    int maxClients = *(int*)((DWORD)*g_pGlobals + GV_MAXCLIENTS);
+    for (int i = 1; i <= maxClients && i <= 64; i++)
+    {
+        GdmHand& h = g_gdmHands[i];
+        float dt = (std::min)(0.1f, (std::max)(0.0f, now - h.last));
+        void* e = entOf(i);
+        unsigned char* p = e ? (unsigned char*)PrivateOf(e) : nullptr;
+        if (!p || !(F<int>(Vars(e), EV_FLAGS) & FL_CLIENT) || !Alive(e) || !Readable(p, GDM_WEAPON + 4))
+        {
+            h = GdmHand();
+            h.last = now;
+            continue;
+        }
+        h.last = now;
+        unsigned char* w = ItemHandle(p + PLAYER_ACTIVE_ITEM);
+        std::string cls = WbHeld(p);
+        int clip = w ? *(int*)(w + GDM_ITEM_CLIP) : -1;
+        if (cls != h.cls)
+        {
+            h = GdmHand();
+            h.cls = cls;
+            h.clip = clip;
+            h.last = now;
+            continue;
+        }
+        if (cls.empty())
+            continue;
+        if (clip >= 0 && h.clip >= 0 && clip < h.clip)
+        {
+            h.fired = true;
+            g_gdmUse[cls].shots += (std::min)(5, h.clip - clip);
+        }
+        h.clip = clip;
+        bool attack = (F<int>(Vars(e), GDM_EV_BUTTON) & IN_ATTACK) != 0;
+        if (attack && clip > 0)
+        {
+            h.held += dt;
+            if (!h.down)
+                h.presses++;
+        }
+        h.down = attack;
+        const GdmUse& u = g_gdmUse[cls];
+        if (!h.fired && h.held >= GDM_DEAD_HELD && h.presses >= GDM_DEAD_PRESSES)
+            GdmBroken(cls, "fires nothing (4 s of trigger with rounds in the clip, not one used)");
+        else if (u.shots >= GDM_DEAD_SHOTS && !u.hits && !g_wbOrig.empty())
+            GdmBroken(cls, "hurts nobody (40 rounds fired, not one hit)");
+    }
+}
+
+// a player hurt (weapon_balance.inl's TakeDamage hook): a hit for the attacker's weapon
+static void GdmOnDamage(void* victim, void* attacker, float damage)
+{
+    if (damage <= 0 || !attacker || GameMode() != MODE_GDM || !Readable(attacker, EV_CONTAINING_ENTITY + 4))
+        return;
+    void* aed = *(void**)((unsigned char*)attacker + EV_CONTAINING_ENTITY);
+    unsigned char* ap = aed ? (unsigned char*)PrivateOf(aed) : nullptr;
+    if (!ap || ap == victim || !Readable(ap, 0x2170))
+        return;
+    std::string cls = WbHeld(ap);
+    if (cls.empty())
+        return;
+    g_gdmUse[cls].hits++;
+    int idx = g_IndexOfEdict ? g_IndexOfEdict(aed) : 0;
+    if (idx > 0 && idx < 65 && g_gdmHands[idx].cls == cls)
+        g_gdmHands[idx].fired = true;
+}
+
+static void SafeGdmOnDamage(void* victim, void* attacker, float damage)
+{
+    __try
+    {
+        GdmOnDamage(victim, attacker, damage);
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+    }
 }
 
 static void GdmDrawRows(unsigned char* rules, int offset)
@@ -75,16 +384,32 @@ static void GdmWatch()
     static float next = 0;
     if (!g_mpDelta || !g_pGlobals || !*g_pGlobals || g_edictToVars < 0 || GameMode() != MODE_GDM)
         return;
-    float now = Now();
-    if (now >= next - 10.0f && now < next)
-        return;
-    next = now + GDM_REDRAW;
     static bool loaded = false;
     if (!loaded)
     {
         loaded = true;
         GdmLoadPool();
     }
+    static int match = -1;
+    if (match != g_nav.level)
+    {
+        // a new match: nobody has had anything yet
+        match = g_nav.level;
+        g_gdmHad.clear();
+        g_gdmUse.clear();
+        for (auto& h : g_gdmHands)
+            h = GdmHand();
+        g_gdmRules = nullptr;
+        g_gdmRows = nullptr;
+    }
+    GdmHookGive();
+    GdmTrack();
+    float now = Now();
+    if (now >= next - 10.0f && now < next)
+        return;
+    next = now + GDM_REDRAW;
+    if (g_gdmGive)
+        return; // every player draws in the detour
     unsigned char* rules = *(unsigned char**)(MP_GAMERULES + g_mpDelta);
     if (!rules || !Readable(rules, 0x300) || *(DWORD*)rules != MP_GDM_RULES_VT + g_mpDelta)
         return;

@@ -302,11 +302,14 @@ static float SafeWbDamage(void* self, void* inflictor, void* attacker, float dam
     }
 }
 
+static void SafeGdmOnDamage(void* victim, void* attacker, float damage); // modes/gun_deathmatch.inl: hits per weapon
+
 static int __fastcall WbTakeDamage(void* self, void* edx, void* inflictor, void* attacker, float damage, int bits, int extra)
 {
     auto it = g_wbOrig.find(*(void**)self);
     if (it == g_wbOrig.end())
         return 0; // can't happen: only hooked vtables get here
+    SafeGdmOnDamage(self, attacker, damage);
     return it->second(self, edx, inflictor, attacker, SafeWbDamage(self, inflictor, attacker, damage), bits, extra);
 }
 

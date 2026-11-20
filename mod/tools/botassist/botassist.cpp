@@ -2191,13 +2191,11 @@ static void UpdateMatchBots()
     g_matchKnown = false;
     g_matchAdded[0] = g_matchAdded[1] = g_matchAdded[2] = 0;
     LeaveCriticalSection(&g_matchLock);
+    // every bot's state goes: the last match's bots are gone, and their edicts may be too (2026-11-20: after a Gun
+    // Deathmatch with 18 bots, Zombie Shelter's bots became bots 18-20 and every order read the old edicts: access
+    // violations, and the bots followed no order and did no job)
     for (auto& b : g_bots)
-    {
-        b.roomBot = -1;
-        b.ordered = false;
-        b.commander = nullptr;
-        b.order = ORDER_FOLLOW;
-    }
+        b = BotState();
     g_teamOrder = ORDER_FOLLOW;
     InterlockedExchange(&g_matchFetch, 1);
     FetchMatchBots(NULL);
