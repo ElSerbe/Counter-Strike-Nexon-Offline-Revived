@@ -5690,6 +5690,7 @@ static void HookedStartFrame()
         WbFrame();
         KnifeFixFrame();
         GrenadeFixFrame();
+        GunPricesFrame();
         if (CoopMode())
         {
             UpdateBarricades(); // zombies against barricades, bots or not

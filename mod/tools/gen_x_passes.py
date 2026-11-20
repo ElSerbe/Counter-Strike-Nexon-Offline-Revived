@@ -31,7 +31,7 @@ SPACE = {"beamgun", "halogun", "halogunex", "lasersg", "voidpistolex", "wonderca
          "transformgunadv", "leapstrikegun", "y21s1jetgunma", "y21s1jetgunmd", "sfturret", "sfsnipermb", "sfmgzhc",
          "restrictionpistol"}
 # English names for the weapons the game's texts don't name (the game shows its names in pictures; the user read
-# Giga Break, Gravity Repulsor, Cyclops, Custos, Arbalest, Space Arbalest, Asura Hell Splitter in game, 2026-11-20)
+# Giga Break, Gravity Repulsor, Cyclops, Cousteau, Arbalest, Space Arbalest, Asura Hell Splitter in game, 2026-11-20)
 NAMES = {
     "dgaxe": "Dread Axe", "dgaxeex": "Dread Axe EX", "y26s1m32": "M32 MGL (2026)", "beamgun": "Giga Break",
     "transformgunadv": "Transform Gun ADV", "speargunex": "Spear Gun EX", "deserteagleg": "Desert Eagle Gold",
@@ -45,7 +45,7 @@ NAMES = {
     "leapstrikegun": "Gravity Repulsor", "m1887craftb": "M1887 Craft B", "restrictionpistol": "Cyclops",
     "voidpistolex": "Void Avenger EX", "y21s1jetgunmd": "Jet Gun MD", "dvhammer": "Divine Hammer",
     "infinityex2zhc": "Infinity EX2 (Hero)", "whipflail": "Whip Flail", "summonknifeex": "Summon Knife EX",
-    "divinetitanex": "Divine Titan EX", "sfturret": "Custos", "divinetitan": "Divine Titan", "sbmine": "SB Mine",
+    "divinetitanex": "Divine Titan EX", "sfturret": "Cousteau", "divinetitan": "Divine Titan", "sbmine": "SB Mine",
     "boww": "Bow W", "m134w": "M134 W", "qbs09b": "QBS-09 B", "destroyerb": "Destroyer B", "pp2000b": "PP-2000 B",
     "sfsnipermb": "SF Sniper MB", "dualkrissb": "Dual Kriss B", "mg36b": "MG36 B", "hdaggerb": "Hunting Dagger B",
     "wa2000desert": "WA2000 Desert", "pgmb": "PGM B", "bisonb": "Bizon B", "crossbowcls": "Classic Crossbow",

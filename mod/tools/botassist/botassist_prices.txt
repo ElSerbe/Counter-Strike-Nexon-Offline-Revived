@@ -1,0 +1,13 @@
+; In-game buy prices ($) of the strongest weapons (the user, 2026-11-20: too cheap to equip in a match).
+; botassist sets them each new map in the engine's item records (the buy is charged that).
+;   <InGameID> x<factor>   the game's own price times factor
+;   <InGameID> <dollars>   this price
+; InGameID = Item.csv's 6th column. "cap" = the highest price botassist sets (a price is never lowered).
+cap 16000
+725 x4   ; Giga Break (beamgun, 9637)
+530 x4   ; Asura Hell Splitter (wondercannonex, 8709)
+591 x4   ; Space Arbalest (halogunex, 9098)
+537 x4   ; Arbalest (halogun, 8787)
+656 x3   ; Vortex Drill (sgdrillvortex, 9384)
+541 x3   ; Cousteau (sfturret, 8820)
+390 x3   ; Magnum Launcher (sgmissile, 8094)

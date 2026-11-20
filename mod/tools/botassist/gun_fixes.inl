@@ -114,6 +114,18 @@ static float ByMode(float pvp, float zombie, float scenario)
     return CoopMode() ? scenario : ZombieMode(GameMode()) ? zombie : pvp;
 }
 
+// the first shots of each fixed gun are logged step by step (2026-11-20: the server closed on the Gravity Repulsor's
+// first shot and the log said nothing), so the next test shows the step it stops at
+static int g_gunSteps = 0;
+static void GunStep(const char* what, const char* step)
+{
+    if (g_gunSteps < 60)
+    {
+        g_gunSteps++;
+        Log("gun fix step: %s: %s", what, step);
+    }
+}
+
 static void AimVectors(unsigned char* pev, float* fwd)
 {
     float p = (*(float*)(pev + EV_VANGLE) + *(float*)(pev + EV_PUNCHANGLE)) / RAD;
@@ -134,13 +146,17 @@ static bool GunBullet(void* weapon, float spread, int damage, int penetration, i
     if (!vt || !Readable(vt + PL_VT_GUNPOS, 4) || !pev)
         return false;
     float src[3] = { 0, 0, 0 }, out[3], fwd[3];
+    GunStep("bullet", "gun position");
     ((GunPositionFn)vt[PL_VT_GUNPOS])(player, nullptr, src);
     AimVectors(pev, fwd);
+    GunStep("bullet", "FireBullets3");
     ((FireBullets3Fn)(MP_FIREBULLETS3 + g_mpDelta))(player, nullptr, out, src[0], src[1], src[2], fwd[0], fwd[1], fwd[2],
                                                    spread, BD_DISTANCE, penetration, bullet, damage, BD_RANGE_MOD, pev,
                                                    0, *(int*)(player + PL_SHARED_RAND), 0, 0);
+    GunStep("bullet", "fired");
     if (hit)
     {
+        GunStep("bullet", "trace for the blast");
         TraceResult tr;
         V3 from = Vec(src), dir = Vec(fwd);
         Trace(from, from + dir * BD_DISTANCE, *(void**)(pev + EV_CONTAINING_ENTITY), 0, tr);
@@ -153,6 +169,7 @@ static bool GunBullet(void* weapon, float spread, int damage, int penetration, i
 // the game's explosion at `at`: sprite, sound, damage around; the shooter (attackerPev) isn't hurt by his own blast
 static void GunBlast(const float* at, unsigned char* attackerPev, float damage, float radius, int scale)
 {
+    GunStep("blast", "explosion message");
     if (g_MessageBegin && g_WriteByte && g_WriteShort && g_WriteCoord && g_MessageEnd)
     {
         g_MessageBegin(4 /* MSG_PVS */, 23 /* SVC_TEMPENTITY */, at, nullptr);
@@ -166,11 +183,13 @@ static void GunBlast(const float* at, unsigned char* attackerPev, float damage, 
         g_WriteByte(0);
         g_MessageEnd();
     }
+    GunStep("blast", "RadiusDamage");
     float take = *(float*)(attackerPev + EV_TAKEDAMAGE);
     *(float*)(attackerPev + EV_TAKEDAMAGE) = 0;
     ((RadiusDamageFn)(MP_RADIUS_DAMAGE + g_mpDelta))(at[0], at[1], at[2], attackerPev, attackerPev, damage, radius, 0,
                                                      0x1000000 /* the barrels' and grenades' blast bit */);
     *(float*)(attackerPev + EV_TAKEDAMAGE) = take;
+    GunStep("blast", "done");
 }
 
 static unsigned char* WeaponOwnerPev(void* weapon)
@@ -189,7 +208,9 @@ static void GunFixFault(const char* what, DWORD code)
 static void __fastcall HookedLsgPrimary(void* weapon, void* edx)
 {
     int clip = Readable((unsigned char*)weapon + WPN_CLIP, 4) ? *(int*)((unsigned char*)weapon + WPN_CLIP) : 0;
+    GunStep("Gravity Repulsor", "the game's PrimaryAttack");
     g_lsgPrimary(weapon, edx);
+    GunStep("Gravity Repulsor", "back from it");
     __try
     {
         float hit[3];
@@ -209,7 +230,9 @@ static void __fastcall HookedBgPrimary(void* weapon, void* edx)
     unsigned char* w = (unsigned char*)weapon;
     int clip = Readable(w + WPN_CLIP, 4) ? *(int*)(w + WPN_CLIP) : 0;
     float next = Readable(w + WPN_NEXT_PRIMARY, 4) ? *(float*)(w + WPN_NEXT_PRIMARY) : 0;
+    GunStep("Giga Break", "the game's PrimaryAttack");
     g_bgPrimary(weapon, edx);
+    GunStep("Giga Break", "back from it");
     __try
     {
         unsigned char* pev = WeaponOwnerPev(weapon);
@@ -267,6 +290,13 @@ static void* DetourChecked(DWORD addr, const unsigned char* code, int len, void*
 
 static void FixSciFiGuns()
 {
+    char ini[MAX_PATH];
+    snprintf(ini, sizeof(ini), "%sbotassist.ini", g_dir);
+    if (!GetPrivateProfileIntA("BotAssist", "SciFiGunFixes", 1, ini))
+    {
+        Log("guns: Gravity Repulsor and Giga Break left as they are (SciFiGunFixes=0 in botassist.ini)");
+        return;
+    }
     const unsigned char lsg[] = { 0x55, 0x8b, 0xec, 0x83, 0xe4, 0xf8 }; // push ebp; mov ebp, esp; and esp, -8
     const unsigned char bg1[] = { 0x55, 0x8b, 0xec, 0x83, 0xec, 0x0c }; // push ebp; mov ebp, esp; sub esp, 0xc
     const unsigned char bg2[] = { 0x55, 0x8b, 0xec, 0x83, 0xec, 0x08 }; // ... sub esp, 8
@@ -278,4 +308,118 @@ static void FixSciFiGuns()
         g_bgSecondary = (WeaponFn)DetourChecked(MP_BG_SECONDARY, bg2, sizeof(bg2), (void*)HookedBgSecondary, "Giga Break");
     Log("guns: Gravity Repulsor %s, Giga Break %s (their shots had no bullet)", g_lsgPrimary ? "fires" : "left as it is",
         g_bgPrimary && g_bgSecondary ? "fires (right click: blast)" : "left as it is");
+}
+
+// ---------------------------------------------------------------- in-game prices ($)
+// The buy price of a weapon is the first field of its record in the engine's item manager (mp.dll 0x10ab96d0: manager
+// = [0x121d3d18](), record = manager vfunc 4 (InGameID, Item.csv's 6th column); BuyWeapon 0x113eb3a0 then asks the
+// game rules (vfunc 0x400) and compares with the money, 0x114b76d0). The user (2026-11-20): the strongest weapons were
+// too cheap to equip in a match. botassist_prices.txt next to botassist.asi sets their prices: each new map, the
+// records of the listed weapons get the new price (a factor of the game's own, or dollars), up to its "cap".
+static const DWORD MP_ITEM_MANAGER = 0x121d3d18;
+typedef void* (*ItemManagerFn)();
+typedef int*(__fastcall* ItemRecordFn)(void* mgr, void* edx, int inGameId);
+struct GunPrice
+{
+    int id;
+    float factor; // > 0: times the game's price
+    int dollars;  // else this price
+};
+static std::vector<GunPrice> g_gunPrices;
+static std::map<int, int> g_gunPriceBase; // the game's own price of each listed weapon
+static int g_gunPriceCap = 16000, g_gunPriceLevel = -1;
+static bool g_gunPricesRead = false;
+
+static void ReadGunPrices()
+{
+    g_gunPricesRead = true;
+    char path[MAX_PATH];
+    snprintf(path, sizeof(path), "%sbotassist_prices.txt", g_dir);
+    FILE* f = fopen(path, "r");
+    if (!f)
+        return;
+    char line[256];
+    while (fgets(line, sizeof(line), f))
+    {
+        char* c = strchr(line, ';');
+        if (c)
+            *c = 0;
+        int id = 0;
+        char val[64] = "";
+        if (sscanf(line, " cap %d", &g_gunPriceCap) == 1)
+            continue;
+        if (sscanf(line, " %d %63s", &id, val) != 2 || id <= 0)
+            continue;
+        GunPrice p = { id, 0, 0 };
+        if (val[0] == 'x' || val[0] == 'X')
+            p.factor = (float)atof(val + 1);
+        else
+            p.dollars = atoi(val);
+        if (p.factor > 0 || p.dollars > 0)
+            g_gunPrices.push_back(p);
+    }
+    fclose(f);
+    Log("prices: %d weapons from botassist_prices.txt (cap $%d)", (int)g_gunPrices.size(), g_gunPriceCap);
+}
+
+static void LogGunPrices(void* mgr, ItemRecordFn record)
+{
+    std::string list;
+    for (const GunPrice& p : g_gunPrices)
+    {
+        int* rec = record(mgr, nullptr, p.id);
+        char one[48];
+        snprintf(one, sizeof(one), "%s%d: $%d -> $%d", list.empty() ? "" : ", ", p.id, g_gunPriceBase[p.id],
+                 rec ? *rec : -1);
+        list += one;
+    }
+    Log("prices: %s", list.c_str());
+}
+
+// once a map: the listed weapons' records get their price
+static void GunPricesFrame()
+{
+    if (!g_gunPricesRead)
+        ReadGunPrices();
+    if (g_gunPrices.empty() || g_gunPriceLevel == g_nav.level)
+        return;
+    g_gunPriceLevel = g_nav.level;
+    __try
+    {
+        ItemManagerFn getMgr = *(ItemManagerFn*)(MP_ITEM_MANAGER + g_mpDelta);
+        void* mgr = getMgr ? getMgr() : nullptr;
+        if (!mgr)
+            return;
+        ItemRecordFn record = (ItemRecordFn)(*(void***)mgr)[1];
+        int set = 0;
+        for (const GunPrice& p : g_gunPrices)
+        {
+            int* rec = record(mgr, nullptr, p.id);
+            if (!rec || !Readable(rec, 4))
+                continue;
+            auto it = g_gunPriceBase.find(p.id);
+            int base = it != g_gunPriceBase.end() ? it->second : *rec;
+            if (it == g_gunPriceBase.end())
+                g_gunPriceBase[p.id] = base;
+            int price = p.factor > 0 ? (int)(base * p.factor) : p.dollars;
+            price = (std::min)(price, g_gunPriceCap);
+            price = (std::max)(price, base);
+            if (*rec != price)
+            {
+                DWORD old;
+                if (VirtualProtect(rec, 4, PAGE_READWRITE, &old))
+                {
+                    *rec = price;
+                    set++;
+                }
+            }
+        }
+        static int logs = 0;
+        if (set && logs++ < 10)
+            LogGunPrices(mgr, record);
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        Log("prices: exception 0x%08lX setting the weapons' prices", GetExceptionCode());
+    }
 }

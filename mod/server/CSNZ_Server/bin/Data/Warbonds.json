@@ -978,7 +978,7 @@
 					{ "ItemID": 530, "Cost": 225 }, { "ItemID": 339, "Cost": 100 }, { "ItemID": 417, "Cost": 120 }, { "ItemID": 753, "Cost": 120 }
 				] },
 				{ "Unlock": 870, "Items": [
-					{ "ItemID": 984, "Cost": 225 }, { "ItemID": 8094, "Cost": 4000 }, { "ItemID": 8350, "Cost": 360 }
+					{ "ItemID": 984, "Cost": 225 }, { "ItemID": 8094, "Cost": 600 }, { "ItemID": 8350, "Cost": 360 }
 				] }
 			]
 		},
@@ -1148,16 +1148,16 @@
 					{ "ItemID": 8113, "Cost": 165 }, { "ItemID": 8395, "Cost": 165 }, { "ItemID": 8078, "Cost": 265 }, { "ItemID": 8396, "Cost": 265 }
 				] },
 				{ "Unlock": 340, "Items": [
-					{ "ItemID": 8457, "Cost": 300, "Name": "Jet Gun MA" }, { "ItemID": 9117, "Cost": 450, "Name": "SF Sniper MB" }, { "ItemID": 9369, "Cost": 825, "Name": "SF MG (Hero)" }, { "ItemID": 8460, "Cost": 1000, "Name": "Jet Gun MD" }
+					{ "ItemID": 8457, "Cost": 300, "Name": "Jet Gun MA" }, { "ItemID": 9117, "Cost": 450, "Name": "SF Sniper MB" }, { "ItemID": 8820, "Cost": 600, "Name": "Cousteau" }, { "ItemID": 9369, "Cost": 825, "Name": "SF MG (Hero)" }
 				] },
-				{ "Unlock": 1370, "Items": [
-					{ "ItemID": 8876, "Cost": 1500, "Name": "Gravity Repulsor" }, { "ItemID": 8720, "Cost": 1500, "Name": "Cyclops" }, { "ItemID": 8663, "Cost": 1500, "Name": "Void Avenger EX" }, { "ItemID": 8666, "Cost": 1500, "Name": "Laser Shotgun" }
+				{ "Unlock": 1210, "Items": [
+					{ "ItemID": 8460, "Cost": 1000, "Name": "Jet Gun MD" }, { "ItemID": 9384, "Cost": 1000, "Name": "Vortex Drill" }, { "ItemID": 8876, "Cost": 1500, "Name": "Gravity Repulsor" }, { "ItemID": 8720, "Cost": 1500, "Name": "Cyclops" }
 				] },
-				{ "Unlock": 3770, "Items": [
-					{ "ItemID": 8891, "Cost": 1500, "Name": "Transform Gun ADV" }, { "ItemID": 8820, "Cost": 4000, "Name": "Custos" }, { "ItemID": 9384, "Cost": 5000, "Name": "Vortex Drill" }, { "ItemID": 9637, "Cost": 9000, "Name": "Giga Break" }
+				{ "Unlock": 3210, "Items": [
+					{ "ItemID": 8663, "Cost": 1500, "Name": "Void Avenger EX" }, { "ItemID": 8666, "Cost": 1500, "Name": "Laser Shotgun" }, { "ItemID": 8891, "Cost": 1500, "Name": "Transform Gun ADV" }, { "ItemID": 9637, "Cost": 2250, "Name": "Giga Break" }
 				] },
-				{ "Unlock": 11570, "Items": [
-					{ "ItemID": 8709, "Cost": 9000, "Name": "Asura Hell Splitter" }, { "ItemID": 9098, "Cost": 9000, "Name": "Space Arbalest" }, { "ItemID": 8787, "Cost": 9000, "Name": "Arbalest" }
+				{ "Unlock": 5910, "Items": [
+					{ "ItemID": 8709, "Cost": 2250, "Name": "Asura Hell Splitter" }, { "ItemID": 9098, "Cost": 2250, "Name": "Space Arbalest" }, { "ItemID": 8787, "Cost": 2250, "Name": "Arbalest" }
 				] }
 			]
 		}
