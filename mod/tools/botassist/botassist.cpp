@@ -1703,6 +1703,8 @@ static bool FloorAlong(void* bot, V3 from, V3 to)
 }
 
 static bool CoopUnstick(void* bot, BotState& st, V3 pos); // scenario_orders.inl
+static bool HuntGoal(void* bot, BotState& st, V3 pos, V3& goal); // scenario_orders.inl
+static void HsTargetBots(DWORD delta);                          // modes/human_scenario.inl
 static bool CoopMode();
 
 // Every mode that walks a path goes through here, so this is where a bot that isn't getting anywhere is noticed. Moving doesn't count
@@ -2452,6 +2454,8 @@ static void Drive(void* bot, BotState& st, Command& cmd, float dt)
             goal = Origin(st.threat);
             wantMove = true;
         }
+        else if (!st.target && !st.threat && HuntGoal(bot, st, pos, goal))
+            wantMove = true; // nothing in sight: towards the nearest monster of the map (Human Scenario's are far away)
         else if ((!st.threat || HsNoChase(st.threat, st.target, eye)) && leader && Len(Origin(leader) - pos) > 900.0f)
         {
             goal = FormationSpot(leader, st.slot, cfg.followDistance); // nothing to hunt: rejoin
@@ -5013,6 +5017,7 @@ static void HookBotManager(DWORD delta)
     FixDivineTitanEx(delta);
     GuardZbSkillThinks(delta);
     FixCrossbowCls(delta);
+    HsTargetBots(delta);
     InstallTableOverrides();
     InstallFileOverrides();
     LoadZombieSkillTable();

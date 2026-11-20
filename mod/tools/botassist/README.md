@@ -1282,3 +1282,11 @@ sword keeps its own models; the Y25S2 SF Sword's helper is the fallback (works, 
 GameUI reads resource/clan/ClanAchieve.csv with its own CSV reader. Files of botassist_tables/resource/clan/ are opened
 instead of the game's through the same file system hook as the model aliases (by their full path): the window shows
 the offline targets of CSNZ_Server's Family achievements (tools/gen_family_achievements.py).
+
+## Human Scenario: the soldiers shoot the bots; "Hunt freely" goes looking
+
+The soldiers' AI (CHumanImprov) takes a player as its target only if vtable slot 0x11c (0x11351010) says yes: the
+target's Classify() 2 or 21. Bots classify as 15 (CCSBot / ZBBot 0x107f8c40), so the soldiers shot only the player.
+botassist puts its own check in that slot (modes/human_scenario.inl HsTargetBots): 15 too. In every co-op mode, "Hunt
+freely" with nothing in sight now walks to the nearest living monster of the map that isn't an aircraft or a missile
+(scenario_orders.inl HuntGoal, looked up every 2 s); before, the bots stood still until a monster came near.

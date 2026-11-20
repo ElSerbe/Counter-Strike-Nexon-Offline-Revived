@@ -219,6 +219,37 @@ static bool CoopUnstick(void* bot, BotState& st, V3 pos)
     return true;
 }
 
+// "Hunt freely" with nothing in sight: the nearest living monster of the whole map that walks (not the aircraft), so
+// the bots go and find them (Human Scenario's soldiers stay far from the players; the bots stood still). Looked up
+// every 2 s per bot.
+static bool HuntGoal(void* bot, BotState& st, V3 pos, V3& goal)
+{
+    (void)bot;
+    if (!CoopMode() || !g_nav.ok)
+        return false;
+    static std::unordered_map<int, std::pair<float, V3>> cache; // slot -> (next look, goal; x NAN: none)
+    float now = Now();
+    auto& c = cache[st.slot];
+    if (now >= c.first || now < c.first - 3.0f)
+    {
+        c.first = now + 2.0f;
+        float best = 1e18f;
+        V3 found{ NAN, 0, 0 };
+        ForEntitiesNear(pos, 16000.0f, [&](void* e) {
+            if (!IsLivingMonster(e) || HsFlying(e) || HsIsMissile(e))
+                return;
+            float d = Len(Center(e) - pos);
+            if (d < best)
+                best = d, found = Origin(e);
+        });
+        c.second = found;
+    }
+    if (c.second.x != c.second.x) // (NAN: no monster left)
+        return false;
+    goal = c.second;
+    return true;
+}
+
 static void SoBring(void* player)
 {
     int team = TeamOf(player);

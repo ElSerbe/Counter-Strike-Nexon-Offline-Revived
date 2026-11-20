@@ -32,6 +32,42 @@ static bool HsIsEnemyClass(const char* classname)
     return false;
 }
 
+// The soldiers' AI (CHumanImprov) looks for targets among the players (0x11351ec0: by index, alive, in range, in
+// sight) and keeps one only if its vtable slot 0x11c (0x11351010: target's Classify() 2 or 21) says yes. Bots classify
+// as 15 (CCSBot, ZBBot: 0x107f8c40), so the soldiers never shot them: only the player. Slot 0x11c now also takes 15.
+static const DWORD MP_VT_HUMANIMPROV = 0x119445ac, MP_HUMANIMPROV_ISTARGET = 0x11351010;
+static const int HS_SLOT_ISTARGET = 0x11c / 4, CLASS_PLAYER_HS = 2, CLASS_HS_OTHER = 0x15, CLASS_BOT = 0xf;
+typedef int(__fastcall* ClassifyFn)(void* self, void* edx);
+
+static bool __fastcall HsIsTarget(void* self, void* edx, void* target)
+{
+    (void)self, (void)edx;
+    if (!target || !Readable(target, 4))
+        return false;
+    void** vt = *(void***)target;
+    if (!vt || !Readable(vt + 12, 4))
+        return false;
+    int c = ((ClassifyFn)vt[12])(target, nullptr); // Classify (vtable +0x30)
+    return c == CLASS_PLAYER_HS || c == CLASS_HS_OTHER || c == CLASS_BOT;
+}
+
+static void HsTargetBots(DWORD delta)
+{
+    void** vt = (void**)(MP_VT_HUMANIMPROV + delta);
+    if (!Readable(vt + HS_SLOT_ISTARGET, 4) || vt[HS_SLOT_ISTARGET] == (void*)HsIsTarget)
+        return;
+    if (vt[HS_SLOT_ISTARGET] != (void*)(MP_HUMANIMPROV_ISTARGET + delta))
+    {
+        Log("Human Scenario: the soldiers' AI has unexpected code: they still shoot only players");
+        return;
+    }
+    DWORD old;
+    VirtualProtect(vt + HS_SLOT_ISTARGET, 4, PAGE_READWRITE, &old);
+    vt[HS_SLOT_ISTARGET] = (void*)HsIsTarget;
+    VirtualProtect(vt + HS_SLOT_ISTARGET, 4, old, &old);
+    Log("Human Scenario: the soldiers shoot the bots too (they took only players as targets)");
+}
+
 static float HsScanRadius()
 {
     return GameMode() == MODE_HS ? max(cfg.radius, HS_SCAN_RADIUS) : cfg.radius;
