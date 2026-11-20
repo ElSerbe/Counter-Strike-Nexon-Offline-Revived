@@ -7,15 +7,16 @@
 // Gravity Repulsor (weapon_leapstrikegun)
 //  - each shot (gun_fixes.inl: a bullet and a small blast where it lands) also sends a pulse around the player that
 //    pushes and hurts the enemies next to him; while hovering the shots hit harder.
-//  - anti-gravity energy charges by itself (25 s); right click with it full: Repulsor Leap (hurts and pushes the
-//    enemies around, then throws the player where he aims); when the leap ends with the gun in hand: Anti-graviton
-//    (hovers 3 s); right click while hovering: Gravity Strike (straight down; landing hurts, pushes and stuns a wide
-//    area; no damage taken until 1.5 s after landing). Each enemy hit gives energy back (at most 80%).
+//  - anti-gravity energy charges by itself (10 s); right click with it full: Repulsor Leap (hurts and pushes the
+//    enemies around, then throws the player where he aims); when the leap ends with the gun in hand: Anti-Graviton
+//    (hovers 6 s, shooting allowed); right click while hovering, or by itself when the hover ends with the gun in
+//    hand: Gravity Strike (straight down; landing hurts, pushes and stuns a wide area; no damage taken until 1.5 s
+//    after landing). The gauge restarts at 20% plus 5% for each enemy hit (at most 80%).
 // Giga Break (weapon_beamgun)
-//  - left click: bullets with a small blast; in zombie modes and Super Soldier every second shot in a row opens a
-//    small black hole that pulls enemies in.
-//  - right click: two swings in a row hit what's in front; the second creates Overflow-Alpha (6 s).
-//  - special ammunition charges by itself (40 s); R with it full: Overflow-Beta (15 s).
+//  - left click: bullets with a blast; every 6th shot in a row releases a bigger one.
+//  - right click: swings that hit what's in front; the second of a combo also sends an energy wave forward (and in
+//    zombie modes and Super Soldier a small black hole where it ends) and creates Overflow-Alpha (4 s).
+//  - special ammunition charges by itself (30 s); R with it full: Overflow-Beta (10 s).
 //  - in Overflow (the weapon's state +0x1c0 = 1/2, end time +0x1cc, the game's own animations): left click = Overflow
 //    Burst (a big blast where you aim), right click = Overflow Crash (a dash that crashes into the area in front, no
 //    damage taken meanwhile).
@@ -174,79 +175,111 @@ static void SfLsgShot(void* player)
     SfArea(Origin(player), player, ByMode(6, 80, 120) * SfLsgBonus(player), 120.0f, 260.0f, 0, 0);
 }
 
+// The video (the user's, "CSN:S Gravity Repulsor Review", 2026-11-21) and the game's own help panel: the gauge fills
+// in about 10 s (+9-10%/s on the HUD); the leap takes the player up (to the training room's ceiling); hovering lasts
+// about 6 s and he can shoot meanwhile; when it ends with the gun in hand the Gravity Strike goes off by itself (panel:
+// "right-click during Anti-Graviton to use directly, or it automatically activates if you're using a weapon when the
+// Anti-Graviton ends"); after landing the gauge was at about 25%. Hover and fall go through the player's own gravity
+// (pev +0x12c: the client predicts it, no jerks), the leap is one push.
+static const int SF_EV_GRAVITY = 0x12c;
+static const float LSG_CHARGE_PER_S = 10.0f, LSG_HOVER_S = 6.0f, LSG_LEAP_SPEED = 1000.0f, LSG_LEAP_UP = 320.0f;
+
+static void SfLsgStrike(void* player, SfPlayer& s, float now)
+{
+    unsigned char* v = Vars(player);
+    float* vel = (float*)(v + EV_VELOCITY);
+    vel[0] *= 0.2f;
+    vel[1] *= 0.2f;
+    vel[2] = -1600.0f;
+    F<float>(v, SF_EV_GRAVITY) = 3.0f; // straight down, fast
+    s.phase = 3;
+    s.phaseAt = now;
+    s.invulnUntil = now + 4.0f; // until it lands (then 1.5 s more)
+}
+
 static void SfLsgFrame(void* player, SfPlayer& s, bool active, int pressed, float now, float dt)
 {
-    if (s.energy < 100 && s.phase == 0)
-    {
-        s.energy = (std::min)(100.0f, s.energy + dt * 4.0f); // 25 s
-        if (s.energy >= 100 && active && !s.energyTold)
-        {
-            s.energyTold = true;
-            SfSay(player, "Gravity Repulsor: energy full - right click: Repulsor Leap");
-        }
-    }
     unsigned char* v = Vars(player);
     float* vel = (float*)(v + EV_VELOCITY);
     bool ground = (F<int>(v, EV_FLAGS) & SF_FL_ONGROUND) != 0;
+    if (s.energy < 100 && s.phase == 0)
+    {
+        s.energy = (std::min)(100.0f, s.energy + dt * LSG_CHARGE_PER_S);
+        if (s.energy >= 100 && active && !s.energyTold)
+        {
+            s.energyTold = true;
+            SfSay(player, "Gravity Repulsor: energy 100% - right click: Repulsor Leap");
+        }
+    }
     if (active && (pressed & SF_IN_ATTACK2))
     {
         if (s.phase == 0 && s.energy >= 100)
         {
-            s.leapHits = SfArea(Origin(player), player, ByMode(30, 500, 700), 180.0f, 600.0f, 250.0f, 20);
+            // Repulsor Leap: the enemies around are hurt and pushed, then the player is thrown where he aims
+            s.leapHits = SfArea(Origin(player), player, ByMode(30, 500, 700), 200.0f, 650.0f, 250.0f, 20);
             V3 aim = SfAim(player);
-            vel[0] = aim.x * 900.0f;
-            vel[1] = aim.y * 900.0f;
-            vel[2] = (std::max)(aim.z * 900.0f, 0.0f) + 350.0f;
+            vel[0] = aim.x * LSG_LEAP_SPEED;
+            vel[1] = aim.y * LSG_LEAP_SPEED;
+            vel[2] = (std::max)(aim.z * LSG_LEAP_SPEED, 0.0f) + LSG_LEAP_UP;
             s.energy = 0;
             s.energyTold = false;
             s.phase = 1;
             s.phaseAt = now;
             return;
         }
-        if (s.phase == 0 && active)
+        if (s.phase == 2)
+        {
+            SfLsgStrike(player, s, now); // Gravity Strike, used directly
+            return;
+        }
+        if (s.phase == 0)
         {
             char t[96];
             snprintf(t, sizeof(t), "Gravity Repulsor: energy %d%%", (int)s.energy);
             SfSay(player, t);
         }
-        if (s.phase == 2)
-        {
-            vel[0] = vel[1] = 0;
-            vel[2] = -1800.0f;
-            s.phase = 3;
-            s.phaseAt = now;
-            s.invulnUntil = now + 4.0f; // until it lands (then 1.5 s more)
-            return;
-        }
     }
-    if (s.phase == 1 && ((vel[2] <= 0 && now - s.phaseAt > 0.15f) || now - s.phaseAt > 1.2f))
+    if (s.phase == 1 && ((vel[2] <= 60.0f && now - s.phaseAt > 0.2f) || now - s.phaseAt > 1.5f))
     {
-        s.phase = active ? 2 : 0; // Anti-graviton only with the gun in hand
-        s.phaseAt = now;
-        if (s.phase == 0)
+        if (active)
+        {
+            s.phase = 2; // Anti-Graviton: hovers, free to move and shoot
+            s.phaseAt = now;
+            vel[2] = 0;
+            F<float>(v, SF_EV_GRAVITY) = 0.001f;
+            SfSay(player, "Anti-Graviton - right click: Gravity Strike");
+        }
+        else
+        {
+            s.phase = 0;
             s.energy = (std::min)(80.0f, s.leapHits * 10.0f);
+        }
     }
     else if (s.phase == 2)
     {
-        if (now - s.phaseAt > 3.0f || ground || !active)
+        if (!active)
         {
+            F<float>(v, SF_EV_GRAVITY) = 1.0f;
             s.phase = 0;
             s.energy = (std::min)(80.0f, s.leapHits * 10.0f);
         }
-        else
-            vel[2] = -15.0f; // hovering, free to move around
+        else if (now - s.phaseAt >= LSG_HOVER_S || ground)
+            SfLsgStrike(player, s, now); // the hover ended with the gun in hand: the strike goes off by itself
+        else if (vel[2] < -40.0f || vel[2] > 40.0f)
+            vel[2] *= 0.5f;
     }
     else if (s.phase == 3)
     {
-        if (ground || now - s.phaseAt > 2.5f)
+        if (ground || now - s.phaseAt > 3.0f)
         {
-            int hits = SfArea(Origin(player) - V3{ 0, 0, 30 }, player, ByMode(120, 3000, 3000), 300.0f, 900.0f, 300.0f, 45);
+            F<float>(v, SF_EV_GRAVITY) = 1.0f;
+            int hits = SfArea(Origin(player) - V3{ 0, 0, 30 }, player, ByMode(150, 4000, 6000), 320.0f, 900.0f, 300.0f, 50);
             s.invulnUntil = now + 1.5f;
             s.phase = 0;
-            s.energy = (std::min)(80.0f, (s.leapHits + hits) * 10.0f);
+            s.energy = (std::min)(80.0f, 20.0f + (s.leapHits + hits) * 5.0f);
         }
-        else
-            vel[2] = -1800.0f;
+        else if (vel[2] > -1600.0f)
+            vel[2] = -1600.0f;
     }
 }
 
@@ -272,7 +305,21 @@ static void SfEnterOverflow(SfPlayer& s, void* weapon, float secs)
         g_sendWeaponAnim(weapon, nullptr, 6 /* change_idle_charge */, 0);
 }
 
-// gun_fixes.inl, after the game's PrimaryAttack: fired = a round taken, anim = what it played
+// The user's video ("CSN:S Review Giga Break & Giga Break LE", training room against a zombie target, 2026-11-21):
+// basic shots ~865 each (bullet + blast), and after a run of shots a bigger release (~1290); right click = melee swings
+// (~96 each), the combo ends with a wide energy wave and the weapon changes (Overflow-Alpha, ~4 s); in Overflow the
+// right click dashes into the target behind a hexagon shield (Overflow Crash, ~1920) and the left click hits one far
+// target very hard (Overflow Burst, ~17000). The special ammunition gauge (bottom right) fills ~3.3%/s (30 s).
+// Zombie numbers from the video; scenario x3.5 and the others x0.05 (the game's 2400 / 680 / 32 for a bullet).
+static const float GB_ALPHA_S = 4.0f, GB_BETA_S = 10.0f, GB_BETA_PER_S = 3.33f;
+static const int GB_RELEASE_EVERY = 6;
+
+static float SfGb(float zombie, float pvp)
+{
+    return ByMode(pvp, zombie, zombie * 3.5f);
+}
+
+// gun_fixes.inl, after the game's PrimaryAttack: normalShot = a round taken, burst = an Overflow Burst played (9/10)
 static void SfBgPrimary(void* player, void* weapon, bool normalShot, int anim, bool burst)
 {
     int i = SfIndex(player);
@@ -280,27 +327,33 @@ static void SfBgPrimary(void* player, void* weapon, bool normalShot, int anim, b
         return;
     SfPlayer& s = g_sf[i];
     float now = Now();
+    float hit[3];
     if (normalShot)
     {
-        float hit[3];
-        if (GunBullet(weapon, 0.008f, (int)ByMode(32, 680, 2400), 2, BULLET_762, hit))
-        {
-            float a[3] = { hit[0], hit[1], hit[2] };
-            GunBlast(a, Vars(player), ByMode(10, 150, 500), 70.0f, 4);
-            s.shotRun = now - s.lastShot < 0.9f ? s.shotRun + 1 : 1;
-            s.lastShot = now;
-            if (s.shotRun % 2 == 0 && SfBlackHoleMode())
-                g_sfPulls.push_back({ Vec(a), player, now + 1.5f });
-        }
+        if (!GunBullet(weapon, 0.008f, (int)ByMode(32, 680, 2400), 2, BULLET_762, hit))
+            return;
+        GunBlast(hit, Vars(player), SfGb(185, 10), 70.0f, 4);
+        s.shotRun = now - s.lastShot < 1.0f ? s.shotRun + 1 : 1;
+        s.lastShot = now;
+        if (s.shotRun % GB_RELEASE_EVERY == 0) // consecutive basic attacks release energy
+            SfArea(Vec(hit), player, SfGb(1290, 60), 150.0f, 300.0f, 150.0f, 25);
     }
-    else if (burst)
-    {
-        // Overflow Burst: everything released at one far point (anim 9; 10 is the last one, the state ends)
-        float hit[3];
-        if (GunBullet(weapon, 0.0f, (int)ByMode(60, 1500, 5000), 0, BULLET_762, hit))
-            SfArea(Vec(hit), player, ByMode(150, 4000, 12000), 300.0f, 400.0f, 200.0f, 40);
-    }
+    else if (burst && GunBullet(weapon, 0.0f, (int)SfGb(2000, 60), 0, BULLET_762, hit))
+        SfArea(Vec(hit), player, SfGb(15000, 220), 140.0f, 500.0f, 200.0f, 45); // Overflow Burst
     (void)anim;
+}
+
+// the swings' energy wave: what's along the aim line up to 700 units
+static void SfBgWave(void* player)
+{
+    V3 eye = Eye(player), aim = SfAim(player);
+    TraceResult tr;
+    Trace(eye, eye + aim * 700.0f, player, 1, tr);
+    float len = tr.flFraction * 700.0f;
+    for (float d = 80.0f; d < len; d += 110.0f)
+        SfArea(eye + aim * d, player, SfGb(300, 25) / 2, 90.0f, 350.0f, 120.0f, d < 100 ? 20 : 0);
+    if (SfBlackHoleMode()) // zombie modes and Super Soldier: a small black hole where the wave ends
+        g_sfPulls.push_back({ eye + aim * (std::max)(0.0f, len - 30.0f), player, Now() + 1.5f });
 }
 
 // gun_fixes.inl, after the game's SecondaryAttack when it did something
@@ -315,27 +368,27 @@ static void SfBgSecondary(void* player, void* weapon, int anim)
     {
         // a swing: what's in front of the player
         V3 front = Eye(player) + SfAim(player) * 80.0f;
-        SfArea(front, player, ByMode(60, 1200, 3000), 130.0f, 450.0f, 150.0f, 12);
+        SfArea(front, player, SfGb(96, 35), 120.0f, 250.0f, 100.0f, 0);
         if (anim == 3 && now - s.lastSwing < 2.0f && *(int*)((unsigned char*)weapon + WPN_STATE_GB) == 0)
         {
-            SfEnterOverflow(s, weapon, 6.0f); // Overflow-Alpha
-            SfSay(player, "Giga Break: Overflow-Alpha");
+            SfBgWave(player); // the combo's end: the wave, then Overflow-Alpha
+            SfEnterOverflow(s, weapon, GB_ALPHA_S);
         }
         s.lastSwing = now;
     }
     else if (anim == 0xb)
     {
-        // Overflow Crash: a dash, then the crash
+        // Overflow Crash: a dash behind the shield, then the crash
         V3 aim = SfAim(player);
         float* vel = (float*)(Vars(player) + EV_VELOCITY);
         float l = Len2D(aim);
         aim = l > 0.1f ? V3{ aim.x / l, aim.y / l, 0 } : V3{ 1, 0, 0 };
         vel[0] = aim.x * 1300.0f;
         vel[1] = aim.y * 1300.0f;
-        vel[2] = 160.0f;
-        s.crashAt = now + 0.45f;
-        s.crashUntil = now + 0.45f;
-        s.invulnUntil = now + 1.0f;
+        vel[2] = 140.0f;
+        s.crashAt = now + 0.35f;
+        s.crashUntil = now + 0.35f;
+        s.invulnUntil = now + 0.9f;
     }
 }
 
@@ -364,7 +417,7 @@ static void SfBgFrame(void* player, SfPlayer& s, void* weapon, bool active, int 
     }
     if (state == 0 && s.beta < 100)
     {
-        s.beta = (std::min)(100.0f, s.beta + dt * 2.5f); // 40 s
+        s.beta = (std::min)(100.0f, s.beta + dt * GB_BETA_PER_S);
         if (s.beta >= 100 && !s.betaTold)
         {
             s.betaTold = true;
@@ -375,14 +428,13 @@ static void SfBgFrame(void* player, SfPlayer& s, void* weapon, bool active, int 
     {
         s.beta = 0;
         s.betaTold = false;
-        SfEnterOverflow(s, weapon, 15.0f);
-        SfSay(player, "Giga Break: Overflow-Beta");
+        SfEnterOverflow(s, weapon, GB_BETA_S);
     }
     if (s.crashAt && now >= s.crashAt)
     {
         s.crashAt = 0;
         V3 front = Origin(player) + SfAim(player) * 60.0f;
-        SfArea(front, player, ByMode(120, 3000, 8000), 220.0f, 700.0f, 250.0f, 35);
+        SfArea(front, player, SfGb(1920, 90), 200.0f, 700.0f, 250.0f, 35);
         if (g_sendWeaponAnim)
             g_sendWeaponAnim(weapon, nullptr, 13 /* charge_shootB_end */, 0);
     }
@@ -538,6 +590,8 @@ static void SfFrame()
         s.lastFrame = now;
         if (!Alive(e))
         {
+            if (s.phase >= 2)
+                F<float>(Vars(e), SF_EV_GRAVITY) = 1.0f; // (hovering or falling: the gravity back)
             s.phase = 0;
             s.blastWeapon = nullptr;
             continue;

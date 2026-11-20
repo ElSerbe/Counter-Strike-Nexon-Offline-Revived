@@ -474,7 +474,11 @@ writes it too.
 
 ## Gravity Repulsor, Giga Break, IGNITE-10: their special functions (scifi_weapons.inl)
 
-From the CSO wiki's descriptions and the user's videos (2026-11-21), untested. Every frame, for each player, the right
+From the CSO wiki's descriptions (2026-11-21), then redone after the user's own videos (frames read with ffmpeg; the
+user: the first version wasn't what the videos show), untested. Gravity Repulsor: gauge 10 s, hover 6 s through the
+player's gravity (pev +0x12c), the strike goes off by itself when the hover ends; Giga Break: numbers read off the
+video (shots ~865, release every 6th ~1290, swings ~96, Crash ~1920, Burst ~15000 on zombies), Alpha 4 s, Beta gauge
+30 s / 10 s. Older numbers below may differ: scifi_weapons.inl's comments are the reference. Every frame, for each player, the right
 click / R pressed with the weapon in hand (pev button +0x1a4):
 - **Gravity Repulsor**: each shot also pulses around the player (hurt + push); energy charges in 25 s; right click when
   full: Repulsor Leap (hurt + push around, thrown where you aim), then Anti-graviton (hover 3 s with the gun in hand),
