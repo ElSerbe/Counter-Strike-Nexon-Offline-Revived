@@ -7250,6 +7250,7 @@ static void HookAiSettingsButton(HMODULE gameUi)
 }
 
 #include "room_settings_button.inl"
+#include "family_button.inl"
 
 // "call <page manager>" in the button's branch becomes "jmp stub"; the stub jumps back past the page call
 static void HookTaskbarButton(DWORD siteVa, DWORD returnVa, void* stub, DWORD* returnSlot, const char* what)
@@ -7812,6 +7813,7 @@ static DWORD WINAPI Watcher(LPVOID)
             uiHooked = ui;
             HookAiSettingsButton(ui);
             HookExtraSettingsButton();
+            HookViewBenefitsButton();
             GuardGameUiImages(ui);
             GuardGameUiRandomMap(ui);
             HookTaskbarButton(GAMEUI_VIP_PAGE, GAMEUI_VIP_RETURN, (void*)VipStub, &g_vipReturn, "VIP");

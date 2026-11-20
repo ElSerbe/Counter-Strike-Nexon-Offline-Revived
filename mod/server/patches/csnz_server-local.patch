@@ -1865,13 +1865,14 @@ index e4e7c83..30aa227 100644
 \ No newline at end of file
 diff --git a/src/manager/familymanager.cpp b/src/manager/familymanager.cpp
 new file mode 100644
-index 0000000..b0e13ba
+index 0000000..30fbf5a
 --- /dev/null
 +++ b/src/manager/familymanager.cpp
-@@ -0,0 +1,501 @@
+@@ -0,0 +1,558 @@
 +// Offline build: Family EXP, level, points and the game's Family Achievements (see familymanager.h).
 +#include "familymanager.h"
 +#include "itemmanager.h"
++#include "warbondmanager.h"
 +#include "packetmanager.h"
 +#include "userdatabase.h"
 +#include "common/logger.h"
@@ -1909,8 +1910,8 @@ index 0000000..b0e13ba
 +
 +	struct Achievement
 +	{
-+		int id = 0, parent = 0, target = 1, score = 0, medals = 0, buff = 0;
-+		string key, name;
++		int id = 0, parent = 0, target = 1, score = 0, medals = 0, buff = 0, category = 0;
++		string key, name, reward;
 +		vector<RewardItem> items;
 +		Condition cond;
 +	};
@@ -1990,6 +1991,7 @@ index 0000000..b0e13ba
 +			x.id = a.value("ID", 0), x.parent = a.value("Parent", 0), x.target = max(1, a.value("Target", 1));
 +			x.score = a.value("Score", 0), x.medals = a.value("Medals", 0), x.buff = a.value("Buff", 0);
 +			x.key = a.value("Key", string()), x.name = a.value("Name", x.key);
++			x.reward = a.value("Reward", string()), x.category = a.value("Category", 0);
 +			for (auto& it : a.value("Items", json::array()))
 +			{
 +				RewardItem r = {};
@@ -2339,6 +2341,14 @@ index 0000000..b0e13ba
 +
 +	void Decorate(Clan_s& clan)
 +	{
++		// the members online (the family home's "Members Online")
++		vector<ClanUser> users;
++		g_UserDatabase.GetClanUserList(clan.id, false, users);
++		clan.onlineMembers = 0;
++		for (auto& u : users)
++			clan.onlineMembers += u.user != nullptr;
++		if (clan.memberCount <= 0)
++			clan.memberCount = (int)users.size();
 +		lock_guard<mutex> lock(g_lock);
 +		auto it = g_state.find(clan.id);
 +		if (it == g_state.end())
@@ -2369,13 +2379,60 @@ index 0000000..b0e13ba
 +		return va("Family level %d%s, %lld Family Points, %d of %d achievements, EXP/Point bonus +%d%%", level,
 +			need ? va(" (%lld / %lld EXP)", into, need) : " (max)", c.points, done, (int)g_achievements.size(), Buff(c));
 +	}
++
++	json Api(IUser* user)
++	{
++		int clanID = ClanOf(user);
++		if (clanID <= 0)
++			return { { "inFamily", false } };
++		Clan_s clan = {};
++		g_UserDatabase.GetClanInfo(clanID, clan);
++		vector<ClanUser> users;
++		g_UserDatabase.GetClanUserList(clanID, false, users);
++		lock_guard<mutex> lock(g_lock);
++		ClanState c = g_state.count(clanID) ? g_state[clanID] : ClanState();
++		long long into = 0, need = 0;
++		int level = Level(c.exp, &into, &need);
++		json members = json::array();
++		for (auto& u : users)
++			members.push_back({ { "name", u.character.gameName.empty() ? u.userName : u.character.gameName },
++				{ "grade", u.memberGrade }, { "online", u.user != nullptr } });
++		json list = json::array();
++		int score = 0, done = 0;
++		for (auto& a : g_achievements)
++		{
++			bool isDone = c.done.count(a.id) != 0;
++			score += isDone ? a.score : 0;
++			done += isDone;
++			string text = g_texts.value("CSO_ClanAchieve_" + a.key + "_text", string());
++			json items = json::array();
++			for (auto& it : a.items)
++				items.push_back({ { "id", it.itemID }, { "name", g_WarbondManager.ItemName(it.itemID) }, { "count", it.count }, { "days", it.duration } });
++			list.push_back({ { "id", a.id }, { "key", a.key }, { "name", a.name }, { "text", text }, { "category", a.category },
++				{ "parent", a.parent }, { "target", a.target }, { "progress", c.progress.count(a.id) ? c.progress[a.id] : 0 },
++				{ "done", isDone ? c.done[a.id] : 0 }, { "score", a.score }, { "medals", a.medals }, { "buff", a.buff },
++				{ "items", items }, { "children", a.cond.type == "children" } });
++		}
++		json chronicle = json::array();
++		for (auto& ch : c.chronicle)
++			chronicle.push_back({ { "date", ch.date }, { "text", ch.str } });
++		return {
++			{ "inFamily", true }, { "name", clan.name }, { "master", clan.clanMaster }, { "notice", clan.noticeMsg },
++			{ "level", level }, { "maxLevel", (int)g_levels.size() + 1 }, { "expInto", into }, { "expNeed", need },
++			{ "exp", c.exp }, { "points", c.points }, { "bonus", Buff(c) }, { "baseExpBonus", clan.expBoost },
++			{ "basePointBonus", clan.pointBoost }, { "levelMedals", g_levelMedals * (level + 1) },
++			{ "score", score }, { "done", done }, { "members", members }, { "achievements", list }, { "chronicle", chronicle },
++			{ "rules", { { "expMatch", g_expMatch }, { "expWin", g_expWin }, { "expKill", g_expKill }, { "expMaxKills", g_expMaxKills },
++				{ "pointsMatch", g_pointsMatch }, { "pointsWin", g_pointsWin }, { "killsPerPoint", g_killsPerPoint } } }
++		};
++	}
 +}
 diff --git a/src/manager/familymanager.h b/src/manager/familymanager.h
 new file mode 100644
-index 0000000..9619036
+index 0000000..7464d91
 --- /dev/null
 +++ b/src/manager/familymanager.h
-@@ -0,0 +1,43 @@
+@@ -0,0 +1,45 @@
 +#pragma once
 +
 +// Offline build: what a family (clan) gains by playing - Family EXP and level (the game's resource/ClanLevel.csv), Family
@@ -2418,6 +2475,8 @@ index 0000000..9619036
 +	nlohmann::json Texts();
 +	// "Level 3 (1,200 / 7,040 EXP), 340 Family Points" (the game's family windows show no level)
 +	std::string Summary(int clanID);
++	// GET /api/family: the family page (web/family; the family window's "View Benefits" button opens it)
++	nlohmann::json Api(IUser* user);
 +}
 diff --git a/src/manager/guestprofile.cpp b/src/manager/guestprofile.cpp
 new file mode 100644
@@ -5331,7 +5390,7 @@ index 0000000..4de865d
 +	void OnMatchEnd(IUser* user, int gameMode, int mapID, int difficulty, bool won, int place, int kills);
 +}
 diff --git a/src/manager/packetmanager.cpp b/src/manager/packetmanager.cpp
-index 0defb02..9294475 100644
+index 0defb02..f05e797 100644
 --- a/src/manager/packetmanager.cpp
 +++ b/src/manager/packetmanager.cpp
 @@ -1,4 +1,7 @@
@@ -5661,14 +5720,14 @@ index 0defb02..9294475 100644
  
  	msg->WriteUInt32(ip_string_to_int(network.m_szExternalIpAddress), false);
  	msg->WriteUInt16(network.m_nExternalClientPort);
-@@ -6072,7 +6209,82 @@ void CPacketManager::SendTitle(IExtendedSocket* socket, int id)
+@@ -6072,10 +6209,85 @@ void CPacketManager::SendTitle(IExtendedSocket* socket, int id)
  
  	msg->WriteUInt8(0);
  	msg->WriteUInt16(id);
 +	msg->WriteUInt8(0); // read by the client too (Packet_Title type 0: u16 title, u8), passed to its listeners
-+
-+	socket->Send(msg);
-+}
+ 
+ 	socket->Send(msg);
+ }
  
 +// offline build: the medals as the client's honor quests (hw.dll Packet_Quest type 1, the full quest list): they are
 +// what My Info's Medals tab shows, with a gauge per requirement. Quest ID = 2000 + title ID.
@@ -5741,9 +5800,27 @@ index 0defb02..9294475 100644
 +	msg->WriteUInt16(achievements.size());
 +	for (auto& a : achievements)
 +		msg->WriteString(a);
- 	socket->Send(msg);
- }
++	socket->Send(msg);
++}
++
+ void CPacketManager::SendUDPHostData(IExtendedSocket* socket, bool host, int userID, const string& ipAddress, int port)
+ {
+ 	CSendPacket* msg = CreatePacket(socket, PacketId::Udp);
+@@ -6186,9 +6398,12 @@ void BuildClanInfo(CSendPacket* msg, const Clan_s& clan)
+ 	}
  
+ 	//msg->WriteUInt8(clan.time);
++	// offline build: the family home's "Login Rate for One Week: %d/%d" is these two the other way round (GameUI
++	// 0x101e7030: +0xf4 / +0xf0), active members of the week over members, not the member limit (it showed 450/1);
++	// every member counts as active. Then "Members Online" (+0x44)
+ 	msg->WriteUInt32(clan.memberCount);
+-	msg->WriteUInt32(clan.maxMemberCount);
+-	msg->WriteUInt32(0);
++	msg->WriteUInt32(clan.memberCount);
++	msg->WriteUInt32(clan.onlineMembers);
+ 	msg->WriteUInt32(0);
+ 
+ 	for (int i = 0; i < 2; i++)
 diff --git a/src/manager/packetmanager.h b/src/manager/packetmanager.h
 index b9ca2f3..6df8ba2 100644
 --- a/src/manager/packetmanager.h
@@ -8324,7 +8401,7 @@ index ee72a34..6b6beac 100644
  
  	// clan related
 diff --git a/src/manager/userdatabase_sqlite.cpp b/src/manager/userdatabase_sqlite.cpp
-index ed5fefb..41561d5 100644
+index ed5fefb..25f927a 100644
 --- a/src/manager/userdatabase_sqlite.cpp
 +++ b/src/manager/userdatabase_sqlite.cpp
 @@ -14,6 +14,8 @@
@@ -8868,6 +8945,24 @@ index ed5fefb..41561d5 100644
  int CUserDatabaseSQLite::GetUsersAssociatedWithIP(const string& ip, vector<CUserData>& userData)
  {
  	try
+@@ -4198,7 +4707,7 @@ int CUserDatabaseSQLite::CreateClan(ClanCreateConfig& clanCfg)
+ 			if (query.executeStep())
+ 			{
+ 				int points = query.getColumn(0);
+-				if (points < 30000) // 30k points
++				if (points < 2000) // offline build: 2,000 points (medals) to create a family (the user's price; 30,000 before)
+ 				{
+ 					return -3;
+ 				}
+@@ -4208,7 +4717,7 @@ int CUserDatabaseSQLite::CreateClan(ClanCreateConfig& clanCfg)
+ 		SQLite::Transaction transaction(m_Database);
+ 		{
+ 			IUser* user = g_UserManager.GetUserById(clanCfg.masterUserID);
+-			if (!user->UpdatePoints(-30000))
++			if (!user->UpdatePoints(-2000))
+ 			{
+ 				return 0;
+ 			}
 @@ -5900,19 +6409,28 @@ void CUserDatabaseSQLite::OnMinuteTick(time_t curTime)
  				int userID = query.getColumn(0);
  
@@ -9804,10 +9899,10 @@ index c7d2bdb..75d0ee9 100644
 +extern CVoxelManager g_VoxelManager;
 diff --git a/src/manager/warbondmanager.cpp b/src/manager/warbondmanager.cpp
 new file mode 100644
-index 0000000..ab3a6b7
+index 0000000..b339da2
 --- /dev/null
 +++ b/src/manager/warbondmanager.cpp
-@@ -0,0 +1,1142 @@
+@@ -0,0 +1,1147 @@
 +#include "channelmanager.h"
 +#include "guestprofile.h"
 +#include "transfer.h"
@@ -10106,6 +10201,11 @@ index 0000000..ab3a6b7
 +	{
 +		// the Studio maps page (web/maps): the player's maps and their share codes, the maps other players publish
 +		result = g_VoxelManager.MapsApi(user, req.method, req.query, req.body, resp.status);
++	}
++	else if (req.method == "GET" && req.path == "/api/family")
++	{
++		// the family page (web/family): level, EXP, points, bonuses, achievements, chronicle (manager/familymanager.cpp)
++		result = Family::Api(user);
 +	}
 +	else if (req.method == "GET" && req.path == "/api/profile")
 +	{

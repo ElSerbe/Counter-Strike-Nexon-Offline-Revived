@@ -71,6 +71,7 @@
 		{
 			"ID": 1,
 			"Key": "cso_ori_ctruler",
+			"Category": 1,
 			"Parent": 3,
 			"Target": 1,
 			"GameTarget": 1,
@@ -103,6 +104,7 @@
 		{
 			"ID": 2,
 			"Key": "cso_ori_trruler",
+			"Category": 1,
 			"Parent": 3,
 			"Target": 1,
 			"GameTarget": 1,
@@ -135,6 +137,7 @@
 		{
 			"ID": 3,
 			"Key": "cso_ori_ruler",
+			"Category": 1,
 			"Parent": 0,
 			"Target": 2,
 			"GameTarget": 2,
@@ -161,6 +164,7 @@
 		{
 			"ID": 4,
 			"Key": "cso_ori_ctwinner",
+			"Category": 1,
 			"Parent": 6,
 			"Target": 100,
 			"GameTarget": 100000,
@@ -193,6 +197,7 @@
 		{
 			"ID": 5,
 			"Key": "cso_ori_trwinner",
+			"Category": 1,
 			"Parent": 6,
 			"Target": 100,
 			"GameTarget": 100000,
@@ -225,6 +230,7 @@
 		{
 			"ID": 6,
 			"Key": "cso_ori_winner",
+			"Category": 1,
 			"Parent": 43,
 			"Target": 2,
 			"GameTarget": 2,
@@ -251,6 +257,7 @@
 		{
 			"ID": 7,
 			"Key": "cso_ori_ctgroup",
+			"Category": 1,
 			"Parent": 9,
 			"Target": 30,
 			"GameTarget": 1000,
@@ -283,6 +290,7 @@
 		{
 			"ID": 8,
 			"Key": "cso_ori_trgroup",
+			"Category": 1,
 			"Parent": 9,
 			"Target": 30,
 			"GameTarget": 1000,
@@ -315,6 +323,7 @@
 		{
 			"ID": 9,
 			"Key": "cso_ori_group",
+			"Category": 1,
 			"Parent": 44,
 			"Target": 2,
 			"GameTarget": 2,
@@ -341,6 +350,7 @@
 		{
 			"ID": 10,
 			"Key": "cso_ori_ctplay",
+			"Category": 1,
 			"Parent": 12,
 			"Target": 100,
 			"GameTarget": 100000,
@@ -373,6 +383,7 @@
 		{
 			"ID": 11,
 			"Key": "cso_ori_trplay",
+			"Category": 1,
 			"Parent": 12,
 			"Target": 100,
 			"GameTarget": 100000,
@@ -410,6 +421,7 @@
 		{
 			"ID": 12,
 			"Key": "cso_ori_play",
+			"Category": 1,
 			"Parent": 0,
 			"Target": 2,
 			"GameTarget": 2,
@@ -436,6 +448,7 @@
 		{
 			"ID": 13,
 			"Key": "cso_ori_cthunter",
+			"Category": 1,
 			"Parent": 15,
 			"Target": 1500,
 			"GameTarget": 100000,
@@ -468,6 +481,7 @@
 		{
 			"ID": 14,
 			"Key": "cso_ori_trhunter",
+			"Category": 1,
 			"Parent": 15,
 			"Target": 1500,
 			"GameTarget": 100000,
@@ -505,6 +519,7 @@
 		{
 			"ID": 15,
 			"Key": "cso_ori_hunter",
+			"Category": 1,
 			"Parent": 0,
 			"Target": 2,
 			"GameTarget": 2,
@@ -531,6 +546,7 @@
 		{
 			"ID": 16,
 			"Key": "cso_zb_oriwinner",
+			"Category": 2,
 			"Parent": 19,
 			"Target": 150,
 			"GameTarget": 200000,
@@ -560,6 +576,7 @@
 		{
 			"ID": 17,
 			"Key": "cso_zb_muwinner",
+			"Category": 2,
 			"Parent": 19,
 			"Target": 150,
 			"GameTarget": 200000,
@@ -587,6 +604,7 @@
 		{
 			"ID": 18,
 			"Key": "cso_zb_hewinner",
+			"Category": 2,
 			"Parent": 19,
 			"Target": 150,
 			"GameTarget": 200000,
@@ -616,6 +634,7 @@
 		{
 			"ID": 19,
 			"Key": "cso_zb_winner",
+			"Category": 2,
 			"Parent": 43,
 			"Target": 3,
 			"GameTarget": 3,
@@ -643,6 +662,7 @@
 		{
 			"ID": 20,
 			"Key": "cso_zb_origroup",
+			"Category": 2,
 			"Parent": 23,
 			"Target": 30,
 			"GameTarget": 1000,
@@ -672,6 +692,7 @@
 		{
 			"ID": 21,
 			"Key": "cso_zb_mugroup",
+			"Category": 2,
 			"Parent": 23,
 			"Target": 30,
 			"GameTarget": 1000,
@@ -699,6 +720,7 @@
 		{
 			"ID": 22,
 			"Key": "cso_zb_hegroup",
+			"Category": 2,
 			"Parent": 23,
 			"Target": 30,
 			"GameTarget": 1000,
@@ -728,6 +750,7 @@
 		{
 			"ID": 23,
 			"Key": "cso_zb_group",
+			"Category": 2,
 			"Parent": 44,
 			"Target": 3,
 			"GameTarget": 3,
@@ -755,6 +778,7 @@
 		{
 			"ID": 24,
 			"Key": "cso_zbs_lostcity",
+			"Category": 3,
 			"Parent": 30,
 			"Target": 1,
 			"GameTarget": 1,
@@ -783,6 +807,7 @@
 		{
 			"ID": 25,
 			"Key": "cso_zbs_doublegate",
+			"Category": 3,
 			"Parent": 30,
 			"Target": 1,
 			"GameTarget": 1,
@@ -811,6 +836,7 @@
 		{
 			"ID": 26,
 			"Key": "cso_zbs_trap",
+			"Category": 3,
 			"Parent": 30,
 			"Target": 1,
 			"GameTarget": 1,
@@ -839,6 +865,7 @@
 		{
 			"ID": 27,
 			"Key": "cso_zbs_lastclue",
+			"Category": 3,
 			"Parent": 30,
 			"Target": 1,
 			"GameTarget": 1,
@@ -867,6 +894,7 @@
 		{
 			"ID": 28,
 			"Key": "cso_zbs_chaos",
+			"Category": 3,
 			"Parent": 30,
 			"Target": 1,
 			"GameTarget": 1,
@@ -895,6 +923,7 @@
 		{
 			"ID": 29,
 			"Key": "cso_zbs_deadend",
+			"Category": 3,
 			"Parent": 30,
 			"Target": 1,
 			"GameTarget": 1,
@@ -923,6 +952,7 @@
 		{
 			"ID": 30,
 			"Key": "cso_zbs_season1",
+			"Category": 3,
 			"Parent": 0,
 			"Target": 6,
 			"GameTarget": 6,
@@ -953,6 +983,7 @@
 		{
 			"ID": 31,
 			"Key": "cso_zbs_trace",
+			"Category": 3,
 			"Parent": 35,
 			"Target": 1,
 			"GameTarget": 1,
@@ -981,6 +1012,7 @@
 		{
 			"ID": 32,
 			"Key": "cso_zbs_culvert",
+			"Category": 3,
 			"Parent": 35,
 			"Target": 1,
 			"GameTarget": 1,
@@ -1009,6 +1041,7 @@
 		{
 			"ID": 33,
 			"Key": "cso_zbs_decoy",
+			"Category": 3,
 			"Parent": 35,
 			"Target": 1,
 			"GameTarget": 1,
@@ -1037,6 +1070,7 @@
 		{
 			"ID": 34,
 			"Key": "cso_zbs_angra",
+			"Category": 3,
 			"Parent": 35,
 			"Target": 1,
 			"GameTarget": 1,
@@ -1065,6 +1099,7 @@
 		{
 			"ID": 35,
 			"Key": "cso_zbs_season2",
+			"Category": 3,
 			"Parent": 0,
 			"Target": 4,
 			"GameTarget": 4,
@@ -1093,6 +1128,7 @@
 		{
 			"ID": 36,
 			"Key": "cso_zbs_contact",
+			"Category": 3,
 			"Parent": 40,
 			"Target": 1,
 			"GameTarget": 1,
@@ -1121,6 +1157,7 @@
 		{
 			"ID": 37,
 			"Key": "cso_zbs_behind",
+			"Category": 3,
 			"Parent": 40,
 			"Target": 1,
 			"GameTarget": 1,
@@ -1149,6 +1186,7 @@
 		{
 			"ID": 38,
 			"Key": "cso_zbs_defense",
+			"Category": 3,
 			"Parent": 40,
 			"Target": 1,
 			"GameTarget": 1,
@@ -1177,6 +1215,7 @@
 		{
 			"ID": 39,
 			"Key": "cso_zbs_panic",
+			"Category": 3,
 			"Parent": 40,
 			"Target": 1,
 			"GameTarget": 1,
@@ -1205,6 +1244,7 @@
 		{
 			"ID": 40,
 			"Key": "cso_zbs_season3",
+			"Category": 3,
 			"Parent": 0,
 			"Target": 4,
 			"GameTarget": 4,
@@ -1233,6 +1273,7 @@
 		{
 			"ID": 41,
 			"Key": "cso_zbs_encounter",
+			"Category": 3,
 			"Parent": 72,
 			"Target": 1,
 			"GameTarget": 1,
@@ -1261,6 +1302,7 @@
 		{
 			"ID": 42,
 			"Key": "cso_zbs_conspiracy",
+			"Category": 3,
 			"Parent": 72,
 			"Target": 1,
 			"GameTarget": 1,
@@ -1289,6 +1331,7 @@
 		{
 			"ID": 43,
 			"Key": "cso_winner",
+			"Category": 0,
 			"Parent": 0,
 			"Target": 2,
 			"GameTarget": 2,
@@ -1315,6 +1358,7 @@
 		{
 			"ID": 44,
 			"Key": "cso_group",
+			"Category": 0,
 			"Parent": 0,
 			"Target": 2,
 			"GameTarget": 2,
@@ -1341,6 +1385,7 @@
 		{
 			"ID": 45,
 			"Key": "cso_zbs_envymask",
+			"Category": 3,
 			"Parent": 72,
 			"Target": 1,
 			"GameTarget": 1,
@@ -1369,6 +1414,7 @@
 		{
 			"ID": 46,
 			"Key": "cso_oritop",
+			"Category": 1,
 			"Parent": 50,
 			"Target": 1,
 			"GameTarget": 1,
@@ -1400,6 +1446,7 @@
 		{
 			"ID": 47,
 			"Key": "cso_zbtop",
+			"Category": 2,
 			"Parent": 50,
 			"Target": 1,
 			"GameTarget": 1,
@@ -1435,6 +1482,7 @@
 		{
 			"ID": 48,
 			"Key": "cso_pvetop",
+			"Category": 3,
 			"Parent": 50,
 			"Target": 1,
 			"GameTarget": 1,
@@ -1464,6 +1512,7 @@
 		{
 			"ID": 49,
 			"Key": "cso_dmtop",
+			"Category": 4,
 			"Parent": 50,
 			"Target": 1,
 			"GameTarget": 1,
@@ -1493,6 +1542,7 @@
 		{
 			"ID": 50,
 			"Key": "cso_ranktop",
+			"Category": 0,
 			"Parent": 0,
 			"Target": 4,
 			"GameTarget": 4,
@@ -1521,6 +1571,7 @@
 		{
 			"ID": 51,
 			"Key": "cso_dm_dmslayers",
+			"Category": 4,
 			"Parent": 53,
 			"Target": 3000,
 			"GameTarget": 1000000,
@@ -1547,6 +1598,7 @@
 		{
 			"ID": 52,
 			"Key": "cso_dm_tdmslayers",
+			"Category": 4,
 			"Parent": 53,
 			"Target": 3000,
 			"GameTarget": 1000000,
@@ -1573,6 +1625,7 @@
 		{
 			"ID": 53,
 			"Key": "cso_dm_slayers",
+			"Category": 4,
 			"Parent": 0,
 			"Target": 2,
 			"GameTarget": 2,
@@ -1599,6 +1652,7 @@
 		{
 			"ID": 54,
 			"Key": "cso_dm_mainwppro",
+			"Category": 4,
 			"Parent": 58,
 			"Target": 1000,
 			"GameTarget": 100000,
@@ -1628,6 +1682,7 @@
 		{
 			"ID": 55,
 			"Key": "cso_dm_subwppro",
+			"Category": 4,
 			"Parent": 58,
 			"Target": 500,
 			"GameTarget": 100000,
@@ -1657,6 +1712,7 @@
 		{
 			"ID": 56,
 			"Key": "cso_dm_meleewppro",
+			"Category": 4,
 			"Parent": 58,
 			"Target": 200,
 			"GameTarget": 100000,
@@ -1686,6 +1742,7 @@
 		{
 			"ID": 57,
 			"Key": "cso_dm_throwwppro",
+			"Category": 4,
 			"Parent": 58,
 			"Target": 100,
 			"GameTarget": 100000,
@@ -1720,6 +1777,7 @@
 		{
 			"ID": 58,
 			"Key": "cso_dm_wppro",
+			"Category": 4,
 			"Parent": 0,
 			"Target": 4,
 			"GameTarget": 4,
@@ -1748,6 +1806,7 @@
 		{
 			"ID": 59,
 			"Key": "cso_zbs_hards",
+			"Category": 3,
 			"Parent": 62,
 			"Target": 30,
 			"GameTarget": 1000,
@@ -1774,6 +1833,7 @@
 		{
 			"ID": 60,
 			"Key": "cso_zbs_normals",
+			"Category": 3,
 			"Parent": 62,
 			"Target": 30,
 			"GameTarget": 1000,
@@ -1800,6 +1860,7 @@
 		{
 			"ID": 61,
 			"Key": "cso_zbs_easys",
+			"Category": 3,
 			"Parent": 62,
 			"Target": 30,
 			"GameTarget": 1000,
@@ -1826,6 +1887,7 @@
 		{
 			"ID": 62,
 			"Key": "cso_zbs_alls",
+			"Category": 3,
 			"Parent": 0,
 			"Target": 3,
 			"GameTarget": 3,
@@ -1853,6 +1915,7 @@
 		{
 			"ID": 63,
 			"Key": "cso_ms_ateam",
+			"Category": 0,
 			"Parent": 0,
 			"Target": 12,
 			"GameTarget": 12,
@@ -1876,6 +1939,7 @@
 		{
 			"ID": 64,
 			"Key": "cso_ms_zbkiller",
+			"Category": 0,
 			"Parent": 0,
 			"Target": 12,
 			"GameTarget": 12,
@@ -1899,6 +1963,7 @@
 		{
 			"ID": 65,
 			"Key": "cso_ms_zbspro",
+			"Category": 0,
 			"Parent": 0,
 			"Target": 12,
 			"GameTarget": 12,
@@ -1922,6 +1987,7 @@
 		{
 			"ID": 66,
 			"Key": "cso_ms_pro",
+			"Category": 0,
 			"Parent": 0,
 			"Target": 1000,
 			"GameTarget": 10000,
@@ -1939,6 +2005,7 @@
 		{
 			"ID": 67,
 			"Key": "cso_evt_schoolrage",
+			"Category": 9,
 			"Parent": 69,
 			"Target": 1000,
 			"GameTarget": 10000,
@@ -1972,6 +2039,7 @@
 		{
 			"ID": 68,
 			"Key": "cso_evt_randjourney",
+			"Category": 9,
 			"Parent": 69,
 			"Target": 20,
 			"GameTarget": 100,
@@ -1998,6 +2066,7 @@
 		{
 			"ID": 69,
 			"Key": "cso_evt_newterm",
+			"Category": 9,
 			"Parent": 0,
 			"Target": 2,
 			"GameTarget": 2,
@@ -2024,6 +2093,7 @@
 		{
 			"ID": 70,
 			"Key": "cso_dm_traitor",
+			"Category": 4,
 			"Parent": 0,
 			"Target": 1000,
 			"GameTarget": 100000,
@@ -2052,6 +2122,7 @@
 		{
 			"ID": 71,
 			"Key": "cso_zbs_paranoia",
+			"Category": 3,
 			"Parent": 72,
 			"Target": 1,
 			"GameTarget": 1,
@@ -2080,6 +2151,7 @@
 		{
 			"ID": 72,
 			"Key": "cso_zbs_season4",
+			"Category": 3,
 			"Parent": 0,
 			"Target": 4,
 			"GameTarget": 4,
@@ -2108,6 +2180,7 @@
 		{
 			"ID": 73,
 			"Key": "cso_zbs_evacuate1",
+			"Category": 3,
 			"Parent": 0,
 			"Target": 1,
 			"GameTarget": 1,
@@ -2136,6 +2209,7 @@
 		{
 			"ID": 74,
 			"Key": "cso_zbs_memories1",
+			"Category": 3,
 			"Parent": 0,
 			"Target": 1,
 			"GameTarget": 1,

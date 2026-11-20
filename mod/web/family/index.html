@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Family</title>
+<link rel="stylesheet" href="../bots/bots.css">
+<link rel="stylesheet" href="family.css">
+</head>
+<body>
+<header class="topbar">
+  <h1>Family</h1>
+  <div id="famname" class="famname"></div>
+  <button id="close" class="close" type="button" title="Close (Esc)">Close &times;</button>
+</header>
+
+<main id="main" class="fam-main">
+  <section class="card level-card">
+    <h2>Family level</h2>
+    <div class="level-row">
+      <div class="level-badge"><span class="level-num" id="level">1</span><span class="level-of" id="levelof">of 50</span></div>
+      <div class="level-bar-wrap">
+        <div class="level-bar"><div class="level-fill" id="levelfill"></div></div>
+        <div class="level-exp" id="levelexp"></div>
+        <div class="level-next" id="levelnext"></div>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="stat"><span class="stat-v" id="points">0</span><span class="stat-k">Family Points</span></div>
+      <div class="stat"><span class="stat-v" id="achieved">0</span><span class="stat-k">Achievements</span></div>
+      <div class="stat"><span class="stat-v" id="score">0</span><span class="stat-k">Achievement points</span></div>
+      <div class="stat"><span class="stat-v" id="members">0</span><span class="stat-k">Members</span></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Benefits</h2>
+    <p class="card-help">What every match of a family member gets.</p>
+    <div class="benefits">
+      <div class="benefit"><span class="b-icon exp">EXP</span><div class="b-text"><span class="b-name">Family EXP bonus</span><span class="b-val" id="bexp"></span></div></div>
+      <div class="benefit"><span class="b-icon point">PTS</span><div class="b-text"><span class="b-name">Family Point bonus</span><span class="b-val" id="bpoint"></span></div></div>
+      <div class="benefit"><span class="b-icon medal">LV</span><div class="b-text"><span class="b-name">Next level's reward</span><span class="b-val" id="blevel"></span></div></div>
+    </div>
+    <div class="rules" id="rules"></div>
+  </section>
+
+  <section class="card members-card">
+    <h2>Members</h2>
+    <div id="memberlist" class="memberlist"></div>
+    <h2 class="sub">Chronicle</h2>
+    <div id="chronicle" class="chronicle"></div>
+  </section>
+
+  <section class="card ach-card">
+    <div class="ach-head">
+      <h2>Family achievements</h2>
+      <div class="tabs" id="tabs"></div>
+    </div>
+    <p class="card-help">Done by playing with your family. "With N family members" counts when every real player in the match is in your family (alone with bots: always). The rewards go to the members who played the match that completed it.</p>
+    <div id="achlist" class="achlist"></div>
+  </section>
+</main>
+
+<div id="nofamily" class="nofamily hidden">
+  <p>You aren't in a family yet.</p>
+  <p class="card-help">Create one or join one from the Family window. Creating a family costs 2,000 medals.</p>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+<script src="family.js"></script>
+</body>
+</html>

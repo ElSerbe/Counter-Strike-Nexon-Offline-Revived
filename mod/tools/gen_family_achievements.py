@@ -192,7 +192,7 @@ def main():
             items = [(676, min(20, int(ext.group(1) or ext.group(2))), 0)]
         buff = re.search(r"Buff \+?(\d+)%|(\d+)% Point Buff", reward)
         buff = int(buff.group(1) or buff.group(2)) if buff else 0
-        a = {"ID": aid, "Key": key, "Parent": int(r["parent"]) if r["parent"] else 0, "Target": target,
+        a = {"ID": aid, "Key": key, "Category": int(r["category"] or 0), "Parent": int(r["parent"]) if r["parent"] else 0, "Target": target,
              "GameTarget": game, "Score": int(r["rewardScore"]), "Medals": int(r["rewardScore"]) * 3,
              "Buff": buff, "Items": [{"ItemID": i, "Count": c, "Days": d} for i, c, d in items],
              "Name": texts.get((key.lower(), "name"), key), "Reward": reward, "Condition": cond}
