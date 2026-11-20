@@ -1,8 +1,8 @@
 diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
-index b5e72be..62a2fab 100644
+index b5e72be..2213bbe 100644
 --- a/src/CMakeLists.txt
 +++ b/src/CMakeLists.txt
-@@ -38,6 +38,15 @@ endif()
+@@ -38,6 +38,16 @@ endif()
  target_sources(PROJECTNAME PRIVATE "main.cpp")
  target_sources(PROJECTNAME PRIVATE "serverinstance.cpp")
  target_sources(PROJECTNAME PRIVATE "serverconfig.cpp")
@@ -14,11 +14,12 @@ index b5e72be..62a2fab 100644
 +target_sources(PROJECTNAME PRIVATE "manager/missionmanager.cpp")
 +target_sources(PROJECTNAME PRIVATE "manager/loginsupplies.cpp")
 +target_sources(PROJECTNAME PRIVATE "manager/moderewards.cpp")
++target_sources(PROJECTNAME PRIVATE "manager/familymanager.cpp")
 +target_sources(PROJECTNAME PRIVATE "net/webserver.cpp")
  target_sources(PROJECTNAME PRIVATE "command.cpp")
  target_sources(PROJECTNAME PRIVATE "common/buffer.cpp")
  target_sources(PROJECTNAME PRIVATE "common/buildnum.cpp")
-@@ -56,6 +65,8 @@ target_sources(PROJECTNAME PRIVATE "command.cpp")
+@@ -56,6 +66,8 @@ target_sources(PROJECTNAME PRIVATE "command.cpp")
  
  target_sources(PROJECTNAME PRIVATE "manager/manager.cpp")
  target_sources(PROJECTNAME PRIVATE "manager/usermanager.cpp")
@@ -27,7 +28,7 @@ index b5e72be..62a2fab 100644
  if (SERVER_DB_PROXY)
  	target_sources(PROJECTNAME PRIVATE "manager/userdatabase.cpp")
  endif()
-@@ -74,6 +85,8 @@ target_sources(PROJECTNAME PRIVATE "manager/minigamemanager.cpp")
+@@ -74,6 +86,8 @@ target_sources(PROJECTNAME PRIVATE "manager/minigamemanager.cpp")
  target_sources(PROJECTNAME PRIVATE "manager/clanmanager.cpp")
  target_sources(PROJECTNAME PRIVATE "manager/rankmanager.cpp")
  target_sources(PROJECTNAME PRIVATE "manager/voxelmanager.cpp")
@@ -36,7 +37,7 @@ index b5e72be..62a2fab 100644
  target_sources(PROJECTNAME PRIVATE "manager/classmodmanager.cpp")
  
  target_sources(PROJECTNAME PRIVATE "packet/packethelper_fulluserinfo.cpp")
-@@ -148,6 +161,8 @@ if (MSVC)
+@@ -148,6 +162,8 @@ if (MSVC)
  else()
  	# don't treat some warnings as errors
  	target_compile_options(PROJECTNAME PRIVATE -Wno-error=sign-compare -Wno-error=unused-variable -Wno-error=delete-non-virtual-dtor -Wno-error=unused-parameter -Wno-error=conversion-null -Wno-error=register -Wno-error=unused-value -Wno-error=reorder -Wno-error=attributes)
@@ -1309,18 +1310,19 @@ index 0000000..5c99d8e
 +
 +extern CBingoManager g_BingoManager;
 diff --git a/src/manager/channelmanager.cpp b/src/manager/channelmanager.cpp
-index 35561e8..56eda5a 100644
+index 35561e8..c476146 100644
 --- a/src/manager/channelmanager.cpp
 +++ b/src/manager/channelmanager.cpp
-@@ -1,4 +1,7 @@
+@@ -1,4 +1,8 @@
  #include "channelmanager.h"
 +#include "transfer.h"
 +#include "roomoptions.h"
++#include "familymanager.h"
 +#include "guestprofile.h"
  
  #include "itemmanager.h"
  #include "packetmanager.h"
-@@ -8,6 +11,7 @@
+@@ -8,6 +12,7 @@
  #include "dedicatedservermanager.h"
  
  #include "user/userinventoryitem.h"
@@ -1328,7 +1330,7 @@ index 35561e8..56eda5a 100644
  
  #include "csvtable.h"
  #include "serverconfig.h"
-@@ -21,7 +25,7 @@ using namespace std;
+@@ -21,7 +26,7 @@ using namespace std;
  CChannelManager g_ChannelManager;
  
  // TODO: Should we implement multi channels?
@@ -1337,7 +1339,7 @@ index 35561e8..56eda5a 100644
  {
  }
  
-@@ -83,6 +87,175 @@ bool CChannelManager::OnChannelListPacket(IExtendedSocket* socket)
+@@ -83,6 +88,175 @@ bool CChannelManager::OnChannelListPacket(IExtendedSocket* socket)
  	return true;
  }
  
@@ -1513,7 +1515,7 @@ index 35561e8..56eda5a 100644
  bool CChannelManager::OnRoomRequest(CReceivePacket* msg, IExtendedSocket* socket)
  {
  	LOG_PACKET;
-@@ -121,7 +294,20 @@ bool CChannelManager::OnRoomRequest(CReceivePacket* msg, IExtendedSocket* socket
+@@ -121,7 +295,20 @@ bool CChannelManager::OnRoomRequest(CReceivePacket* msg, IExtendedSocket* socket
  		g_PacketManager.SendRoomListFull(socket, channelServers[0]->GetChannels()[0]->GetRooms());
  		break;
  	case 27:
@@ -1534,7 +1536,7 @@ index 35561e8..56eda5a 100644
  	case InRoomType::SetZBAddonsRequest:
  		return OnRoomSetZBAddonRequest(msg, user);
  	case InRoomType::KickRequest:
-@@ -379,7 +565,12 @@ bool CChannelManager::OnCommandHandler(IExtendedSocket* socket, IUser* user, con
+@@ -379,7 +566,12 @@ bool CChannelManager::OnCommandHandler(IExtendedSocket* socket, IUser* user, con
  
  	if (!user)
  	{
@@ -1548,12 +1550,21 @@ index 35561e8..56eda5a 100644
  		{
  			if (args.size() == 3)
  			{
-@@ -443,6 +634,31 @@ bool CChannelManager::OnCommandHandler(IExtendedSocket* socket, IUser* user, con
+@@ -443,6 +635,40 @@ bool CChannelManager::OnCommandHandler(IExtendedSocket* socket, IUser* user, con
  	}
  	else
  	{
 +		// offline build: a player who came through the Steam bridge goes back to their own server (127.0.0.1:30002 on
 +		// their PC) with the return ticket their server gave them
++		// offline build: the family's level, points and achievements (the game's family windows show no level)
++		if (args[0] == "/family")
++		{
++			int clanID = user->GetCharacter(UFLAG_LOW_CLAN).clanID;
++			g_PacketManager.SendUMsgNoticeMessageInChat(socket, clanID > 0 ? "[Family] " + Family::Summary(clanID) :
++				string("You aren't in a family."));
++			return true;
++		}
++
 +		if (args[0] == "/home")
 +		{
 +			if (!SendUserHome(user, "/home"))
@@ -1580,7 +1591,7 @@ index 35561e8..56eda5a 100644
  		CUserCharacterExtended characterExtended = user->GetCharacterExtended(EXT_UFLAG_GAMEMASTER);
  		if (characterExtended.gameMaster)
  		{
-@@ -1246,6 +1462,9 @@ bool CChannelManager::OnNewRoomRequest(CReceivePacket* msg, IUser* user)
+@@ -1246,6 +1472,9 @@ bool CChannelManager::OnNewRoomRequest(CReceivePacket* msg, IUser* user)
  	// hide user from channel users list
  	channel->UserLeft(user, true);
  
@@ -1590,7 +1601,7 @@ index 35561e8..56eda5a 100644
  	Logger().Info("User '%s' created a new room (RID: %d, name: '%s')\n", user->GetLogName(), newRoom->GetID(), roomSettings->roomName.c_str());
  
  	if (roomSettings->familyBattle)
-@@ -1270,10 +1489,50 @@ bool CChannelManager::OnNewRoomRequest(CReceivePacket* msg, IUser* user)
+@@ -1270,10 +1499,50 @@ bool CChannelManager::OnNewRoomRequest(CReceivePacket* msg, IUser* user)
  
  bool CChannelManager::OnJoinRoomRequest(CReceivePacket* msg, IUser* user)
  {
@@ -1642,7 +1653,7 @@ index 35561e8..56eda5a 100644
  	CChannel* channel = user->GetCurrentChannel();
  	if (channel == NULL)
  	{
-@@ -1396,6 +1655,9 @@ bool CChannelManager::OnJoinRoomRequest(CReceivePacket* msg, IUser* user)
+@@ -1396,6 +1665,9 @@ bool CChannelManager::OnJoinRoomRequest(CReceivePacket* msg, IUser* user)
  
  	channel->SendUpdateRoomList(room);
  
@@ -1652,7 +1663,7 @@ index 35561e8..56eda5a 100644
  	Logger().Info("User '%s' joined a room (RID: %d)\n", user->GetLogName(), room->GetID());
  
  	return true;
-@@ -1450,6 +1712,22 @@ bool CChannelManager::OnSetTeamRequest(CReceivePacket* msg, IUser* user)
+@@ -1450,6 +1722,22 @@ bool CChannelManager::OnSetTeamRequest(CReceivePacket* msg, IUser* user)
  	return true;
  }
  
@@ -1675,7 +1686,7 @@ index 35561e8..56eda5a 100644
  bool CChannelManager::OnLeaveRoomRequest(IUser* user)
  {
  	IRoom* currentRoom = user->GetCurrentRoom();
-@@ -1501,6 +1779,10 @@ bool CChannelManager::OnLeaveRoomRequest(IUser* user)
+@@ -1501,6 +1789,10 @@ bool CChannelManager::OnLeaveRoomRequest(IUser* user)
  		}
  
  		currentRoom->RemoveUser(user);
@@ -1686,7 +1697,7 @@ index 35561e8..56eda5a 100644
  	}
  
  	currentChannel->SendFullUpdateRoomList(user);
-@@ -1705,13 +1987,43 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
+@@ -1705,13 +1997,43 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
  		return false;
  	}
  
@@ -1730,7 +1741,7 @@ index 35561e8..56eda5a 100644
  	if (newSettings.familyBattle)
  	{
  		CUserCharacter character = user->GetCharacter(UFLAG_LOW_CLAN);
-@@ -1787,6 +2099,7 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
+@@ -1787,6 +2109,7 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
  		}
  	}
  
@@ -1738,7 +1749,7 @@ index 35561e8..56eda5a 100644
  	currentRoom->UpdateSettings(newSettings);
  
  	// inform every user in the room of the changes
-@@ -1795,6 +2108,10 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
+@@ -1795,6 +2118,10 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
  		currentRoom->SendUpdateRoomSettings(u, roomSettings, newSettings.lowFlag, newSettings.lowMidFlag, newSettings.highMidFlag, newSettings.highFlag);
  	}
  
@@ -1749,7 +1760,7 @@ index 35561e8..56eda5a 100644
  	currentChannel->SendUpdateRoomList(currentRoom);
  
  	Logger().Info("Host '%s' updated room settings (RID: %d)\n", user->GetLogName(), currentRoom->GetID());
-@@ -1921,7 +2238,12 @@ bool CChannelManager::OnRoomKickRequest(CReceivePacket* msg, IUser* user)
+@@ -1921,7 +2248,12 @@ bool CChannelManager::OnRoomKickRequest(CReceivePacket* msg, IUser* user)
  		return false;
  	}
  
@@ -1763,7 +1774,7 @@ index 35561e8..56eda5a 100644
  	if (destUser == NULL)
  	{
  		Logger().Warn("User '%s' tried to kick a user from a room, although destUser == NULL (RID: %d)\n", user->GetLogName(), currentRoom->GetID());
-@@ -2089,7 +2411,7 @@ bool CChannelManager::OnVoxelRoomListRequest(CReceivePacket* msg, IUser* user)
+@@ -2089,7 +2421,7 @@ bool CChannelManager::OnVoxelRoomListRequest(CReceivePacket* msg, IUser* user)
  {
  	string voxel_id = msg->ReadString();
  
@@ -1804,6 +1815,610 @@ index ab4039d..cc14e51 100644
  
  extern CChannelManager g_ChannelManager;
 \ No newline at end of file
+diff --git a/src/manager/clanmanager.cpp b/src/manager/clanmanager.cpp
+index e4e7c83..30aa227 100644
+--- a/src/manager/clanmanager.cpp
++++ b/src/manager/clanmanager.cpp
+@@ -1,6 +1,7 @@
+ #include "clanmanager.h"
+ #include "manager/usermanager.h"
+ #include "manager/packetmanager.h"
++#include "manager/familymanager.h"
+ #include "manager/userdatabase.h"
+ 
+ #include "user/userinventoryitem.h"
+@@ -165,6 +166,19 @@ bool CClanManager::OnPacket(CReceivePacket* msg, IExtendedSocket* socket)
+ 		break;
+ 	case ClanPacketType::RequestClanInactiveAccounts:
+ 		break;
++	case ClanPacketType::RequestClanAchievement:
++		// offline build: the Family Achievements window asks with the family's ID (hw 0x0251e3b0: 0xa1, u32)
++		Family::SendAchievements(user, msg->ReadUInt32());
++		break;
++	case ClanPacketType::ClanUserList:
++	{
++		// offline build: the family window asks for its members (hw 0x0251e450: 0x6d, nothing more); the reply is the
++		// list the login sends
++		vector<ClanUser> users;
++		if (g_UserDatabase.GetClanUserList(user->GetID(), true, users) > 0)
++			g_PacketManager.SendClanCreateUserList(user->GetExtendedSocket(), users);
++		break;
++	}
+ 	default:
+ 		Logger().Warn(OBFUSCATE("[User '%s'] Unknown clan type %d\n"), user->GetLogName(), type);
+ 		break;
+@@ -207,6 +221,7 @@ bool CClanManager::OnClanInfoRequest(CReceivePacket* msg, IUser* user)
+ 		return false;
+ 	}
+ 
++	Family::Decorate(clan); // offline build: bonuses and member limit from the family's level and achievements
+ 	g_PacketManager.SendClanInfo(user->GetExtendedSocket(), clan);
+ 
+ 	return true;
+@@ -1074,5 +1089,6 @@ void CClanManager::OnUserLogin(IUser* user)
+ 
+ 	//ClanStoragePage storagePage;
+ 	//g_UserDatabase.GetClanStoragePage(user->GetID(), );
++	Family::Decorate(clan); // offline build: bonuses, member limit and chronicle from the family's level and achievements
+ 	g_PacketManager.SendClanUpdate(user->GetExtendedSocket(), 0, loggedInUser.memberGrade, clan);
+ }
+\ No newline at end of file
+diff --git a/src/manager/familymanager.cpp b/src/manager/familymanager.cpp
+new file mode 100644
+index 0000000..b0e13ba
+--- /dev/null
++++ b/src/manager/familymanager.cpp
+@@ -0,0 +1,501 @@
++// Offline build: Family EXP, level, points and the game's Family Achievements (see familymanager.h).
++#include "familymanager.h"
++#include "itemmanager.h"
++#include "packetmanager.h"
++#include "userdatabase.h"
++#include "common/logger.h"
++#include "common/utils.h"
++#include "interface/iuser.h"
++#include "room/gamematch.h"
++#include "serverinstance.h"
++#include "csvtable.h"
++#include "definitions.h"
++#include <algorithm>
++#include <ctime>
++#include <fstream>
++#include <map>
++#include <mutex>
++#include <set>
++#include <sstream>
++
++using namespace std;
++using json = nlohmann::json;
++
++namespace Family
++{
++	struct Condition
++	{
++		string type;          // win, play, kills, orders, children
++		vector<int> modes;
++		int team = 0;         // 1 TR, 2 CT
++		int members = 0;      // "with N family members" (met when every real player in the match is in the family)
++		string weapon;        // primary, secondary, melee, grenade
++		string map;           // the map's file name
++		int difficulty = -1;  // the room's least difficulty
++		string period;        // orders: Daily or Weekly
++		vector<int> of;       // children
++	};
++
++	struct Achievement
++	{
++		int id = 0, parent = 0, target = 1, score = 0, medals = 0, buff = 0;
++		string key, name;
++		vector<RewardItem> items;
++		Condition cond;
++	};
++
++	struct ClanState
++	{
++		long long exp = 0, points = 0;
++		map<int, long long> progress;
++		map<int, int> done; // achievement -> date (yyyymmdd)
++		vector<ClanChronicle> chronicle;
++	};
++
++	static mutex g_lock;
++	static vector<Achievement> g_achievements;
++	static map<int, ClanState> g_state;
++	static vector<long long> g_levels; // EXP each level needs (the game's ClanLevel.csv)
++	static json g_texts = json::object();
++	static map<int, string> g_mapFiles;
++	static int g_expMatch = 20, g_expWin = 15, g_expKill = 1, g_expMaxKills = 60, g_expAchievement = 10;
++	static int g_pointsMatch = 5, g_pointsWin = 5, g_killsPerPoint = 5, g_membersBase = 30, g_membersPerLevel = 2, g_levelMedals = 25;
++
++	static const char* STATE_FILE = "Data/FamilyState.json";
++
++	static int Today()
++	{
++		time_t now = time(NULL);
++		tm local = *localtime(&now);
++		return (local.tm_year + 1900) * 10000 + (local.tm_mon + 1) * 100 + local.tm_mday;
++	}
++
++	static void Save()
++	{
++		json out = json::object();
++		for (auto& kv : g_state)
++		{
++			json c;
++			c["Exp"] = kv.second.exp;
++			c["Points"] = kv.second.points;
++			json p = json::object(), d = json::object(), ch = json::array();
++			for (auto& x : kv.second.progress)
++				p[to_string(x.first)] = x.second;
++			for (auto& x : kv.second.done)
++				d[to_string(x.first)] = x.second;
++			for (auto& x : kv.second.chronicle)
++				ch.push_back({ { "Date", x.date }, { "Type", x.type }, { "Text", x.str } });
++			c["Progress"] = p;
++			c["Done"] = d;
++			c["Chronicle"] = ch;
++			out[to_string(kv.first)] = c;
++		}
++		ofstream f(STATE_FILE);
++		f << out.dump(1, '\t');
++	}
++
++	void Load()
++	{
++		lock_guard<mutex> lock(g_lock);
++		g_achievements.clear();
++		ifstream f("Data/FamilyAchievements.json");
++		json d = json::parse(f, nullptr, false, true);
++		if (d.is_discarded() || !d.is_object())
++		{
++			Logger().Warn("Family: Data/FamilyAchievements.json can't be read\n");
++			return;
++		}
++		json e = d.value("Exp", json::object()), p = d.value("Points", json::object());
++		g_expMatch = e.value("Match", 20), g_expWin = e.value("Win", 15), g_expKill = e.value("Kill", 1);
++		g_expMaxKills = e.value("MaxKills", 60), g_expAchievement = e.value("Achievement", 10);
++		g_pointsMatch = p.value("Match", 5), g_pointsWin = p.value("Win", 5), g_killsPerPoint = max(1, p.value("KillsPerPoint", 5));
++		g_membersBase = d.value("MembersBase", 30), g_membersPerLevel = d.value("MembersPerLevel", 2);
++		g_levelMedals = d.value("LevelMedals", 25);
++		g_levels = d.value("Levels", vector<long long>());
++		g_texts = d.value("Texts", json::object());
++		for (auto& a : d.value("Achievements", json::array()))
++		{
++			Achievement x;
++			x.id = a.value("ID", 0), x.parent = a.value("Parent", 0), x.target = max(1, a.value("Target", 1));
++			x.score = a.value("Score", 0), x.medals = a.value("Medals", 0), x.buff = a.value("Buff", 0);
++			x.key = a.value("Key", string()), x.name = a.value("Name", x.key);
++			for (auto& it : a.value("Items", json::array()))
++			{
++				RewardItem r = {};
++				r.itemID = it.value("ItemID", 0), r.count = it.value("Count", 1), r.duration = it.value("Days", 0);
++				if (r.itemID)
++					x.items.push_back(r);
++			}
++			json c = a.value("Condition", json::object());
++			x.cond.type = c.value("type", string());
++			x.cond.modes = c.value("modes", vector<int>());
++			x.cond.team = c.value("team", 0), x.cond.members = c.value("members", 0);
++			x.cond.weapon = c.value("weapon", string()), x.cond.map = c.value("map", string());
++			x.cond.difficulty = c.value("difficulty", -1), x.cond.period = c.value("period", string());
++			x.cond.of = c.value("of", vector<int>());
++			g_achievements.push_back(x);
++		}
++
++		// the maps' file names (MapList.csv: id, name, file name)
++		g_mapFiles.clear();
++		ifstream ml("Data/MapList.csv");
++		string line;
++		while (getline(ml, line))
++		{
++			stringstream ss(line);
++			string id, name, file;
++			if (!getline(ss, id, ',') || !getline(ss, name, ',') || !getline(ss, file, ','))
++				continue;
++			auto trim = [](string s) { s.erase(0, s.find_first_not_of(" \t\r")); s.erase(s.find_last_not_of(" \t\r") + 1); return s; };
++			id = trim(id), file = trim(file);
++			if (!id.empty() && isdigit((unsigned char)id[0]))
++				g_mapFiles[atoi(id.c_str())] = file;
++		}
++
++		g_state.clear();
++		ifstream sf(STATE_FILE);
++		json s = json::parse(sf, nullptr, false, true);
++		if (s.is_object())
++			for (auto& kv : s.items())
++			{
++				ClanState c;
++				c.exp = kv.value().value("Exp", 0LL), c.points = kv.value().value("Points", 0LL);
++				json progress = kv.value().value("Progress", json::object()), done = kv.value().value("Done", json::object());
++				for (auto& x : progress.items())
++					c.progress[atoi(x.key().c_str())] = x.value().get<long long>();
++				for (auto& x : done.items())
++					c.done[atoi(x.key().c_str())] = x.value().get<int>();
++				for (auto& x : kv.value().value("Chronicle", json::array()))
++					c.chronicle.push_back({ x.value("Date", 0), x.value("Type", 2), x.value("Text", string()) });
++				g_state[atoi(kv.key().c_str())] = c;
++			}
++		Logger().Info("Family: %d achievements, %d levels, %d families with progress\n", (int)g_achievements.size(),
++			(int)g_levels.size(), (int)g_state.size());
++	}
++
++	static int Level(long long exp, long long* into = nullptr, long long* need = nullptr)
++	{
++		int level = 1;
++		long long before = 0;
++		for (size_t i = 0; i < g_levels.size() && g_levels[i] > 0; i++)
++		{
++			if (exp < g_levels[i])
++			{
++				if (into)
++					*into = exp - before;
++				if (need)
++					*need = g_levels[i] - before;
++				return level;
++			}
++			before = g_levels[i];
++			level++;
++		}
++		if (into)
++			*into = 0;
++		if (need)
++			*need = 0;
++		return level;
++	}
++
++	static int Buff(const ClanState& c)
++	{
++		int b = 0;
++		for (auto& a : g_achievements)
++			if (a.buff && c.done.count(a.id))
++				b += a.buff;
++		return b;
++	}
++
++	static int ClanOf(IUser* user)
++	{
++		return user ? user->GetCharacter(UFLAG_LOW_CLAN).clanID : 0;
++	}
++
++	static string WeaponKind(int gunID)
++	{
++		if (gunID <= 0)
++			return "";
++		int category = 0;
++		try { category = g_pItemTable->GetCell<int>("Category", to_string(gunID)); } catch (...) { return ""; }
++		switch (category)
++		{
++		case 1: return "secondary";
++		case 2: case 3: case 4: case 5: return "primary";
++		case 6: return "grenade";
++		case 11: return "melee";
++		}
++		return "";
++	}
++
++	void OnKill(CGameMatchUserStat* stat, int gunID)
++	{
++		string kind = WeaponKind(gunID);
++		if (stat && !kind.empty())
++			stat->m_Counters["Family." + kind]++;
++	}
++
++	static void Notify(int clanID, const string& text)
++	{
++		vector<ClanUser> users;
++		g_UserDatabase.GetClanUserList(clanID, false, users);
++		for (auto& u : users)
++			if (u.user)
++				g_PacketManager.SendUMsgNoticeMessageInChat(u.user->GetExtendedSocket(), text);
++	}
++
++	// the member limit of the family's level, in the database too (joining checks it there); UpdateClan wants the master
++	static void ApplyMemberLimit(int clanID, int level)
++	{
++		Clan_s clan = {};
++		if (g_UserDatabase.GetClanInfo(clanID, clan) <= 0)
++			return;
++		int limit = g_membersBase + g_membersPerLevel * (level - 1);
++		if (clan.maxMemberCount >= limit)
++			return;
++		vector<ClanUser> users;
++		g_UserDatabase.GetClanUserList(clanID, false, users);
++		for (auto& u : users)
++			if (u.memberGrade <= 1)
++			{
++				clan.maxMemberCount = limit;
++				if (g_UserDatabase.UpdateClan(u.userID, CFLAG_MAXMEMBERCOUNT, clan) > 0)
++					Logger().Info("Family: clan %d member limit %d (level %d)\n", clanID, limit, level);
++				return;
++			}
++	}
++
++	// an achievement done: its rewards to the members who were there, the parents checked
++	static void Complete(int clanID, ClanState& c, const Achievement& a, const vector<IUser*>& present)
++	{
++		if (c.done.count(a.id))
++			return;
++		c.done[a.id] = Today();
++		c.progress[a.id] = a.target;
++		c.exp += (long long)g_expAchievement * a.score;
++		c.chronicle.push_back({ Today(), 2, a.name });
++		string items;
++		for (auto& it : a.items)
++		{
++			const char* name = it.count > 1 ? va(" x%d", it.count) : "";
++			items += string(items.empty() ? "" : ", ") + "item " + to_string(it.itemID) + name + (it.duration ? va(" (%d days)", it.duration) : "");
++		}
++		for (IUser* u : present)
++		{
++			for (auto& it : a.items)
++				g_ItemManager.AddItem(u->GetID(), u, it.itemID, it.count, it.duration);
++			if (a.medals)
++				u->UpdatePoints(a.medals);
++		}
++		string reward = va("+%d medals", a.medals);
++		if (!a.items.empty())
++			reward += " and the achievement's items";
++		if (a.buff)
++			reward += va(", Family EXP/Point bonus +%d%%", a.buff);
++		Notify(clanID, va("[Family] Achievement \"%s\" complete! %s for the members who played it.", a.name.c_str(), reward.c_str()));
++		Logger().Info("Family: clan %d completed %d %s (%s; %d members rewarded)\n", clanID, a.id, a.key.c_str(), items.c_str(), (int)present.size());
++		for (auto& p : g_achievements)
++			if (p.cond.type == "children" && find(p.cond.of.begin(), p.cond.of.end(), a.id) != p.cond.of.end())
++			{
++				long long n = 0;
++				for (int child : p.cond.of)
++					n += c.done.count(child);
++				c.progress[p.id] = n;
++				if (n >= p.target)
++					Complete(clanID, c, p, present);
++			}
++	}
++
++	static void Advance(int clanID, ClanState& c, const Achievement& a, long long add, const vector<IUser*>& present)
++	{
++		if (add <= 0 || c.done.count(a.id))
++			return;
++		long long& v = c.progress[a.id];
++		v = min<long long>(a.target, v + add);
++		if (v >= a.target)
++			Complete(clanID, c, a, present);
++	}
++
++	void OnMatchEnd(CGameMatch* match, int difficulty, const vector<MatchPlayer>& players)
++	{
++		if (!match || players.empty())
++			return;
++		lock_guard<mutex> lock(g_lock);
++		if (g_achievements.empty())
++			return;
++		int mode = match->m_nGameMode;
++		string mapFile = g_mapFiles.count(match->m_nMapID) ? g_mapFiles[match->m_nMapID] : "";
++		int real = 0;
++		map<int, vector<const MatchPlayer*>> clans;
++		for (auto& p : players)
++		{
++			if (!p.stat || !p.stat->m_pUser)
++				continue;
++			real++;
++			int clanID = ClanOf(p.stat->m_pUser);
++			if (clanID > 0)
++				clans[clanID].push_back(&p);
++		}
++		for (auto& kv : clans)
++		{
++			int clanID = kv.first;
++			auto& members = kv.second;
++			ClanState& c = g_state[clanID];
++			vector<IUser*> present;
++			for (auto* p : members)
++				present.push_back(p->stat->m_pUser);
++			bool everyone = (int)members.size() >= real;
++
++			// EXP and points, with the achievements' bonus
++			int bonus = Buff(c);
++			long long exp = 0, points = 0;
++			for (auto* p : members)
++			{
++				int kills = p->stat->m_nKills;
++				exp += g_expMatch + (p->won ? g_expWin : 0) + (long long)g_expKill * min(kills, g_expMaxKills);
++				points += g_pointsMatch + (p->won ? g_pointsWin : 0) + kills / g_killsPerPoint;
++			}
++			exp += exp * bonus / 100;
++			points += points * bonus / 100;
++			int levelBefore = Level(c.exp);
++			c.exp += exp;
++			c.points += points;
++
++			for (auto& a : g_achievements)
++			{
++				const Condition& k = a.cond;
++				if (k.type != "win" && k.type != "play" && k.type != "kills")
++					continue;
++				if (!k.modes.empty() && find(k.modes.begin(), k.modes.end(), mode) == k.modes.end())
++					continue;
++				if (!k.map.empty() && _stricmp(k.map.c_str(), mapFile.c_str()))
++					continue;
++				if (k.difficulty >= 0 && difficulty < k.difficulty)
++					continue;
++				if (k.members > 1 && !everyone && (int)members.size() < k.members)
++					continue;
++				long long add = 0;
++				bool any = false;
++				for (auto* p : members)
++				{
++					if (k.team && p->team != k.team)
++						continue;
++					any = any || k.type == "play" || (k.type == "win" && p->won);
++					if (k.type == "kills")
++					{
++						if (k.weapon.empty())
++							add += p->stat->m_nKills;
++						else
++						{
++							auto it = p->stat->m_Counters.find("Family." + k.weapon);
++							add += it == p->stat->m_Counters.end() ? 0 : it->second;
++						}
++					}
++				}
++				if (k.type != "kills")
++					add = any ? 1 : 0;
++				Advance(clanID, c, a, add, present);
++			}
++
++			long long into = 0, need = 0;
++			int level = Level(c.exp, &into, &need);
++			ApplyMemberLimit(clanID, level);
++			string msg = va("[Family] +%lld EXP, +%lld Family Points%s. Level %d%s", exp, points,
++				bonus ? va(" (bonus +%d%%)", bonus) : "", level, need ? va(" (%lld / %lld EXP)", into, need) : " (max)");
++			for (IUser* u : present)
++				g_PacketManager.SendUMsgNoticeMessageInChat(u->GetExtendedSocket(), msg);
++			if (level > levelBefore)
++			{
++				// (new families may hold 450 members already: the level's reward is medals for the members online)
++				c.chronicle.push_back({ Today(), 2, va("Family Level %d", level) });
++				int medals = g_levelMedals * level;
++				vector<ClanUser> users;
++				g_UserDatabase.GetClanUserList(clanID, false, users);
++				for (auto& u : users)
++					if (u.user)
++					{
++						u.user->UpdatePoints(medals);
++						g_PacketManager.SendUMsgNoticeMessageInChat(u.user->GetExtendedSocket(),
++							va("[Family] The family reached level %d! +%d medals for every member online.", level, medals));
++					}
++			}
++			Logger().Info("Family: clan %d, mode %d, %d of %d players: +%lld EXP (level %d), +%lld points\n", clanID, mode,
++				(int)members.size(), real, exp, level, points);
++		}
++		Save();
++	}
++
++	void OnOrderDone(IUser* user, const string& period)
++	{
++		int clanID = ClanOf(user);
++		if (clanID <= 0)
++			return;
++		lock_guard<mutex> lock(g_lock);
++		ClanState& c = g_state[clanID];
++		for (auto& a : g_achievements)
++			if (a.cond.type == "orders" && a.cond.period == period)
++				Advance(clanID, c, a, 1, { user });
++		Save();
++	}
++
++	void SendAchievements(IUser* user, int clanID)
++	{
++		if (!user)
++			return;
++		if (clanID <= 0)
++			clanID = ClanOf(user);
++		lock_guard<mutex> lock(g_lock);
++		ClanState c = g_state.count(clanID) ? g_state[clanID] : ClanState();
++		int total = 0;
++		for (auto& a : g_achievements)
++			if (c.done.count(a.id))
++				total += a.score;
++		// 0xa1: u32 total score, u16 count, count x (u16 id, u32 progress, u8 done, u8 reward received) (hw 0x02635900)
++		CSendPacket* msg = g_PacketManager.CreatePacket(user->GetExtendedSocket(), PacketId::Clan);
++		msg->BuildHeader();
++		msg->WriteUInt8(ClanPacketType::RequestClanAchievement);
++		msg->WriteUInt32(total);
++		msg->WriteUInt16((unsigned)g_achievements.size());
++		for (auto& a : g_achievements)
++		{
++			bool done = c.done.count(a.id) != 0;
++			msg->WriteUInt16(a.id);
++			msg->WriteUInt32((unsigned)(c.progress.count(a.id) ? c.progress[a.id] : 0));
++			msg->WriteUInt8(done);
++			msg->WriteUInt8(done);
++		}
++		user->GetExtendedSocket()->Send(msg);
++	}
++
++	void Decorate(Clan_s& clan)
++	{
++		lock_guard<mutex> lock(g_lock);
++		auto it = g_state.find(clan.id);
++		if (it == g_state.end())
++			return;
++		int bonus = Buff(it->second);
++		clan.expBoost += bonus;
++		clan.pointBoost += bonus;
++		clan.maxMemberCount = max(clan.maxMemberCount, g_membersBase + g_membersPerLevel * (Level(it->second.exp) - 1));
++		for (auto& ch : it->second.chronicle)
++			clan.chronicle.push_back(ch);
++	}
++
++	json Texts()
++	{
++		lock_guard<mutex> lock(g_lock);
++		return g_texts;
++	}
++
++	string Summary(int clanID)
++	{
++		lock_guard<mutex> lock(g_lock);
++		ClanState c = g_state.count(clanID) ? g_state[clanID] : ClanState();
++		long long into = 0, need = 0;
++		int level = Level(c.exp, &into, &need);
++		int done = 0;
++		for (auto& a : g_achievements)
++			done += c.done.count(a.id) != 0;
++		return va("Family level %d%s, %lld Family Points, %d of %d achievements, EXP/Point bonus +%d%%", level,
++			need ? va(" (%lld / %lld EXP)", into, need) : " (max)", c.points, done, (int)g_achievements.size(), Buff(c));
++	}
++}
+diff --git a/src/manager/familymanager.h b/src/manager/familymanager.h
+new file mode 100644
+index 0000000..9619036
+--- /dev/null
++++ b/src/manager/familymanager.h
+@@ -0,0 +1,43 @@
++#pragma once
++
++// Offline build: what a family (clan) gains by playing - Family EXP and level (the game's resource/ClanLevel.csv), Family
++// Points, and the game's Family Achievements (Data/FamilyAchievements.json, tools/gen_family_achievements.py) with their
++// rewards. State in Data/FamilyState.json. The user's rules (2026-11-20): "with N family members" is met when every real
++// player of the match is in the family (alone: always); EXP comes from the members' matches; achievements give the game's
++// items and medals; levels raise the member limit.
++
++#include <string>
++#include <vector>
++#include "nlohmann/json.hpp"
++
++class IUser;
++class CGameMatch;
++class CGameMatchUserStat;
++struct GameMatch_KillEvent;
++struct Clan_s;
++
++namespace Family
++{
++	struct MatchPlayer
++	{
++		CGameMatchUserStat* stat;
++		int team; // 1 TR, 2 CT
++		bool won;
++	};
++
++	void Load();
++	// a kill: its weapon's kind is counted for the weapon achievements (stat->m_Counters "Family.<kind>")
++	void OnKill(CGameMatchUserStat* stat, int gunID);
++	// the end of a match: EXP, points and achievement progress of every family in it
++	void OnMatchEnd(CGameMatch* match, int difficulty, const std::vector<MatchPlayer>& players);
++	// a daily or weekly order done by a member
++	void OnOrderDone(IUser* user, const std::string& period);
++	// the client's Family Achievements window (clan packet 0xa1)
++	void SendAchievements(IUser* user, int clanID);
++	// what the family's info shows: bonuses from the achievements, member limit by level, achievement chronicle
++	void Decorate(Clan_s& clan);
++	// the achievements' texts for the offline rules (merged into /api/questtexts)
++	nlohmann::json Texts();
++	// "Level 3 (1,200 / 7,040 EXP), 340 Family Points" (the game's family windows show no level)
++	std::string Summary(int clanID);
++}
 diff --git a/src/manager/guestprofile.cpp b/src/manager/guestprofile.cpp
 new file mode 100644
 index 0000000..13016e4
@@ -9189,10 +9804,10 @@ index c7d2bdb..75d0ee9 100644
 +extern CVoxelManager g_VoxelManager;
 diff --git a/src/manager/warbondmanager.cpp b/src/manager/warbondmanager.cpp
 new file mode 100644
-index 0000000..28e0e08
+index 0000000..ab3a6b7
 --- /dev/null
 +++ b/src/manager/warbondmanager.cpp
-@@ -0,0 +1,1138 @@
+@@ -0,0 +1,1142 @@
 +#include "channelmanager.h"
 +#include "guestprofile.h"
 +#include "transfer.h"
@@ -9213,6 +9828,7 @@ index 0000000..28e0e08
 +#include "medalmanager.h"
 +#include "missionmanager.h"
 +#include "roomoptions.h"
++#include "familymanager.h"
 +
 +#include <fstream>
 +#include <set>
@@ -9238,6 +9854,7 @@ index 0000000..28e0e08
 +	if (!LoadConfig())
 +		return false;
 +	ModeRewards::Load();
++	Family::Load();
 +
 +	// offline Studio: the voxel REST API (VoxelConfigList.json points the game here)
 +	m_WebServer.SetStudioHandler([](const WebRequest& req) { return g_VoxelManager.OnHttp(req); });
@@ -9412,6 +10029,7 @@ index 0000000..28e0e08
 +		// for botassist.asi: the medals' offline conditions replace the game's texts in My Info's Medals tab
 +		result = g_MedalManager.QuestTexts();
 +		result.update(g_MissionManager.TextOverrides()); // the tutorial's rewards, the Point Coupon (Data/GameTexts.json)
++		result.update(Family::Texts()); // the Family achievements' offline rules (Data/FamilyAchievements.json)
 +	}
 +	else if (req.method == "GET" && req.path == "/api/rooms")
 +	{
@@ -10188,6 +10806,7 @@ index 0000000..28e0e08
 +				reward += string(reward.empty() ? "" : ", ") + va("+%d Bingo Ticket%s", o.tickets, o.tickets == 1 ? "" : "s");
 +			if (o.period == "Daily" || o.period == "Weekly")
 +			{
++				Family::OnOrderDone(user, o.period); // the Family achievements that count orders
 +				// now and then a decoder too (Data/DailyDecoders.json)
 +				string decoder = g_MissionManager.DailyDecoder(user, false, o.period == "Weekly");
 +				if (!decoder.empty())
@@ -11662,20 +12281,21 @@ index 4c688f4..c1e0b2a 100644
 +	bool m_bWouldBlock; // last read hit WOLFSSL_ERROR_WANT_READ/WRITE (non-blocking SSL, retry on next poll)
  };
 diff --git a/src/room/gamematch.cpp b/src/room/gamematch.cpp
-index 65418d8..044af94 100644
+index 65418d8..b536080 100644
 --- a/src/room/gamematch.cpp
 +++ b/src/room/gamematch.cpp
-@@ -6,6 +6,9 @@
+@@ -6,6 +6,10 @@
  #include "manager/itemmanager.h"
  #include "manager/hostmanager.h"
  #include "manager/userdatabase.h"
 +#include "manager/warbondmanager.h"
 +#include "manager/medalmanager.h"
 +#include "manager/moderewards.h"
++#include "manager/familymanager.h"
  
  #include "user/userinventoryitem.h"
  
-@@ -19,6 +22,7 @@ CGameMatchUserStat::CGameMatchUserStat()
+@@ -19,6 +23,7 @@ CGameMatchUserStat::CGameMatchUserStat()
  	m_nDeaths = 0;
  	m_nPointsEarned = 0;
  	m_nBonusPointsEarned = 0;
@@ -11683,7 +12303,7 @@ index 65418d8..044af94 100644
  	m_nExpEarned = 0;
  	m_nBonusExpEarned = 0;
  	m_nItemBonusPoints = 0;
-@@ -209,6 +213,7 @@ void CGameMatch::Connect(IUser* user)
+@@ -209,6 +214,7 @@ void CGameMatch::Connect(IUser* user)
  	{
  		CGameMatchUserStat* userStat = new CGameMatchUserStat();
  		userStat->m_pUser = user;
@@ -11691,7 +12311,7 @@ index 65418d8..044af94 100644
  
  		m_UserStats.push_back(userStat);
  	}
-@@ -220,6 +225,7 @@ void CGameMatch::Disconnect(IUser* user)
+@@ -220,6 +226,7 @@ void CGameMatch::Disconnect(IUser* user)
  	if (stat)
  	{
  		g_QuestManager.OnGameMatchLeave(user, stat->m_TempQuestProgress, stat->m_TempQuestEventProgress);
@@ -11699,7 +12319,7 @@ index 65418d8..044af94 100644
  
  		delete stat;
  		m_UserStats.erase(remove(begin(m_UserStats), end(m_UserStats), stat), end(m_UserStats));
-@@ -271,6 +277,8 @@ void CGameMatch::OnUpdateKillCounter(IUser* user, int kills)
+@@ -271,6 +278,8 @@ void CGameMatch::OnUpdateKillCounter(IUser* user, int kills)
  	if (stat)
  	{
  		stat->UpdateKillsCount(kills);
@@ -11708,7 +12328,7 @@ index 65418d8..044af94 100644
  	}
  }
  
-@@ -292,7 +300,14 @@ void CGameMatch::OnKillEvent(IUser* user, GameMatch_KillEvent& killEvent)
+@@ -292,7 +301,15 @@ void CGameMatch::OnKillEvent(IUser* user, GameMatch_KillEvent& killEvent)
  
  	// don't count player suicide
  	if (killEvent.killerUserID != killEvent.victimUserID)
@@ -11716,6 +12336,7 @@ index 65418d8..044af94 100644
  		stat->IncrementKillCount();
 +		stat->m_KillTypes[killEvent.victimKillType]++;
 +		g_MedalManager.OnKill(stat, this, killEvent);
++		Family::OnKill(stat, killEvent.gunID); // the weapon kinds of the Family achievements
 +	}
 +	if (g_WarbondManager.LogKills())
 +		Logger().Info("KillEvent: killer %d (team %d) gun %d -> victim %d (team %d), killType %d, kills now %d\n", killEvent.killerUserID, killEvent.killerTeam,
@@ -11723,7 +12344,7 @@ index 65418d8..044af94 100644
  
  	g_QuestManager.OnKillEvent(stat, this, killEvent);
  
-@@ -356,6 +371,7 @@ void CGameMatch::OnBombExplode(IUser* user)
+@@ -356,6 +373,7 @@ void CGameMatch::OnBombExplode(IUser* user)
  	if (!stat)
  		return;
  
@@ -11731,7 +12352,7 @@ index 65418d8..044af94 100644
  	g_QuestManager.OnBombExplode(stat, this);
  }
  
-@@ -365,6 +381,7 @@ void CGameMatch::OnBombDefuse(IUser* user)
+@@ -365,6 +383,7 @@ void CGameMatch::OnBombDefuse(IUser* user)
  	if (!stat)
  		return;
  
@@ -11739,7 +12360,7 @@ index 65418d8..044af94 100644
  	g_QuestManager.OnBombDefuse(stat, this);
  }
  
-@@ -374,6 +391,7 @@ void CGameMatch::OnHostageEscape(IUser* user)
+@@ -374,6 +393,7 @@ void CGameMatch::OnHostageEscape(IUser* user)
  	if (!stat)
  		return;
  
@@ -11747,7 +12368,7 @@ index 65418d8..044af94 100644
  	g_QuestManager.OnHostageEscape(stat, this);
  }
  
-@@ -383,6 +401,7 @@ void CGameMatch::OnMonsterKill(IUser* user, int monsterType)
+@@ -383,6 +403,7 @@ void CGameMatch::OnMonsterKill(IUser* user, int monsterType)
  	if (!stat)
  		return;	
  
@@ -11755,7 +12376,7 @@ index 65418d8..044af94 100644
  	g_QuestManager.OnMonsterKill(stat, this, monsterType);
  }
  
-@@ -391,6 +410,7 @@ void CGameMatch::OnDropBoxPickup(IUser* user, int rewardID)
+@@ -391,6 +412,7 @@ void CGameMatch::OnDropBoxPickup(IUser* user, int rewardID)
  	CGameMatchUserStat* stat = GetGameUserStat(user);
  	if (!stat)
  		return;
@@ -11763,7 +12384,7 @@ index 65418d8..044af94 100644
  
  #ifndef PUBLIC_RELEASE
  	if (m_nGameMode != 15 && m_nGameMode != 17 && m_nGameMode != 26 && m_nGameMode != 28)
-@@ -430,8 +450,36 @@ void CGameMatch::OnKiteKill(IUser* user)
+@@ -430,8 +452,51 @@ void CGameMatch::OnKiteKill(IUser* user)
  
  void CGameMatch::OnGameMatchEnd()
  {
@@ -11790,6 +12411,21 @@ index 65418d8..044af94 100644
 +		}
 +	}
 +
++	// offline build: Family EXP, points and achievements (manager/familymanager.cpp)
++	{
++		vector<Family::MatchPlayer> players;
++		for (auto stat : m_UserStats)
++		{
++			if (!stat->m_pUser)
++				continue;
++			RoomTeamNum team = m_pParentRoom->GetUserTeam(stat->m_pUser);
++			bool won = (team == RoomTeamNum::Terrorist && m_nTerWinCount > m_nCtWinCount) ||
++				(team == RoomTeamNum::CounterTerrorist && m_nCtWinCount > m_nTerWinCount);
++			players.push_back({ stat, (int)team, won });
++		}
++		Family::OnMatchEnd(this, m_pParentRoom->GetSettings()->zsDifficulty, players);
++	}
++
 +	if (m_bCheats)
 +		for (auto stat : m_UserStats)
 +		{
@@ -11800,7 +12436,7 @@ index 65418d8..044af94 100644
  
  	Logger().Info("CGameMatch::OnGameMatchEnd: gamemode: %d, CT rounds win count: %d, T rounds win count: %d\n", m_nGameMode, m_nCtWinCount, m_nTerWinCount);
  }
-@@ -532,7 +580,6 @@ void CGameMatch::CalculateGameResult()
+@@ -532,7 +597,6 @@ void CGameMatch::CalculateGameResult()
  	CalculateFirstPlace();
  
  	int expCoef = GetExpCoefficient();
@@ -11808,7 +12444,7 @@ index 65418d8..044af94 100644
  
  	for (auto stat : m_UserStats)
  	{
-@@ -541,8 +588,23 @@ void CGameMatch::CalculateGameResult()
+@@ -541,8 +605,23 @@ void CGameMatch::CalculateGameResult()
  		// calc exp
  		stat->m_nExpEarned = stat->m_nKills > 0 ? expCoef * stat->m_nKills : expCoef;
  
@@ -11834,7 +12470,7 @@ index 65418d8..044af94 100644
  
  		// calc bonus exp/points
  		auto bonusPercentageClass = find_if(g_pServerConfig->gameMatch.bonusPercentageClasses.begin(), g_pServerConfig->gameMatch.bonusPercentageClasses.end(),
-@@ -601,6 +663,10 @@ void CGameMatch::CalculateGameResult()
+@@ -601,6 +680,10 @@ void CGameMatch::CalculateGameResult()
  			}
  		}
  
@@ -11845,7 +12481,7 @@ index 65418d8..044af94 100644
  		if (stat->m_nExpEarned > 9999)
  		{
  			stat->m_nExpEarned = 9999;
-@@ -623,6 +689,9 @@ void CGameMatch::ApplyGameResult()
+@@ -623,6 +706,9 @@ void CGameMatch::ApplyGameResult()
  
  		int totalPoints = stat->m_nPointsEarned + stat->m_nBonusPointsEarned;
  		user->UpdatePoints(totalPoints);

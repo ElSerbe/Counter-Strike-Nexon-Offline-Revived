@@ -1268,3 +1268,17 @@ Walkers pick places away from the zombies they see.
   the mode's weapons: the room's loadout isn't bought over them. Its health going up when picked looked like a new
   life, and the loadout dropped the hero's minigun. botassist.log: "Zombie Hero: bot ... is the hero".
 - A hero holding the chainsaw doesn't back off from zombies (`ZombieFlee`): the game's AI takes it to them.
+
+## Melee weapons with no server code (knife_fixes.inl)
+
+mp.dll keeps one knife helper per knife index (Item.csv InGameID - 4000 + 2) in a std::map (0x11096b30 registers). The
+helpers of the Miracle Prism Sword (magicknife, 70), its Zombie Files version (127), the Tyrant Mace and the 2025
+Runeblade are empty shells in this client (Deploy = the do-nothing 0x106581d0): the weapon was invisible and never hit.
+botassist registers for index 70 a copy of the Frostblade's helper whose data (+0x18, the knife index) says 70, so the
+sword keeps its own models; the Y25S2 SF Sword's helper is the fallback (works, looks like the Beam Sword Universe).
+
+## Family Achievements' targets (model_aliases.inl file overrides)
+
+GameUI reads resource/clan/ClanAchieve.csv with its own CSV reader. Files of botassist_tables/resource/clan/ are opened
+instead of the game's through the same file system hook as the model aliases (by their full path): the window shows
+the offline targets of CSNZ_Server's Family achievements (tools/gen_family_achievements.py).

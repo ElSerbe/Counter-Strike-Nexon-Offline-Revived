@@ -48,6 +48,11 @@ EXTRA_FILES += [
     (f, "botassist_tables/resource/allstar/" + f.name, True)
     for f in sorted((MOD / "tools" / "botassist" / "tables" / "resource" / "allstar").glob("*.csv"))
 ]
+# the Family Achievements window's offline targets (gen_family_achievements.py); botassist opens it instead of the game's
+EXTRA_FILES += [
+    (f, "botassist_tables/resource/clan/" + f.name, True)
+    for f in sorted((MOD / "tools" / "botassist" / "tables" / "resource" / "clan").glob("*.csv"))
+]
 # the zombie class skills' values (gen_zombie_skills.py), dedicated-server files the game lacks
 EXTRA_FILES += [
     (f, "botassist_tables/resource/zombi/ZombieSkillProperty_Dedi/" + f.name, True)

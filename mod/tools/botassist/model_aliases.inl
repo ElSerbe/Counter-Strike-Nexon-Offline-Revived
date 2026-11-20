@@ -12,6 +12,33 @@ static const int FS_SLOT_OPEN = 12;
 typedef void* (__fastcall* FsOpenFn)(void* self, void* edx, const char* name, const char* options, const char* pathID);
 static FsOpenFn g_fsOpen = nullptr;
 static std::unordered_map<std::string, std::string> g_modelAliases; // "y19s4hammer" -> "hammer"
+// Files GameUI reads itself (its own CSV reader, not the hw.dll loaders of the table overrides): a file of
+// botassist_tablesesource\clan\ next to botassist.asi is opened instead of the game's, by its full path (the Family
+// Achievements' offline targets: tables/resource/clan/ClanAchieve.csv, gen_family_achievements.py)
+static std::unordered_map<std::string, std::string> g_fileOverrides; // "resource/clan/clanachieve.csv" -> full path
+
+static void LoadFileOverrides()
+{
+    const char* dirs[] = { "resource\\clan" };
+    for (const char* d : dirs)
+    {
+        WIN32_FIND_DATAA fd;
+        std::string base = std::string(g_dir) + "botassist_tables\\" + d + "\\";
+        HANDLE h = FindFirstFileA((base + "*").c_str(), &fd);
+        if (h == INVALID_HANDLE_VALUE)
+            continue;
+        do
+        {
+            if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+                continue;
+            std::string rel = std::string(d) + "/" + fd.cFileName;
+            for (auto& ch : rel)
+                ch = ch == '\\' ? '/' : (char)tolower((unsigned char)ch);
+            g_fileOverrides[rel] = base + fd.cFileName;
+        } while (FindNextFileA(h, &fd));
+        FindClose(h);
+    }
+}
 
 // the alias path of a missing weapon model ("" when it isn't one)
 static std::string ModelAlias(const char* name)
@@ -37,6 +64,22 @@ static std::string ModelAlias(const char* name)
 
 static void* __fastcall HookedFsOpen(void* self, void* edx, const char* name, const char* options, const char* pathID)
 {
+    if (name && !g_fileOverrides.empty() && options && options[0] == 'r')
+    {
+        std::string n = name;
+        for (auto& ch : n)
+            ch = ch == '\\' ? '/' : (char)tolower((unsigned char)ch);
+        auto it = g_fileOverrides.find(n);
+        if (it != g_fileOverrides.end())
+        {
+            void* o = g_fsOpen(self, edx, it->second.c_str(), options, pathID);
+            static int reports = 0;
+            if (reports++ < 20)
+                Log("file %s: %s", name, o ? "opened from botassist_tables" : "botassist_tables' copy couldn't be opened, the game's is used");
+            if (o)
+                return o;
+        }
+    }
     void* h = g_fsOpen(self, edx, name, options, pathID);
     if (h || !options || options[0] != 'r')
         return h;
@@ -59,6 +102,7 @@ static void InstallModelAliases()
     if (!fs)
         return;
     done = true;
+    LoadFileOverrides();
     if (FILE* f = fopen((std::string(g_dir) + "botassist_model_aliases.txt").c_str(), "r"))
     {
         char line[256], a[128], b[128];
@@ -73,7 +117,7 @@ static void InstallModelAliases()
     void** vt = iface && Readable(iface, 4) ? *(void***)iface : nullptr;
     IMAGE_NT_HEADERS* nt = (IMAGE_NT_HEADERS*)((unsigned char*)fs + ((IMAGE_DOS_HEADER*)fs)->e_lfanew);
     DWORD lo = (DWORD)fs, hi = lo + nt->OptionalHeader.SizeOfImage;
-    if (!vt || !Readable(vt + FS_SLOT_OPEN, 4) || g_modelAliases.empty() || (DWORD)vt[FS_SLOT_OPEN] < lo ||
+    if (!vt || !Readable(vt + FS_SLOT_OPEN, 4) || (g_modelAliases.empty() && g_fileOverrides.empty()) || (DWORD)vt[FS_SLOT_OPEN] < lo ||
         (DWORD)vt[FS_SLOT_OPEN] >= hi)
     {
         Log("model aliases: %d weapons, file system %s: not hooked", (int)g_modelAliases.size(), iface ? "unexpected" : "not found");
@@ -86,5 +130,6 @@ static void InstallModelAliases()
     VirtualProtect(vt + FS_SLOT_OPEN, sizeof(void*), PAGE_READWRITE, &old);
     vt[FS_SLOT_OPEN] = (void*)HookedFsOpen;
     VirtualProtect(vt + FS_SLOT_OPEN, sizeof(void*), old, &old);
-    Log("model aliases: %d weapons without models of their own show their base weapon's", (int)g_modelAliases.size());
+    Log("model aliases: %d weapons without models of their own show their base weapon's; %d files of botassist_tables opened instead of the game's",
+        (int)g_modelAliases.size(), (int)g_fileOverrides.size());
 }
