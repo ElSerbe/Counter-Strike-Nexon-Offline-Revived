@@ -5014,6 +5014,7 @@ static void InstallZtHooks(DWORD delta); // modes/zombie_tag.inl: what each play
 #include "crash_watch.inl"
 #include "gun_fixes.inl"
 #include "grenade_fixes.inl"
+#include "scifi_weapons.inl"
 
 static void HookBotManager(DWORD delta)
 {
@@ -5693,6 +5694,7 @@ static void HookedStartFrame()
         WbFrame();
         KnifeFixFrame();
         GrenadeFixFrame();
+        SfFrame();
         if (CoopMode())
         {
             UpdateBarricades(); // zombies against barricades, bots or not

@@ -472,6 +472,25 @@ Third test: "Host_Error: CL_ParseServerMessage: Bad server message". CSO's TE_EX
 Half-Life's (sprite, scale, framerate, flags, and one more: the drums' blast 0x11479fc0 writes four); the blast now
 writes it too.
 
+## Gravity Repulsor, Giga Break, IGNITE-10: their special functions (scifi_weapons.inl)
+
+From the CSO wiki's descriptions and the user's videos (2026-11-21), untested. Every frame, for each player, the right
+click / R pressed with the weapon in hand (pev button +0x1a4):
+- **Gravity Repulsor**: each shot also pulses around the player (hurt + push); energy charges in 25 s; right click when
+  full: Repulsor Leap (hurt + push around, thrown where you aim), then Anti-graviton (hover 3 s with the gun in hand),
+  right click while hovering: Gravity Strike (straight down; landing hurts, pushes and stuns 300 units around; no damage
+  until 1.5 s after landing); enemies hit give energy back (at most 80%); shots while hovering do x1.5.
+- **Giga Break**: shots with a small blast; zombie modes and Super Soldier: every 2nd shot in a row opens a black hole
+  pulling enemies 1.5 s; right click = swings that hit in front, the 2nd one = Overflow-Alpha (6 s); special ammunition
+  charges in 40 s, R when full = Overflow-Beta (15 s); in Overflow (weapon +0x1c0 = 1, its countdown +0x1cc kept by
+  botassist) left click = Overflow Burst (big blast where you aim), right click = Overflow Crash (dash, crash in front,
+  no damage meanwhile); zombie modes: Wingman (2 targets every 0.8 s) and Overflow Shield (after 80 s / 60 s in
+  scenario and 20 hits, stops one hit that would kill and pushes the zombies around; 60 s to come back).
+- **IGNITE-10**: thrown, lies like a mine up to 20 s and goes off when an enemy comes within 110 units; right click:
+  Ignite Blast 75 units in front (damage + strong push, uses one bomb; anim 4 bmode).
+Damage per mode with ByMode (scenario, zombie, the others); blasts are the game's TE_EXPLOSION + RadiusDamage, pushes
+set the victims' velocity, protection and the shield go through weapon_balance.inl's TakeDamage hook (SfOnDamage).
+
 ## In-game prices ($) of the strongest weapons (gun_fixes.inl, botassist_prices.txt)
 
 BuyWeapon (0x113eb3a0) asks the game rules for the price (vfunc 0x400 = 0x11414a10 in every mode, thiscall rules,
@@ -483,8 +502,8 @@ shows the new price is unknown). The first version wrote the item record's first
 ## Grenades: Ignite Bomb, Junk Grenade drums (grenade_fixes.inl)
 
 The grenade weapon (CHEGrenade) throws through 0x11050670 (cdecl, a switch on the grenade type, +0x220): type 0x15,
-the **Ignite Bomb** (8886), returns without throwing (its code was server-only), so it's thrown as a Flame Grenade
-(type 3). The **Junk Grenade** (vxlgrenade, type 0xd; detonation CGrenade::DetonateVxlGrenade 0x11482ee0) now leaves up
+the **IGNITE-10** (8886), returns without throwing (its code was server-only), so it's thrown as an HE grenade
+whose fuse never runs out and becomes a mine (scifi_weapons.inl). The **Junk Grenade** (vxlgrenade, type 0xd; detonation CGrenade::DetonateVxlGrenade 0x11482ee0) now leaves up
 to 5 of the game's explosive drums around its blast (`func_barrelbomb`, CBarrelBomb vtable 0x119705dc, models
 zm_shoreline/drum_01/02): a shot sets one off (credited to the shooter, chain reactions), the rest go off by
 themselves after 3-5 s (credited to the thrower); 25% are the big drum (double damage). Their models are precached

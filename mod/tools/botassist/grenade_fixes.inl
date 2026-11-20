@@ -4,8 +4,9 @@
 // 0x15 Ignite Bomb...) and the throw: WeaponIdle 0x11050a10 calls 0x11050670 (cdecl type, thrower pev, start xyz,
 // velocity xyz, time, team, event, extra), a switch: 3 the Flame Grenade's 0x1148af90, 0xc the Chain Grenade, 0xe and
 // default the HE grenade's 0x1148b520, 0x12 the Trinity's, and 0x15 returns at once.
-//  - Ignite Bomb (item 8886, ignitebomb, type 0x15): its thrower was only on Nexon's servers, so the throw animation
-//    played and nothing left the hand (the user, 2026-11-20). It's thrown as a Flame Grenade now (fire on landing).
+//  - Ignite Bomb (IGNITE-10, item 8886, ignitebomb, type 0x15): its thrower was only on Nexon's servers, so the throw
+//    animation played and nothing left the hand (the user, 2026-11-20). It's thrown as an HE grenade whose fuse never
+//    runs out, and scifi_weapons.inl makes it a mine (first version: a Flame Grenade; the user: "it's like a mine").
 //  - Junk Grenade (vxlgrenade, type 0xd): its detonation (CGrenade::DetonateVxlGrenade 0x11482ee0, the think chosen
 //    when pev dmg is 769) scatters junk blocks in Studio's voxel world and blows up. The user wanted explosive props
 //    around it for a few seconds that go off: botassist puts up to 5 of the game's own explosive drums around the blast
@@ -17,7 +18,7 @@
 static const DWORD MP_GRENADE_THROW = 0x11050670, MP_HEGRENADE_PRECACHE = 0x110504f0, MP_DETONATE_VXL = 0x11482ee0;
 static const DWORD MP_CREATE_NAMED = 0x113e6830, MP_VT_BARRELBOMB = 0x119705dc, MP_BARREL_KILLED = 0x11479fc0;
 static const DWORD MP_PRECACHE_MODEL = 0x121d3a5c, MP_PRECACHE_SOUND = 0x121d3a60; // mp.dll's engine function pointers
-static const int GREN_FLAME = 3, GREN_IGNITE = 0x15;
+static const int GREN_HE = 0, GREN_FLAME = 3, GREN_IGNITE = 0x15;
 static const int EV_OWNER = 0x1bc, EV_SOLID_OFS = 0x11c;
 static const int BARREL_SPAWN_RATIO = 0xbc, BARREL_DAMAGE = 0xc0, BARREL_RANGE = 0xc4, BARREL_BIG_RATIO = 0xc8;
 static const int BARRELS_PER_GRENADE = 5, BARRELS_MAX = 25;
@@ -42,12 +43,30 @@ struct DrumBarrel
 static std::vector<DrumBarrel> g_drums;
 static std::string g_drumsMap; // the map the drums were precached for
 
+static void SfIgniteThrown(void* grenade, void* ownerPev); // scifi_weapons.inl: the bomb becomes a mine
+
+static void SafeIgniteThrown(DWORD grenade, DWORD pev)
+{
+    __try
+    {
+        SfIgniteThrown((void*)grenade, (void*)pev);
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        Log("IGNITE-10: exception 0x%08lX making the bomb a mine", GetExceptionCode());
+    }
+}
+
 static DWORD __cdecl HookedGrenadeThrow(int type, DWORD pev, DWORD sx, DWORD sy, DWORD sz, DWORD vx, DWORD vy, DWORD vz,
                                         DWORD time, DWORD team, DWORD ev, DWORD extra)
 {
-    if (type == GREN_IGNITE)
-        type = GREN_FLAME; // its own thrower is missing (see above)
-    return g_grenadeThrow(type, pev, sx, sy, sz, vx, vy, vz, time, team, ev, extra);
+    if (type != GREN_IGNITE)
+        return g_grenadeThrow(type, pev, sx, sy, sz, vx, vy, vz, time, team, ev, extra);
+    // its own thrower is missing (see above): thrown as an HE grenade, then scifi_weapons.inl makes it a mine
+    DWORD grenade = g_grenadeThrow(GREN_HE, pev, sx, sy, sz, vx, vy, vz, time, team, ev, extra);
+    if (grenade)
+        SafeIgniteThrown(grenade, pev);
+    return grenade;
 }
 
 static void __fastcall HookedHeGrenadePrecache(void* self, void* edx)
@@ -65,6 +84,7 @@ static void __fastcall HookedHeGrenadePrecache(void* self, void* edx)
         model("models/metalplategibs.mdl");
         sound("debris/bustmetal1.wav");
         sound("debris/bustmetal2.wav");
+        model("models/w_ignitebomb.mdl"); // the IGNITE-10 lying on the ground (scifi_weapons.inl)
         g_drumsMap = String(*(int*)((DWORD)*g_pGlobals + GV_MAPNAME));
     }
     __except (EXCEPTION_EXECUTE_HANDLER)
@@ -227,6 +247,6 @@ static void FixGrenades()
                                                     (void*)HookedHeGrenadePrecache, "Junk Grenade drums");
     if (!g_detonateVxl && g_heGrenadePrecache)
         g_detonateVxl = (ThisFn)DetourChecked(MP_DETONATE_VXL, det, sizeof(det), (void*)HookedDetonateVxl, "Junk Grenade");
-    Log("grenades: Ignite Bomb %s; Junk Grenade %s", g_grenadeThrow ? "thrown as a Flame Grenade" : "left as it is",
+    Log("grenades: IGNITE-10 %s; Junk Grenade %s", g_grenadeThrow ? "thrown as a mine" : "left as it is",
         g_detonateVxl ? "leaves explosive drums (from the next map loaded)" : "left as it is");
 }

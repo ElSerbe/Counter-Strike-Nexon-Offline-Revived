@@ -105,6 +105,11 @@ typedef void(__fastcall* WeaponFn)(void* weapon, void* edx);
 typedef void (*RadiusDamageFn)(float x, float y, float z, void* inflictor, void* attacker, float damage, float radius,
                                int ignoreClass, int bits);
 static WeaponFn g_lsgPrimary, g_bgPrimary, g_bgSecondary;
+// scifi_weapons.inl: what the shots do besides the bullet (pulses, swings, Overflow...)
+static float SfLsgBonus(void* player);
+static void SfLsgShot(void* player);
+static void SfBgPrimary(void* player, void* weapon, bool normalShot, int anim, bool burst);
+static void SfBgSecondary(void* player, void* weapon, int anim);
 static bool ZombieMode(int mode);
 static bool CoopMode();
 
@@ -219,9 +224,14 @@ static void __fastcall HookedLsgPrimary(void* weapon, void* edx)
     {
         float hit[3];
         unsigned char* pev = WeaponOwnerPev(weapon);
+        void* player = pev ? *(void**)(pev + EV_CONTAINING_ENTITY) : nullptr;
+        float bonus = player ? SfLsgBonus(player) : 1.0f;
         if (pev && *(int*)((unsigned char*)weapon + WPN_CLIP) < clip &&
-            GunBullet(weapon, 0.012f, (int)ByMode(16, 176, 430), 1, BULLET_50AE, hit))
-            GunBlast(hit, pev, ByMode(20, 150, 300), 90.0f, 6);
+            GunBullet(weapon, 0.012f, (int)(ByMode(16, 176, 430) * bonus), 1, BULLET_50AE, hit))
+        {
+            GunBlast(hit, pev, ByMode(20, 150, 300) * bonus, 90.0f, 6);
+            SfLsgShot(player);
+        }
     }
     __except (EXCEPTION_EXECUTE_HANDLER)
     {
@@ -242,14 +252,11 @@ static void __fastcall HookedBgPrimary(void* weapon, void* edx)
         unsigned char* pev = WeaponOwnerPev(weapon);
         if (!pev)
             return;
-        float hit[3];
         int anim = *(int*)(pev + PL_EV_WEAPONANIM);
-        float scale = ByMode(1.0f, 680.0f / 32, 2400.0f / 32);
-        if (*(int*)(w + WPN_CLIP) < clip)
-            GunBullet(weapon, 0.008f, (int)(32 * scale), 2, BULLET_762, nullptr);
-        else if (*(float*)(w + WPN_NEXT_PRIMARY) != next && (anim == 9 || anim == 10) &&
-                 GunBullet(weapon, 0.0f, (int)(96 * scale), 3, BULLET_762, hit))
-            GunBlast(hit, pev, 150.0f * scale, 200.0f, 30); // charged: charge_shootA
+        bool shot = *(int*)(w + WPN_CLIP) < clip;
+        bool burst = !shot && *(float*)(w + WPN_NEXT_PRIMARY) != next && (anim == 9 || anim == 10);
+        if (shot || burst)
+            SfBgPrimary(*(void**)(pev + EV_CONTAINING_ENTITY), weapon, shot, anim, burst);
     }
     __except (EXCEPTION_EXECUTE_HANDLER)
     {
@@ -267,11 +274,7 @@ static void __fastcall HookedBgSecondary(void* weapon, void* edx)
         unsigned char* pev = WeaponOwnerPev(weapon);
         if (!pev || *(float*)(w + WPN_NEXT_SECONDARY) == next)
             return;
-        int anim = *(int*)(pev + PL_EV_WEAPONANIM);
-        float damage = anim == 2 ? 100.0f : anim == 3 ? 140.0f : anim == 0xb ? 220.0f : 0.0f;
-        float scale = ByMode(1.0f, 680.0f / 32, 2400.0f / 32), hit[3];
-        if (damage > 0 && GunBullet(weapon, 0.0f, (int)(damage * 0.4f * scale), 3, BULLET_762, hit))
-            GunBlast(hit, pev, damage * scale, 140.0f + damage / 2, anim == 0xb ? 40 : 25);
+        SfBgSecondary(*(void**)(pev + EV_CONTAINING_ENTITY), weapon, *(int*)(pev + PL_EV_WEAPONANIM));
     }
     __except (EXCEPTION_EXECUTE_HANDLER)
     {
