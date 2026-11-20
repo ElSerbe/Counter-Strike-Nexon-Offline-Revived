@@ -203,6 +203,10 @@
 				] },
 				{ "Unlock": 0, "Title": "Account", "Items": [
 					{ "ItemID": 65, "Cost": 15, "Repeatable": true, "Days": 0 }
+				] },
+				// the old shop's items that weren't anywhere else (Shop.json; the game's shop page now opens this shop)
+				{ "Unlock": 0, "Title": "Classic shop", "Items": [
+					{ "ItemID": 84, "Cost": 3, "Repeatable": true, "Days": 7 }, { "ItemID": 111, "Cost": 3, "Repeatable": true, "Days": 7 }, { "ItemID": 136, "Cost": 4, "Repeatable": true, "Days": 7 }, { "ItemID": 137, "Cost": 4, "Repeatable": true, "Days": 7 }, { "ItemID": 138, "Cost": 4, "Repeatable": true, "Days": 7 }, { "ItemID": 252, "Cost": 4, "Repeatable": true, "Days": 7 }, { "ItemID": 163, "Cost": 4, "Repeatable": true, "Days": 7 }, { "ItemID": 200, "Cost": 4, "Repeatable": true, "Days": 7 }, { "ItemID": 216, "Cost": 4, "Repeatable": true, "Days": 7 }, { "ItemID": 305, "Cost": 4, "Repeatable": true, "Days": 7 }, { "ItemID": 358, "Cost": 4, "Repeatable": true, "Days": 7 }, { "ItemID": 201, "Cost": 4, "Repeatable": true, "Days": 7 }, { "ItemID": 306, "Cost": 4, "Repeatable": true, "Days": 7 }, { "ItemID": 359, "Cost": 4, "Repeatable": true, "Days": 7 }, { "ItemID": 300, "Cost": 3, "Repeatable": true, "Days": 0 }, { "ItemID": 173, "Cost": 20, "Repeatable": true, "Days": 0 }
 				] }
 			]
 		},

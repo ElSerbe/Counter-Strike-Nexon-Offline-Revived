@@ -7251,6 +7251,7 @@ static void HookAiSettingsButton(HMODULE gameUi)
 
 #include "room_settings_button.inl"
 #include "family_button.inl"
+#include "shop_redirect.inl"
 
 // "call <page manager>" in the button's branch becomes "jmp stub"; the stub jumps back past the page call
 static void HookTaskbarButton(DWORD siteVa, DWORD returnVa, void* stub, DWORD* returnSlot, const char* what)
@@ -7808,6 +7809,8 @@ static DWORD WINAPI Watcher(LPVOID)
             FixScoreboard(client);
         }
         HMODULE ui = GetModuleHandleA("GameUI.dll");
+        if (ui && uiHooked == ui && cfg.enabled)
+            HookShopPage(); // (its vtable may be set after GameUI loads: tried until it's hooked)
         if (ui && ui != uiHooked && cfg.enabled)
         {
             uiHooked = ui;
