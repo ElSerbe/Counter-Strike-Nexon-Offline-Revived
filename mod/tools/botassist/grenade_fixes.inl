@@ -85,6 +85,7 @@ static void __fastcall HookedHeGrenadePrecache(void* self, void* edx)
         sound("debris/bustmetal1.wav");
         sound("debris/bustmetal2.wav");
         model("models/w_ignitebomb.mdl"); // the IGNITE-10 lying on the ground (scifi_weapons.inl)
+        model("models/ef_beamgun_wingman.mdl"); // the Giga Break's Wingman (scifi_weapons.inl)
         g_drumsMap = String(*(int*)((DWORD)*g_pGlobals + GV_MAPNAME));
     }
     __except (EXCEPTION_EXECUTE_HANDLER)

@@ -57,6 +57,9 @@ struct SfPlayer
     float blastAt = 0;     // IGNITE-10: the Ignite Blast's moment
     void* blastWeapon = nullptr;
     float lastFrame = 0;
+    void* drone = nullptr; // the Wingman's drone (an info_target), its private data
+    void* droneEdict = nullptr;
+    float droneSide = 1;
     int level = -1;
 };
 static SfPlayer g_sf[33];
@@ -451,6 +454,76 @@ static void SfBgSecondary(void* player, void* weapon, int anim)
     }
 }
 
+// The Wingman's drone: the original server put it next to the player (client.dll only shoots from it, event 5);
+// the user (2026-11-21) wanted it seen. An info_target with the game's models/ef_beamgun_wingman.mdl (precached with
+// the drums in grenade_fixes.inl, so only on maps loaded since botassist hooked mp.dll), flying (MOVETYPE_NOCLIP,
+// not solid) to a spot beside the player's head, facing where he looks; removed when the Giga Break isn't in hand.
+static const int SF_EV_MOVETYPE = 0x118, SF_MOVETYPE_NOCLIP = 8;
+
+static bool SfDroneAlive(SfPlayer& s)
+{
+    return s.droneEdict && *(int*)s.droneEdict == 0 && PrivateOf(s.droneEdict) == s.drone;
+}
+
+static void SfDroneRemove(SfPlayer& s)
+{
+    if (SfDroneAlive(s))
+        F<int>(Vars(s.droneEdict), EV_FLAGS) |= SF_FL_KILLME;
+    s.drone = s.droneEdict = nullptr;
+}
+
+static void SfDroneFrame(void* player, SfPlayer& s, bool want)
+{
+    std::string map = String(*(int*)((DWORD)*g_pGlobals + GV_MAPNAME));
+    if (!want || g_drumsMap.empty() || map != g_drumsMap)
+    {
+        SfDroneRemove(s);
+        return;
+    }
+    if (!SfDroneAlive(s))
+    {
+        static const char kClass[] = "info_target";
+        const char* base = *(const char**)((DWORD)*g_pGlobals + GV_STRINGBASE);
+        void* edict = ((CreateNamedFn)(MP_CREATE_NAMED + g_mpDelta))((int)(kClass - base), 0);
+        void* priv = edict ? PrivateOf(edict) : nullptr;
+        if (!priv)
+            return;
+        unsigned char* v = Vars(edict);
+        float* o = (float*)(v + EV_ORIGIN);
+        V3 at = Eye(player);
+        o[0] = at.x, o[1] = at.y, o[2] = at.z;
+        (*(SfSetModelFn*)(MP_SET_MODEL + g_mpDelta))(edict, "models/ef_beamgun_wingman.mdl");
+        F<int>(v, SF_EV_MOVETYPE) = SF_MOVETYPE_NOCLIP;
+        F<int>(v, EV_SOLID_OFS) = 0;
+        s.drone = priv;
+        s.droneEdict = edict;
+    }
+    // beside the head (the side the client shoots from alternates; the drone stays on the right)
+    unsigned char* v = Vars(s.droneEdict);
+    float yaw = F<float>(Vars(player), EV_VANGLE + 4) / RAD;
+    V3 right = { sinf(yaw), -cosf(yaw), 0 };
+    V3 want3 = Eye(player) + right * 28.0f + V3{ 0, 0, 14 };
+    V3 cur = Origin(s.droneEdict);
+    V3 d = want3 - cur;
+    float* vel = (float*)(v + EV_VELOCITY);
+    if (Len(d) > 300.0f) // left behind (teleport, respawn): straight there
+    {
+        float* o = (float*)(v + EV_ORIGIN);
+        o[0] = want3.x, o[1] = want3.y, o[2] = want3.z;
+        vel[0] = vel[1] = vel[2] = 0;
+    }
+    else
+    {
+        vel[0] = d.x * 12.0f;
+        vel[1] = d.y * 12.0f;
+        vel[2] = d.z * 12.0f;
+    }
+    float* ang = (float*)(v + EV_ANGLES);
+    ang[0] = 0;
+    ang[1] = F<float>(Vars(player), EV_VANGLE + 4);
+    ang[2] = 0;
+}
+
 static void SfBgFrame(void* player, SfPlayer& s, void* weapon, bool active, int pressed, float now, float dt)
 {
     if (!active)
@@ -655,7 +728,11 @@ static void SfFrame()
         }
         void* e = SfEdictOf(i);
         if (!e || *(int*)e != 0 || !PrivateOf(e) || !(F<int>(Vars(e), EV_FLAGS) & FL_CLIENT))
+        {
+            if (s.droneEdict)
+                SfDroneRemove(s); // (the player left)
             continue;
+        }
         float dt = s.lastFrame > 0 && now > s.lastFrame && now - s.lastFrame < 1.0f ? now - s.lastFrame : 0.0f;
         s.lastFrame = now;
         if (!Alive(e))
@@ -664,6 +741,7 @@ static void SfFrame()
                 F<float>(Vars(e), SF_EV_GRAVITY) = 1.0f; // (hovering or falling: the gravity back)
             s.phase = 0;
             s.blastWeapon = nullptr;
+            SfDroneRemove(s);
             continue;
         }
         int buttons = F<int>(Vars(e), SF_EV_BUTTON);
@@ -675,6 +753,7 @@ static void SfFrame()
         {
             SfLsgFrame(e, s, !strcmp(cls, "weapon_leapstrikegun"), pressed, now, dt);
             SfBgFrame(e, s, weapon, !strcmp(cls, "weapon_beamgun"), pressed, now, dt);
+            SfDroneFrame(e, s, !strcmp(cls, "weapon_beamgun") && SfWingmanMode());
             if (weapon)
                 SfIgniteFrame(e, s, weapon, !strcmp(cls, "weapon_hegrenade"), pressed, now);
         }

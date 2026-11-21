@@ -478,7 +478,12 @@ From the CSO wiki's descriptions (2026-11-21), then redone after the user's own 
 user: the first version wasn't what the videos show), untested. Gravity Repulsor: gauge 10 s, hover 6 s through the
 player's gravity (pev +0x12c), the strike goes off by itself when the hover ends; Giga Break: numbers read off the
 video (shots ~865, release every 6th ~1290, swings ~96, Crash ~1920, Burst ~15000 on zombies), Alpha 4 s, Beta gauge
-30 s / 10 s. Older numbers below may differ: scifi_weapons.inl's comments are the reference. Every frame, for each player, the right
+30 s / 10 s. Older numbers below may differ: scifi_weapons.inl's comments are the reference.
+Then (2026-11-21) on the game's own state machine and effects: mp.dll still runs the Giga Break's states (Alpha after
+the 2nd swing, Beta with both mouse buttons when the special ammunition is full, the Crash's fall and landing);
+botassist adds the charging, the damage and sends the shots' client events (client.dll 0x2564420: hexagon hit every
+2nd shot, Burst, black hole, Wingman, Shield); no generic explosions on the Giga Break any more; the Wingman's drone
+(models/ef_beamgun_wingman.mdl on an info_target beside the player's head) in zombie modes. Every frame, for each player, the right
 click / R pressed with the weapon in hand (pev button +0x1a4):
 - **Gravity Repulsor**: each shot also pulses around the player (hurt + push); energy charges in 25 s; right click when
   full: Repulsor Leap (hurt + push around, thrown where you aim), then Anti-graviton (hover 3 s with the gun in hand),
