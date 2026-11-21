@@ -572,12 +572,8 @@ namespace CsnzLauncher
                     (Paths.InstalledVersion()?.ToString(3) ?? "not installed")) +
                 "&windows=" + Uri.EscapeDataString(Environment.OSVersion.VersionString + (Environment.Is64BitOperatingSystem ? " (64-bit)" : ""));
             var how = text == null ? "" :
-                copied ? "
-
-The last session's logs are copied: paste them (Ctrl+V) in the Logs box, or drag the file from the folder that opens." :
-                         "
-
-The last session's logs are in the folder that opens: drag last-session.txt into the Logs box.";
+                copied ? "\n\nThe last session's logs are copied: paste them (Ctrl+V) in the Logs box, or drag the file from the folder that opens." :
+                         "\n\nThe last session's logs are in the folder that opens: drag last-session.txt into the Logs box.";
             if (DarkBox.Show(this, "Your browser opens GitHub's problem form (you need a free GitHub account). Describe what happened and " +
                     "how to make it happen again." + how, Text, MessageBoxButtons.OKCancel) != DialogResult.OK)
                 return;
