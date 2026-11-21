@@ -490,6 +490,13 @@ effect files, found in Data/Packer by name (nartool): sprites/ef_leapstrikegun{,
 frames, sprite version 3) and models/ef_leapstrikegun{,ex}_landing.mdl, precached with the drums. Shot: hit + shoot
 sprites and "-1_exp" where the round lands; leap: jump ring; hover: fly ring under the feet every second; landing:
 the landing model (an info_target for 1.1 s) and a big hit sprite. Sprites go out as TE_EXPLOSION (flags 14).
+Then (2026-11-21) the rest of its files, named in another offline server's launcher and all in the game's packs:
+ef_leapstrikegun_projectile.spr flies from the gun to where each round lands (an info_target, NOCLIP, 3000 u/s);
+ef_leapstrikegun_explo.spr lies flat there (sprites/ef_leapstrikegun_explo_h.spr: made once by model_aliases.inl from
+the game's own file with its type byte set to oriented); jumpfx on the ground and jumpdash following the player on the
+leap, flying while hovering (replayed every 91 frames), fall on the dive (MOVETYPE_FOLLOW, aiment +0x1b8).
+Weapon properties: tools/weaponprop_keys.py lists every weapon's WeaponProp names, offsets and the values mp.dll
+registers itself (14.7k of ~18.8k found; 564 classes) - the game's own numbers, used when the server sends none.
 Every frame, for each player, the right
 click / R pressed with the weapon in hand (pev button +0x1a4):
 - **Gravity Repulsor**: each shot also pulses around the player (hurt + push); energy charges in 25 s; right click when
