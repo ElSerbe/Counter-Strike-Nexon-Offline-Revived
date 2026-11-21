@@ -483,7 +483,14 @@ Then (2026-11-21) on the game's own state machine and effects: mp.dll still runs
 the 2nd swing, Beta with both mouse buttons when the special ammunition is full, the Crash's fall and landing);
 botassist adds the charging, the damage and sends the shots' client events (client.dll 0x2564420: hexagon hit every
 2nd shot, Burst, black hole, Wingman, Shield); no generic explosions on the Giga Break any more; the Wingman's drone
-(models/ef_beamgun_wingman.mdl on an info_target beside the player's head) in zombie modes. Every frame, for each player, the right
+(models/ef_beamgun_wingman.mdl on an info_target beside the player's head) in zombie modes.
+Gravity Repulsor / Abyss Repulsor (2026-11-21): energy and state in the weapon (+0x168 0-100, +0x1c0), which
+client.dll's LeapStrikeGunEffectManager draws (gauge, charged lightning, v_leapstrikegun_parts.mdl); the game's own
+effect files, found in Data/Packer by name (nartool): sprites/ef_leapstrikegun{,ex}_{shoot,hit,jump,fly}.spr (DDS
+frames, sprite version 3) and models/ef_leapstrikegun{,ex}_landing.mdl, precached with the drums. Shot: hit + shoot
+sprites and "-1_exp" where the round lands; leap: jump ring; hover: fly ring under the feet every second; landing:
+the landing model (an info_target for 1.1 s) and a big hit sprite. Sprites go out as TE_EXPLOSION (flags 14).
+Every frame, for each player, the right
 click / R pressed with the weapon in hand (pev button +0x1a4):
 - **Gravity Repulsor**: each shot also pulses around the player (hurt + push); energy charges in 25 s; right click when
   full: Repulsor Leap (hurt + push around, thrown where you aim), then Anti-graviton (hover 3 s with the gun in hand),

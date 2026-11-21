@@ -107,7 +107,7 @@ typedef void (*RadiusDamageFn)(float x, float y, float z, void* inflictor, void*
 static WeaponFn g_lsgPrimary, g_bgPrimary, g_bgSecondary;
 // scifi_weapons.inl: what the shots do besides the bullet (pulses, swings, Overflow...)
 static float SfLsgBonus(void* player);
-static void SfLsgShot(void* player);
+static void SfLsgShot(void* player, void* weapon, const float* hit);
 static void SfBgPrimary(void* player, void* weapon, bool normalShot, int anim, bool burst);
 static void SfBgSecondary(void* player, void* weapon, int anim);
 static bool ZombieMode(int mode);
@@ -230,7 +230,7 @@ static void __fastcall HookedLsgPrimary(void* weapon, void* edx)
             GunBullet(weapon, 0.012f, (int)(ByMode(16, 176, 430) * bonus), 1, BULLET_50AE, hit))
         {
             GunBlast(hit, pev, ByMode(20, 150, 300) * bonus, 90.0f, 0); // (no generic sprite: the game has none here)
-            SfLsgShot(player);
+            SfLsgShot(player, weapon, hit);
         }
     }
     __except (EXCEPTION_EXECUTE_HANDLER)

@@ -43,6 +43,8 @@ struct SfPlayer
     int phase = 0;         // 0, 1 leap, 2 hover, 3 strike
     float phaseAt = 0, invulnUntil = 0;
     int leapHits = 0;
+    bool lsgEx = false;    // the Abyss Repulsor (its own effects)
+    float nextFly = 0;     // Anti-Graviton: the next ring under the feet
     bool energyTold = false;
     float beta = 0;        // Giga Break special ammunition, 0-100
     bool betaTold = false;
@@ -167,15 +169,141 @@ static void SfSay(void* player, const char* text)
 }
 
 // ---------------------------------------------------------------- Gravity Repulsor
+static void SfSound(void* edict, const char* sample);
+
 static float SfLsgBonus(void* player)
 {
     int i = SfIndex(player);
     return i && g_sf[i].phase == 2 ? 1.5f : 1.0f;
 }
 
-// called by gun_fixes.inl after each shot: the pulse around the player (hurts and pushes the enemies next to him)
-static void SfLsgShot(void* player)
+// The game's own effect files (the user, 2026-11-21: "its files must be in the game, leapstrikegun is its ID"): the
+// packs (Data/Packer) still have sprites/ef_leapstrikegun_shoot.spr (a blue hexagon grid, 26 frames), _hit.spr (the
+// violet burst, 15), _jump.spr (a blue shock ring, 30), _fly.spr (a cyan ring, 30) and models/ef_leapstrikegun_landing.mdl
+// (the landing blast: its textures jumpfx, lendexplo_ground, lendexplo1/2; one 30-frame sequence); the Abyss Repulsor
+// has the same set as ef_leapstrikegunex_* (red). Their users, the anti-gravity round and the dive, were server
+// entities that are gone (leapstrikegun_proj / _dive: their names are precached by 0x10e65e11, no class). The user's
+// video shows the round's violet burst where it lands (the hit sprite) and the blast on landing; botassist plays the
+// sprites with the TE_EXPLOSION the game's barrels use (no sound, light or particles) and the landing model as a short
+// lived entity. Sprites are 256 px: TE_EXPLOSION's scale is in tenths, 10 = 256 units.
+static const int LSG_FX_SHOOT = 0, LSG_FX_HIT = 1, LSG_FX_JUMP = 2, LSG_FX_FLY = 3;
+static int g_lsgSprite[2][4] = {};
+static std::string g_lsgFxMap; // the map they were precached for
+static const int SF_EV_SEQUENCE = 0x138, SF_EV_FRAME = 0x140, SF_EV_ANIMTIME = 0x144, SF_EV_FRAMERATE = 0x148;
+
+static void SfLsgPrecache(PrecacheFn model, PrecacheFn sound)
 {
+    static const char* kSprites[2][4] = {
+        { "sprites/ef_leapstrikegun_shoot.spr", "sprites/ef_leapstrikegun_hit.spr", "sprites/ef_leapstrikegun_jump.spr",
+          "sprites/ef_leapstrikegun_fly.spr" },
+        { "sprites/ef_leapstrikegunex_shoot.spr", "sprites/ef_leapstrikegunex_hit.spr",
+          "sprites/ef_leapstrikegunex_jump.spr", "sprites/ef_leapstrikegunex_fly.spr" } };
+    for (int g = 0; g < 2; g++)
+        for (int k = 0; k < 4; k++)
+            g_lsgSprite[g][k] = model(kSprites[g][k]);
+    model("models/ef_leapstrikegun_landing.mdl");
+    model("models/ef_leapstrikegunex_landing.mdl");
+    sound("weapons/leapstrikegun-1_exp.wav");
+    sound("weapons/leapstrikegunex-1_exp.wav");
+    sound("weapons/leapstrikegun_change_fly_exp.wav");
+    g_lsgFxMap = String(*(int*)((DWORD)*g_pGlobals + GV_MAPNAME));
+}
+
+static bool SfLsgFxReady()
+{
+    return !g_lsgFxMap.empty() && g_lsgFxMap == String(*(int*)((DWORD)*g_pGlobals + GV_MAPNAME));
+}
+
+// one of the gun's sprites, played once at `at`
+static void SfLsgSprite(bool ex, int which, V3 at, int scale, int framerate)
+{
+    int index = g_lsgSprite[ex ? 1 : 0][which];
+    if (!index || !SfLsgFxReady() || !g_MessageBegin || !g_WriteByte || !g_WriteShort || !g_WriteCoord || !g_MessageEnd)
+        return;
+    float a[3] = { at.x, at.y, at.z };
+    g_MessageBegin(4 /* MSG_PVS */, 23 /* SVC_TEMPENTITY */, a, nullptr);
+    g_WriteByte(3); // TE_EXPLOSION (CSO's: 4 bytes after the sprite, see GunBlast)
+    g_WriteCoord(a[0]);
+    g_WriteCoord(a[1]);
+    g_WriteCoord(a[2]);
+    g_WriteShort(index);
+    g_WriteByte(scale);
+    g_WriteByte(framerate);
+    g_WriteByte(2 | 4 | 8); // no light, no sound, no particles
+    g_WriteByte(0);
+    g_MessageEnd();
+}
+
+// short-lived entities: the landing blast's model, the sound of a round where it lands
+struct SfFx
+{
+    void* edict;
+    void* priv;
+    float until;
+    int level;
+};
+static std::vector<SfFx> g_sfFx;
+
+static void SfFxSpawn(V3 at, const char* model, const char* sound, float life)
+{
+    if (!SfLsgFxReady())
+        return;
+    static const char kClass[] = "info_target";
+    const char* base = *(const char**)((DWORD)*g_pGlobals + GV_STRINGBASE);
+    void* edict = ((CreateNamedFn)(MP_CREATE_NAMED + g_mpDelta))((int)(kClass - base), 0);
+    void* priv = edict ? PrivateOf(edict) : nullptr;
+    if (!priv)
+        return;
+    unsigned char* v = Vars(edict);
+    float* o = (float*)(v + EV_ORIGIN);
+    o[0] = at.x, o[1] = at.y, o[2] = at.z;
+    if (model)
+    {
+        (*(SfSetModelFn*)(MP_SET_MODEL + g_mpDelta))(edict, model);
+        F<int>(v, EV_SOLID_OFS) = 0;
+        F<int>(v, SF_EV_SEQUENCE) = 0;
+        F<float>(v, SF_EV_FRAME) = 0;
+        F<float>(v, SF_EV_ANIMTIME) = Now();
+        F<float>(v, SF_EV_FRAMERATE) = 1.0f;
+    }
+    if (sound)
+        SfSound(edict, sound);
+    g_sfFx.push_back({ edict, priv, Now() + life, g_nav.level });
+}
+
+static void SfFxFrame(float now)
+{
+    for (size_t i = 0; i < g_sfFx.size();)
+    {
+        SfFx& f = g_sfFx[i];
+        bool alive = f.level == g_nav.level && *(int*)f.edict == 0 && PrivateOf(f.edict) == f.priv;
+        if (alive && now < f.until)
+        {
+            i++;
+            continue;
+        }
+        if (alive)
+            F<int>(Vars(f.edict), EV_FLAGS) |= SF_FL_KILLME;
+        g_sfFx.erase(g_sfFx.begin() + i);
+    }
+}
+
+static bool SfLsgIsEx(void* weapon)
+{
+    unsigned char* pev = weapon && Readable((unsigned char*)weapon + 8, 4) ? *(unsigned char**)((unsigned char*)weapon + 8)
+                                                                          : nullptr;
+    return pev && !strcmp(String(*(int*)pev), "weapon_leapstrikegunex");
+}
+
+// called by gun_fixes.inl after each shot: the round's burst where it lands (the hit sprite, the hexagons, its
+// "-1_exp" sound) and the pulse around the player (hurts and pushes the enemies next to him)
+static void SfLsgShot(void* player, void* weapon, const float* hit)
+{
+    bool ex = SfLsgIsEx(weapon);
+    V3 at = Vec(hit);
+    SfLsgSprite(ex, LSG_FX_HIT, at, 6, 30);
+    SfLsgSprite(ex, LSG_FX_SHOOT, at, 4, 40);
+    SfFxSpawn(at, nullptr, ex ? "weapons/leapstrikegunex-1_exp.wav" : "weapons/leapstrikegun-1_exp.wav", 1.0f);
     SfArea(Origin(player), player, ByMode(6, 80, 120) * SfLsgBonus(player), 150.0f, 260.0f, 0, 0);
 }
 
@@ -242,6 +370,8 @@ static void SfLsgFrame(void* player, SfPlayer& s, void* weapon, bool active, int
     float* vel = (float*)(v + EV_VELOCITY);
     bool ground = (F<int>(v, EV_FLAGS) & SF_FL_ONGROUND) != 0;
     int* energy = active ? (int*)((unsigned char*)weapon + WPN_LSG_ENERGY) : nullptr;
+    if (active)
+        s.lsgEx = SfLsgIsEx(weapon);
     if (energy && s.phase == 0 && *energy < 100)
     {
         s.energy += dt * LSG_CHARGE_PER_S; // (fractions; the weapon keeps whole percents)
@@ -258,6 +388,7 @@ static void SfLsgFrame(void* player, SfPlayer& s, void* weapon, bool active, int
         {
             // Repulsor Leap: the enemies around are hurt and pushed, then the player is thrown where he aims
             s.leapHits = SfArea(Origin(player), player, ByMode(30, 500, 700), 200.0f, 650.0f, 250.0f, 0);
+            SfLsgSprite(s.lsgEx, LSG_FX_JUMP, Origin(player) - V3{ 0, 0, 20 }, 10, 30);
             V3 aim = SfAim(player);
             vel[0] = aim.x * LSG_LEAP_SPEED;
             vel[1] = aim.y * LSG_LEAP_SPEED;
@@ -300,8 +431,16 @@ static void SfLsgFrame(void* player, SfPlayer& s, void* weapon, bool active, int
         }
         else if (now - s.phaseAt >= LSG_HOVER_S || ground)
             SfLsgStrike(player, weapon, s, now); // the hover ended with the gun in hand: the strike goes off by itself
-        else if (vel[2] < -40.0f || vel[2] > 40.0f)
-            vel[2] *= 0.5f;
+        else
+        {
+            if (vel[2] < -40.0f || vel[2] > 40.0f)
+                vel[2] *= 0.5f;
+            if (now >= s.nextFly)
+            {
+                s.nextFly = now + 1.0f;
+                SfLsgSprite(s.lsgEx, LSG_FX_FLY, Origin(player) - V3{ 0, 0, 34 }, 4, 30);
+            }
+        }
     }
     else if (s.phase == 3)
     {
@@ -310,6 +449,12 @@ static void SfLsgFrame(void* player, SfPlayer& s, void* weapon, bool active, int
             F<float>(v, SF_EV_GRAVITY) = 1.0f;
             int hits = SfArea(Origin(player) - V3{ 0, 0, 30 }, player, ByMode(150, 4000, 6000), 320.0f, 900.0f, 300.0f, 0);
             SfSound(*(void**)(v + EV_CONTAINING_ENTITY), "weapons/leapstrikegun_change_fly_exp.wav");
+            TraceResult tr;
+            Trace(Origin(player), Origin(player) - V3{ 0, 0, 120 }, player, 1, tr);
+            V3 floor = Vec(tr.vecEndPos) + V3{ 0, 0, 2 };
+            SfFxSpawn(floor, s.lsgEx ? "models/ef_leapstrikegunex_landing.mdl" : "models/ef_leapstrikegun_landing.mdl",
+                      nullptr, 1.1f);
+            SfLsgSprite(s.lsgEx, LSG_FX_HIT, floor + V3{ 0, 0, 40 }, 14, 30);
             s.invulnUntil = now + 1.5f;
             s.phase = 0;
             SfLsgSetState(weapon, 0);
@@ -814,6 +959,7 @@ static void SfFrame()
     __try
     {
         SfMinesFrame(now);
+        SfFxFrame(now);
         for (size_t k = 0; k < g_sfPulls.size();)
         {
             SfPull& p = g_sfPulls[k];
