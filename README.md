@@ -5,7 +5,7 @@
 <p align="center">
   <a href="https://patreon.com/ltsYuri"><img src="https://img.shields.io/badge/Support_me_on-Patreon-F96854?style=for-the-badge&logo=patreon&logoColor=white" alt="Support me on Patreon"></a>
   <a href="https://discord.gg/fjxubwyhYv"><img src="https://img.shields.io/badge/Discord-Join-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"></a>
-  <a href="https://github.com/ElSerbe/Counter-Strike-Nexon-Offline-Revived/releases"><img src="https://img.shields.io/github/downloads/ElSerbe/Counter-Strike-Nexon-Offline-Revived/total?style=for-the-badge&logo=github&label=Downloads&color=2ED3A0" alt="Downloads"></a>
+  <a href="https://github.com/ElSerbe/Counter-Strike-Nexon-Offline-Revived/releases"><img src="https://img.shields.io/github/downloads/ElSerbe/Counter-Strike-Nexon-Offline-Revived/total?style=for-the-badge&logo=github&label=Downloads&color=15805F" alt="Downloads"></a>
 </p>
 
 Counter-Strike Nexon: Zombies played offline, on your own PC, against room bots that play every mode: a local
