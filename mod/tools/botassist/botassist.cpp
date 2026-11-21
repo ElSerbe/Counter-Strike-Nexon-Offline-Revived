@@ -7877,7 +7877,10 @@ static DWORD WINAPI Watcher(LPVOID)
         else if (!mp)
             hooked = NULL;
         if (mp && mp == hooked)
+        {
             CheckClock();
+            FixBuyMenuPrices(); // gun_fixes.inl: the buy menu shows the new prices
+        }
         if (cfg.enabled)
             DecoderDiag();
         Sleep(500);

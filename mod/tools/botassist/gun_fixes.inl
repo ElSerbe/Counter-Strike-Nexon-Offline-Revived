@@ -106,7 +106,6 @@ typedef void (*RadiusDamageFn)(float x, float y, float z, void* inflictor, void*
                                int ignoreClass, int bits);
 static WeaponFn g_lsgPrimary, g_bgPrimary, g_bgSecondary;
 // scifi_weapons.inl: what the shots do besides the bullet (pulses, swings, Overflow...)
-static float SfLsgBonus(void* player);
 static void SfLsgShot(void* player, void* weapon, const float* hit);
 static void SfBgPrimary(void* player, void* weapon, bool normalShot, int anim, bool burst);
 static void SfBgSecondary(void* player, void* weapon, int anim);
@@ -156,9 +155,10 @@ static bool GunBullet(void* weapon, float spread, int damage, int penetration, i
     ((GunPositionFn)vt[PL_VT_GUNPOS])(player, nullptr, src);
     AimVectors(pev, fwd);
     GunStep("bullet", "FireBullets3");
-    ((FireBullets3Fn)(MP_FIREBULLETS3 + g_mpDelta))(player, nullptr, out, src[0], src[1], src[2], fwd[0], fwd[1], fwd[2],
-                                                   spread, BD_DISTANCE, penetration, bullet, damage, BD_RANGE_MOD, pev,
-                                                   0, *(int*)(player + PL_SHARED_RAND), 0, 0);
+    if (damage > 0) // (0: only where the aim lands, for a weapon whose round is its explosion)
+        ((FireBullets3Fn)(MP_FIREBULLETS3 + g_mpDelta))(player, nullptr, out, src[0], src[1], src[2], fwd[0], fwd[1],
+                                                       fwd[2], spread, BD_DISTANCE, penetration, bullet, damage,
+                                                       BD_RANGE_MOD, pev, 0, *(int*)(player + PL_SHARED_RAND), 0, 0);
     GunStep("bullet", "fired");
     if (hit)
     {
@@ -225,13 +225,8 @@ static void __fastcall HookedLsgPrimary(void* weapon, void* edx)
         float hit[3];
         unsigned char* pev = WeaponOwnerPev(weapon);
         void* player = pev ? *(void**)(pev + EV_CONTAINING_ENTITY) : nullptr;
-        float bonus = player ? SfLsgBonus(player) : 1.0f;
-        if (pev && *(int*)((unsigned char*)weapon + WPN_CLIP) < clip &&
-            GunBullet(weapon, 0.012f, (int)(ByMode(16, 176, 430) * bonus), 1, BULLET_50AE, hit))
-        {
-            GunBlast(hit, pev, ByMode(20, 150, 300) * bonus, 90.0f, 0); // (no generic sprite: the game has none here)
-            SfLsgShot(player, weapon, hit);
-        }
+        if (pev && *(int*)((unsigned char*)weapon + WPN_CLIP) < clip && GunBullet(weapon, 0.012f, 0, 0, BULLET_50AE, hit))
+            SfLsgShot(player, weapon, hit); // the anti-gravity round: its explosion, with the game's own numbers
     }
     __except (EXCEPTION_EXECUTE_HANDLER)
     {
@@ -365,12 +360,102 @@ static void ReadGunPrices()
     fclose(f);
 }
 
+// The buy menu (the user, 2026-11-21: "the prices aren't updated in the buy menu"): mp.dll's engine function 163
+// ([0x121d3ce8]) returns hw.dll's IGBuyMenuMgr (its instance at hw [0x3f25314]); its vfunc 0xf0 (0x2542f40) is the price
+// mp.dll's rules read: Find(id) 0x2542650 gives the record's index, Record(index) 0x2541e90 the record, price at +0x18.
+// The buy menu reads the same manager, so botassist writes the new prices into the records themselves (the
+// Watcher thread, from the first map on, again if the records are reloaded): the menu shows what the buy charges.
+// Then HookedItemPrice leaves those weapons alone (the price it gets is already the new one).
+static const DWORD HW_IMAGE_BASE = 0x1d00000, HW_BUYMENU_MGR = 0x3f25314, HW_BUYMENU_PRICE = 0x2542f40,
+                   HW_BUYMENU_FIND = 0x2542650, HW_BUYMENU_RECORD = 0x2541e90;
+static const int BUYREC_PRICE = 0x18;
+typedef int(__fastcall* BmFindFn)(void* mgr, void* edx, int id);
+typedef unsigned char*(__fastcall* BmRecordFn)(void* mgr, void* edx, int index);
+static CRITICAL_SECTION g_menuPriceLock;
+static std::map<int, int> g_menuPriceGame, g_menuPriceSet; // InGameID -> the game's price / the price written
+static volatile bool g_gunPricesRead = false;
+
+static int GunPriceFor(int id, int gamePrice)
+{
+    auto it = g_gunPrices.find(id);
+    if (it == g_gunPrices.end() || gamePrice <= 0)
+        return gamePrice;
+    int want = it->second.factor > 0 ? (int)(gamePrice * it->second.factor) : it->second.dollars;
+    return (std::max)((std::min)(want, g_gunPriceCap), gamePrice);
+}
+
+static void FixBuyMenuPrices() // Watcher thread, every 0.5 s
+{
+    static bool checked = false, ok = false;
+    static DWORD delta = 0;
+    if (!g_gunPricesRead)
+        return;
+    if (!checked)
+    {
+        HMODULE hw = GetModuleHandleA("hw.dll");
+        if (!hw)
+            return;
+        checked = true;
+        delta = (DWORD)hw - HW_IMAGE_BASE;
+        static const unsigned char kPrice[] = { 0x55, 0x8b, 0xec, 0x56, 0xff, 0x75, 0x08, 0x8b, 0xf1, 0xe8 };
+        unsigned char* f = (unsigned char*)(HW_BUYMENU_PRICE + delta);
+        ok = Readable(f, sizeof(kPrice)) && !memcmp(f, kPrice, sizeof(kPrice));
+        InitializeCriticalSection(&g_menuPriceLock);
+        Log("prices: buy menu %s", ok ? "found (its records get the new prices)" : "not this hw.dll: only the buy is charged them");
+    }
+    void* mgr = ok ? *(void**)(HW_BUYMENU_MGR + delta) : nullptr;
+    if (!mgr || !Readable(mgr, 4))
+        return;
+    __try
+    {
+        for (auto& gp : g_gunPrices)
+        {
+            int id = gp.first;
+            int index = ((BmFindFn)(HW_BUYMENU_FIND + delta))(mgr, nullptr, id);
+            if (index == -1)
+                continue;
+            unsigned char* rec = ((BmRecordFn)(HW_BUYMENU_RECORD + delta))(mgr, nullptr, index);
+            if (!rec || !Readable(rec + BUYREC_PRICE, 4))
+                continue;
+            int cur = *(int*)(rec + BUYREC_PRICE);
+            EnterCriticalSection(&g_menuPriceLock);
+            auto set = g_menuPriceSet.find(id);
+            bool mine = set != g_menuPriceSet.end() && set->second == cur;
+            if (!mine)
+            {
+                int want = GunPriceFor(id, cur);
+                g_menuPriceGame[id] = cur;
+                g_menuPriceSet[id] = want;
+                *(int*)(rec + BUYREC_PRICE) = want;
+                Log("prices: buy menu, weapon %d $%d (the game's $%d)", id, want, cur);
+            }
+            LeaveCriticalSection(&g_menuPriceLock);
+        }
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        static int faults = 0;
+        if (faults++ < 3)
+            Log("prices: exception 0x%08lX setting the buy menu's prices", GetExceptionCode());
+    }
+}
+
 static int __fastcall HookedItemPrice(void* rules, void* edx, void* player, int id)
 {
     int price = g_itemPrice(rules, edx, player, id);
     auto it = g_gunPrices.find(id);
     if (it == g_gunPrices.end() || price <= 0)
         return price;
+    bool menuSet = false;
+    if (g_gunPricesRead && g_menuPriceSet.size())
+    {
+        EnterCriticalSection(&g_menuPriceLock);
+        auto set = g_menuPriceSet.find(id);
+        menuSet = set != g_menuPriceSet.end() && set->second == price;
+        LeaveCriticalSection(&g_menuPriceLock);
+    }
+    if (menuSet)
+        return price; // (the record has the new price already)
     int want = it->second.factor > 0 ? (int)(price * it->second.factor) : it->second.dollars;
     want = (std::max)((std::min)(want, g_gunPriceCap), price);
     static int logs = 0;
@@ -386,6 +471,7 @@ static void FixGunPrices()
     ReadGunPrices();
     if (g_gunPrices.empty())
         return;
+    g_gunPricesRead = true; // (FixBuyMenuPrices may start)
     const unsigned char code[] = { 0x55, 0x8b, 0xec, 0xff, 0x15, 0, 0, 0, 0 }; // push ebp; mov ebp, esp; call [engine]
     unsigned char want[sizeof(code)];
     memcpy(want, code, sizeof(code));

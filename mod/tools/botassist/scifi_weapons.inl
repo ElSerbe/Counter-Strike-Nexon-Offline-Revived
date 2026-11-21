@@ -44,6 +44,8 @@ struct SfPlayer
     float phaseAt = 0, invulnUntil = 0;
     int leapHits = 0;
     bool lsgEx = false;    // the Abyss Repulsor (its own effects)
+    V3 leapVel = { 0, 0, 0 };
+    float leapFor = 0;     // LeapTime
     float nextFly = 0;     // Anti-Graviton: the next ring under the feet
     void* lsgAtt = nullptr; // the effect model following the player (jumpdash / flying / fall), its edict
     float lsgAttRenew = 0;  // when the flying aura's 91 frames end (played again)
@@ -170,13 +172,54 @@ static void SfSay(void* player, const char* text)
         ShPrint(player, text);
 }
 
+// ---------------------------------------------------------------- the weapons' own numbers
+// Every special weapon's numbers are in its prop object (weapon +0x204): mp.dll registers each one with the game's
+// value (tools/weaponprop_keys.py lists names, offsets and values; the server's WeaponProp metadata could override
+// them, ours sends none). A value is a vector (mVal, +0x1c/+0x20) read by the getter 0x106444d0 (thiscall, index).
+// The user (2026-11-21): "adjust them to their official numbers". Distances are in meters (x39.37 units: the Gravity
+// Repulsor's 2 / 4 / 10 m match the video's ~80 / 160 / 400 units).
+static const int SF_WPN_PROP = 0x204;
+static const DWORD SF_PROP_GET = 0x106444d0;
+typedef float(__fastcall* SfPropGetFn)(void* value, void* edx, int index);
+static const float SF_METER = 39.37f;
+
+static float SfProp(void* weapon, int offset, float fallback)
+{
+    unsigned char* prop = weapon && Readable((unsigned char*)weapon + SF_WPN_PROP, 4)
+                              ? *(unsigned char**)((unsigned char*)weapon + SF_WPN_PROP) : nullptr;
+    unsigned char* value = prop ? prop + offset : nullptr;
+    if (!value || !Readable(value, 0x24) || *(DWORD*)(value + 0x1c) == *(DWORD*)(value + 0x20))
+        return fallback;
+    float v = ((SfPropGetFn)(SF_PROP_GET + g_mpDelta))(value, nullptr, 0);
+    return v == v ? v : fallback; // (NaN)
+}
+
+// a number with its three versions: the others / zombie modes / scenario (co-op)
+static float SfPropMode(void* weapon, int pvp, int zombie, int scenario, float fPvp, float fZombie, float fScenario)
+{
+    return CoopMode() ? SfProp(weapon, scenario, fScenario)
+                      : ZombieMode(GameMode()) ? SfProp(weapon, zombie, fZombie) : SfProp(weapon, pvp, fPvp);
+}
+
 // ---------------------------------------------------------------- Gravity Repulsor
 static void SfSound(void* edict, const char* sample);
 
-static float SfLsgBonus(void* player)
+// LEAPSTRIKEGUN_prop (the Abyss Repulsor's has the same layout); the game's values as fallbacks
+enum
+{
+    LSGP_GAUGE_INTERVAL = 0xa8, LSGP_GAUGE_INTERVAL_Z = 0xe0, LSGP_GAUGE_INTERVAL_S = 0x118, LSGP_MAX_SPECIAL = 0x150,
+    LSGP_PROJ_SPEED = 0x2a0, LSGP_PROJ_RADIUS = 0x310, LSGP_PROJ_DMG = 0x348, LSGP_PROJ_DMG_Z = 0x380,
+    LSGP_PROJ_DMG_S = 0x3b8, LSGP_PROJ_BMODE_RATIO = 0x3f0, LSGP_KB_GROUND = 0x428, LSGP_KB_JUMP = 0x460,
+    LSGP_KB_FJUMP = 0x498, LSGP_KB_DUCK = 0x4d0, LSGP_AMODE_RADIUS = 0x540, LSGP_AMODE_DMG = 0x578,
+    LSGP_AMODE_DMG_Z = 0x5b0, LSGP_AMODE_DMG_S = 0x5e8, LSGP_AMODE_BMODE_RATIO = 0x620, LSGP_LEAP_SPEED = 0x690,
+    LSGP_LEAP_SPEED_Z = 0x6c8, LSGP_LEAP_SPEED_S = 0x700, LSGP_LEAP_TIME = 0x738, LSGP_LEAP_TIME_Z = 0x770,
+    LSGP_LEAP_TIME_S = 0x7a8, LSGP_LEAP_MIN_PITCH = 0x7e0, LSGP_LEAP_RADIUS = 0x818
+};
+
+static float SfLsgBonus(void* player, void* weapon)
 {
     int i = SfIndex(player);
-    return i && g_sf[i].phase == 2 ? 1.5f : 1.0f;
+    return i && g_sf[i].phase == 2 ? SfProp(weapon, LSGP_PROJ_BMODE_RATIO, 2.0f) : 1.0f;
 }
 
 // The game's own effect files (the user, 2026-11-21: "its files must be in the game, leapstrikegun is its ID"): the
@@ -228,6 +271,8 @@ static void SfLsgPrecache(PrecacheFn model, PrecacheFn sound)
             model(kLsgRing[g]);
     model("models/ef_leapstrikegunex_landing.mdl");
     sound("weapons/leapstrikegun-1_exp.wav");
+    sound("weapons/leapstrikegun-1.wav"); // the shot (the user, 2026-11-21: "no sound when shooting")
+    sound("weapons/leapstrikegunex-1.wav");
     sound("weapons/leapstrikegunex-1_exp.wav");
     sound("weapons/leapstrikegun_change_fly_exp.wav");
     g_lsgFxMap = String(*(int*)((DWORD)*g_pGlobals + GV_MAPNAME));
@@ -320,12 +365,11 @@ static void SfLsgRing(bool ex, V3 at, float scale)
 }
 
 // the round itself: the projectile sprite flying from the gun to where the shot lands
-static void SfLsgProjectile(bool ex, V3 from, V3 to)
+static void SfLsgProjectile(bool ex, V3 from, V3 to, float speed)
 {
     float dist = Len(to - from);
-    if (dist < 40.0f || !SfLsgFxReady())
+    if (dist < 40.0f || !SfLsgFxReady() || speed < 100.0f)
         return;
-    const float speed = 3000.0f;
     size_t before = g_sfFx.size();
     SfFxSpawn(from, ex ? "sprites/ef_leapstrikegunex_projectile.spr" : "sprites/ef_leapstrikegun_projectile.spr",
               nullptr, dist / speed);
@@ -402,18 +446,35 @@ static bool SfLsgIsEx(void* weapon)
     return pev && !strcmp(String(*(int*)pev), "weapon_leapstrikegunex");
 }
 
-// called by gun_fixes.inl after each shot: the round's burst where it lands (the hit sprite, the hexagons, its
-// "-1_exp" sound) and the pulse around the player (hurts and pushes the enemies next to him)
+// called by gun_fixes.inl after each shot: the shot's sound, the round flying (ProjSpeed) and its explosion where it
+// lands with the game's numbers: ProjExploRadius (2 m), ProjExploDamage 20 / 220 zombie / 538 scenario, x2 while
+// hovering (ProjExploDamageBModeRatio), the knockback of the target's state (ground 450, jump 350, forward jump 350,
+// ducking 260) on zombies and monsters; then the hit and hexagon sprites, the flat ring and the "-1_exp" sound.
+// (Earlier botassist fired a bullet, a small blast and a pulse around the player, its own guesses: gone.)
 static void SfLsgShot(void* player, void* weapon, const float* hit)
 {
     bool ex = SfLsgIsEx(weapon);
     V3 at = Vec(hit);
-    SfLsgProjectile(ex, Eye(player) + SfAim(player) * 24.0f - V3{ 0, 0, 8 }, at);
+    SfSound(*(void**)(Vars(player) + EV_CONTAINING_ENTITY), ex ? "weapons/leapstrikegunex-1.wav" : "weapons/leapstrikegun-1.wav");
+    SfLsgProjectile(ex, Eye(player) + SfAim(player) * 24.0f - V3{ 0, 0, 8 }, at, SfProp(weapon, LSGP_PROJ_SPEED, 2000.0f));
+    float radius = SfProp(weapon, LSGP_PROJ_RADIUS, 2.0f) * SF_METER;
+    float damage = SfPropMode(weapon, LSGP_PROJ_DMG, LSGP_PROJ_DMG_Z, LSGP_PROJ_DMG_S, 20.0f, 220.0f, 538.0f) *
+                   SfLsgBonus(player, weapon);
+    if (ZombieMode(GameMode()) || CoopMode())
+        ForEntitiesNear(at, radius, [&](void* e) {
+            if (!SfEnemy(e, player))
+                return;
+            int fl = F<int>(Vars(e), EV_FLAGS);
+            float kb = !(fl & SF_FL_ONGROUND) ? SfProp(weapon, LSGP_KB_JUMP, 350.0f)
+                       : (fl & 0x4000 /* FL_DUCKING */) ? SfProp(weapon, LSGP_KB_DUCK, 260.0f)
+                                                       : SfProp(weapon, LSGP_KB_GROUND, 450.0f);
+            SfKnock(e, at, kb, 0);
+        });
+    GunBlast(hit, Vars(player), damage, radius, 0);
     SfLsgSprite(ex, LSG_FX_HIT, at, 6, 30);
     SfLsgSprite(ex, LSG_FX_SHOOT, at, 4, 40);
     SfLsgRing(ex, at, 0.8f);
     SfFxSpawn(at, nullptr, ex ? "weapons/leapstrikegunex-1_exp.wav" : "weapons/leapstrikegun-1_exp.wav", 1.0f);
-    SfArea(Origin(player), player, ByMode(6, 80, 120) * SfLsgBonus(player), 150.0f, 260.0f, 0, 0);
 }
 
 // The video (the user's, "CSN:S Gravity Repulsor Review", 2026-11-21) and the game's own help panel: the gauge fills
@@ -423,7 +484,12 @@ static void SfLsgShot(void* player, void* weapon, const float* hit)
 // Anti-Graviton ends"); after landing the gauge was at about 25%. Hover and fall go through the player's own gravity
 // (pev +0x12c: the client predicts it, no jerks), the leap is one push.
 static const int SF_EV_GRAVITY = 0x12c;
-static const float LSG_CHARGE_PER_S = 10.0f, LSG_HOVER_S = 6.0f, LSG_LEAP_SPEED = 1000.0f, LSG_LEAP_UP = 320.0f;
+// The game's numbers (LEAPSTRIKEGUN_prop): the gauge gains 1 every GaugeChargeInterval (0.25 s, zombie 0.1 s: the
+// video's 10 s); the leap goes at LeapSpeed (760 / 930 zombie / 500 scenario) for LeapTime (0.75 s), at least
+// LeapMinPitch (25 degrees) up; its blast covers LeapExploRadius (4 m) with AModeExploDamage (11 / 314 / 666); the
+// strike's landing covers AModeExploRadius (10 m) with AModeExploDamage x AModeExploDamageBModeRatio (x2); the landing
+// gives back up to MaxSpecialCharge (80). The hover's length has no number of its own: 6 s from the video.
+static const float LSG_HOVER_S = 6.0f;
 
 // What the game still has (2026-11-21): client.dll's LeapStrikeGunEffectManager draws the gauge and the charged look
 // (the purple lightning, the change_* sounds) from the weapon's +0x168 (0-100; 100 = charged) and its state +0x1c0
@@ -474,6 +540,19 @@ static void SfLsgStrike(void* player, void* weapon, SfPlayer& s, float now)
     SfLsgAttach(player, s, "fall");
 }
 
+// where the leap goes: the aim, at least LeapMinPitch up, at LeapSpeed
+static V3 SfLsgLeapVelocity(void* player, void* weapon)
+{
+    V3 aim = SfAim(player);
+    float flat = sqrtf(aim.x * aim.x + aim.y * aim.y);
+    float pitch = atan2f(aim.z, flat), minPitch = SfProp(weapon, LSGP_LEAP_MIN_PITCH, 25.0f) / RAD;
+    if (pitch < minPitch)
+        pitch = minPitch;
+    float yaw = atan2f(aim.y, aim.x);
+    float speed = SfPropMode(weapon, LSGP_LEAP_SPEED, LSGP_LEAP_SPEED_Z, LSGP_LEAP_SPEED_S, 760.0f, 930.0f, 500.0f);
+    return V3{ cosf(pitch) * cosf(yaw), cosf(pitch) * sinf(yaw), sinf(pitch) } * speed;
+}
+
 static void SfLsgFrame(void* player, SfPlayer& s, void* weapon, bool active, int pressed, float now, float dt)
 {
     unsigned char* v = Vars(player);
@@ -484,7 +563,9 @@ static void SfLsgFrame(void* player, SfPlayer& s, void* weapon, bool active, int
         s.lsgEx = SfLsgIsEx(weapon);
     if (energy && s.phase == 0 && *energy < 100)
     {
-        s.energy += dt * LSG_CHARGE_PER_S; // (fractions; the weapon keeps whole percents)
+        float interval = SfPropMode(weapon, LSGP_GAUGE_INTERVAL, LSGP_GAUGE_INTERVAL_Z, LSGP_GAUGE_INTERVAL_S, 0.25f, 0.1f,
+                                    0.25f);
+        s.energy += dt / (std::max)(0.01f, interval); // (fractions; the weapon keeps whole points)
         int add = (int)s.energy;
         if (add > 0)
         {
@@ -497,15 +578,16 @@ static void SfLsgFrame(void* player, SfPlayer& s, void* weapon, bool active, int
         if (s.phase == 0 && *energy >= 100)
         {
             // Repulsor Leap: the enemies around are hurt and pushed, then the player is thrown where he aims
-            s.leapHits = SfArea(Origin(player), player, ByMode(30, 500, 700), 200.0f, 650.0f, 250.0f, 0);
+            s.leapHits = SfArea(Origin(player), player,
+                                SfPropMode(weapon, LSGP_AMODE_DMG, LSGP_AMODE_DMG_Z, LSGP_AMODE_DMG_S, 11.0f, 314.0f, 666.0f),
+                                SfProp(weapon, LSGP_LEAP_RADIUS, 4.0f) * SF_METER, 650.0f, 250.0f, 0);
             SfLsgSprite(s.lsgEx, LSG_FX_JUMP, Origin(player) - V3{ 0, 0, 20 }, 10, 30);
             SfFxSpawn(Origin(player) - V3{ 0, 0, 34 },
                       s.lsgEx ? "models/ef_leapstrikegunex_jumpfx.mdl" : "models/ef_leapstrikegun_jumpfx.mdl", nullptr, 1.1f);
             SfLsgAttach(player, s, "jumpdash");
-            V3 aim = SfAim(player);
-            vel[0] = aim.x * LSG_LEAP_SPEED;
-            vel[1] = aim.y * LSG_LEAP_SPEED;
-            vel[2] = (std::max)(aim.z * LSG_LEAP_SPEED, 0.0f) + LSG_LEAP_UP;
+            s.leapVel = SfLsgLeapVelocity(player, weapon);
+            s.leapFor = SfPropMode(weapon, LSGP_LEAP_TIME, LSGP_LEAP_TIME_Z, LSGP_LEAP_TIME_S, 0.75f, 0.75f, 0.75f);
+            vel[0] = s.leapVel.x, vel[1] = s.leapVel.y, vel[2] = s.leapVel.z;
             *energy = 0;
             s.energy = 0;
             s.phase = 1;
@@ -519,7 +601,13 @@ static void SfLsgFrame(void* player, SfPlayer& s, void* weapon, bool active, int
             return;
         }
     }
-    if (s.phase == 1 && ((vel[2] <= 60.0f && now - s.phaseAt > 0.2f) || now - s.phaseAt > 1.5f))
+    if (s.phase == 1 && now - s.phaseAt < s.leapFor)
+    {
+        vel[0] = s.leapVel.x, vel[1] = s.leapVel.y, vel[2] = s.leapVel.z; // the leap keeps its speed for LeapTime
+        if (s.lsgAtt == nullptr && active) // (the trail)
+            SfLsgAttach(player, s, "jumpdash");
+    }
+    else if (s.phase == 1)
     {
         if (active)
         {
@@ -567,7 +655,10 @@ static void SfLsgFrame(void* player, SfPlayer& s, void* weapon, bool active, int
         if (ground || now - s.phaseAt > 3.0f)
         {
             F<float>(v, SF_EV_GRAVITY) = 1.0f;
-            int hits = SfArea(Origin(player) - V3{ 0, 0, 30 }, player, ByMode(150, 4000, 6000), 320.0f, 900.0f, 300.0f, 0);
+            float strike = SfPropMode(weapon, LSGP_AMODE_DMG, LSGP_AMODE_DMG_Z, LSGP_AMODE_DMG_S, 11.0f, 314.0f, 666.0f) *
+                           SfProp(weapon, LSGP_AMODE_BMODE_RATIO, 2.0f);
+            int hits = SfArea(Origin(player) - V3{ 0, 0, 30 }, player, strike,
+                              SfProp(weapon, LSGP_AMODE_RADIUS, 10.0f) * SF_METER, 900.0f, 300.0f, 0);
             SfSound(*(void**)(v + EV_CONTAINING_ENTITY), "weapons/leapstrikegun_change_fly_exp.wav");
             TraceResult tr;
             Trace(Origin(player), Origin(player) - V3{ 0, 0, 120 }, player, 1, tr);
@@ -579,8 +670,9 @@ static void SfLsgFrame(void* player, SfPlayer& s, void* weapon, bool active, int
             s.phase = 0;
             SfLsgSetState(weapon, 0);
             SfLsgAttachOff(s);
-            if (energy) // energy back for the enemies the leap and the strike hit, at most 80%
-                *energy = (std::max)(*energy, (std::min)(80, 20 + (s.leapHits + hits) * 5));
+            if (energy) // energy back for the enemies the leap and the strike hit, at most MaxSpecialCharge (80)
+                *energy = (std::max)(*energy, (std::min)((int)SfProp(weapon, LSGP_MAX_SPECIAL, 80.0f),
+                                                         20 + (s.leapHits + hits) * 5));
         }
         else if (vel[2] > -1600.0f)
             vel[2] = -1600.0f;
@@ -618,7 +710,19 @@ static bool SfWingmanMode()
 // Overflow the right click sets +0x178 = 1 (Crash), 0x10baba70 then pulls the player down and on landing sets 3 and
 // plays the end. What the server code doesn't have any more: the charging, every damage, the Crash's jump. The
 // user (2026-11-21): in the video's first 7 s it's only shots and a reload.
-static const float GB_BETA_FULL_S = 30.0f;
+// The game's numbers (BEAMGUN_prop, the user 2026-11-21: "official numbers"): the shot ShootADamage 40 / 850 zombie /
+// 3600 scenario; the special ammunition gains Clip2ChargeAmount (5) every Clip2ChargeTime (1 s) up to
+// Clip2TotalAmount (100), full at Clip2ConsumeToFullCharge (100): 20 s; the Overflow's lengths (TempChargeDuration
+// 2.5 s, FullChargeDuration 7 s) the game sets itself; the Crash's landing is the FullChargeExplosion: 6 m, 5 / 3000 /
+// 3000, pushed 1500 aside and 200 up in zombie modes (-9999 = none), then FullChargeGodTime (1 s) without damage.
+enum
+{
+    GBP_CLIP2_TOTAL = 0x118, GBP_CLIP2_TIME = 0x150, GBP_CLIP2_TIME_Z = 0x188, GBP_CLIP2_TIME_S = 0x1c0,
+    GBP_CLIP2_AMOUNT = 0x1f8, GBP_GOD_TIME = 0x2d8, GBP_EXPLO_RADIUS = 0x310, GBP_EXPLO_DMG = 0x348,
+    GBP_EXPLO_DMG_Z = 0x380, GBP_EXPLO_DMG_S = 0x3b8, GBP_KB_SIDE = 0x3f0, GBP_KB_SIDE_Z = 0x428, GBP_KB_SIDE_S = 0x460,
+    GBP_KB_UP = 0x498, GBP_KB_UP_Z = 0x4d0, GBP_KB_UP_S = 0x508, GBP_SHOOT_DMG = 0x5b0, GBP_SHOOT_DMG_Z = 0x5e8,
+    GBP_SHOOT_DMG_S = 0x620
+};
 static const int GB_RELEASE_EVERY = 2, WPN_GB_SPECIAL = 0x168, WPN_GB_CRASH = 0x178, WPN_PROP = 0x204,
                  PROP_GB_SPECIAL_MAX = 0x230;
 static const DWORD MP_PROP_GET = 0x106444d0; // float thiscall(prop value, 0)
@@ -678,7 +782,9 @@ static void SfBgPrimary(void* player, void* weapon, bool normalShot, int anim, b
     float hit[3];
     if (normalShot)
     {
-        if (!GunBullet(weapon, 0.008f, (int)ByMode(32, 680, 2400), 2, BULLET_762, hit))
+        if (!GunBullet(weapon, 0.008f,
+                       (int)SfPropMode(weapon, GBP_SHOOT_DMG, GBP_SHOOT_DMG_Z, GBP_SHOOT_DMG_S, 40.0f, 850.0f, 3600.0f), 2,
+                       BULLET_762, hit))
             return;
         float dist = Len(Vec(hit) - Eye(player));
         s.shotRun = now - s.lastShot < 1.0f ? s.shotRun + 1 : 1;
@@ -865,7 +971,8 @@ static void SfBgFrame(void* player, SfPlayer& s, void* weapon, bool active, int 
         int* special = (int*)(w + WPN_GB_SPECIAL);
         if (full > 0 && *special < (int)full)
         {
-            s.beta += dt * full / GB_BETA_FULL_S;
+            float every = SfPropMode(weapon, GBP_CLIP2_TIME, GBP_CLIP2_TIME_Z, GBP_CLIP2_TIME_S, 1.0f, 1.0f, 1.0f);
+            s.beta += dt * SfProp(weapon, GBP_CLIP2_AMOUNT, 5.0f) / (std::max)(0.05f, every);
             int add = (int)s.beta;
             if (add > 0)
             {
@@ -892,8 +999,12 @@ static void SfBgFrame(void* player, SfPlayer& s, void* weapon, bool active, int 
     if (s.crashUntil && (crash == 3 || crash == 0 || now > s.crashUntil))
     {
         s.crashUntil = 0;
-        SfArea(Origin(player) + SfAim(player) * 40.0f - V3{ 0, 0, 20 }, player, SfGb(1920, 90), 200.0f, 700.0f, 250.0f, 0);
-        s.invulnUntil = now + 0.5f;
+        float side = SfPropMode(weapon, GBP_KB_SIDE, GBP_KB_SIDE_Z, GBP_KB_SIDE_S, -9999.0f, 1500.0f, -9999.0f);
+        float up = SfPropMode(weapon, GBP_KB_UP, GBP_KB_UP_Z, GBP_KB_UP_S, -9999.0f, 200.0f, -9999.0f);
+        SfArea(Origin(player) + SfAim(player) * 40.0f - V3{ 0, 0, 20 }, player,
+               SfPropMode(weapon, GBP_EXPLO_DMG, GBP_EXPLO_DMG_Z, GBP_EXPLO_DMG_S, 5.0f, 3000.0f, 3000.0f),
+               SfProp(weapon, GBP_EXPLO_RADIUS, 6.0f) * SF_METER, side > 0 ? side : 0, up > 0 ? up : 0, 0);
+        s.invulnUntil = now + SfProp(weapon, GBP_GOD_TIME, 1.0f);
     }
     if (SfWingmanMode() && now >= s.nextWingman)
     {

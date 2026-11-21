@@ -497,6 +497,13 @@ the game's own file with its type byte set to oriented); jumpfx on the ground an
 leap, flying while hovering (replayed every 91 frames), fall on the dive (MOVETYPE_FOLLOW, aiment +0x1b8).
 Weapon properties: tools/weaponprop_keys.py lists every weapon's WeaponProp names, offsets and the values mp.dll
 registers itself (14.7k of ~18.8k found; 564 classes) - the game's own numbers, used when the server sends none.
+The Gravity Repulsor and the Giga Break now take their numbers from the weapon's own prop object at run time
+(SfProp / SfPropMode: the game's values, the server's WeaponProp if it ever sends some): GR round = ProjExploDamage
+20 / 220 / 538 in 2 m (x2 while hovering), knockback by the target's state, gauge 1 per 0.25 s (zombie 0.1 s), leap
+LeapSpeed for LeapTime at least LeapMinPitch up, leap blast 4 m and strike 10 m with AModeExploDamage (x2 on the
+strike); its shot plays weapons/leapstrikegun-1.wav (no client event plays it). GB shot ShootADamage 40 / 850 / 3600,
+special ammo 5 a second up to 100, Crash landing = FullChargeExplosion (6 m, 5 / 3000 / 3000, push 1500 / 200 in
+zombie modes) then FullChargeGodTime. Meters x39.37 = units.
 Every frame, for each player, the right
 click / R pressed with the weapon in hand (pev button +0x1a4):
 - **Gravity Repulsor**: each shot also pulses around the player (hurt + push); energy charges in 25 s; right click when
@@ -519,8 +526,13 @@ set the victims' velocity, protection and the shield go through weapon_balance.i
 BuyWeapon (0x113eb3a0) asks the game rules for the price (vfunc 0x400 = 0x11414a10 in every mode, thiscall rules,
 player, InGameID) and compares it with the money (0x114b76d0). botassist detours 0x11414a10 for the weapons of
 botassist_prices.txt (`<InGameID> x<factor>` or `<InGameID> <dollars>`, `cap`): Giga Break, Asura Hell Splitter,
-Space Arbalest, Arbalest x4; Vortex Drill, Cousteau, Magnum Launcher x3; at most $16000 (untested; whether the buy menu
-shows the new price is unknown). The first version wrote the item record's first field, which is the InGameID.
+Space Arbalest, Arbalest x4; Vortex Drill, Cousteau, Magnum Launcher x3; at most $16000. The first version wrote the
+item record's first field, which is the InGameID.
+The buy menu kept showing the old price (user, 2026-11-21): the rules' price comes from hw.dll's IGBuyMenuMgr
+(mp's engine function 163 returns its instance, hw [0x3f25314]; vfunc 0xf0 0x2542f40 = Find(id) 0x2542650 +
+Record(index) 0x2541e90, price at +0x18), the same manager the menu reads. botassist's Watcher thread
+(FixBuyMenuPrices) writes the new prices into those records from the first map on (again if they're reloaded), and
+the rules hook then leaves those weapons alone. Untested in game.
 
 ## Grenades: Ignite Bomb, Junk Grenade drums (grenade_fixes.inl)
 
