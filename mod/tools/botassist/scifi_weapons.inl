@@ -312,10 +312,37 @@ static bool SfWingmanMode()
 // plays the end. What the server code doesn't have any more: the charging, every damage, the Crash's jump. The
 // user (2026-11-21): in the video's first 7 s it's only shots and a reload.
 static const float GB_BETA_FULL_S = 30.0f;
-static const int GB_RELEASE_EVERY = 6, WPN_GB_SPECIAL = 0x168, WPN_GB_CRASH = 0x178, WPN_PROP = 0x204,
+static const int GB_RELEASE_EVERY = 2, WPN_GB_SPECIAL = 0x168, WPN_GB_CRASH = 0x178, WPN_PROP = 0x204,
                  PROP_GB_SPECIAL_MAX = 0x230;
 static const DWORD MP_PROP_GET = 0x106444d0; // float thiscall(prop value, 0)
 typedef float(__fastcall* PropGetFn)(void* value, void* edx, int index);
+
+// The Giga Break's effects are client.dll's own: its event handler (0x2564420, event_args +0x30 fparam1, +0x40 bparam1,
+// +0x44 bparam2 = which effect) plays them with the game's sprites, models and sounds: 0 the basic shot (beamgun-1,
+// the client's bullets; bparam1 1 = the hexagon hit ef_beamgun_shootA_hit.spr + beamgun-1_exp1 at fparam1 units along
+// the aim, 4 = the charged hit), 1 shootB1's wave, 2 shootB2's black hole (ef_beamgun_shootB2_exp/landx, exp2 sprite,
+// beamgun-2, at fparam1), 3 the Overflow Burst (charge_shootA + chargeshootAhit sprites, beamgun-4/-4_exp, at fparam1),
+// 4 the Crash's jump (1) and landing (3), 5 the Wingman's shots (targets' entity indexes in iparam1, iparam2, fparam1,
+// fparam2; beamgun-5), 6 Overflow-Beta's aura, 7 the Overflow Shield (ef_beamgun_skill). The server sends them with
+// PLAYBACK_EVENT_FULL ([0x121d3c5c], the weapon's event index +0x218); the shots' sending was in the server code that is
+// gone, so botassist sends 0, 2, 3, 5 and 7 (1, 4 and 6 the game still sends). The user (2026-11-21): "every two shots
+// or so it blows up on the target with a hexagonal sprite opening".
+static const DWORD MP_PLAYBACK_EVENT = 0x121d3c5c, MP_VEC3_ORIGIN = 0x121d3a3c;
+static const int WPN_EVENT = 0x218;
+enum { GBEV_SHOT = 0, GBEV_BLACKHOLE = 2, GBEV_BURST = 3, GBEV_WINGMAN = 5, GBEV_SHIELD = 7 };
+typedef void (*PlaybackEventFn)(int flags, void* invoker, unsigned short ev, float delay, const float* origin,
+                                const float* angles, float f1, float f2, int i1, int i2, int b1, int b2);
+
+static void SfGbEvent(void* player, void* weapon, int which, float f1, float f2, int i1, int i2, int b1)
+{
+    PlaybackEventFn fn = *(PlaybackEventFn*)(MP_PLAYBACK_EVENT + g_mpDelta);
+    unsigned short ev = weapon ? *(unsigned short*)((unsigned char*)weapon + WPN_EVENT) : 0;
+    if (!fn || !ev)
+        return;
+    const float* zero = (const float*)(MP_VEC3_ORIGIN + g_mpDelta);
+    fn(0 /* everyone, the shooter too: his client doesn't play these by itself */, player, ev, 0.0f, zero, zero, f1, f2,
+       i1, i2, b1, which);
+}
 
 static float SfGbSpecialMax(void* weapon)
 {
@@ -343,14 +370,35 @@ static void SfBgPrimary(void* player, void* weapon, bool normalShot, int anim, b
     {
         if (!GunBullet(weapon, 0.008f, (int)ByMode(32, 680, 2400), 2, BULLET_762, hit))
             return;
-        GunBlast(hit, Vars(player), SfGb(185, 10), 70.0f, 4);
+        float dist = Len(Vec(hit) - Eye(player));
         s.shotRun = now - s.lastShot < 1.0f ? s.shotRun + 1 : 1;
         s.lastShot = now;
-        if (s.shotRun % GB_RELEASE_EVERY == 0) // consecutive basic attacks release energy
-            SfArea(Vec(hit), player, SfGb(1290, 60), 150.0f, 300.0f, 150.0f, 25);
+        // consecutive basic attacks release energy: every second shot in a row the hexagon blows up on the target
+        bool release = s.shotRun % GB_RELEASE_EVERY == 0;
+        SfGbEvent(player, weapon, GBEV_SHOT, dist, 0, 0, 0, release ? 1 : 0);
+        unsigned char* pv = Vars(player);
+        float take = F<float>(pv, EV_TAKEDAMAGE);
+        F<float>(pv, EV_TAKEDAMAGE) = 0; // (the game's own explosion sprite comes with the event: no TE_EXPLOSION)
+        ((RadiusDamageFn)(MP_RADIUS_DAMAGE + g_mpDelta))(hit[0], hit[1], hit[2], pv, pv, SfGb(185, 10), 70.0f, 0,
+                                                         0x1000000);
+        F<float>(pv, EV_TAKEDAMAGE) = take;
+        if (release)
+        {
+            ForEntitiesNear(Vec(hit), 140.0f, [&](void* e) {
+                if (SfEnemy(e, player))
+                    SfKnock(e, Vec(hit), 250.0f, 120.0f);
+            });
+            F<float>(pv, EV_TAKEDAMAGE) = 0;
+            ((RadiusDamageFn)(MP_RADIUS_DAMAGE + g_mpDelta))(hit[0], hit[1], hit[2], pv, pv, SfGb(425, 25), 140.0f, 0,
+                                                             0x1000000);
+            F<float>(pv, EV_TAKEDAMAGE) = take;
+        }
     }
     else if (burst && GunBullet(weapon, 0.0f, (int)SfGb(2000, 60), 0, BULLET_762, hit))
-        SfArea(Vec(hit), player, SfGb(15000, 220), 140.0f, 500.0f, 200.0f, 45); // Overflow Burst
+    {
+        SfGbEvent(player, weapon, GBEV_BURST, Len(Vec(hit) - Eye(player)), 0, 0, 0, 0);
+        SfArea(Vec(hit), player, SfGb(15000, 220), 140.0f, 500.0f, 200.0f, 0); // Overflow Burst (its own sprites)
+    }
     (void)anim;
 }
 
@@ -382,7 +430,10 @@ static void SfBgSecondary(void* player, void* weapon, int anim)
         if (anim == 2)
             s.waveAt = now + 0.45f;
         else if (SfBlackHoleMode())
+        {
             g_sfPulls.push_back({ Eye(player) + SfAim(player) * 250.0f, player, now + 1.5f });
+            SfGbEvent(player, weapon, GBEV_BLACKHOLE, 250.0f, 0, 0, 0, 0);
+        }
         s.lastSwing = now;
     }
     else if (anim == 0xb)
@@ -466,10 +517,14 @@ static void SfBgFrame(void* player, SfPlayer& s, void* weapon, bool active, int 
                 targets.push_back({ Len(Center(e) - eye), e });
         });
         std::sort(targets.begin(), targets.end());
+        int idx[2] = { 0, 0 };
+        for (size_t k = 0; k < targets.size() && k < 2; k++)
+            idx[k] = g_IndexOfEdict ? g_IndexOfEdict(targets[k].second) : 0;
+        if (idx[0])
+            SfGbEvent(player, weapon, GBEV_WINGMAN, 0, 0, idx[0], idx[1], 0); // the Wingman's own shots
         for (size_t k = 0; k < targets.size() && k < 2; k++)
         {
             V3 c = Center(targets[k].second);
-            Beam(eye + V3{ 0, 0, 20 }, c, 255, 60, 60, 2);
             float at[3] = { c.x, c.y, c.z };
             unsigned char* pv = Vars(player);
             float take = F<float>(pv, EV_TAKEDAMAGE);
@@ -683,6 +738,9 @@ static float SfOnDamage(void* victimPriv, void* attackerPev, float damage)
             s.hits = 0;
             s.heldSecs = 0;
             SfArea(Origin(victim), victim, ByMode(60, 1000, 1500), 250.0f, 900.0f, 250.0f, 30);
+            void* w = nullptr;
+            if (!strcmp(SfActiveClass(victim, &w), "weapon_beamgun"))
+                SfGbEvent(victim, w, GBEV_SHIELD, 0, 0, 0, 0, 0);
             SfSay(victim, "Giga Break: Overflow Shield!");
             return 0;
         }
