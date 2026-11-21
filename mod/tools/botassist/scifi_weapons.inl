@@ -173,10 +173,10 @@ static float SfLsgBonus(void* player)
     return i && g_sf[i].phase == 2 ? 1.5f : 1.0f;
 }
 
-// called by gun_fixes.inl after each shot: the pulse around the player
+// called by gun_fixes.inl after each shot: the pulse around the player (hurts and pushes the enemies next to him)
 static void SfLsgShot(void* player)
 {
-    SfArea(Origin(player), player, ByMode(6, 80, 120) * SfLsgBonus(player), 120.0f, 260.0f, 0, 0);
+    SfArea(Origin(player), player, ByMode(6, 80, 120) * SfLsgBonus(player), 150.0f, 260.0f, 0, 0);
 }
 
 // The video (the user's, "CSN:S Gravity Repulsor Review", 2026-11-21) and the game's own help panel: the gauge fills
@@ -188,7 +188,41 @@ static void SfLsgShot(void* player)
 static const int SF_EV_GRAVITY = 0x12c;
 static const float LSG_CHARGE_PER_S = 10.0f, LSG_HOVER_S = 6.0f, LSG_LEAP_SPEED = 1000.0f, LSG_LEAP_UP = 320.0f;
 
-static void SfLsgStrike(void* player, SfPlayer& s, float now)
+// What the game still has (2026-11-21): client.dll's LeapStrikeGunEffectManager draws the gauge and the charged look
+// (the purple lightning, the change_* sounds) from the weapon's +0x168 (0-100; 100 = charged) and its state +0x1c0
+// (2 and up: the flying sounds); mp.dll resets +0x168 when the gun is dropped (0x10e662e0: "when dropped and picked up
+// again the energy resets") and has CLeapStrikeGunModule, the player movement of the leap (1), the hover (2) and the
+// dive (3), but what started it, the anti-gravity rounds (leapstrikegun_proj) and the dive (leapstrikegun_dive) are
+// gone. botassist keeps the gauge and the state in the weapon so the game shows them, and does the moves itself.
+// Gravity Repulsor and Abyss Repulsor (weapon_leapstrikegunex: CLeapStrikeGunEX shares every function but its
+// precache and spawn).
+static const int WPN_LSG_ENERGY = 0x168, WPN_LSG_STATE = 0x1c0;
+static const DWORD MP_EMIT_SOUND = 0x114fe930; // cdecl edict, channel, sample, volume, attenuation, flags, pitch
+typedef void (*EmitSoundFn)(void* edict, int channel, const char* sample, float vol, float attn, int flags, int pitch);
+
+static bool SfIsLsg(const char* cls)
+{
+    return !strcmp(cls, "weapon_leapstrikegun") || !strcmp(cls, "weapon_leapstrikegunex");
+}
+
+static void SfSound(void* edict, const char* sample)
+{
+    __try
+    {
+        ((EmitSoundFn)(MP_EMIT_SOUND + g_mpDelta))(edict, 1 /* CHAN_WEAPON */, sample, 1.0f, 0.8f, 0, 100);
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+    }
+}
+
+static void SfLsgSetState(void* weapon, int phase)
+{
+    if (weapon)
+        *(int*)((unsigned char*)weapon + WPN_LSG_STATE) = phase;
+}
+
+static void SfLsgStrike(void* player, void* weapon, SfPlayer& s, float now)
 {
     unsigned char* v = Vars(player);
     float* vel = (float*)(v + EV_VELOCITY);
@@ -199,48 +233,46 @@ static void SfLsgStrike(void* player, SfPlayer& s, float now)
     s.phase = 3;
     s.phaseAt = now;
     s.invulnUntil = now + 4.0f; // until it lands (then 1.5 s more)
+    SfLsgSetState(weapon, 3);
 }
 
-static void SfLsgFrame(void* player, SfPlayer& s, bool active, int pressed, float now, float dt)
+static void SfLsgFrame(void* player, SfPlayer& s, void* weapon, bool active, int pressed, float now, float dt)
 {
     unsigned char* v = Vars(player);
     float* vel = (float*)(v + EV_VELOCITY);
     bool ground = (F<int>(v, EV_FLAGS) & SF_FL_ONGROUND) != 0;
-    if (s.energy < 100 && s.phase == 0)
+    int* energy = active ? (int*)((unsigned char*)weapon + WPN_LSG_ENERGY) : nullptr;
+    if (energy && s.phase == 0 && *energy < 100)
     {
-        s.energy = (std::min)(100.0f, s.energy + dt * LSG_CHARGE_PER_S);
-        if (s.energy >= 100 && active && !s.energyTold)
+        s.energy += dt * LSG_CHARGE_PER_S; // (fractions; the weapon keeps whole percents)
+        int add = (int)s.energy;
+        if (add > 0)
         {
-            s.energyTold = true;
-            SfSay(player, "Gravity Repulsor: energy 100% - right click: Repulsor Leap");
+            s.energy -= add;
+            *energy = (std::min)(100, *energy + add);
         }
     }
-    if (active && (pressed & SF_IN_ATTACK2))
+    if (energy && (pressed & SF_IN_ATTACK2))
     {
-        if (s.phase == 0 && s.energy >= 100)
+        if (s.phase == 0 && *energy >= 100)
         {
             // Repulsor Leap: the enemies around are hurt and pushed, then the player is thrown where he aims
-            s.leapHits = SfArea(Origin(player), player, ByMode(30, 500, 700), 200.0f, 650.0f, 250.0f, 20);
+            s.leapHits = SfArea(Origin(player), player, ByMode(30, 500, 700), 200.0f, 650.0f, 250.0f, 0);
             V3 aim = SfAim(player);
             vel[0] = aim.x * LSG_LEAP_SPEED;
             vel[1] = aim.y * LSG_LEAP_SPEED;
             vel[2] = (std::max)(aim.z * LSG_LEAP_SPEED, 0.0f) + LSG_LEAP_UP;
+            *energy = 0;
             s.energy = 0;
-            s.energyTold = false;
             s.phase = 1;
             s.phaseAt = now;
+            SfLsgSetState(weapon, 1);
             return;
         }
         if (s.phase == 2)
         {
-            SfLsgStrike(player, s, now); // Gravity Strike, used directly
+            SfLsgStrike(player, weapon, s, now); // Gravity Strike, used directly
             return;
-        }
-        if (s.phase == 0)
-        {
-            char t[96];
-            snprintf(t, sizeof(t), "Gravity Repulsor: energy %d%%", (int)s.energy);
-            SfSay(player, t);
         }
     }
     if (s.phase == 1 && ((vel[2] <= 60.0f && now - s.phaseAt > 0.2f) || now - s.phaseAt > 1.5f))
@@ -251,12 +283,12 @@ static void SfLsgFrame(void* player, SfPlayer& s, bool active, int pressed, floa
             s.phaseAt = now;
             vel[2] = 0;
             F<float>(v, SF_EV_GRAVITY) = 0.001f;
-            SfSay(player, "Anti-Graviton - right click: Gravity Strike");
+            SfLsgSetState(weapon, 2);
         }
         else
         {
             s.phase = 0;
-            s.energy = (std::min)(80.0f, s.leapHits * 10.0f);
+            s.energy = 0;
         }
     }
     else if (s.phase == 2)
@@ -265,10 +297,9 @@ static void SfLsgFrame(void* player, SfPlayer& s, bool active, int pressed, floa
         {
             F<float>(v, SF_EV_GRAVITY) = 1.0f;
             s.phase = 0;
-            s.energy = (std::min)(80.0f, s.leapHits * 10.0f);
         }
         else if (now - s.phaseAt >= LSG_HOVER_S || ground)
-            SfLsgStrike(player, s, now); // the hover ended with the gun in hand: the strike goes off by itself
+            SfLsgStrike(player, weapon, s, now); // the hover ended with the gun in hand: the strike goes off by itself
         else if (vel[2] < -40.0f || vel[2] > 40.0f)
             vel[2] *= 0.5f;
     }
@@ -277,14 +308,19 @@ static void SfLsgFrame(void* player, SfPlayer& s, bool active, int pressed, floa
         if (ground || now - s.phaseAt > 3.0f)
         {
             F<float>(v, SF_EV_GRAVITY) = 1.0f;
-            int hits = SfArea(Origin(player) - V3{ 0, 0, 30 }, player, ByMode(150, 4000, 6000), 320.0f, 900.0f, 300.0f, 50);
+            int hits = SfArea(Origin(player) - V3{ 0, 0, 30 }, player, ByMode(150, 4000, 6000), 320.0f, 900.0f, 300.0f, 0);
+            SfSound(*(void**)(v + EV_CONTAINING_ENTITY), "weapons/leapstrikegun_change_fly_exp.wav");
             s.invulnUntil = now + 1.5f;
             s.phase = 0;
-            s.energy = (std::min)(80.0f, 20.0f + (s.leapHits + hits) * 5.0f);
+            SfLsgSetState(weapon, 0);
+            if (energy) // energy back for the enemies the leap and the strike hit, at most 80%
+                *energy = (std::max)(*energy, (std::min)(80, 20 + (s.leapHits + hits) * 5));
         }
         else if (vel[2] > -1600.0f)
             vel[2] = -1600.0f;
     }
+    if (energy && s.phase == 0 && *(int*)((unsigned char*)weapon + WPN_LSG_STATE) != 0)
+        SfLsgSetState(weapon, 0);
 }
 
 // ---------------------------------------------------------------- Giga Break
@@ -762,7 +798,7 @@ static void SfFrame()
         const char* cls = SfActiveClass(e, &weapon);
         __try
         {
-            SfLsgFrame(e, s, !strcmp(cls, "weapon_leapstrikegun"), pressed, now, dt);
+            SfLsgFrame(e, s, weapon, SfIsLsg(cls), pressed, now, dt);
             SfBgFrame(e, s, weapon, SfIsGb(cls), pressed, now, dt);
             SfDroneFrame(e, s, SfIsGb(cls) && SfWingmanMode(), !strcmp(cls, "weapon_beamgunle"));
             if (weapon)

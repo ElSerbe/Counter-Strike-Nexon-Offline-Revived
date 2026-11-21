@@ -229,7 +229,7 @@ static void __fastcall HookedLsgPrimary(void* weapon, void* edx)
         if (pev && *(int*)((unsigned char*)weapon + WPN_CLIP) < clip &&
             GunBullet(weapon, 0.012f, (int)(ByMode(16, 176, 430) * bonus), 1, BULLET_50AE, hit))
         {
-            GunBlast(hit, pev, ByMode(20, 150, 300) * bonus, 90.0f, 6);
+            GunBlast(hit, pev, ByMode(20, 150, 300) * bonus, 90.0f, 0); // (no generic sprite: the game has none here)
             SfLsgShot(player);
         }
     }
