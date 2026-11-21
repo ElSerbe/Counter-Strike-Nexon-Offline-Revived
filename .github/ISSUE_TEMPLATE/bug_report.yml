@@ -1,0 +1,97 @@
+name: Problem report
+description: Something doesn't work, crashes or looks wrong in the game or the launcher.
+title: "[Problem] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting it! The launcher's **Logs > Report a problem on GitHub...** opens this form with your
+        versions filled in and gets your logs ready.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What went wrong, and what did you expect instead? Screenshots or a short video help a lot (drag them here).
+      placeholder: "The game closed when I shot the Gravity Repulsor in Zombie Scenario..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: How can we make it happen again?
+      description: The steps, as exactly as you can.
+      placeholder: |
+        1. Create a Zombie Scenario room with 4 bots
+        2. Buy the Gravity Repulsor
+        3. Shoot
+    validations:
+      required: true
+
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where does it happen?
+      options:
+        - In a match (a game mode)
+        - In the lobby, rooms or menus
+        - In the shop or another in-game web page
+        - In the launcher (install, update, patch, Play)
+        - Installing or starting the game
+        - Online play with other players
+        - Somewhere else
+    validations:
+      required: true
+
+  - type: input
+    id: mode
+    attributes:
+      label: Game mode and map (if it was in a match)
+      placeholder: "Zombie Scenario, Angra Nest"
+
+  - type: input
+    id: version
+    attributes:
+      label: Launcher and mod version
+      description: Shown at the bottom of the launcher (filled in when you open this form from the launcher).
+      placeholder: "Launcher v1.1.29, mod 1.1.29"
+    validations:
+      required: true
+
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      placeholder: "Windows 11 (64-bit)"
+
+  - type: dropdown
+    id: copy
+    attributes:
+      label: Where did your copy of the game come from?
+      options:
+        - Steam
+        - The archive.org download (the launcher's Get the game)
+        - I don't know
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        In the launcher, **Logs > Copy the last session's logs** and paste them here, or drag the file
+        `mod\logs\last-session.txt` into this box. For network or online problems, turn on **Detailed logs** first and
+        play until it happens again.
+      render: text
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before sending
+      options:
+        - label: I'm using the latest release (the launcher's button says Play, not Update).
+          required: true
+        - label: I looked at the open issues and this isn't reported yet.

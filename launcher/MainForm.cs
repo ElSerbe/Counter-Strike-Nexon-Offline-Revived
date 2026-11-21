@@ -128,6 +128,8 @@ namespace CsnzLauncher
             logsMenu.Items.Add("Copy the last session's logs", null, (s, e) => CopyLogs());
             logsMenu.Items.Add("Open the last session's logs", null, (s, e) => OpenLogs());
             logsMenu.Items.Add("Open the logs folder", null, (s, e) => { Directory.CreateDirectory(Paths.LogDir); Process.Start("explorer.exe", "\"" + Paths.LogDir + "\""); });
+            logsMenu.Items.Add(new ToolStripSeparator());
+            logsMenu.Items.Add("Report a problem on GitHub...", null, (s, e) => ReportProblem());
             logsButton.Click += (s, e) => logsMenu.Show(logsButton, new Point(0, logsButton.Height));
 
             var more = new ContextMenuStrip { Renderer = new DarkMenuRenderer(), BackColor = Theme.Panel, ForeColor = Theme.Text, ShowImageMargin = false, Font = Theme.UiFont(13) };
@@ -141,6 +143,7 @@ namespace CsnzLauncher
             more.Items.Add(new ToolStripSeparator());
             more.Items.Add("Open the mod's folder", null, (s, e) => Process.Start("explorer.exe", "\"" + Paths.Mod + "\""));
             more.Items.Add("Open the project on GitHub", null, (s, e) => Process.Start(GitHub.PageUrl));
+            more.Items.Add("Report a problem on GitHub...", null, (s, e) => ReportProblem());
             more.Items.Add("Join the Discord", null, (s, e) => Process.Start(DiscordUrl));
             more.Items.Add("Support the project on Patreon", null, (s, e) => Process.Start(PatreonUrl));
             more.Items.Add(new ToolStripSeparator());
@@ -552,6 +555,42 @@ namespace CsnzLauncher
             catch (Exception ex)
             {
                 DarkBox.Show(this, "Couldn't copy them (" + ex.Message + "). They are in " + LogBundle.FilePath, Text);
+            }
+        }
+
+        // a GitHub issue from the "Problem report" form (.github/ISSUE_TEMPLATE/bug_report.yml) with the versions and
+        // Windows filled in; the last session's logs are gathered into one file, shown in Explorer to drag into the
+        // issue (too big for the address; GitHub takes files dropped on a text box). Needs a GitHub account.
+        void ReportProblem()
+        {
+            var text = BuildLogs();
+            bool copied = false;
+            if (text != null && text.Length < 60000) // (an issue's text box takes up to 65536 characters)
+                try { Clipboard.SetText(text); copied = true; } catch { }
+            var url = GitHub.PageUrl + "/issues/new?template=bug_report.yml" +
+                "&version=" + Uri.EscapeDataString("Launcher v" + Paths.LauncherVersion.ToString(3) + ", mod " +
+                    (Paths.InstalledVersion()?.ToString(3) ?? "not installed")) +
+                "&windows=" + Uri.EscapeDataString(Environment.OSVersion.VersionString + (Environment.Is64BitOperatingSystem ? " (64-bit)" : ""));
+            var how = text == null ? "" :
+                copied ? "
+
+The last session's logs are copied: paste them (Ctrl+V) in the Logs box, or drag the file from the folder that opens." :
+                         "
+
+The last session's logs are in the folder that opens: drag last-session.txt into the Logs box.";
+            if (DarkBox.Show(this, "Your browser opens GitHub's problem form (you need a free GitHub account). Describe what happened and " +
+                    "how to make it happen again." + how, Text, MessageBoxButtons.OKCancel) != DialogResult.OK)
+                return;
+            try
+            {
+                if (text != null && File.Exists(LogBundle.FilePath))
+                    Process.Start("explorer.exe", "/select,\"" + LogBundle.FilePath + "\"");
+                Process.Start(url);
+                Log("Problem report: GitHub's form opened" + (text == null ? "." : copied ? ", the logs are copied." : ", the logs file is shown."));
+            }
+            catch (Exception ex)
+            {
+                DarkBox.Show(this, "Couldn't open the browser (" + ex.Message + "). The form is at " + GitHub.PageUrl + "/issues/new/choose", Text);
             }
         }
 

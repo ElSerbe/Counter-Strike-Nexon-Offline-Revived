@@ -13,42 +13,84 @@ server (accounts, rooms, shop, inventory, missions, medals), client patches, and
 an AI for each mode (Zombie Giant, Zombie Scenario, Human Scenario, Zombie Tag, Soccer, All Star, Item Battle and
 more).
 
-**It doesn't include the game.** You need Counter-Strike Nexon: Zombies installed with Steam (it's free). The
-launcher patches *your* copy of the game, keeps a backup of every file it changes and can put them back.
+**It doesn't include the game:** you need Counter-Strike Nexon: Zombies (free on Steam). If you don't have it, the
+launcher gets it for you.
 
-## Playing
+## Installing and playing
 
-1. Install Counter-Strike Nexon: Zombies from Steam (the launcher points you there if it isn't installed).
-   If Steam doesn't give you the game any more, the same window (also **More > Get the game**) downloads the
-   copy of the same Steam version kept on the Internet Archive
-   ([csnz-1362486462562801379](https://archive.org/details/csnz-1362486462562801379), Steam depot manifest
-   1362486462562801379): 12.9 GB, resumable, checked against archive.org's MD5 and unpacked into the folder you
-   choose (about 27 GB free needed while installing). The repository doesn't host the game. A copy that isn't a
-   Steam library install gets the Goldberg Steam Emulator's `steam_api.dll` in its `Bin` on Play, so it starts without
-   the game on your Steam account (the launcher downloads the emulator's v0.2.5 from its author's GitLab: see
-   `mod\tools\goldberg`, LGPL v3; Valve's is kept for online play).
-2. Download `CSNZ-Offline-Revived-Launcher.exe` from the latest release and put it in an empty folder of its own
-   (the mod is installed next to it, in `mod\`). Don't open it from the browser's downloads bar: the browser runs a new temporary
-   copy each time, and the launcher would ask to install everything again (it now offers to move itself to
-   `Documents\CSNZ Offline Revived` when that happens).
-3. Open it. The repository is public, so it needs nothing else to find the releases. Windows may say "Windows
-   protected your PC" the first time (SmartScreen, because the launcher isn't signed yet): **More info > Run anyway**.
-   On its first start the launcher explains antivirus warnings (see [Antivirus warnings](#antivirus-warnings)).
-4. **Install** downloads the mod. Later, the same button says **Update** when a newer release is out (the
-   launcher updates itself too).
-5. **Play**: the first time Windows asks for administrator rights to add the hosts block (the game's Nexon
-   addresses go to 127.0.0.1); then the launcher makes the server's certificate, patches the game, starts the
-   local server and the game (which asks for administrator rights itself), and stops the server when the game
-   closes.
-6. **More > Create a desktop shortcut that starts the game**: a shortcut to the launcher with `--play`, which goes
-   straight into the game (the launcher closes with it). From then on the launcher is how you start the game.
-7. Item pictures: after the mod is installed (or before the first Play), the launcher asks once whether to extract the
-   item pictures, 3D previews, medal icons and mission pictures of the in-game web pages from your game (a few
-   minutes). It doesn't ask again: not after an answer, nor when they're already there (updates keep them). The
-   **Pictures** button extracts them any time. It runs the mod's Python scripts: without Python on the PC, the launcher
-   offers to download the newest Python installer from python.org (checked to be signed by the Python Software
-   Foundation) and installs it for your Windows user only, without administrator rights. It then adds the `pefile`
-   package with pip.
+### The easy way: the launcher does everything
+
+1. Download **`CSNZ-Offline-Revived-Launcher.exe`** from the
+   [latest release](https://github.com/ElSerbe/Counter-Strike-Nexon-Offline-Revived/releases/latest) and put it in a
+   folder of its own (for example `Documents\CSNZ Offline Revived`).
+2. Open it. If Windows says *"Windows protected your PC"*, click **More info > Run anyway** (the launcher is new and
+   not signed yet; see [Antivirus warnings](#antivirus-warnings)).
+3. Click **Install**. The launcher finds your game, or installs it if you don't have it (with Steam, or by
+   downloading the same version from the Internet Archive), downloads the mod and patches the game. It keeps a copy of
+   every game file it changes, so it can always put the original back.
+4. Click **Play**. The first time, Windows asks for administrator rights: say yes (it keeps the game offline, on
+   your own PC).
+
+That's it. When a new version is out, the button says **Update**: one click updates the mod and the launcher.
+
+Handy extras in the launcher:
+
+- **More > Create a desktop shortcut that starts the game**: one double click and you're in the game.
+- **Pictures**: extracts the item pictures and 3D previews for the in-game shop and pages (it asks once).
+- **Online play**: play with friends through Steam (Steam must be open).
+- **Logs > Report a problem on GitHub...**: something went wrong? See [Reporting a problem](#reporting-a-problem).
+
+<details>
+<summary>What the launcher does, in detail</summary>
+
+- **The game:** it finds it in Steam's libraries (app 273110). If it isn't installed, a window offers **Install with
+  Steam**, or downloads the copy of the same Steam version kept on the Internet Archive
+  ([csnz-1362486462562801379](https://archive.org/details/csnz-1362486462562801379)): 12.9 GB, resumable, checked
+  against archive.org's MD5, unpacked into the folder you choose (about 27 GB free needed while installing). The
+  repository doesn't host the game. A copy that isn't a Steam library install gets the Goldberg Steam Emulator's
+  `steam_api.dll` in its `Bin` on Play, so it starts without the game on your Steam account (v0.2.5 from its
+  author's GitLab, see `mod\tools\goldberg`, LGPL v3; Valve's is kept for online play).
+- **The mod** is installed next to the launcher, in `mod\`. Don't open the launcher from the browser's downloads bar:
+  the browser runs a new temporary copy each time (the launcher offers to move itself to `Documents\CSNZ Offline
+  Revived` when that happens).
+- **Play:** the first time, it adds the hosts block (the game's Nexon addresses go to 127.0.0.1; the only thing that
+  needs administrator rights), makes the local server's certificate, patches the game, starts the local server and the
+  game (which asks for administrator rights itself), and stops the server when the game closes.
+- **Pictures:** runs the mod's Python scripts on your game's files. Without Python, it offers to download the newest
+  installer from python.org (checked to be signed by the Python Software Foundation) and installs it for your Windows
+  user only, then adds the `pefile` package.
+- **Under the game's folder** it shows the game's state (original, patched, or not matching this release) and a
+  **Patch the game** / **Unpatch (original game)** button: unpatching puts the original files back and takes the
+  mod's files out of `Bin` (keeping your `botassist.ini`). If a backup is missing it offers Steam's *Verify integrity
+  of game files*. **More > Remove the hosts block** is the other half of going back online.
+- If Steam updates the game, the patches no longer fit: the launcher says so and doesn't touch anything until a
+  release for the new version is out.
+
+</details>
+
+### The manual way (advanced)
+
+If you'd rather not use the launcher, these are the same steps by hand. You need
+[Python 3](https://www.python.org/downloads/) with the `pefile` package (`py -m pip install pefile`).
+
+1. **Install the game** with Steam (or download the
+   [Internet Archive copy](https://archive.org/details/csnz-1362486462562801379)).
+2. **Download** `CSNZ-Offline-Revived-<version>.zip` from the
+   [latest release](https://github.com/ElSerbe/Counter-Strike-Nexon-Offline-Revived/releases/latest) and unzip it
+   into a folder. You get a `mod` folder.
+3. **Back up the game** (to be able to undo): copy the game's `Bin` folder to `mod\backup\original\Bin`.
+4. **Patch the game** (in a terminal, in the folder that has `mod`):
+   `py mod\tools\apply_patches.py "C:\...\Counter-Strike Nexon Zombies\Bin" apply`
+5. **Keep it offline:** open Notepad as administrator, open `C:\Windows\System32\drivers\etc\hosts`, paste the
+   lines of `mod\tools\hosts_block.txt` at the end and save.
+6. **Make the server's certificate** (once):
+   `powershell -ExecutionPolicy Bypass -File mod\tools\make_server_cert.ps1`
+7. **Play:** double-click `mod\server\run_server.cmd` (the local server; leave it open), then start the game as
+   administrator from its `Bin` folder: `cstrike-online.exe --proxy-server=http://127.0.0.1:9` (the address keeps the
+   game's built-in browser off the internet).
+
+To undo it: `py mod\tools\apply_patches.py "C:\...\Bin" revert` and take the lines back out of the hosts file.
+Updates are the same steps with the new release's zip.
 
 ### Online play
 
@@ -122,24 +164,18 @@ There's no need to turn your antivirus off. If it stops one of them:
 
 ### Reporting a problem
 
-1. Turn on **Detailed logs** under the game's folder. On the next Play the local server and the Steam bridge log
-   every packet; the files get bigger, so turn it off again afterwards.
+Something doesn't work? In the launcher: **Logs > Report a problem on GitHub...** (also in **More**). It opens the
+[problem form](https://github.com/ElSerbe/Counter-Strike-Nexon-Offline-Revived/issues/new?template=bug_report.yml)
+with your versions filled in and gets your logs ready to paste or drag in (you need a free GitHub account). Prefer to
+talk? Ask on [Discord](https://discord.gg/fjxubwyhYv).
+
+The logs help a lot. For a problem that's hard to catch:
+
+1. Turn on **Detailed logs** under the game's folder (the local server and the Steam bridge log every packet; turn it
+   off again afterwards, the files get bigger).
 2. Play until the problem happens, then close the game.
 3. **Logs > Copy the last session's logs** puts everything in the clipboard: the launcher, the Steam bridge, the
-   local server and the game (`Bin\Error.log`, `botassist.log`). Paste it in your message, or send
-   `mod\logs\last-session.txt`. **Logs > Open the last session's logs** shows the same text in Notepad.
-
-The launcher finds the game in Steam's libraries by itself (Steam's manifest of app 273110). If it isn't installed,
-it opens a window with **Install with Steam**, the store page, and the commands for Win+R (`steam://install/273110`
-to install it, `steam://run/273110` to start it with Steam); that window closes by itself once Steam has the game.
-
-Under the game's folder the launcher shows its state (original, patched, or not matching this release) and a
-**Patch the game** / **Unpatch (original game)** button: unpatching puts Steam's files back from the backups, takes
-the mod's files out of `Bin` and keeps your `botassist.ini` for the next patch. If a backup is missing it offers
-Steam's *Verify integrity of game files*. **More > Remove the hosts block** is the other half of going back online.
-
-If Steam updates the game, the patches no longer fit: the launcher says so and doesn't touch anything until a
-release for the new version is out.
+   local server and the game (`Bin\Error.log`, `botassist.log`). The same text is in `mod\logs\last-session.txt`.
 
 ## The repository
 
