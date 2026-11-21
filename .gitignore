@@ -93,3 +93,4 @@ mod/server/CSNZ_Server/bin/Data/Studio/resources/*
 
 # secret gift codes (only their SHA-256 is in Data/RedeemCodes.json)
 /PATREON_CODES.txt
+/Patreon Exclusive Codes.png
