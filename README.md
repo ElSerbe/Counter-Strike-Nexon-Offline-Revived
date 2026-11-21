@@ -89,6 +89,10 @@ lobby chat, in any case and with or without spaces.
 - **Stop Killing Games**: 5 of every decoder in the game.
 - **Welcome**: 3 Point Coupons (100 points each), M1911 A1 (permanent), MP7A1 Unicorn (90 days), MG42 (permanent),
   15 Bingo Tickets and 5 Advanced Decoders.
+- **Patreon codes** for [Patreon](https://patreon.com/ltsYuri) supporters:
+  - **Patreon 1**: JANUS-7 (permanent), 10 Advanced Decoders, 5 Point Coupons, 20 Bingo Tickets and 250 medals.
+  - **Patreon 2**: JANUS-7 and Gungnir (permanent), 20 Advanced Decoders, 5 Transcendence Decoders, 10 Point Coupons,
+    40 Bingo Tickets and 500 medals.
 
 The codes are in `mod\server\CSNZ_Server\bin\Data\RedeemCodes.json`. Advanced Decoders aren't sold in the game's
 shop; the shop page's Supply Depot sells them for 60 medals each.

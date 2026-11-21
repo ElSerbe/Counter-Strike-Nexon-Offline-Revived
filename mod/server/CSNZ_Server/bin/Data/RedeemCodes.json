@@ -1,7 +1,7 @@
 {
 	// Offline build: gift codes (manager/redeemcodes.cpp). Each account can use each code once: in the shop page's
 	// "Redeem a code" box or with /redeem <code> in the lobby chat. A code is typed in any case, with or without spaces
-	// or dashes ("Stop Killing Games" = "STOPKILLINGGAMES"). Items: ItemID, Count, Days (0 = permanent).
+	// or dashes ("Stop Killing Games" = "STOPKILLINGGAMES"). Items: ItemID, Count, Days (0 = permanent); Medals: at most 500.
 	"Codes": {
 		// 5 of every decoder that opens in this server (ItemBox.json: Item.csv's 44 LotteryKeyItem decoders)
 		"STOPKILLINGGAMES": {
@@ -33,6 +33,29 @@
 				{ "ItemID": 714, "Count": 1 },              // MG42, permanent
 				{ "ItemID": 2179, "Count": 15 },            // Bingo Ticket (the bingo's tickets)
 				{ "ItemID": 173, "Count": 5 }               // Advanced Decoder
+			]
+		},
+		// for Patreon supporters
+		"PATREON1": {
+			"Message": "Thank you for your support! JANUS-7, Advanced Decoders, Point Coupons, Bingo Tickets and 250 medals added.",
+			"Medals": 250,
+			"Items": [
+				{ "ItemID": 595, "Count": 1 },              // JANUS-7, permanent
+				{ "ItemID": 173, "Count": 10 },             // Advanced Decoder
+				{ "ItemID": 1030, "Count": 5 },             // Point Coupon Lv. 1 (100 points)
+				{ "ItemID": 2179, "Count": 20 }             // Bingo Ticket
+			]
+		},
+		"PATREON2": {
+			"Message": "Thank you for your support! JANUS-7, Gungnir, decoders, Point Coupons, Bingo Tickets and 500 medals added.",
+			"Medals": 500,
+			"Items": [
+				{ "ItemID": 595, "Count": 1 },              // JANUS-7, permanent
+				{ "ItemID": 8171, "Count": 1 },             // Gungnir, permanent
+				{ "ItemID": 173, "Count": 20 },             // Advanced Decoder
+				{ "ItemID": 8292, "Count": 5 },             // Transcendence Decoder
+				{ "ItemID": 1030, "Count": 10 },            // Point Coupon Lv. 1 (100 points)
+				{ "ItemID": 2179, "Count": 40 }             // Bingo Ticket
 			]
 		}
 	}

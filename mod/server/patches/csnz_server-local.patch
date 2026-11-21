@@ -6149,13 +6149,13 @@ index 223166a..9b3a5a0 100644
  	user->UpdateTitles(slot, titleID);
 diff --git a/src/manager/redeemcodes.cpp b/src/manager/redeemcodes.cpp
 new file mode 100644
-index 0000000..5125d52
+index 0000000..cb676d7
 --- /dev/null
 +++ b/src/manager/redeemcodes.cpp
-@@ -0,0 +1,89 @@
+@@ -0,0 +1,94 @@
 +// Offline build: gift codes (the user, 2026-11-21: "Stop Killing Games" and "Welcome", one use each).
 +//
-+// Data/RedeemCodes.json lists the codes and their items; the file is read at each use, so a code can be added
++// Data/RedeemCodes.json lists the codes, their items and medals (at most 500); the file is read at each use, so a code can be added
 +// without restarting the server. A code is typed in any case, with or without spaces or dashes. An account that
 +// used a code has the counter "Code:<CODE>" (mode -1) set: it can't use it again. Typed in the shop page
 +// ("Redeem a code", POST /api/redeem) or with /redeem <code> in the lobby chat.
@@ -6236,11 +6236,16 @@ index 0000000..5125d52
 +				itemID, count, days, result);
 +		}
 +	}
-+	Logger().Info("RedeemCode: user %d used code %s: %d items added, %d failed\n", user->GetID(), code.c_str(), added, failed);
++	// medals (the user, 2026-11-21: at most 500 a code)
++	int medals = min(max(entry->value("Medals", 0), 0), 500);
++	if (medals)
++		user->UpdatePoints(medals);
++	Logger().Info("RedeemCode: user %d used code %s: %d items added, %d failed, %d medals\n", user->GetID(), code.c_str(), added,
++		failed, medals);
 +	string message = entry->value("Message", "Code redeemed: the items are in your inventory.");
 +	if (failed)
 +		message += " (" + to_string(failed) + " of them couldn't be added.)";
-+	return { { "message", message }, { "added", added }, { "failed", failed } };
++	return { { "message", message }, { "added", added }, { "failed", failed }, { "medals", medals } };
 +}
 diff --git a/src/manager/redeemcodes.h b/src/manager/redeemcodes.h
 new file mode 100644
