@@ -38,6 +38,18 @@ button { font-family: inherit; cursor: pointer; }
 .medal-icon.small { width: 13px; height: 13px; }
 .medal-icon.small::after { inset: 3px; }
 
+.redeem { margin-left: auto; background: none; border: 1px solid var(--line-strong); color: var(--accent); padding: 6px 12px; font-size: 13px; letter-spacing: 1.5px; text-transform: uppercase; }
+.redeem:hover { border-color: var(--accent); }
+.redeem + .wallet { margin-left: 14px; }
+.redeem-box { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; background: rgba(4,5,7,.72); }
+.redeem-box.hidden { display: none; }
+.redeem-box form { width: 380px; background: #12161b; border: 1px solid var(--line-strong); padding: 20px 22px; display: grid; gap: 12px; box-shadow: 0 14px 40px rgba(0,0,0,.6); }
+.redeem-box h2 { margin: 0; font-size: 16px; letter-spacing: 2.5px; text-transform: uppercase; color: var(--accent); }
+.redeem-box p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.redeem-box input { background: #0b0e11; border: 1px solid var(--line-strong); color: var(--text); padding: 10px 12px; font-size: 16px; letter-spacing: 2px; text-transform: uppercase; }
+.redeem-box input:focus { outline: none; border-color: var(--accent); }
+.redeem-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.redeem-actions .cta { align-self: auto; padding: 10px 20px; }
 .close { background: none; border: 1px solid var(--line-strong); color: var(--muted); padding: 6px 12px; font-size: 13px; letter-spacing: 1.5px; text-transform: uppercase; }
 .close:hover { border-color: var(--danger); color: var(--text); }
 

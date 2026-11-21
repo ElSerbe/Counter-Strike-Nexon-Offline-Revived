@@ -13,6 +13,7 @@
     <button type="button" data-tab="passes" class="active">Battle passes</button>
     <a class="tab-link" href="/maps/" title="Your Studio maps, their share codes and the maps other players publish">Studio maps</a>
   </nav>
+  <button id="redeem" class="redeem" type="button" title="Gift codes: each one can be used once per account">Redeem code</button>
   <div class="wallet" title="Medals">
     <span class="medal-icon"></span><span id="medals">--</span>
   </div>
@@ -20,6 +21,18 @@
 </header>
 
 <main id="view"></main>
+
+<div id="redeem-box" class="redeem-box hidden" role="dialog" aria-label="Redeem a code">
+  <form id="redeem-form">
+    <h2>Redeem a code</h2>
+    <p>Each code can be used once per account. You can also type <b>/redeem &lt;code&gt;</b> in the lobby chat.</p>
+    <input id="redeem-code" type="text" maxlength="64" autocomplete="off" spellcheck="false" placeholder="Code">
+    <div class="redeem-actions">
+      <button type="button" id="redeem-cancel" class="cta ghost">Cancel</button>
+      <button type="submit" class="cta">Redeem</button>
+    </div>
+  </form>
+</div>
 
 <div id="toast" class="toast hidden"></div>
 <div id="tooltip" class="tooltip hidden"></div>

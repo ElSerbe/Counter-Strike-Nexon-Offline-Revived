@@ -440,6 +440,34 @@
   backBtn.onclick = () => { cancelHold(); openPass = null; hideTooltip(); render(); };
   closeBtn.onclick = closeShop;
 
+  // ---------- gift codes (POST /api/redeem, CSNZ_Server manager/redeemcodes.cpp) ----------
+  const redeemBox = document.getElementById("redeem-box");
+  const redeemInput = document.getElementById("redeem-code");
+  const showRedeem = open => {
+    redeemBox.classList.toggle("hidden", !open);
+    if (open) { redeemInput.value = ""; redeemInput.focus(); }
+  };
+  document.getElementById("redeem").onclick = () => showRedeem(true);
+  document.getElementById("redeem-cancel").onclick = () => showRedeem(false);
+  redeemBox.onclick = e => { if (e.target === redeemBox) showRedeem(false); };
+  redeemInput.onkeydown = e => { if (e.key === "Escape") { e.stopPropagation(); showRedeem(false); } };
+  document.getElementById("redeem-form").onsubmit = async e => {
+    e.preventDefault();
+    const code = redeemInput.value.trim();
+    if (!code || busy) return;
+    busy = true;
+    try {
+      const res = await api("/api/redeem", { code });
+      if (res.state) { state = res.state; render(); }
+      showRedeem(false);
+      toast(res.message || "Code redeemed.", "ok");
+    } catch (err) {
+      toast(err.message, "error");
+    } finally {
+      busy = false;
+    }
+  };
+
   load();
   setInterval(() => { if (!busy && !hold) load(); }, 15000); // medals change after matches
 })();

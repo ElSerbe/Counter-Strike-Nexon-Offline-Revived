@@ -81,6 +81,18 @@ Every finished match gives EXP and medals, and advances orders, bingo and Zombie
 - **Any mode**: a 15% chance of a Parts Reward Box for a finished match with a kill (the sources don't list this per
   mode; it's the game's "Game Result Reward", and the chance is in that file).
 
+### Gift codes
+
+Each account can use each code once: in the shop page (**Redeem code**, top right) or with `/redeem <code>` in the
+lobby chat, in any case and with or without spaces.
+
+- **Stop Killing Games**: 5 of every decoder in the game.
+- **Welcome**: 3 Point Coupons (100 points each), M1911 A1 (permanent), MP7A1 Unicorn (90 days), MG42 (permanent),
+  15 Bingo Tickets and 5 Advanced Decoders.
+
+The codes are in `mod\server\CSNZ_Server\bin\Data\RedeemCodes.json`. Advanced Decoders aren't sold in the game's
+shop; the shop page's Supply Depot sells them for 60 medals each.
+
 ### Antivirus warnings
 
 The launcher and the mod's programs are new, unsigned and downloaded by few people, which is what makes antivirus

@@ -1,0 +1,39 @@
+{
+	// Offline build: gift codes (manager/redeemcodes.cpp). Each account can use each code once: in the shop page's
+	// "Redeem a code" box or with /redeem <code> in the lobby chat. A code is typed in any case, with or without spaces
+	// or dashes ("Stop Killing Games" = "STOPKILLINGGAMES"). Items: ItemID, Count, Days (0 = permanent).
+	"Codes": {
+		// 5 of every decoder that opens in this server (ItemBox.json: Item.csv's 44 LotteryKeyItem decoders)
+		"STOPKILLINGGAMES": {
+			"Message": "Stop Killing Games: 5 of every decoder added to your inventory.",
+			"Items": [
+				{ "ItemID": 165, "Count": 5 }, { "ItemID": 173, "Count": 5 }, { "ItemID": 396, "Count": 5 },
+				{ "ItemID": 533, "Count": 5 }, { "ItemID": 552, "Count": 5 }, { "ItemID": 555, "Count": 5 },
+				{ "ItemID": 576, "Count": 5 }, { "ItemID": 774, "Count": 5 }, { "ItemID": 803, "Count": 5 },
+				{ "ItemID": 806, "Count": 5 }, { "ItemID": 871, "Count": 5 }, { "ItemID": 872, "Count": 5 },
+				{ "ItemID": 886, "Count": 5 }, { "ItemID": 955, "Count": 5 }, { "ItemID": 956, "Count": 5 },
+				{ "ItemID": 957, "Count": 5 }, { "ItemID": 958, "Count": 5 }, { "ItemID": 975, "Count": 5 },
+				{ "ItemID": 976, "Count": 5 }, { "ItemID": 985, "Count": 5 }, { "ItemID": 2198, "Count": 5 },
+				{ "ItemID": 2599, "Count": 5 }, { "ItemID": 8097, "Count": 5 }, { "ItemID": 8261, "Count": 5 },
+				{ "ItemID": 8292, "Count": 5 }, { "ItemID": 8293, "Count": 5 }, { "ItemID": 8308, "Count": 5 },
+				{ "ItemID": 8309, "Count": 5 }, { "ItemID": 8310, "Count": 5 }, { "ItemID": 8311, "Count": 5 },
+				{ "ItemID": 8312, "Count": 5 }, { "ItemID": 8453, "Count": 5 }, { "ItemID": 8616, "Count": 5 },
+				{ "ItemID": 8617, "Count": 5 }, { "ItemID": 8898, "Count": 5 }, { "ItemID": 9053, "Count": 5 },
+				{ "ItemID": 9084, "Count": 5 }, { "ItemID": 9116, "Count": 5 }, { "ItemID": 9144, "Count": 5 },
+				{ "ItemID": 9184, "Count": 5 }, { "ItemID": 9330, "Count": 5 }, { "ItemID": 9633, "Count": 5 },
+				{ "ItemID": 9706, "Count": 5 }, { "ItemID": 9707, "Count": 5 }
+			]
+		},
+		"WELCOME": {
+			"Message": "Welcome! Point Coupons, M1911 A1, MP7A1 Unicorn, MG42, Bingo Tickets and Advanced Decoders added to your inventory.",
+			"Items": [
+				{ "ItemID": 1030, "Count": 3 },             // Point Coupon Lv. 1 (100 points)
+				{ "ItemID": 724, "Count": 1 },              // M1911 A1, permanent
+				{ "ItemID": 610, "Count": 1, "Days": 90 },  // MP7A1 Unicorn, 90 days
+				{ "ItemID": 714, "Count": 1 },              // MG42, permanent
+				{ "ItemID": 2179, "Count": 15 },            // Bingo Ticket (the bingo's tickets)
+				{ "ItemID": 173, "Count": 5 }               // Advanced Decoder
+			]
+		}
+	}
+}

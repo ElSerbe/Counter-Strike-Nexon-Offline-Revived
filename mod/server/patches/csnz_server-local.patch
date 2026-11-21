@@ -1,8 +1,8 @@
 diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
-index b5e72be..2213bbe 100644
+index b5e72be..bcf4893 100644
 --- a/src/CMakeLists.txt
 +++ b/src/CMakeLists.txt
-@@ -38,6 +38,16 @@ endif()
+@@ -38,6 +38,17 @@ endif()
  target_sources(PROJECTNAME PRIVATE "main.cpp")
  target_sources(PROJECTNAME PRIVATE "serverinstance.cpp")
  target_sources(PROJECTNAME PRIVATE "serverconfig.cpp")
@@ -13,13 +13,14 @@ index b5e72be..2213bbe 100644
 +target_sources(PROJECTNAME PRIVATE "manager/medalmanager.cpp")
 +target_sources(PROJECTNAME PRIVATE "manager/missionmanager.cpp")
 +target_sources(PROJECTNAME PRIVATE "manager/loginsupplies.cpp")
++target_sources(PROJECTNAME PRIVATE "manager/redeemcodes.cpp")
 +target_sources(PROJECTNAME PRIVATE "manager/moderewards.cpp")
 +target_sources(PROJECTNAME PRIVATE "manager/familymanager.cpp")
 +target_sources(PROJECTNAME PRIVATE "net/webserver.cpp")
  target_sources(PROJECTNAME PRIVATE "command.cpp")
  target_sources(PROJECTNAME PRIVATE "common/buffer.cpp")
  target_sources(PROJECTNAME PRIVATE "common/buildnum.cpp")
-@@ -56,6 +66,8 @@ target_sources(PROJECTNAME PRIVATE "command.cpp")
+@@ -56,6 +67,8 @@ target_sources(PROJECTNAME PRIVATE "command.cpp")
  
  target_sources(PROJECTNAME PRIVATE "manager/manager.cpp")
  target_sources(PROJECTNAME PRIVATE "manager/usermanager.cpp")
@@ -28,7 +29,7 @@ index b5e72be..2213bbe 100644
  if (SERVER_DB_PROXY)
  	target_sources(PROJECTNAME PRIVATE "manager/userdatabase.cpp")
  endif()
-@@ -74,6 +86,8 @@ target_sources(PROJECTNAME PRIVATE "manager/minigamemanager.cpp")
+@@ -74,6 +87,8 @@ target_sources(PROJECTNAME PRIVATE "manager/minigamemanager.cpp")
  target_sources(PROJECTNAME PRIVATE "manager/clanmanager.cpp")
  target_sources(PROJECTNAME PRIVATE "manager/rankmanager.cpp")
  target_sources(PROJECTNAME PRIVATE "manager/voxelmanager.cpp")
@@ -37,7 +38,7 @@ index b5e72be..2213bbe 100644
  target_sources(PROJECTNAME PRIVATE "manager/classmodmanager.cpp")
  
  target_sources(PROJECTNAME PRIVATE "packet/packethelper_fulluserinfo.cpp")
-@@ -148,6 +162,8 @@ if (MSVC)
+@@ -148,6 +163,8 @@ if (MSVC)
  else()
  	# don't treat some warnings as errors
  	target_compile_options(PROJECTNAME PRIVATE -Wno-error=sign-compare -Wno-error=unused-variable -Wno-error=delete-non-virtual-dtor -Wno-error=unused-parameter -Wno-error=conversion-null -Wno-error=register -Wno-error=unused-value -Wno-error=reorder -Wno-error=attributes)
@@ -1310,19 +1311,20 @@ index 0000000..5c99d8e
 +
 +extern CBingoManager g_BingoManager;
 diff --git a/src/manager/channelmanager.cpp b/src/manager/channelmanager.cpp
-index 35561e8..c476146 100644
+index 35561e8..038bbf6 100644
 --- a/src/manager/channelmanager.cpp
 +++ b/src/manager/channelmanager.cpp
-@@ -1,4 +1,8 @@
+@@ -1,4 +1,9 @@
  #include "channelmanager.h"
 +#include "transfer.h"
 +#include "roomoptions.h"
++#include "redeemcodes.h"
 +#include "familymanager.h"
 +#include "guestprofile.h"
  
  #include "itemmanager.h"
  #include "packetmanager.h"
-@@ -8,6 +12,7 @@
+@@ -8,6 +13,7 @@
  #include "dedicatedservermanager.h"
  
  #include "user/userinventoryitem.h"
@@ -1330,7 +1332,7 @@ index 35561e8..c476146 100644
  
  #include "csvtable.h"
  #include "serverconfig.h"
-@@ -21,7 +26,7 @@ using namespace std;
+@@ -21,7 +27,7 @@ using namespace std;
  CChannelManager g_ChannelManager;
  
  // TODO: Should we implement multi channels?
@@ -1339,7 +1341,7 @@ index 35561e8..c476146 100644
  {
  }
  
-@@ -83,6 +88,175 @@ bool CChannelManager::OnChannelListPacket(IExtendedSocket* socket)
+@@ -83,6 +89,175 @@ bool CChannelManager::OnChannelListPacket(IExtendedSocket* socket)
  	return true;
  }
  
@@ -1515,7 +1517,7 @@ index 35561e8..c476146 100644
  bool CChannelManager::OnRoomRequest(CReceivePacket* msg, IExtendedSocket* socket)
  {
  	LOG_PACKET;
-@@ -121,7 +295,20 @@ bool CChannelManager::OnRoomRequest(CReceivePacket* msg, IExtendedSocket* socket
+@@ -121,7 +296,20 @@ bool CChannelManager::OnRoomRequest(CReceivePacket* msg, IExtendedSocket* socket
  		g_PacketManager.SendRoomListFull(socket, channelServers[0]->GetChannels()[0]->GetRooms());
  		break;
  	case 27:
@@ -1536,7 +1538,7 @@ index 35561e8..c476146 100644
  	case InRoomType::SetZBAddonsRequest:
  		return OnRoomSetZBAddonRequest(msg, user);
  	case InRoomType::KickRequest:
-@@ -379,7 +566,12 @@ bool CChannelManager::OnCommandHandler(IExtendedSocket* socket, IUser* user, con
+@@ -379,7 +567,12 @@ bool CChannelManager::OnCommandHandler(IExtendedSocket* socket, IUser* user, con
  
  	if (!user)
  	{
@@ -1550,7 +1552,7 @@ index 35561e8..c476146 100644
  		{
  			if (args.size() == 3)
  			{
-@@ -443,6 +635,40 @@ bool CChannelManager::OnCommandHandler(IExtendedSocket* socket, IUser* user, con
+@@ -443,6 +636,58 @@ bool CChannelManager::OnCommandHandler(IExtendedSocket* socket, IUser* user, con
  	}
  	else
  	{
@@ -1562,6 +1564,24 @@ index 35561e8..c476146 100644
 +			int clanID = user->GetCharacter(UFLAG_LOW_CLAN).clanID;
 +			g_PacketManager.SendUMsgNoticeMessageInChat(socket, clanID > 0 ? "[Family] " + Family::Summary(clanID) :
 +				string("You aren't in a family."));
++			return true;
++		}
++
++		// offline build: gift codes (manager/redeemcodes.cpp), for everyone: /redeem <code> (spaces allowed)
++		if (args[0] == "/redeem")
++		{
++			string typed;
++			for (size_t i = 1; i < args.size(); i++)
++				typed += args[i];
++			if (typed.empty())
++			{
++				g_PacketManager.SendUMsgNoticeMessageInChat(socket, "/redeem <code>: gives the code's items (once per account)");
++				return true;
++			}
++			int status = 200;
++			nlohmann::json result = RedeemCode(user, typed, status);
++			g_PacketManager.SendUMsgNoticeMessageInChat(socket, result.contains("error") ? result["error"].get<string>()
++				: result.value("message", string("Code redeemed.")));
 +			return true;
 +		}
 +
@@ -1591,7 +1611,7 @@ index 35561e8..c476146 100644
  		CUserCharacterExtended characterExtended = user->GetCharacterExtended(EXT_UFLAG_GAMEMASTER);
  		if (characterExtended.gameMaster)
  		{
-@@ -1246,6 +1472,9 @@ bool CChannelManager::OnNewRoomRequest(CReceivePacket* msg, IUser* user)
+@@ -1246,6 +1491,9 @@ bool CChannelManager::OnNewRoomRequest(CReceivePacket* msg, IUser* user)
  	// hide user from channel users list
  	channel->UserLeft(user, true);
  
@@ -1601,7 +1621,7 @@ index 35561e8..c476146 100644
  	Logger().Info("User '%s' created a new room (RID: %d, name: '%s')\n", user->GetLogName(), newRoom->GetID(), roomSettings->roomName.c_str());
  
  	if (roomSettings->familyBattle)
-@@ -1270,10 +1499,50 @@ bool CChannelManager::OnNewRoomRequest(CReceivePacket* msg, IUser* user)
+@@ -1270,10 +1518,50 @@ bool CChannelManager::OnNewRoomRequest(CReceivePacket* msg, IUser* user)
  
  bool CChannelManager::OnJoinRoomRequest(CReceivePacket* msg, IUser* user)
  {
@@ -1653,7 +1673,7 @@ index 35561e8..c476146 100644
  	CChannel* channel = user->GetCurrentChannel();
  	if (channel == NULL)
  	{
-@@ -1396,6 +1665,9 @@ bool CChannelManager::OnJoinRoomRequest(CReceivePacket* msg, IUser* user)
+@@ -1396,6 +1684,9 @@ bool CChannelManager::OnJoinRoomRequest(CReceivePacket* msg, IUser* user)
  
  	channel->SendUpdateRoomList(room);
  
@@ -1663,7 +1683,7 @@ index 35561e8..c476146 100644
  	Logger().Info("User '%s' joined a room (RID: %d)\n", user->GetLogName(), room->GetID());
  
  	return true;
-@@ -1450,6 +1722,22 @@ bool CChannelManager::OnSetTeamRequest(CReceivePacket* msg, IUser* user)
+@@ -1450,6 +1741,22 @@ bool CChannelManager::OnSetTeamRequest(CReceivePacket* msg, IUser* user)
  	return true;
  }
  
@@ -1686,7 +1706,7 @@ index 35561e8..c476146 100644
  bool CChannelManager::OnLeaveRoomRequest(IUser* user)
  {
  	IRoom* currentRoom = user->GetCurrentRoom();
-@@ -1501,6 +1789,10 @@ bool CChannelManager::OnLeaveRoomRequest(IUser* user)
+@@ -1501,6 +1808,10 @@ bool CChannelManager::OnLeaveRoomRequest(IUser* user)
  		}
  
  		currentRoom->RemoveUser(user);
@@ -1697,7 +1717,7 @@ index 35561e8..c476146 100644
  	}
  
  	currentChannel->SendFullUpdateRoomList(user);
-@@ -1705,13 +1997,43 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
+@@ -1705,13 +2016,43 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
  		return false;
  	}
  
@@ -1741,7 +1761,7 @@ index 35561e8..c476146 100644
  	if (newSettings.familyBattle)
  	{
  		CUserCharacter character = user->GetCharacter(UFLAG_LOW_CLAN);
-@@ -1787,6 +2109,7 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
+@@ -1787,6 +2128,7 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
  		}
  	}
  
@@ -1749,7 +1769,7 @@ index 35561e8..c476146 100644
  	currentRoom->UpdateSettings(newSettings);
  
  	// inform every user in the room of the changes
-@@ -1795,6 +2118,10 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
+@@ -1795,6 +2137,10 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
  		currentRoom->SendUpdateRoomSettings(u, roomSettings, newSettings.lowFlag, newSettings.lowMidFlag, newSettings.highMidFlag, newSettings.highFlag);
  	}
  
@@ -1760,7 +1780,7 @@ index 35561e8..c476146 100644
  	currentChannel->SendUpdateRoomList(currentRoom);
  
  	Logger().Info("Host '%s' updated room settings (RID: %d)\n", user->GetLogName(), currentRoom->GetID());
-@@ -1921,7 +2248,12 @@ bool CChannelManager::OnRoomKickRequest(CReceivePacket* msg, IUser* user)
+@@ -1921,7 +2267,12 @@ bool CChannelManager::OnRoomKickRequest(CReceivePacket* msg, IUser* user)
  		return false;
  	}
  
@@ -1774,7 +1794,7 @@ index 35561e8..c476146 100644
  	if (destUser == NULL)
  	{
  		Logger().Warn("User '%s' tried to kick a user from a room, although destUser == NULL (RID: %d)\n", user->GetLogName(), currentRoom->GetID());
-@@ -2089,7 +2421,7 @@ bool CChannelManager::OnVoxelRoomListRequest(CReceivePacket* msg, IUser* user)
+@@ -2089,7 +2440,7 @@ bool CChannelManager::OnVoxelRoomListRequest(CReceivePacket* msg, IUser* user)
  {
  	string voxel_id = msg->ReadString();
  
@@ -6127,6 +6147,117 @@ index 223166a..9b3a5a0 100644
  		return;
  
  	user->UpdateTitles(slot, titleID);
+diff --git a/src/manager/redeemcodes.cpp b/src/manager/redeemcodes.cpp
+new file mode 100644
+index 0000000..5125d52
+--- /dev/null
++++ b/src/manager/redeemcodes.cpp
+@@ -0,0 +1,89 @@
++// Offline build: gift codes (the user, 2026-11-21: "Stop Killing Games" and "Welcome", one use each).
++//
++// Data/RedeemCodes.json lists the codes and their items; the file is read at each use, so a code can be added
++// without restarting the server. A code is typed in any case, with or without spaces or dashes. An account that
++// used a code has the counter "Code:<CODE>" (mode -1) set: it can't use it again. Typed in the shop page
++// ("Redeem a code", POST /api/redeem) or with /redeem <code> in the lobby chat.
++#include "redeemcodes.h"
++#include "itemmanager.h"
++#include "userdatabase.h"
++#include "serverconfig.h"
++#include "interface/iuser.h"
++#include "main.h"
++
++#include <fstream>
++#include <cctype>
++
++using namespace std;
++using json = nlohmann::json;
++
++static string NormalizeCode(const string& typed)
++{
++	string code;
++	for (char c : typed)
++		if (isalnum((unsigned char)c))
++			code += (char)toupper((unsigned char)c);
++	return code;
++}
++
++json RedeemCode(IUser* user, const string& typed, int& status)
++{
++	auto fail = [&](int code, const string& message)
++	{
++		status = code;
++		return json{ { "error", message } };
++	};
++	if (!user)
++		return fail(401, "Log in to the game first.");
++	string code = NormalizeCode(typed);
++	if (code.empty())
++		return fail(400, "Type a code.");
++
++	ifstream f("Data/RedeemCodes.json");
++	json cfg = json::parse(f, nullptr, false, true);
++	if (cfg.is_discarded() || !cfg.contains("Codes") || !cfg["Codes"].is_object())
++		return fail(500, "The server's code list (Data/RedeemCodes.json) couldn't be read.");
++	const json* entry = nullptr;
++	for (auto& c : cfg["Codes"].items())
++		if (NormalizeCode(c.key()) == code)
++			entry = &c.value();
++	if (!entry)
++		return fail(404, "That code doesn't exist.");
++
++	string counter = "Code:" + code;
++	vector<UserCounter_s> counters;
++	g_UserDatabase.GetCounters(user->GetID(), counters);
++	for (auto& c : counters)
++		if (c.mode == -1 && c.name == counter && c.value)
++			return fail(409, "You already used this code.");
++
++	json items = entry->value("Items", json::array());
++	int used = g_UserDatabase.GetInventoryItemsCount(user->GetID());
++	if (used >= 0 && used + (int)items.size() > g_pServerConfig->inventorySlotMax)
++		return fail(409, "Your inventory doesn't have room for this code's " + to_string(items.size()) +
++			" items: free some slots and try again.");
++
++	// marked first: a second request while this one adds the items finds it used
++	g_UserDatabase.SetCounter(user->GetID(), { -1, counter, 1 });
++	int added = 0, failed = 0;
++	for (auto& i : items)
++	{
++		int itemID = i.value("ItemID", 0), count = max(1, i.value("Count", 1)), days = max(0, i.value("Days", 0));
++		if (itemID <= 0)
++			continue;
++		int result = g_ItemManager.AddItem(user->GetID(), user, itemID, count, days);
++		if (result == ITEM_ADD_SUCCESS)
++			added++;
++		else
++		{
++			failed++;
++			Logger().Warn("RedeemCode: user %d, code %s: item %d x%d (%d days) not added (%d)\n", user->GetID(), code.c_str(),
++				itemID, count, days, result);
++		}
++	}
++	Logger().Info("RedeemCode: user %d used code %s: %d items added, %d failed\n", user->GetID(), code.c_str(), added, failed);
++	string message = entry->value("Message", "Code redeemed: the items are in your inventory.");
++	if (failed)
++		message += " (" + to_string(failed) + " of them couldn't be added.)";
++	return { { "message", message }, { "added", added }, { "failed", failed } };
++}
+diff --git a/src/manager/redeemcodes.h b/src/manager/redeemcodes.h
+new file mode 100644
+index 0000000..c3b488b
+--- /dev/null
++++ b/src/manager/redeemcodes.h
+@@ -0,0 +1,10 @@
++#pragma once
++
++#include "nlohmann/json.hpp"
++#include <string>
++
++class IUser;
++
++// Offline build: gift codes from Data/RedeemCodes.json, one use per account (manager/redeemcodes.cpp).
++// Returns {"message": ...} or {"error": ...}; status gets an HTTP status for the web page.
++nlohmann::json RedeemCode(IUser* user, const std::string& typed, int& status);
 diff --git a/src/manager/roomoptions.cpp b/src/manager/roomoptions.cpp
 new file mode 100644
 index 0000000..379e8d2
@@ -10122,13 +10253,14 @@ index c7d2bdb..75d0ee9 100644
 +extern CVoxelManager g_VoxelManager;
 diff --git a/src/manager/warbondmanager.cpp b/src/manager/warbondmanager.cpp
 new file mode 100644
-index 0000000..d0f3e25
+index 0000000..0627e5e
 --- /dev/null
 +++ b/src/manager/warbondmanager.cpp
-@@ -0,0 +1,1162 @@
+@@ -0,0 +1,1179 @@
 +#include "channelmanager.h"
 +#include "guestprofile.h"
 +#include "transfer.h"
++#include "redeemcodes.h"
 +#include "warbondmanager.h"
 +#include "moderewards.h"
 +#include "usermanager.h"
@@ -10484,6 +10616,22 @@ index 0000000..d0f3e25
 +		else
 +		{
 +			result = Unlock(user, body.value("warbond", 0), body.value("item", 0), body.value("quantity", 1), resp.status);
++		}
++	}
++	else if (req.method == "POST" && req.path == "/api/redeem")
++	{
++		// gift codes (manager/redeemcodes.cpp), the shop page's "Redeem a code"
++		json body = json::parse(req.body, nullptr, false);
++		if (body.is_discarded() || !body.contains("code") || !body["code"].is_string())
++		{
++			resp.status = 400;
++			result = { { "error", "Invalid request." } };
++		}
++		else
++		{
++			result = RedeemCode(user, body["code"].get<string>(), resp.status);
++			if (!result.contains("error"))
++				result["state"] = BuildState(user); // (the shop shows the new medals, items...)
 +		}
 +	}
 +	else if (req.method == "POST" && req.path == "/api/unlockpass")
