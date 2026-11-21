@@ -6149,16 +6149,21 @@ index 223166a..9b3a5a0 100644
  	user->UpdateTitles(slot, titleID);
 diff --git a/src/manager/redeemcodes.cpp b/src/manager/redeemcodes.cpp
 new file mode 100644
-index 0000000..cb676d7
+index 0000000..3587249
 --- /dev/null
 +++ b/src/manager/redeemcodes.cpp
-@@ -0,0 +1,94 @@
+@@ -0,0 +1,127 @@
 +// Offline build: gift codes (the user, 2026-11-21: "Stop Killing Games" and "Welcome", one use each).
 +//
 +// Data/RedeemCodes.json lists the codes, their items and medals (at most 500); the file is read at each use, so a code can be added
 +// without restarting the server. A code is typed in any case, with or without spaces or dashes. An account that
 +// used a code has the counter "Code:<CODE>" (mode -1) set: it can't use it again. Typed in the shop page
 +// ("Redeem a code", POST /api/redeem) or with /redeem <code> in the lobby chat.
++// A secret code (the Patreon ones: the file ships with every install and is in the public repository) is kept as
++// "Hash": the SHA-256 of the code typed in capitals without spaces or dashes, in hex; its key is only a name.
++#include <wolfssl/options.h>
++#include <wolfssl/wolfcrypt/sha256.h>
++
 +#include "redeemcodes.h"
 +#include "itemmanager.h"
 +#include "userdatabase.h"
@@ -6181,6 +6186,25 @@ index 0000000..cb676d7
 +	return code;
 +}
 +
++static string Sha256Hex(const string& text)
++{
++	unsigned char digest[WC_SHA256_DIGEST_SIZE] = {};
++	wc_Sha256 sha;
++	if (wc_InitSha256(&sha) != 0)
++		return "";
++	wc_Sha256Update(&sha, (const unsigned char*)text.data(), (unsigned int)text.size());
++	wc_Sha256Final(&sha, digest);
++	wc_Sha256Free(&sha);
++	static const char hex[] = "0123456789abcdef";
++	string out;
++	for (unsigned char b : digest)
++	{
++		out += hex[b >> 4];
++		out += hex[b & 15];
++	}
++	return out;
++}
++
 +json RedeemCode(IUser* user, const string& typed, int& status)
 +{
 +	auto fail = [&](int code, const string& message)
@@ -6199,13 +6223,22 @@ index 0000000..cb676d7
 +	if (cfg.is_discarded() || !cfg.contains("Codes") || !cfg["Codes"].is_object())
 +		return fail(500, "The server's code list (Data/RedeemCodes.json) couldn't be read.");
 +	const json* entry = nullptr;
++	string name, hash = Sha256Hex(code);
 +	for (auto& c : cfg["Codes"].items())
-+		if (NormalizeCode(c.key()) == code)
++	{
++		string want = c.value().value("Hash", "");
++		for (auto& ch : want)
++			ch = (char)tolower((unsigned char)ch);
++		if (want.empty() ? NormalizeCode(c.key()) == code : (!hash.empty() && want == hash))
++		{
 +			entry = &c.value();
++			name = NormalizeCode(c.key());
++		}
++	}
 +	if (!entry)
 +		return fail(404, "That code doesn't exist.");
 +
-+	string counter = "Code:" + code;
++	string counter = "Code:" + name; // (a secret code's counter has its name, not the code)
 +	vector<UserCounter_s> counters;
 +	g_UserDatabase.GetCounters(user->GetID(), counters);
 +	for (auto& c : counters)
@@ -6232,7 +6265,7 @@ index 0000000..cb676d7
 +		else
 +		{
 +			failed++;
-+			Logger().Warn("RedeemCode: user %d, code %s: item %d x%d (%d days) not added (%d)\n", user->GetID(), code.c_str(),
++			Logger().Warn("RedeemCode: user %d, code %s: item %d x%d (%d days) not added (%d)\n", user->GetID(), name.c_str(),
 +				itemID, count, days, result);
 +		}
 +	}
@@ -6240,7 +6273,7 @@ index 0000000..cb676d7
 +	int medals = min(max(entry->value("Medals", 0), 0), 500);
 +	if (medals)
 +		user->UpdatePoints(medals);
-+	Logger().Info("RedeemCode: user %d used code %s: %d items added, %d failed, %d medals\n", user->GetID(), code.c_str(), added,
++	Logger().Info("RedeemCode: user %d used code %s: %d items added, %d failed, %d medals\n", user->GetID(), name.c_str(), added,
 +		failed, medals);
 +	string message = entry->value("Message", "Code redeemed: the items are in your inventory.");
 +	if (failed)

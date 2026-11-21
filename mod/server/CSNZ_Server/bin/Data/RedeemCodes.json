@@ -35,8 +35,9 @@
 				{ "ItemID": 173, "Count": 5 }               // Advanced Decoder
 			]
 		},
-		// for Patreon supporters
+		// for Patreon supporters: secret codes, only their SHA-256 here (the codes are given on Patreon)
 		"PATREON1": {
+			"Hash": "f9695da9a3f0d6c1eb88370a9804e0313f844bbc7a1bbde75b196256ed57d80a", // the code is secret (given on Patreon)
 			"Message": "Thank you for your support! JANUS-7, Advanced Decoders, Point Coupons, Bingo Tickets and 250 medals added.",
 			"Medals": 250,
 			"Items": [
@@ -47,6 +48,7 @@
 			]
 		},
 		"PATREON2": {
+			"Hash": "21a7fd2bf87d8a02ec691ef090a56ab30160879cb1fffc3fbc61e5f52c95c6c2", // the code is secret (given on Patreon)
 			"Message": "Thank you for your support! JANUS-7, Gungnir, decoders, Point Coupons, Bingo Tickets and 500 medals added.",
 			"Medals": 500,
 			"Items": [

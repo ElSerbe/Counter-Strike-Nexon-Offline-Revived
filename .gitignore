@@ -90,3 +90,6 @@ mod/server/CSNZ_Server/bin/Data/Studio/resources/*
 
 # third-party downloads kept for study (another offline server's launcher and fixtrike.nar): never committed
 /otro/
+
+# secret gift codes (only their SHA-256 is in Data/RedeemCodes.json)
+/PATREON_CODES.txt
