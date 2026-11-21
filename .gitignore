@@ -87,3 +87,6 @@ mod/server/CSNZ_Server/bin/Data/Studio/resources/*
 
 # Claude Code settings of this PC
 .claude/
+
+# third-party downloads kept for study (another offline server's launcher and fixtrike.nar): never committed
+/otro/

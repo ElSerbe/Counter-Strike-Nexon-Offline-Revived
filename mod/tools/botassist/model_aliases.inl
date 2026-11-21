@@ -40,6 +40,70 @@ static void LoadFileOverrides()
     }
 }
 
+// Files the game lacks that botassist makes from one of its own (2026-11-21): the Gravity Repulsor's flat ring,
+// sprites/ef_leapstrikegun_explo_h.spr (and the Abyss Repulsor's ex one), is the game's ef_leapstrikegun_explo.spr (a
+// blue ring, 15 DDS frames; the Abyss one a red triangle) with its sprite type 2 (always facing the viewer) made 3
+// (oriented: it lies the way its entity is turned). The original drew it flat where a round lands (the horizontal
+// blue line of the user's video). Another offline server ("fixtrike.nar", 2026-11-21) ships it as a file; botassist
+// writes it into botassist_tables\sprites from the player's own game file the first time it is asked for, so no game
+// file is in the mod. Open slot 12, Close +0x34, Size +0x44, Read +0x5c (nartool.cpp).
+static void* g_fsSelf = nullptr;
+static void* HookedFsOpenForward(void* self, const char* name);
+typedef void(__fastcall* FsCloseFn)(void* self, void* edx, void* h);
+typedef unsigned int(__fastcall* FsSizeFn)(void* self, void* edx, void* h);
+typedef int(__fastcall* FsReadFn)(void* self, void* edx, void* buf, int size, void* h);
+
+static std::string DerivedFile(void* self, const std::string& n, const char* pathID)
+{
+    static const char* kDerived[][2] = {
+        { "sprites/ef_leapstrikegun_explo_h.spr", "sprites/ef_leapstrikegun_explo.spr" },
+        { "sprites/ef_leapstrikegunex_explo_h.spr", "sprites/ef_leapstrikegunex_explo.spr" } };
+    for (auto& d : kDerived)
+    {
+        if (n != d[0])
+            continue;
+        std::string dir = std::string(g_dir) + "botassist_tables\\sprites\\";
+        std::string path = dir + (strrchr(d[0], '/') + 1);
+        if (GetFileAttributesA(path.c_str()) != INVALID_FILE_ATTRIBUTES)
+            return path;
+        void* h = g_fsOpen(self, nullptr, d[1], "rb", pathID);
+        if (!h)
+            return "";
+        void** vt = *(void***)self;
+        unsigned int size = ((FsSizeFn)vt[0x44 / 4])(self, nullptr, h);
+        std::vector<unsigned char> buf(size);
+        int got = size ? ((FsReadFn)vt[0x5c / 4])(self, nullptr, buf.data(), (int)size, h) : 0;
+        ((FsCloseFn)vt[0x34 / 4])(self, nullptr, h);
+        if (got != (int)size || size < 64 || memcmp(buf.data(), "IDSP", 4) || buf[8] != 2)
+        {
+            Log("file %s: the game's %s isn't the sprite expected, not made", d[0], d[1]);
+            return "";
+        }
+        buf[8] = 3; // SPR_ORIENTED
+        CreateDirectoryA((std::string(g_dir) + "botassist_tables").c_str(), nullptr);
+        CreateDirectoryA(dir.c_str(), nullptr);
+        FILE* f = fopen(path.c_str(), "wb");
+        if (!f)
+            return "";
+        fwrite(buf.data(), 1, buf.size(), f);
+        fclose(f);
+        Log("file %s: made from the game's %s", d[0], d[1]);
+        return path;
+    }
+    return "";
+}
+
+// whether the game can open `name` (with botassist's additions); the server must not precache what isn't there
+static bool GameFileExists(const char* name)
+{
+    if (!g_fsSelf || !g_fsOpen)
+        return false;
+    void* h = HookedFsOpenForward(g_fsSelf, name);
+    if (h)
+        ((FsCloseFn)(*(void***)g_fsSelf)[0x34 / 4])(g_fsSelf, nullptr, h);
+    return h != nullptr;
+}
+
 // the alias path of a missing weapon model ("" when it isn't one)
 static std::string ModelAlias(const char* name)
 {
@@ -83,6 +147,15 @@ static void* __fastcall HookedFsOpen(void* self, void* edx, const char* name, co
     void* h = g_fsOpen(self, edx, name, options, pathID);
     if (h || !options || options[0] != 'r')
         return h;
+    if (name && strstr(name, "_explo_h"))
+    {
+        std::string n = name;
+        for (auto& ch : n)
+            ch = ch == '\\' ? '/' : (char)tolower((unsigned char)ch);
+        std::string path = DerivedFile(self, n, pathID);
+        if (!path.empty())
+            return g_fsOpen(self, edx, path.c_str(), options, pathID);
+    }
     std::string alias = ModelAlias(name);
     if (alias.empty())
         return h;
@@ -91,6 +164,11 @@ static void* __fastcall HookedFsOpen(void* self, void* edx, const char* name, co
     if (reports++ < 60)
         Log("model aliases: %s isn't in the game files: %s shown instead%s", name, alias.c_str(), h ? "" : " (not there either)");
     return h;
+}
+
+static void* HookedFsOpenForward(void* self, const char* name)
+{
+    return HookedFsOpen(self, nullptr, name, "rb", "GAME");
 }
 
 static void InstallModelAliases()
@@ -117,8 +195,7 @@ static void InstallModelAliases()
     void** vt = iface && Readable(iface, 4) ? *(void***)iface : nullptr;
     IMAGE_NT_HEADERS* nt = (IMAGE_NT_HEADERS*)((unsigned char*)fs + ((IMAGE_DOS_HEADER*)fs)->e_lfanew);
     DWORD lo = (DWORD)fs, hi = lo + nt->OptionalHeader.SizeOfImage;
-    if (!vt || !Readable(vt + FS_SLOT_OPEN, 4) || (g_modelAliases.empty() && g_fileOverrides.empty()) || (DWORD)vt[FS_SLOT_OPEN] < lo ||
-        (DWORD)vt[FS_SLOT_OPEN] >= hi)
+    if (!vt || !Readable(vt + FS_SLOT_OPEN, 4) || (DWORD)vt[FS_SLOT_OPEN] < lo || (DWORD)vt[FS_SLOT_OPEN] >= hi)
     {
         Log("model aliases: %d weapons, file system %s: not hooked", (int)g_modelAliases.size(), iface ? "unexpected" : "not found");
         return;
@@ -126,6 +203,7 @@ static void InstallModelAliases()
     if (vt[FS_SLOT_OPEN] == (void*)HookedFsOpen)
         return;
     g_fsOpen = (FsOpenFn)vt[FS_SLOT_OPEN];
+    g_fsSelf = iface;
     DWORD old;
     VirtualProtect(vt + FS_SLOT_OPEN, sizeof(void*), PAGE_READWRITE, &old);
     vt[FS_SLOT_OPEN] = (void*)HookedFsOpen;

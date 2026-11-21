@@ -188,8 +188,11 @@ static float SfLsgBonus(void* player)
 // lived entity. Sprites are 256 px: TE_EXPLOSION's scale is in tenths, 10 = 256 units.
 static const int LSG_FX_SHOOT = 0, LSG_FX_HIT = 1, LSG_FX_JUMP = 2, LSG_FX_FLY = 3;
 static int g_lsgSprite[2][4] = {};
+static bool g_lsgRing[2] = {}; // the flat ring (ef_leapstrikegun_explo_h.spr, made by model_aliases.inl) precached
+static const char* kLsgRing[2] = { "sprites/ef_leapstrikegun_explo_h.spr", "sprites/ef_leapstrikegunex_explo_h.spr" };
 static std::string g_lsgFxMap; // the map they were precached for
 static const int SF_EV_SEQUENCE = 0x138, SF_EV_FRAME = 0x140, SF_EV_ANIMTIME = 0x144, SF_EV_FRAMERATE = 0x148;
+static const int SF_EV_SCALE = 0x154, SF_EV_RENDERMODE = 0x160, SF_EV_RENDERAMT = 0x164; // (mp.dll's entvars save table)
 
 static void SfLsgPrecache(PrecacheFn model, PrecacheFn sound)
 {
@@ -202,6 +205,9 @@ static void SfLsgPrecache(PrecacheFn model, PrecacheFn sound)
         for (int k = 0; k < 4; k++)
             g_lsgSprite[g][k] = model(kSprites[g][k]);
     model("models/ef_leapstrikegun_landing.mdl");
+    for (int g = 0; g < 2; g++) // only when the file could be made: a missing model stops the map
+        if ((g_lsgRing[g] = GameFileExists(kLsgRing[g])))
+            model(kLsgRing[g]);
     model("models/ef_leapstrikegunex_landing.mdl");
     sound("weapons/leapstrikegun-1_exp.wav");
     sound("weapons/leapstrikegunex-1_exp.wav");
@@ -241,6 +247,8 @@ struct SfFx
     void* priv;
     float until;
     int level;
+    float start = 0, fps = 0; // a sprite: its frame follows the clock (sprites don't play by themselves)
+    int frames = 0;
 };
 static std::vector<SfFx> g_sfFx;
 
@@ -271,6 +279,27 @@ static void SfFxSpawn(V3 at, const char* model, const char* sound, float life)
     g_sfFx.push_back({ edict, priv, Now() + life, g_nav.level });
 }
 
+// the round's flat ring where it lands: the oriented sprite on an entity lying flat (pitch 90), additive
+static void SfLsgRing(bool ex, V3 at, float scale)
+{
+    if (!g_lsgRing[ex ? 1 : 0] || !SfLsgFxReady())
+        return;
+    SfFxSpawn(at, kLsgRing[ex ? 1 : 0], nullptr, 0.5f);
+    if (g_sfFx.empty())
+        return;
+    SfFx& f = g_sfFx.back();
+    unsigned char* v = Vars(f.edict);
+    float* ang = (float*)(v + EV_ANGLES);
+    ang[0] = 90.0f, ang[1] = 0, ang[2] = 0;
+    F<float>(v, SF_EV_FRAMERATE) = 0;
+    F<float>(v, SF_EV_SCALE) = scale;
+    F<int>(v, SF_EV_RENDERMODE) = 5; // kRenderTransAdd
+    F<float>(v, SF_EV_RENDERAMT) = 255.0f;
+    f.start = Now();
+    f.fps = 30.0f;
+    f.frames = 15;
+}
+
 static void SfFxFrame(float now)
 {
     for (size_t i = 0; i < g_sfFx.size();)
@@ -279,6 +308,8 @@ static void SfFxFrame(float now)
         bool alive = f.level == g_nav.level && *(int*)f.edict == 0 && PrivateOf(f.edict) == f.priv;
         if (alive && now < f.until)
         {
+            if (f.frames)
+                F<float>(Vars(f.edict), SF_EV_FRAME) = (std::min)((float)(f.frames - 1), (now - f.start) * f.fps);
             i++;
             continue;
         }
@@ -303,6 +334,7 @@ static void SfLsgShot(void* player, void* weapon, const float* hit)
     V3 at = Vec(hit);
     SfLsgSprite(ex, LSG_FX_HIT, at, 6, 30);
     SfLsgSprite(ex, LSG_FX_SHOOT, at, 4, 40);
+    SfLsgRing(ex, at, 0.8f);
     SfFxSpawn(at, nullptr, ex ? "weapons/leapstrikegunex-1_exp.wav" : "weapons/leapstrikegun-1_exp.wav", 1.0f);
     SfArea(Origin(player), player, ByMode(6, 80, 120) * SfLsgBonus(player), 150.0f, 260.0f, 0, 0);
 }
