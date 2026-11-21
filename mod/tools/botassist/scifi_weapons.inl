@@ -14,12 +14,13 @@
 //    after landing). The gauge restarts at 20% plus 5% for each enemy hit (at most 80%).
 // Giga Break (weapon_beamgun)
 //  - left click: bullets with a blast; every 6th shot in a row releases a bigger one.
-//  - right click: swings that hit what's in front; the second of a combo also sends an energy wave forward (and in
-//    zombie modes and Super Soldier a small black hole where it ends) and creates Overflow-Alpha (4 s).
-//  - special ammunition charges by itself (30 s); R with it full: Overflow-Beta (10 s).
-//  - in Overflow (the weapon's state +0x1c0 = 1/2, end time +0x1cc, the game's own animations): left click = Overflow
-//    Burst (a big blast where you aim), right click = Overflow Crash (a dash that crashes into the area in front, no
-//    damage taken meanwhile).
+//  - right click: swings that hit what's in front; the first one's energy wave goes forward; the second one in a row
+//    (in zombie modes and Super Soldier also a small black hole) and the game itself starts Overflow-Alpha.
+//  - special ammunition (weapon +0x168) charges by itself in 30 s; both mouse buttons together with it full: the game
+//    itself starts Overflow-Beta (its 0x10bab850).
+//  - in Overflow (the weapon's state +0x1c0 = 1/2, countdown +0x1cc, the game's own animations): left click = Overflow
+//    Burst (one far target hit very hard), right click = Overflow Crash (a jump forward that the game ends with a fall,
+//    its state +0x178; the landing crashes into the area; no damage taken meanwhile).
 //  - zombie modes and Zombie Scenario: the Wingman shoots up to 2 enemies every 0.8 s; Overflow Shield (after 80 s
 //    with it, 60 in scenario, and 20 hits): a hit that would kill is stopped, the zombies around pushed and hurt;
 //    then 60 s before it can come back.
@@ -47,7 +48,7 @@ struct SfPlayer
     bool betaTold = false;
     float lastSwing = -100, lastShot = -100;
     int shotRun = 0;
-    float crashUntil = 0, crashAt = 0;
+    float crashUntil = 0, waveAt = 0;
     float overflowUntil = 0; // Giga Break: when its Overflow ends (botassist keeps the weapon's own timer with it)
     float heldSecs = 0;    // Giga Break in hand (shield)
     int hits = 0;
@@ -295,15 +296,6 @@ static bool SfWingmanMode()
     return ZombieMode(GameMode());
 }
 
-static void SfEnterOverflow(SfPlayer& s, void* weapon, float secs)
-{
-    unsigned char* w = (unsigned char*)weapon;
-    *(int*)(w + WPN_STATE_GB) = 1;
-    *(float*)(w + WPN_STATE_END_GB) = secs; // the weapon's times count down to 0 (UTIL_WeaponTimeBase is 0)
-    s.overflowUntil = Now() + secs;
-    if (g_sendWeaponAnim)
-        g_sendWeaponAnim(weapon, nullptr, 6 /* change_idle_charge */, 0);
-}
 
 // The user's video ("CSN:S Review Giga Break & Giga Break LE", training room against a zombie target, 2026-11-21):
 // basic shots ~865 each (bullet + blast), and after a run of shots a bigger release (~1290); right click = melee swings
@@ -311,8 +303,27 @@ static void SfEnterOverflow(SfPlayer& s, void* weapon, float secs)
 // right click dashes into the target behind a hexagon shield (Overflow Crash, ~1920) and the left click hits one far
 // target very hard (Overflow Burst, ~17000). The special ammunition gauge (bottom right) fills ~3.3%/s (30 s).
 // Zombie numbers from the video; scenario x3.5 and the others x0.05 (the game's 2400 / 680 / 32 for a bullet).
-static const float GB_ALPHA_S = 4.0f, GB_BETA_S = 10.0f, GB_BETA_PER_S = 3.33f;
-static const int GB_RELEASE_EVERY = 6;
+// The rest is the game's own (mp.dll, 2026-11-21): SecondaryAttack 0x10ba0ff0 plays shootB1 (2) or, pressed again in
+// time, shootB2 (3) and sets +0x64 = 2/3 with an end time +0x1dc; when it ends 0x10ba1570 sends shootB1's event (the
+// wave) or, after shootB2, starts Overflow-Alpha (+0x1c0 = 1, +0x1cc its length). 0x10bab850 (every frame) marks the
+// weapon charged (pev +0x120) when the special ammunition (+0x168, vfunc 0x2ec) reaches its prop value (+0x204 prop,
+// +0x230) and, with both buttons down (player +0xec4 & 0x801), starts Overflow-Beta (+0x1c0 = 2) and spends it. In
+// Overflow the right click sets +0x178 = 1 (Crash), 0x10baba70 then pulls the player down and on landing sets 3 and
+// plays the end. What the server code doesn't have any more: the charging, every damage, the Crash's jump. The
+// user (2026-11-21): in the video's first 7 s it's only shots and a reload.
+static const float GB_BETA_FULL_S = 30.0f;
+static const int GB_RELEASE_EVERY = 6, WPN_GB_SPECIAL = 0x168, WPN_GB_CRASH = 0x178, WPN_PROP = 0x204,
+                 PROP_GB_SPECIAL_MAX = 0x230;
+static const DWORD MP_PROP_GET = 0x106444d0; // float thiscall(prop value, 0)
+typedef float(__fastcall* PropGetFn)(void* value, void* edx, int index);
+
+static float SfGbSpecialMax(void* weapon)
+{
+    unsigned char* prop = *(unsigned char**)((unsigned char*)weapon + WPN_PROP);
+    if (!prop || !Readable(prop + PROP_GB_SPECIAL_MAX, 8))
+        return 0;
+    return ((PropGetFn)(MP_PROP_GET + g_mpDelta))(prop + PROP_GB_SPECIAL_MAX, nullptr, 0);
+}
 
 static float SfGb(float zombie, float pvp)
 {
@@ -352,8 +363,6 @@ static void SfBgWave(void* player)
     float len = tr.flFraction * 700.0f;
     for (float d = 80.0f; d < len; d += 110.0f)
         SfArea(eye + aim * d, player, SfGb(300, 25) / 2, 90.0f, 350.0f, 120.0f, d < 100 ? 20 : 0);
-    if (SfBlackHoleMode()) // zombie modes and Super Soldier: a small black hole where the wave ends
-        g_sfPulls.push_back({ eye + aim * (std::max)(0.0f, len - 30.0f), player, Now() + 1.5f });
 }
 
 // gun_fixes.inl, after the game's SecondaryAttack when it did something
@@ -366,14 +375,14 @@ static void SfBgSecondary(void* player, void* weapon, int anim)
     float now = Now();
     if (anim == 2 || anim == 3)
     {
-        // a swing: what's in front of the player
+        // a swing: what's in front of the player; the first one's wave follows (shootB1's event), the second one in
+        // zombie modes and Super Soldier leaves a black hole (the game starts Overflow-Alpha by itself after it)
         V3 front = Eye(player) + SfAim(player) * 80.0f;
         SfArea(front, player, SfGb(96, 35), 120.0f, 250.0f, 100.0f, 0);
-        if (anim == 3 && now - s.lastSwing < 2.0f && *(int*)((unsigned char*)weapon + WPN_STATE_GB) == 0)
-        {
-            SfBgWave(player); // the combo's end: the wave, then Overflow-Alpha
-            SfEnterOverflow(s, weapon, GB_ALPHA_S);
-        }
+        if (anim == 2)
+            s.waveAt = now + 0.45f;
+        else if (SfBlackHoleMode())
+            g_sfPulls.push_back({ Eye(player) + SfAim(player) * 250.0f, player, now + 1.5f });
         s.lastSwing = now;
     }
     else if (anim == 0xb)
@@ -383,12 +392,11 @@ static void SfBgSecondary(void* player, void* weapon, int anim)
         float* vel = (float*)(Vars(player) + EV_VELOCITY);
         float l = Len2D(aim);
         aim = l > 0.1f ? V3{ aim.x / l, aim.y / l, 0 } : V3{ 1, 0, 0 };
-        vel[0] = aim.x * 1300.0f;
-        vel[1] = aim.y * 1300.0f;
-        vel[2] = 140.0f;
-        s.crashAt = now + 0.35f;
-        s.crashUntil = now + 0.35f;
-        s.invulnUntil = now + 0.9f;
+        vel[0] = aim.x * 900.0f;
+        vel[1] = aim.y * 900.0f;
+        vel[2] = 330.0f; // the jump; the game pulls him down and lands it (+0x178 = 3)
+        s.crashUntil = now + 3.0f;
+        s.invulnUntil = now + 3.0f;
     }
 }
 
@@ -399,44 +407,51 @@ static void SfBgFrame(void* player, SfPlayer& s, void* weapon, bool active, int 
     unsigned char* w = (unsigned char*)weapon;
     int state = *(int*)(w + WPN_STATE_GB);
     s.heldSecs += dt;
+    // the Overflow's countdown (+0x1cc, set by the game to its length when it starts): kept with the clock, so it
+    // ends whether or not something counts it down; the game ends the state itself when it goes below 0
+    if (state != 0 && s.overflowUntil == 0)
+        s.overflowUntil = now + (std::max)(0.5f, *(float*)(w + WPN_STATE_END_GB));
+    else if (state == 0)
+        s.overflowUntil = 0;
     if (s.overflowUntil > 0)
+        *(float*)(w + WPN_STATE_END_GB) = s.overflowUntil - now;
+    // the special ammunition charges (its full value is the weapon's prop); full, the game shows it charged and both
+    // buttons start Overflow-Beta
+    if (state == 0)
     {
-        if (state == 0)
-            s.overflowUntil = 0; // the game ended it (its last Burst)
-        else if (now >= s.overflowUntil)
+        float full = SfGbSpecialMax(weapon);
+        int* special = (int*)(w + WPN_GB_SPECIAL);
+        if (full > 0 && *special < (int)full)
         {
-            *(int*)(w + WPN_STATE_GB) = 0;
-            *(float*)(w + WPN_STATE_END_GB) = 0;
-            s.overflowUntil = 0;
-            state = 0;
-            if (g_sendWeaponAnim)
-                g_sendWeaponAnim(weapon, nullptr, 7 /* change_charge_idle */, 0);
+            s.beta += dt * full / GB_BETA_FULL_S;
+            int add = (int)s.beta;
+            if (add > 0)
+            {
+                s.beta -= add;
+                *special = (std::min)((int)full, *special + add);
+                if (*special >= (int)full && !s.betaTold)
+                {
+                    s.betaTold = true;
+                    SfSay(player, "Giga Break: special ammunition charged - both mouse buttons: Overflow-Beta");
+                }
+            }
         }
-        else
-            *(float*)(w + WPN_STATE_END_GB) = s.overflowUntil - now;
+        else if (full > 0 && *special < (int)full / 2)
+            s.betaTold = false;
     }
-    if (state == 0 && s.beta < 100)
+    // the energy wave of the first swing
+    if (s.waveAt && now >= s.waveAt)
     {
-        s.beta = (std::min)(100.0f, s.beta + dt * GB_BETA_PER_S);
-        if (s.beta >= 100 && !s.betaTold)
-        {
-            s.betaTold = true;
-            SfSay(player, "Giga Break: special ammunition charged - R: Overflow-Beta");
-        }
+        s.waveAt = 0;
+        SfBgWave(player);
     }
-    if ((pressed & IN_RELOAD) && state == 0 && s.beta >= 100)
+    // Overflow Crash: the game lands it (+0x178 3 or back to 0): the crash
+    int crash = *(int*)(w + WPN_GB_CRASH);
+    if (s.crashUntil && (crash == 3 || crash == 0 || now > s.crashUntil))
     {
-        s.beta = 0;
-        s.betaTold = false;
-        SfEnterOverflow(s, weapon, GB_BETA_S);
-    }
-    if (s.crashAt && now >= s.crashAt)
-    {
-        s.crashAt = 0;
-        V3 front = Origin(player) + SfAim(player) * 60.0f;
-        SfArea(front, player, SfGb(1920, 90), 200.0f, 700.0f, 250.0f, 35);
-        if (g_sendWeaponAnim)
-            g_sendWeaponAnim(weapon, nullptr, 13 /* charge_shootB_end */, 0);
+        s.crashUntil = 0;
+        SfArea(Origin(player) + SfAim(player) * 40.0f - V3{ 0, 0, 20 }, player, SfGb(1920, 90), 200.0f, 700.0f, 250.0f, 35);
+        s.invulnUntil = now + 0.5f;
     }
     if (SfWingmanMode() && now >= s.nextWingman)
     {
