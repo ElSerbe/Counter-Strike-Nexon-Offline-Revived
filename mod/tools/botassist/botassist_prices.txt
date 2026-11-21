@@ -5,6 +5,7 @@
 ; InGameID = Item.csv's 6th column. "cap" = the highest price botassist sets (a price is never lowered).
 cap 16000
 725 x4   ; Giga Break (beamgun, 9637)
+726 x4   ; Giga Break LE (beamgunle, 9638)
 530 x4   ; Asura Hell Splitter (wondercannonex, 8709)
 591 x4   ; Space Arbalest (halogunex, 9098)
 537 x4   ; Arbalest (halogun, 8787)

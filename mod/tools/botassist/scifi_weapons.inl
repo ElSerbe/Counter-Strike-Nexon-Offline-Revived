@@ -59,7 +59,7 @@ struct SfPlayer
     float lastFrame = 0;
     void* drone = nullptr; // the Wingman's drone (an info_target), its private data
     void* droneEdict = nullptr;
-    float droneSide = 1;
+    bool droneLe = false;
     int level = -1;
 };
 static SfPlayer g_sf[33];
@@ -460,6 +460,13 @@ static void SfBgSecondary(void* player, void* weapon, int anim)
 // not solid) to a spot beside the player's head, facing where he looks; removed when the Giga Break isn't in hand.
 static const int SF_EV_MOVETYPE = 0x118, SF_MOVETYPE_NOCLIP = 8;
 
+// Giga Break or Giga Break LE (weapon_beamgunle: CBeamGunLe shares every function of CBeamGun but its precache, its
+// prop and its Wingman model; client.dll picks the LE's sprites and models itself, InGameID 0x2d6)
+static bool SfIsGb(const char* cls)
+{
+    return !strcmp(cls, "weapon_beamgun") || !strcmp(cls, "weapon_beamgunle");
+}
+
 static bool SfDroneAlive(SfPlayer& s)
 {
     return s.droneEdict && *(int*)s.droneEdict == 0 && PrivateOf(s.droneEdict) == s.drone;
@@ -472,7 +479,7 @@ static void SfDroneRemove(SfPlayer& s)
     s.drone = s.droneEdict = nullptr;
 }
 
-static void SfDroneFrame(void* player, SfPlayer& s, bool want)
+static void SfDroneFrame(void* player, SfPlayer& s, bool want, bool le)
 {
     std::string map = String(*(int*)((DWORD)*g_pGlobals + GV_MAPNAME));
     if (!want || g_drumsMap.empty() || map != g_drumsMap)
@@ -480,6 +487,8 @@ static void SfDroneFrame(void* player, SfPlayer& s, bool want)
         SfDroneRemove(s);
         return;
     }
+    if (SfDroneAlive(s) && s.droneLe != le)
+        SfDroneRemove(s); // switched between the Giga Break and its LE: the other drone
     if (!SfDroneAlive(s))
     {
         static const char kClass[] = "info_target";
@@ -492,7 +501,9 @@ static void SfDroneFrame(void* player, SfPlayer& s, bool want)
         float* o = (float*)(v + EV_ORIGIN);
         V3 at = Eye(player);
         o[0] = at.x, o[1] = at.y, o[2] = at.z;
-        (*(SfSetModelFn*)(MP_SET_MODEL + g_mpDelta))(edict, "models/ef_beamgun_wingman.mdl");
+        (*(SfSetModelFn*)(MP_SET_MODEL + g_mpDelta))(edict, le ? "models/ef_beamgunle_wingman.mdl"
+                                                               : "models/ef_beamgun_wingman.mdl");
+        s.droneLe = le;
         F<int>(v, SF_EV_MOVETYPE) = SF_MOVETYPE_NOCLIP;
         F<int>(v, EV_SOLID_OFS) = 0;
         s.drone = priv;
@@ -752,8 +763,8 @@ static void SfFrame()
         __try
         {
             SfLsgFrame(e, s, !strcmp(cls, "weapon_leapstrikegun"), pressed, now, dt);
-            SfBgFrame(e, s, weapon, !strcmp(cls, "weapon_beamgun"), pressed, now, dt);
-            SfDroneFrame(e, s, !strcmp(cls, "weapon_beamgun") && SfWingmanMode());
+            SfBgFrame(e, s, weapon, SfIsGb(cls), pressed, now, dt);
+            SfDroneFrame(e, s, SfIsGb(cls) && SfWingmanMode(), !strcmp(cls, "weapon_beamgunle"));
             if (weapon)
                 SfIgniteFrame(e, s, weapon, !strcmp(cls, "weapon_hegrenade"), pressed, now);
         }
@@ -818,7 +829,7 @@ static float SfOnDamage(void* victimPriv, void* attackerPev, float damage)
             s.heldSecs = 0;
             SfArea(Origin(victim), victim, ByMode(60, 1000, 1500), 250.0f, 900.0f, 250.0f, 0); // (the shield's own effect: event 7)
             void* w = nullptr;
-            if (!strcmp(SfActiveClass(victim, &w), "weapon_beamgun"))
+            if (SfIsGb(SfActiveClass(victim, &w)))
                 SfGbEvent(victim, w, GBEV_SHIELD, 0, 0, 0, 0, 0);
             SfSay(victim, "Giga Break: Overflow Shield!");
             return 0;
@@ -826,7 +837,7 @@ static float SfOnDamage(void* victimPriv, void* attackerPev, float damage)
     }
     void* attacker = attackerPev ? *(void**)((unsigned char*)attackerPev + EV_CONTAINING_ENTITY) : nullptr;
     int ai = attacker && (F<int>((unsigned char*)attackerPev, EV_FLAGS) & FL_CLIENT) ? SfIndex(attacker) : 0;
-    if (ai && attacker != victim && damage > 0 && !strcmp(SfActiveClass(attacker, nullptr), "weapon_beamgun"))
+    if (ai && attacker != victim && damage > 0 && SfIsGb(SfActiveClass(attacker, nullptr)))
         g_sf[ai].hits++;
     return damage;
 }
