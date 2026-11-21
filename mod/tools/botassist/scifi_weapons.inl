@@ -410,7 +410,7 @@ static void SfBgWave(void* player)
     Trace(eye, eye + aim * 700.0f, player, 1, tr);
     float len = tr.flFraction * 700.0f;
     for (float d = 80.0f; d < len; d += 110.0f)
-        SfArea(eye + aim * d, player, SfGb(300, 25) / 2, 90.0f, 350.0f, 120.0f, d < 100 ? 20 : 0);
+        SfArea(eye + aim * d, player, SfGb(300, 25) / 2, 90.0f, 350.0f, 120.0f, 0); // (the wave is the game's effect)
 }
 
 // gun_fixes.inl, after the game's SecondaryAttack when it did something
@@ -501,7 +501,7 @@ static void SfBgFrame(void* player, SfPlayer& s, void* weapon, bool active, int 
     if (s.crashUntil && (crash == 3 || crash == 0 || now > s.crashUntil))
     {
         s.crashUntil = 0;
-        SfArea(Origin(player) + SfAim(player) * 40.0f - V3{ 0, 0, 20 }, player, SfGb(1920, 90), 200.0f, 700.0f, 250.0f, 35);
+        SfArea(Origin(player) + SfAim(player) * 40.0f - V3{ 0, 0, 20 }, player, SfGb(1920, 90), 200.0f, 700.0f, 250.0f, 0);
         s.invulnUntil = now + 0.5f;
     }
     if (SfWingmanMode() && now >= s.nextWingman)
@@ -737,7 +737,7 @@ static float SfOnDamage(void* victimPriv, void* attackerPev, float damage)
             s.shieldBack = now + 60.0f;
             s.hits = 0;
             s.heldSecs = 0;
-            SfArea(Origin(victim), victim, ByMode(60, 1000, 1500), 250.0f, 900.0f, 250.0f, 30);
+            SfArea(Origin(victim), victim, ByMode(60, 1000, 1500), 250.0f, 900.0f, 250.0f, 0); // (the shield's own effect: event 7)
             void* w = nullptr;
             if (!strcmp(SfActiveClass(victim, &w), "weapon_beamgun"))
                 SfGbEvent(victim, w, GBEV_SHIELD, 0, 0, 0, 0, 0);

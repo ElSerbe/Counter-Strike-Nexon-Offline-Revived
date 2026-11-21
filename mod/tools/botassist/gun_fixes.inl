@@ -176,7 +176,7 @@ static bool GunBullet(void* weapon, float spread, int damage, int penetration, i
 static void GunBlast(const float* at, unsigned char* attackerPev, float damage, float radius, int scale)
 {
     GunStep("blast", "explosion message");
-    if (g_MessageBegin && g_WriteByte && g_WriteShort && g_WriteCoord && g_MessageEnd)
+    if (scale > 0 && g_MessageBegin && g_WriteByte && g_WriteShort && g_WriteCoord && g_MessageEnd) // 0: no sprite
     {
         g_MessageBegin(4 /* MSG_PVS */, 23 /* SVC_TEMPENTITY */, at, nullptr);
         g_WriteByte(3); // TE_EXPLOSION
