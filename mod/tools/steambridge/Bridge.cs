@@ -51,6 +51,9 @@ namespace SteamBridge
         ulong myLobby;
         ulong pendingCreate, pendingList;
         string publishedRooms = null;
+        bool publishFailLogged;
+        int publishedCount = -1; // the room count last logged
+        readonly DateTime started = DateTime.Now;
 
         class Host
         {
@@ -62,6 +65,7 @@ namespace SteamBridge
             public ulong PendingJoin;
             public DateTime Seen;
             public List<Dictionary<string, object>> Rooms = new List<Dictionary<string, object>>();
+            public int LoggedRooms = -1; // the room count last logged (a change is logged)
             public List<object> Maps = new List<object>(); // the Studio maps this player publishes
             public List<object> Have = new List<object>(); // the share codes of the maps their PC fetched (it can pass them on)
             public UdpClient[] Udp; // the host PC's game, as this PC's game sees it (31000+k*2+portID)
@@ -263,7 +267,29 @@ namespace SteamBridge
         {
             string rooms;
             try { rooms = http.GetStringAsync(apiUrl + "/api/rooms").GetAwaiter().GetResult(); }
-            catch { return; } // the server isn't up (yet)
+            catch (Exception ex)
+            {
+                // the server isn't up (yet); said once a minute in, when it should be: other players see no rooms
+                if (!publishFailLogged && (DateTime.Now - started).TotalSeconds > 60)
+                {
+                    publishFailLogged = true;
+                    log("This PC's rooms can't be published: the local server's " + apiUrl + "/api/rooms doesn't answer (" +
+                        (ex.InnerException ?? ex).Message + "). Other players see this PC's lobby without rooms.");
+                }
+                return;
+            }
+            if (publishFailLogged)
+            {
+                publishFailLogged = false;
+                log("This PC's rooms are published again.");
+            }
+            int count = System.Text.RegularExpressions.Regex.Matches(rooms, "\"entry\"").Count;
+            if (count != publishedCount)
+            {
+                publishedCount = count;
+                log(count == 0 ? "This PC has no room open: other players see no rooms of yours." :
+                                 "This PC's " + count + " room" + (count == 1 ? " is" : "s are") + " visible to other players.");
+            }
             if (rooms == publishedRooms)
                 return;
             publishedRooms = rooms;
@@ -353,6 +379,12 @@ namespace SteamBridge
                             h.Rooms.Add(r);
                 }
                 catch (Exception ex) { log("Bad room list from " + h.Name + ": " + ex.Message); }
+                if (h.Rooms.Count != h.LoggedRooms)
+                {
+                    h.LoggedRooms = h.Rooms.Count;
+                    log(h.Name + (h.Rooms.Count == 0 ? " has no room open (or their server doesn't publish them)" :
+                                  " has " + h.Rooms.Count + " room" + (h.Rooms.Count == 1 ? "" : "s") + " open"));
+                }
                 ReadStudioCatalog(h, lobby);
                 Native.SteamAPI_ISteamNetworking_AcceptP2PSessionWithUser(steam.Networking, owner);
             }

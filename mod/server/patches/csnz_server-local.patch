@@ -1311,7 +1311,7 @@ index 0000000..5c99d8e
 +
 +extern CBingoManager g_BingoManager;
 diff --git a/src/manager/channelmanager.cpp b/src/manager/channelmanager.cpp
-index 35561e8..038bbf6 100644
+index 35561e8..5b82253 100644
 --- a/src/manager/channelmanager.cpp
 +++ b/src/manager/channelmanager.cpp
 @@ -1,4 +1,9 @@
@@ -1673,7 +1673,36 @@ index 35561e8..038bbf6 100644
  	CChannel* channel = user->GetCurrentChannel();
  	if (channel == NULL)
  	{
-@@ -1396,6 +1684,9 @@ bool CChannelManager::OnJoinRoomRequest(CReceivePacket* msg, IUser* user)
+@@ -1294,6 +1582,28 @@ bool CChannelManager::OnJoinRoomRequest(CReceivePacket* msg, IUser* user)
+ 		return false;
+ 	}
+ 
++	// offline build: a room filled up with AI players makes room for a person (a friend coming through the Steam
++	// bridge, say): the last AI player of the joiner's side goes. Not during a match, where the game's own bots play
++	// them and the game server has its own count.
++	if (room->HasFreeSlots() == false && room->GetStatus() != RoomStatus::STATUS_INGAME &&
++		(!room->HasPassword() || room->GetSettings()->password == password))
++	{
++		CRoom* full = static_cast<CRoom*>(room);
++		const auto& bots = full->GetBots();
++		if (!bots.empty())
++		{
++			int id = bots.back().id;
++			for (auto it = bots.rbegin(); it != bots.rend(); ++it)
++				if (it->team == RoomTeamNum::CounterTerrorist) // where a joiner starts (below)
++				{
++					id = it->id;
++					break;
++				}
++			Logger().Info("Room %d is full of AI players: one leaves for '%s'\n", room->GetID(), user->GetLogName());
++			full->RemoveBot(id);
++		}
++	}
++
+ 	if (room->HasFreeSlots() == false)
+ 	{
+ 		g_PacketManager.SendUMsgNoticeMsgBoxToUuid(user->GetExtendedSocket(), OBFUSCATE("ROOM_JOIN_FAILED_FULL"));
+@@ -1396,6 +1706,9 @@ bool CChannelManager::OnJoinRoomRequest(CReceivePacket* msg, IUser* user)
  
  	channel->SendUpdateRoomList(room);
  
@@ -1683,7 +1712,7 @@ index 35561e8..038bbf6 100644
  	Logger().Info("User '%s' joined a room (RID: %d)\n", user->GetLogName(), room->GetID());
  
  	return true;
-@@ -1450,6 +1741,22 @@ bool CChannelManager::OnSetTeamRequest(CReceivePacket* msg, IUser* user)
+@@ -1450,6 +1763,22 @@ bool CChannelManager::OnSetTeamRequest(CReceivePacket* msg, IUser* user)
  	return true;
  }
  
@@ -1706,7 +1735,7 @@ index 35561e8..038bbf6 100644
  bool CChannelManager::OnLeaveRoomRequest(IUser* user)
  {
  	IRoom* currentRoom = user->GetCurrentRoom();
-@@ -1501,6 +1808,10 @@ bool CChannelManager::OnLeaveRoomRequest(IUser* user)
+@@ -1501,6 +1830,10 @@ bool CChannelManager::OnLeaveRoomRequest(IUser* user)
  		}
  
  		currentRoom->RemoveUser(user);
@@ -1717,7 +1746,7 @@ index 35561e8..038bbf6 100644
  	}
  
  	currentChannel->SendFullUpdateRoomList(user);
-@@ -1705,13 +2016,43 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
+@@ -1705,13 +2038,43 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
  		return false;
  	}
  
@@ -1761,7 +1790,7 @@ index 35561e8..038bbf6 100644
  	if (newSettings.familyBattle)
  	{
  		CUserCharacter character = user->GetCharacter(UFLAG_LOW_CLAN);
-@@ -1787,6 +2128,7 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
+@@ -1787,6 +2150,7 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
  		}
  	}
  
@@ -1769,7 +1798,7 @@ index 35561e8..038bbf6 100644
  	currentRoom->UpdateSettings(newSettings);
  
  	// inform every user in the room of the changes
-@@ -1795,6 +2137,10 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
+@@ -1795,6 +2159,10 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
  		currentRoom->SendUpdateRoomSettings(u, roomSettings, newSettings.lowFlag, newSettings.lowMidFlag, newSettings.highMidFlag, newSettings.highFlag);
  	}
  
@@ -1780,7 +1809,7 @@ index 35561e8..038bbf6 100644
  	currentChannel->SendUpdateRoomList(currentRoom);
  
  	Logger().Info("Host '%s' updated room settings (RID: %d)\n", user->GetLogName(), currentRoom->GetID());
-@@ -1921,7 +2267,12 @@ bool CChannelManager::OnRoomKickRequest(CReceivePacket* msg, IUser* user)
+@@ -1921,7 +2289,12 @@ bool CChannelManager::OnRoomKickRequest(CReceivePacket* msg, IUser* user)
  		return false;
  	}
  
@@ -1794,7 +1823,7 @@ index 35561e8..038bbf6 100644
  	if (destUser == NULL)
  	{
  		Logger().Warn("User '%s' tried to kick a user from a room, although destUser == NULL (RID: %d)\n", user->GetLogName(), currentRoom->GetID());
-@@ -2089,7 +2440,7 @@ bool CChannelManager::OnVoxelRoomListRequest(CReceivePacket* msg, IUser* user)
+@@ -2089,7 +2462,7 @@ bool CChannelManager::OnVoxelRoomListRequest(CReceivePacket* msg, IUser* user)
  {
  	string voxel_id = msg->ReadString();
  
@@ -8411,10 +8440,10 @@ index 0000000..62948ed
 +static CCommand studiofetch("studiofetch", "Fetch a Studio map from the other PCs (Steam bridge)", "studiofetch <code>", StudioFetch);
 diff --git a/src/manager/transfer.cpp b/src/manager/transfer.cpp
 new file mode 100644
-index 0000000..4aa532b
+index 0000000..382153f
 --- /dev/null
 +++ b/src/manager/transfer.cpp
-@@ -0,0 +1,250 @@
+@@ -0,0 +1,299 @@
 +#include "transfer.h"
 +#include "main.h"
 +#include "net/sendpacket.h"
@@ -8518,16 +8547,65 @@ index 0000000..4aa532b
 +	return false;
 +}
 +
++// A room list entry (BuildRoomInfo): u8, u32 id, u8, u8, u16, u32 lFlag, u32 hFlag, then with RLFLAG_NAME the name
++// (null-terminated) and, with every flag (what servers publish), u8, u8 password, u8 level, u8 mode, u16 map,
++// u8 players, u8 max players.
++static const size_t ROOM_ENTRY_NAME = 17;
++
++// the host's name before the room's own, "gikokiko: Fire in the hole!": the list doesn't say whose room is whose
++static vector<unsigned char> WithHostName(const vector<unsigned char>& entry, const string& host)
++{
++	if (host.empty() || entry.size() <= ROOM_ENTRY_NAME || !(entry[9] & 1))
++		return entry;
++	size_t end = ROOM_ENTRY_NAME;
++	while (end < entry.size() && entry[end] != 0)
++		end++;
++	if (end >= entry.size())
++		return entry;
++	string name(entry.begin() + ROOM_ENTRY_NAME, entry.begin() + end);
++	string shown = host + ": " + name;
++	if (shown.size() > 60)
++		shown.resize(60);
++	vector<unsigned char> out(entry.begin(), entry.begin() + ROOM_ENTRY_NAME);
++	out.insert(out.end(), shown.begin(), shown.end());
++	out.insert(out.end(), entry.begin() + end, entry.end()); // from the name's terminator on
++	return out;
++}
++
++// "BOT Frank's 'Come get some.' 32/32 (password)": what the player sees, for the log
++static string Describe(const RemoteRoom_s& room)
++{
++	const auto& e = room.entry;
++	size_t end = ROOM_ENTRY_NAME;
++	while (end < e.size() && e[end] != 0)
++		end++;
++	string text = room.host + "'s room " + to_string(room.rid) + " (here " + to_string(room.vid) + ")";
++	if (!(e.size() > 12 && e[9] == 0xff && e[10] == 0xff) || end + 9 > e.size())
++		return text + ", unreadable entry";
++	text += " '" + string(e.begin() + ROOM_ENTRY_NAME, e.begin() + end) + "' mode " + to_string(e[end + 4]) + ", " +
++		to_string(e[end + 7]) + "/" + to_string(e[end + 8]) + (e[end + 2] ? ", password" : "");
++	return text;
++}
++
 +void ServerTransfer::WriteRemoteRooms(CSendPacket* msg, const vector<RemoteRoom_s>& rooms, int count)
 +{
++	static string lastLogged;
++	string summary;
 +	for (int i = 0; i < count && i < (int)rooms.size(); i++)
 +	{
-+		vector<unsigned char> entry = rooms[i].entry;
++		vector<unsigned char> entry = WithHostName(rooms[i].entry, rooms[i].host);
 +		entry[1] = rooms[i].vid & 0xff;
 +		entry[2] = (rooms[i].vid >> 8) & 0xff;
 +		entry[3] = 0;
 +		entry[4] = 0;
 +		msg->WriteArray(entry);
++		summary += (summary.empty() ? "" : "; ") + Describe(rooms[i]);
++	}
++	// once per change: the other players' rooms the room list shows
++	if (summary != lastLogged)
++	{
++		lastLogged = summary;
++		Logger().Info("Online rooms in the room list: %s\n", summary.empty() ? "none" : summary.c_str());
 +	}
 +}
 +
