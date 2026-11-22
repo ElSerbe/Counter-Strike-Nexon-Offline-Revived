@@ -16,4 +16,4 @@ the game starts without asking Steam. Valve's original is kept next to the Steam
 (`mod\tools\steambridge\out\steam_api.dll`): online play always goes through the real Steam with it.
 
 A game that already has the Goldberg build the mod shipped in v1.1.12 to v1.1.15 (2023-05-09) keeps it.
-`CSNZ-Offline-Revived-Launcher.exe --check --goldberg` tests the download (result in `launcher-check.txt`).
+`CSNZ-Revived-Launcher.exe --check --goldberg` tests the download (result in `launcher-check.txt`).

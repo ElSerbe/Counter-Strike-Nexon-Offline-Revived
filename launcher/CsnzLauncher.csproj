@@ -1,13 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- CSNZ Offline Revived launcher: installs and updates the mod from the GitHub releases, prepares the player's own
+  <!-- CSNZ Revived launcher: installs and updates the mod from the GitHub releases, prepares the player's own
        Steam copy of the game (patches, hosts block, server certificate) and starts the local server and the game.
        .NET Framework 4.8 ships with Windows 10 and 11, so the exe runs without installing anything. -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net48</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
-    <AssemblyName>CSNZ-Offline-Revived-Launcher</AssemblyName>
+    <AssemblyName>CSNZ-Revived-Launcher</AssemblyName>
     <RootNamespace>CsnzLauncher</RootNamespace>
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
@@ -18,10 +18,10 @@
     <DebugType>none</DebugType>
     <Company>ItsYuri</Company>
     <Authors>ItsYuri</Authors>
-    <Product>Counter-Strike Nexon Offline Revived</Product>
-    <AssemblyTitle>Installs and updates Counter-Strike Nexon: Offline Revived and starts the game with its local server</AssemblyTitle>
-    <Description>Installs and updates Counter-Strike Nexon: Offline Revived and starts the game with its local server</Description>
-    <Copyright>GPL-3.0, github.com/ElSerbe/Counter-Strike-Nexon-Offline-Revived</Copyright>
+    <Product>Counter-Strike Nexon Revived</Product>
+    <AssemblyTitle>Installs and updates Counter-Strike Nexon: Revived and starts the game with its local server</AssemblyTitle>
+    <Description>Installs and updates Counter-Strike Nexon: Revived and starts the game with its local server</Description>
+    <Copyright>GPL-3.0, github.com/ElSerbe/Counter-Strike-Nexon-Revived</Copyright>
   </PropertyGroup>
 
   <ItemGroup>

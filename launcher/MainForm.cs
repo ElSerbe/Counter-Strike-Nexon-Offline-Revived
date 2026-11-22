@@ -41,7 +41,7 @@ namespace CsnzLauncher
         public MainForm(bool autoPlay = false)
         {
             this.autoPlay = autoPlay;
-            Text = "Counter-Strike Nexon: Offline Revived";
+            Text = "Counter-Strike Nexon: Revived";
             FormBorderStyle = FormBorderStyle.None;
             ClientSize = new Size(980, 640);
             StartPosition = FormStartPosition.CenterScreen;
@@ -188,17 +188,21 @@ namespace CsnzLauncher
             try
             {
                 var desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
-                var link = Path.Combine(desktop, "Counter-Strike Nexon Offline Revived.lnk");
+                var link = Path.Combine(desktop, "Counter-Strike Nexon Revived.lnk");
                 var shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell"));
                 dynamic sc = shell.GetType().InvokeMember("CreateShortcut", System.Reflection.BindingFlags.InvokeMethod, null, shell, new object[] { link });
                 sc.TargetPath = Application.ExecutablePath;
                 sc.Arguments = "--play";
                 sc.WorkingDirectory = Paths.Root;
                 sc.IconLocation = Application.ExecutablePath + ",0";
-                sc.Description = "Counter-Strike Nexon: Offline Revived";
+                sc.Description = "Counter-Strike Nexon: Revived";
                 sc.Save();
+                // the one made under the project's old name (up to v1.1.30) goes
+                var old = Path.Combine(desktop, "Counter-Strike Nexon Offline Revived.lnk");
+                if (File.Exists(old))
+                    File.Delete(old);
                 Log("Desktop shortcut created: it opens the launcher and starts the game.");
-                DarkBox.Show(this, "\"Counter-Strike Nexon Offline Revived\" is on your desktop: it starts the game directly.", Text);
+                DarkBox.Show(this, "\"Counter-Strike Nexon Revived\" is on your desktop: it starts the game directly.", Text);
             }
             catch (Exception ex)
             {
@@ -677,7 +681,10 @@ namespace CsnzLauncher
         // the latest release's mod package, downloaded and installed over the mod (the player's own files are kept)
         void DownloadMod(string token)
         {
-            var zip = latest.Find(n => n.StartsWith("CSNZ-Offline-Revived-", StringComparison.OrdinalIgnoreCase) && n.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
+            // CSNZ-Revived-<version>.zip; up to v1.1.30 the project was "Offline Revived", and releases still carry a
+            // copy under that name for older launchers
+            var zip = latest.Find(n => n.StartsWith("CSNZ-Revived-", StringComparison.OrdinalIgnoreCase) && n.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                      ?? latest.Find(n => n.StartsWith("CSNZ-Offline-Revived-", StringComparison.OrdinalIgnoreCase) && n.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
             if (zip == null)
                 throw new Exception("The release has no mod package (.zip).");
             var tmp = Path.Combine(Path.GetTempPath(), zip.Name);
@@ -882,7 +889,7 @@ namespace CsnzLauncher
     {
         // Opened from the browser's download bar, the launcher runs from a new temporary copy each time (Chrome/Edge:
         // Downloads\scoped_dir..., else %TEMP%): the mod got installed there and every start asked to install it again.
-        // It offers a folder of its own (Documents\CSNZ Offline Revived by default), copies itself there and starts that copy.
+        // It offers a folder of its own (Documents\CSNZ Revived by default), copies itself there and starts that copy.
         static bool MoveOutOfTemporaryFolder()
         {
             var root = Paths.Root;
@@ -891,13 +898,13 @@ namespace CsnzLauncher
                              root.StartsWith(temp, StringComparison.OrdinalIgnoreCase);
             if (!temporary)
                 return false;
-            var target = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "CSNZ Offline Revived");
+            var target = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "CSNZ Revived");
             var answer = DarkBox.Show(
                 "The launcher was opened from a temporary folder (the browser's downloads bar):\n" + root + "\n\n" +
                 "Everything it installs there is lost, and next time it asks to install again.\n\n" +
                 "Yes: move it to " + target + " and open it from there (a desktop shortcut is made too).\n" +
                 "No: choose another folder.\nCancel: keep running from here.",
-                "Counter-Strike Nexon: Offline Revived", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning);
+                "Counter-Strike Nexon: Revived", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning);
             if (answer == DialogResult.Cancel)
                 return false;
             if (answer == DialogResult.No)
@@ -912,7 +919,7 @@ namespace CsnzLauncher
             try
             {
                 Directory.CreateDirectory(target);
-                var exe = Path.Combine(target, "CSNZ-Offline-Revived-Launcher.exe");
+                var exe = Path.Combine(target, "CSNZ-Revived-Launcher.exe");
                 File.Copy(Application.ExecutablePath, exe, true);
                 foreach (var keep in new[] { "launcher.json" })
                     if (File.Exists(Path.Combine(root, keep)) && !File.Exists(Path.Combine(target, keep)))
@@ -922,7 +929,7 @@ namespace CsnzLauncher
                     var desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
                     var shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell"));
                     dynamic sc = shell.GetType().InvokeMember("CreateShortcut", System.Reflection.BindingFlags.InvokeMethod, null, shell,
-                        new object[] { Path.Combine(desktop, "Counter-Strike Nexon Offline Revived Launcher.lnk") });
+                        new object[] { Path.Combine(desktop, "Counter-Strike Nexon Revived Launcher.lnk") });
                     sc.TargetPath = exe;
                     sc.WorkingDirectory = target;
                     sc.IconLocation = exe + ",0";
@@ -934,7 +941,7 @@ namespace CsnzLauncher
             }
             catch (Exception ex)
             {
-                DarkBox.Show("Couldn't move the launcher: " + ex.Message, "Counter-Strike Nexon: Offline Revived");
+                DarkBox.Show("Couldn't move the launcher: " + ex.Message, "Counter-Strike Nexon: Revived");
                 return false;
             }
         }

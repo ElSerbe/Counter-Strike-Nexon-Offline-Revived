@@ -1,9 +1,10 @@
-"""Builds a release of CSNZ Offline Revived into dist/ (at the repository's root):
+"""Builds a release of CSNZ Revived into dist/ (at the repository's root):
 
-  dist/CSNZ-Offline-Revived-<version>.zip      the mod: every file Git tracks under mod/ at HEAD, the built binaries
-                                               (botassist.asi, CSNZ_Server.exe and its DLLs, nartool.exe) and
-                                               mod/patches.json (the client patches with their file offsets)
-  dist/CSNZ-Offline-Revived-Launcher.exe       the launcher (launcher/, .NET Framework 4.8)
+  dist/CSNZ-Revived-<version>.zip          the mod: every file Git tracks under mod/ at HEAD, the built binaries
+                                           (botassist.asi, CSNZ_Server.exe and its DLLs, nartool.exe) and
+                                           mod/patches.json (the client patches with their file offsets)
+  dist/CSNZ-Offline-Revived-<version>.zip  the same zip under the project's old name, for launchers up to v1.1.30
+  dist/CSNZ-Revived-Launcher.exe           the launcher (launcher/, .NET Framework 4.8)
 
 No file of the game goes in: the launcher patches the player's own Steam copy. Nor does anything of the player's:
 accounts (UserDatabase.db3), the server's certificate and key (the launcher makes them on each PC), logs, backups,
@@ -55,6 +56,8 @@ SIGNED = [
 ]
 # tracked but not for players
 LEAVE_OUT = ["mod/CSNZ_Offline.ps1"]  # the developer's old launcher (his paths)
+# the project's name until v1.1.30 ("Counter-Strike Nexon: Offline Revived")
+LEGACY_PREFIX = "CSNZ-Offline-Revived-"
 
 
 def patch_list(version: str) -> dict:
@@ -87,7 +90,7 @@ def sign(files):
         return
     stamp = os.environ.get("CSNZ_SIGN_TIMESTAMP", "http://time.certum.pl")
     subprocess.run([signtool(), "sign", "/sha1", cert, "/fd", "sha256", "/tr", stamp, "/td", "sha256",
-                    "/d", "Counter-Strike Nexon: Offline Revived", "/du", "https://github.com/ElSerbe/Counter-Strike-Nexon-Offline-Revived",
+                    "/d", "Counter-Strike Nexon: Revived", "/du", "https://github.com/ElSerbe/Counter-Strike-Nexon-Revived",
                     *[str(f) for f in files]], check=True)
     subprocess.run([signtool(), "verify", "/pa", *[str(f) for f in files]], check=True, stdout=subprocess.DEVNULL)
     print(f"signed {len(files)} files")
@@ -106,7 +109,7 @@ def main():
 
     # the mod at HEAD, as Git has it
     tar = subprocess.run(["git", "-C", str(ROOT), "archive", "--format=tar", "HEAD", "mod"], check=True, capture_output=True).stdout
-    zpath = DIST / f"CSNZ-Offline-Revived-{version}.zip"
+    zpath = DIST / f"CSNZ-Revived-{version}.zip"
     count = 0
     with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z, tarfile.open(fileobj=io.BytesIO(tar)) as t:
         for m in t.getmembers():
@@ -120,13 +123,18 @@ def main():
         z.writestr("mod/patches.json", json.dumps(patch_list(version), indent=1))
         z.writestr("mod/VERSION", version + "\n")
     print(f"{zpath.name}: {count + 2} files, {zpath.stat().st_size / 1048576:.1f} MB")
+    # launchers up to v1.1.30 only take a zip named CSNZ-Offline-Revived-*.zip (the project's old name): the same zip
+    # under that name too, so they can still update (and get the new launcher along with it)
+    legacy = DIST / f"{LEGACY_PREFIX}{version}.zip"
+    shutil.copy2(zpath, legacy)
+    print(f"{legacy.name}: the same zip for launchers up to v1.1.30")
 
     # the launcher, with the same version
     out = DIST / "launcher-build"
     subprocess.run(["dotnet", "build", str(ROOT / "launcher" / "CsnzLauncher.csproj"), "-c", "Release", "-o", str(out),
                     f"-p:Version={version}", "-nologo", "-v", "q"], check=True)
-    exe = DIST / "CSNZ-Offline-Revived-Launcher.exe"
-    shutil.copy2(out / "CSNZ-Offline-Revived-Launcher.exe", exe)
+    exe = DIST / "CSNZ-Revived-Launcher.exe"
+    shutil.copy2(out / "CSNZ-Revived-Launcher.exe", exe)
     sign([exe])
     shutil.rmtree(out)
     print(f"{exe.name}: {exe.stat().st_size / 1024:.0f} KB")
@@ -166,8 +174,13 @@ def install_into_play(zpath: Path, exe: Path):
     except PermissionError as e:
         sys.exit(f"Play: {e.filename or 'a file of the mod'} is in use. Close the game and the server started from Play, "
                  f"then run build_release.py --play-only")
+    # the launcher's own update keeps the name its .exe has, so an older Play keeps CSNZ-Offline-Revived-Launcher.exe
+    target = play / exe.name
+    old = play / f"{LEGACY_PREFIX}Launcher.exe"
+    if not target.exists() and old.exists():
+        target = old
     try:
-        shutil.copy2(exe, play / exe.name)
+        shutil.copy2(exe, target)
         launcher = "and the launcher"
     except PermissionError:
         # the launcher is open (its own .exe can't be replaced while it runs): the mod's files are in all the same
@@ -179,6 +192,6 @@ if __name__ == "__main__":
     if "--play-only" in sys.argv:
         # the release already in dist/ into Play, without building it again
         v = (MOD / "VERSION").read_text().strip()
-        install_into_play(DIST / f"CSNZ-Offline-Revived-{v}.zip", DIST / "CSNZ-Offline-Revived-Launcher.exe")
+        install_into_play(DIST / f"CSNZ-Revived-{v}.zip", DIST / "CSNZ-Revived-Launcher.exe")
     else:
         main()

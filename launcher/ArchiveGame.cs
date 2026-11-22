@@ -36,7 +36,7 @@ namespace CsnzLauncher
         static HttpClient Client()
         {
             var c = new HttpClient(new HttpClientHandler { AllowAutoRedirect = true }) { Timeout = Timeout.InfiniteTimeSpan };
-            c.DefaultRequestHeaders.UserAgent.ParseAdd("CSNZ-Offline-Revived-Launcher");
+            c.DefaultRequestHeaders.UserAgent.ParseAdd("CSNZ-Revived-Launcher");
             return c;
         }
 

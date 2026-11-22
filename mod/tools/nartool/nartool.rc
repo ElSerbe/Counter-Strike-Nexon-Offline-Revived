@@ -14,13 +14,13 @@ BEGIN
     BEGIN
         BLOCK "040904b0"
         BEGIN
-            VALUE "CompanyName", "ItsYuri (Counter-Strike Nexon: Offline Revived)"
+            VALUE "CompanyName", "ItsYuri (Counter-Strike Nexon: Revived)"
             VALUE "FileDescription", "Reads the item pictures and models out of the player's own Counter-Strike Nexon game files"
             VALUE "FileVersion", "1.2.0.0"
             VALUE "InternalName", "nartool"
-            VALUE "LegalCopyright", "GPL-3.0, github.com/ElSerbe/Counter-Strike-Nexon-Offline-Revived"
+            VALUE "LegalCopyright", "GPL-3.0, github.com/ElSerbe/Counter-Strike-Nexon-Revived"
             VALUE "OriginalFilename", "nartool.exe"
-            VALUE "ProductName", "Counter-Strike Nexon: Offline Revived"
+            VALUE "ProductName", "Counter-Strike Nexon: Revived"
             VALUE "ProductVersion", "1.2.0.0"
         END
     END

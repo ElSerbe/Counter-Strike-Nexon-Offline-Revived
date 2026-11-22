@@ -472,7 +472,7 @@ namespace CsnzLauncher
                 g.DrawString("COUNTER-STRIKE", f, b, 26, 44);
             using (var f = Theme.Display(26))
             using (var b = new SolidBrush(Theme.Accent))
-                g.DrawString("NEXON: OFFLINE REVIVED", f, b, 32, 134);
+                g.DrawString("NEXON: REVIVED", f, b, 32, 134);
             using (var f = Theme.UiFont(12))
             using (var b = new SolidBrush(Color.FromArgb(150, 170, 170)))
                 g.DrawString(Credits, f, b, 33, 170);

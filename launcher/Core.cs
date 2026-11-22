@@ -113,7 +113,7 @@ namespace CsnzLauncher
 
     public static class GitHub
     {
-        public const string Owner = "ElSerbe", Repo = "Counter-Strike-Nexon-Offline-Revived";
+        public const string Owner = "ElSerbe", Repo = "Counter-Strike-Nexon-Revived";
         public static string PageUrl => $"https://github.com/{Owner}/{Repo}";
 
         static GitHub()
@@ -149,7 +149,7 @@ namespace CsnzLauncher
         static HttpClient Client(string token, bool redirects = true)
         {
             var c = new HttpClient(new HttpClientHandler { AllowAutoRedirect = redirects }) { Timeout = TimeSpan.FromMinutes(30) };
-            c.DefaultRequestHeaders.UserAgent.ParseAdd("CSNZ-Offline-Revived-Launcher/" + Paths.LauncherVersion);
+            c.DefaultRequestHeaders.UserAgent.ParseAdd("CSNZ-Revived-Launcher/" + Paths.LauncherVersion);
             if (!string.IsNullOrEmpty(token))
                 c.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
             return c;
@@ -946,7 +946,7 @@ namespace CsnzLauncher
         public static string Build(Settings settings)
         {
             var sb = new StringBuilder();
-            sb.AppendLine("Counter-Strike Nexon: Offline Revived - logs of the last session, " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+            sb.AppendLine("Counter-Strike Nexon: Revived - logs of the last session, " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
             string windows = Environment.OSVersion.Version.ToString();
             try
             {
@@ -1110,7 +1110,7 @@ namespace CsnzLauncher
             var arch = RuntimeInformation.OSArchitecture == Architecture.Arm64 ? "-arm64" : Environment.Is64BitOperatingSystem ? "-amd64" : "";
             using (var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) })
             {
-                http.DefaultRequestHeaders.UserAgent.ParseAdd("CSNZ-Offline-Revived-Launcher");
+                http.DefaultRequestHeaders.UserAgent.ParseAdd("CSNZ-Revived-Launcher");
                 var index = http.GetStringAsync("https://www.python.org/ftp/python/").GetAwaiter().GetResult();
                 var versions = System.Text.RegularExpressions.Regex.Matches(index, "href=\"(3\\.\\d+\\.\\d+)/\"")
                     .Cast<System.Text.RegularExpressions.Match>().Select(m => new Version(m.Groups[1].Value)).Distinct().OrderByDescending(v => v);
@@ -1135,7 +1135,7 @@ namespace CsnzLauncher
             log($"Downloading Python {version} ({url})...");
             using (var http = new HttpClient { Timeout = TimeSpan.FromMinutes(10) })
             {
-                http.DefaultRequestHeaders.UserAgent.ParseAdd("CSNZ-Offline-Revived-Launcher");
+                http.DefaultRequestHeaders.UserAgent.ParseAdd("CSNZ-Revived-Launcher");
                 using (var r = http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead).GetAwaiter().GetResult())
                 {
                     r.EnsureSuccessStatusCode();

@@ -1,14 +1,14 @@
 <p align="center">
-  <img src=".github/assets/banner.png" alt="Counter-Strike Nexon: Offline Revived" width="100%">
+  <img src=".github/assets/banner.png" alt="Counter-Strike Nexon: Revived" width="100%">
 </p>
 
 <p align="center">
   <a href="https://patreon.com/ltsYuri"><img src="https://img.shields.io/badge/Support_me_on-Patreon-F96854?style=for-the-badge&logo=patreon&logoColor=white" alt="Support me on Patreon"></a>
   <a href="https://discord.gg/fjxubwyhYv"><img src="https://img.shields.io/badge/Discord-Join-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"></a>
-  <a href="https://github.com/ElSerbe/Counter-Strike-Nexon-Offline-Revived/releases"><img src="https://img.shields.io/github/downloads/ElSerbe/Counter-Strike-Nexon-Offline-Revived/total?style=for-the-badge&logo=github&label=Downloads&color=15805F" alt="Downloads"></a>
+  <a href="https://github.com/ElSerbe/Counter-Strike-Nexon-Revived/releases"><img src="https://img.shields.io/github/downloads/ElSerbe/Counter-Strike-Nexon-Revived/total?style=for-the-badge&logo=github&label=Downloads&color=15805F" alt="Downloads"></a>
 </p>
 
-Counter-Strike Nexon: Zombies played offline, on your own PC, against room bots that play every mode: a local
+**Counter-Strike Nexon: Revived** is Counter-Strike Nexon: Zombies played offline, on your own PC, against room bots that play every mode: a local
 server (accounts, rooms, shop, inventory, missions, medals), client patches, and `botassist`, which gives the bots
 an AI for each mode (Zombie Giant, Zombie Scenario, Human Scenario, Zombie Tag, Soccer, All Star, Item Battle and
 more).
@@ -20,9 +20,9 @@ launcher gets it for you.
 
 ### The easy way: the launcher does everything
 
-1. Download **`CSNZ-Offline-Revived-Launcher.exe`** from the
-   [latest release](https://github.com/ElSerbe/Counter-Strike-Nexon-Offline-Revived/releases/latest) and put it in a
-   folder of its own (for example `Documents\CSNZ Offline Revived`).
+1. Download **`CSNZ-Revived-Launcher.exe`** from the
+   [latest release](https://github.com/ElSerbe/Counter-Strike-Nexon-Revived/releases/latest) and put it in a
+   folder of its own (for example `Documents\CSNZ Revived`).
 2. Open it. If Windows says *"Windows protected your PC"*, click **More info > Run anyway** (the launcher is new and
    not signed yet; see [Antivirus warnings](#antivirus-warnings)).
 3. Click **Install**. The launcher finds your game, or installs it if you don't have it (with Steam, or by
@@ -51,8 +51,8 @@ Handy extras in the launcher:
   `steam_api.dll` in its `Bin` on Play, so it starts without the game on your Steam account (v0.2.5 from its
   author's GitLab, see `mod\tools\goldberg`, LGPL v3; Valve's is kept for online play).
 - **The mod** is installed next to the launcher, in `mod\`. Don't open the launcher from the browser's downloads bar:
-  the browser runs a new temporary copy each time (the launcher offers to move itself to `Documents\CSNZ Offline
-  Revived` when that happens).
+  the browser runs a new temporary copy each time (the launcher offers to move itself to `Documents\CSNZ Revived`
+  when that happens).
 - **Play:** the first time, it adds the hosts block (the game's Nexon addresses go to 127.0.0.1; the only thing that
   needs administrator rights), makes the local server's certificate, patches the game, starts the local server and the
   game (which asks for administrator rights itself), and stops the server when the game closes.
@@ -75,8 +75,8 @@ If you'd rather not use the launcher, these are the same steps by hand. You need
 
 1. **Install the game** with Steam (or download the
    [Internet Archive copy](https://archive.org/details/csnz-1362486462562801379)).
-2. **Download** `CSNZ-Offline-Revived-<version>.zip` from the
-   [latest release](https://github.com/ElSerbe/Counter-Strike-Nexon-Offline-Revived/releases/latest) and unzip it
+2. **Download** `CSNZ-Revived-<version>.zip` from the
+   [latest release](https://github.com/ElSerbe/Counter-Strike-Nexon-Revived/releases/latest) and unzip it
    into a folder. You get a `mod` folder.
 3. **Back up the game** (to be able to undo): copy the game's `Bin` folder to `mod\backup\original\Bin`.
 4. **Patch the game** (in a terminal, in the folder that has `mod`):
@@ -160,7 +160,7 @@ There's no need to turn your antivirus off. If it stops one of them:
 ### Reporting a problem
 
 Something doesn't work? In the launcher: **Logs > Report a problem on GitHub...** (also in **More**). It opens the
-[problem form](https://github.com/ElSerbe/Counter-Strike-Nexon-Offline-Revived/issues/new?template=bug_report.yml)
+[problem form](https://github.com/ElSerbe/Counter-Strike-Nexon-Revived/issues/new?template=bug_report.yml)
 with your versions filled in and gets your logs ready to paste or drag in (you need a free GitHub account). Prefer to
 talk? Ask on [Discord](https://discord.gg/fjxubwyhYv).
 
@@ -197,6 +197,8 @@ The logs help a lot. For a problem that's hard to catch:
    (`mod/server/README.md`) and `nartool.exe` (`mod/tools/nartool/build.cmd`).
 2. Raise `mod/VERSION`, commit, then `python mod/tools/release/build_release.py`. With `CSNZ_SIGN_CERT` set to a code
    signing certificate's thumbprint it signs our programs first (see the script's header).
-3. `gh release create v<version> dist/CSNZ-Offline-Revived-<version>.zip dist/CSNZ-Offline-Revived-Launcher.exe`.
+3. `gh release create v<version> dist/CSNZ-Revived-<version>.zip dist/CSNZ-Offline-Revived-<version>.zip
+   dist/CSNZ-Revived-Launcher.exe`. The second zip is the same one under the project's old name: launchers up to
+   v1.1.30 only look for that name.
 
 The launcher compares the release's tag with `mod\VERSION` (and with its own version) to offer the update.

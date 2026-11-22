@@ -16,7 +16,7 @@ namespace CsnzLauncher
 
         DarkBox(string text, string caption, MessageBoxButtons buttons, MessageBoxIcon icon, string[] names = null)
         {
-            title = string.IsNullOrEmpty(caption) ? "Counter-Strike Nexon: Offline Revived" : caption;
+            title = string.IsNullOrEmpty(caption) ? "Counter-Strike Nexon: Revived" : caption;
             stripe = icon == MessageBoxIcon.Warning ? Theme.Warn : icon == MessageBoxIcon.Error ? Theme.Bad : Theme.Accent;
             Text = title;
             FormBorderStyle = FormBorderStyle.None;

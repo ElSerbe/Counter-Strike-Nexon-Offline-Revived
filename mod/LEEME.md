@@ -1,8 +1,8 @@
-# Counter-Strike Nexon offline
+# Counter-Strike Nexon: Revived
 
 ## Jugar
 
-**Con el launcher** (cualquier PC): `CSNZ-Offline-Revived-Launcher.exe` de la última release de GitHub, en una
+**Con el launcher** (cualquier PC): `CSNZ-Revived-Launcher.exe` de la última release de GitHub, en una
 carpeta propia. Instala y actualiza el mod, parchea la copia de Steam del juego, añade el bloque del archivo `hosts`
 y arranca el servidor y el juego. Ver `README.md` en la raíz del repositorio.
 

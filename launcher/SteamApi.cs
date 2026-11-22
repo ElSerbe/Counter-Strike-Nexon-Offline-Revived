@@ -114,7 +114,7 @@ namespace CsnzLauncher
                 byte[] zip;
                 using (var http = new HttpClient { Timeout = TimeSpan.FromMinutes(5) })
                 {
-                    http.DefaultRequestHeaders.UserAgent.ParseAdd("CSNZ-Offline-Revived-Launcher");
+                    http.DefaultRequestHeaders.UserAgent.ParseAdd("CSNZ-Revived-Launcher");
                     zip = http.GetByteArrayAsync(EmulatorZipUrl).GetAwaiter().GetResult();
                 }
                 Directory.CreateDirectory(Path.GetDirectoryName(Emulator));
@@ -198,7 +198,7 @@ namespace CsnzLauncher
                 var url = $"https://archive.org/download/{ArchiveGame.Item}/{Uri.EscapeDataString(zip.Name)}/Bin/steam_api.dll";
                 using (var http = new HttpClient { Timeout = TimeSpan.FromMinutes(2) })
                 {
-                    http.DefaultRequestHeaders.UserAgent.ParseAdd("CSNZ-Offline-Revived-Launcher");
+                    http.DefaultRequestHeaders.UserAgent.ParseAdd("CSNZ-Revived-Launcher");
                     File.WriteAllBytes(part, http.GetByteArrayAsync(url).GetAwaiter().GetResult());
                 }
                 if (!IsValves(part))

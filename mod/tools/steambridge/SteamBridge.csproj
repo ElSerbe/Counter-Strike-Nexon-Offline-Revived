@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- CSNZ Offline Revived Steam bridge: online play through Steam (Spacewar, app 480) with the game's own 32-bit
+  <!-- CSNZ Revived Steam bridge: online play through Steam (Spacewar, app 480) with the game's own 32-bit
        steam_api.dll. It publishes this PC's rooms in a Steam lobby, lists the other players' lobbies for the local
        server (Data/RemoteRooms.json) and tunnels the game's connection to their servers over Steam P2P.
        Without Steam it just exits: offline play never depends on it. -->
@@ -17,10 +17,10 @@
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <Company>ItsYuri</Company>
     <Authors>ItsYuri</Authors>
-    <Product>Counter-Strike Nexon Offline Revived</Product>
-    <AssemblyTitle>Counter-Strike Nexon: Offline Revived - online rooms through Steam (local bridge)</AssemblyTitle>
-    <Description>Counter-Strike Nexon: Offline Revived - online rooms through Steam (local bridge)</Description>
-    <Copyright>GPL-3.0, github.com/ElSerbe/Counter-Strike-Nexon-Offline-Revived</Copyright>
+    <Product>Counter-Strike Nexon Revived</Product>
+    <AssemblyTitle>Counter-Strike Nexon: Revived - online rooms through Steam (local bridge)</AssemblyTitle>
+    <Description>Counter-Strike Nexon: Revived - online rooms through Steam (local bridge)</Description>
+    <Copyright>GPL-3.0, github.com/ElSerbe/Counter-Strike-Nexon-Revived</Copyright>
   </PropertyGroup>
 
   <ItemGroup>
