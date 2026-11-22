@@ -135,6 +135,8 @@ namespace SteamBridge
             public long Received;
             public DateTime SentAt;
             public bool AwaitingReply;
+            // host side: what came in while the connection to this PC's server was still being made (null once made)
+            public List<byte[]> Pending;
         }
 
         // The game connecting to another player's server (the first 32 KB, its login) waits for every answer: when that
@@ -173,12 +175,16 @@ namespace SteamBridge
             this.log = log;
         }
 
+        // Two loops: this one (Steam: callbacks, lobbies, P2P in and out) never waits for this PC's server; ServerLoop asks the
+        // server over HTTP (rooms, match ports, profile mail, Studio) and applies the answers under Steam.Lock. Before
+        // v1.1.40 one loop did both under the lock, so a server slow to answer stalled the P2P traffic too: a friend's
+        // game got no answer for 10-100 s (profile mail lost, logins stuck).
         public void Run(Func<bool> keepRunning)
         {
-            DateTime nextStudio = DateTime.MinValue, nextStudioPublish = DateTime.MinValue;
-            DateTime nextMail = DateTime.MinValue, nextList = DateTime.MinValue, nextPublish = DateTime.MinValue, nextIdentity = DateTime.MinValue, nextHello = DateTime.MinValue, nextUdp = DateTime.MinValue;
+            DateTime nextList = DateTime.MinValue, nextHello = DateTime.MinValue;
             lock (Steam.Lock)
                 pendingCreate = Native.SteamAPI_ISteamMatchmaking_CreateLobby(steam.Matchmaking, Steam.LobbyPublic, 250);
+            new Thread(() => ServerLoop(keepRunning)) { IsBackground = true }.Start();
             while (keepRunning())
             {
                 var now = DateTime.UtcNow;
@@ -186,16 +192,6 @@ namespace SteamBridge
                 {
                     Native.SteamAPI_RunCallbacks();
                     PollCalls();
-                    if (now >= nextIdentity)
-                    {
-                        WriteIdentity();
-                        nextIdentity = now.AddSeconds(10);
-                    }
-                    if (myLobby != 0 && now >= nextPublish)
-                    {
-                        Publish();
-                        nextPublish = now.AddSeconds(3);
-                    }
                     if (pendingList == 0 && now >= nextList)
                     {
                         Native.SteamAPI_ISteamMatchmaking_AddRequestLobbyListStringFilter(steam.Matchmaking, Steam.Utf8Z(Tag), Steam.Utf8Z(Protocol), Steam.ComparisonEqual);
@@ -207,35 +203,96 @@ namespace SteamBridge
                     if (myLobby != 0 && now >= nextHello)
                     {
                         KeepSessions();
+                        CheckStalled();
                         nextHello = now.AddSeconds(2);
                     }
-                    if (now >= nextUdp)
-                    {
-                        ReadUdpState();
-                        CheckStalled();
-                        nextUdp = now.AddSeconds(2);
-                    }
                     ReadP2P();
-                    if (now >= nextMail)
-                    {
-                        PollMail();
-                        nextMail = now.AddMilliseconds(300);
-                    }
-                    if (myLobby != 0 && now >= nextStudioPublish)
-                    {
-                        PublishStudio();
-                        nextStudioPublish = now.AddSeconds(10);
-                    }
-                    if (now >= nextStudio)
-                    {
-                        PollStudio();
-                        nextStudio = now.AddMilliseconds(500);
-                    }
                 }
                 ReadLoopback();
                 Thread.Sleep(15);
             }
             Shutdown();
+        }
+
+        // this PC's server, over HTTP: each answer is fetched outside Steam.Lock and applied under it
+        void ServerLoop(Func<bool> keepRunning)
+        {
+            DateTime nextStudio = DateTime.MinValue, nextStudioPublish = DateTime.MinValue, nextMail = DateTime.MinValue,
+                     nextPublish = DateTime.MinValue, nextIdentity = DateTime.MinValue, nextUdp = DateTime.MinValue;
+            while (keepRunning())
+            {
+                try
+                {
+                    var now = DateTime.UtcNow;
+                    if (now >= nextIdentity)
+                    {
+                        WriteIdentity();
+                        nextIdentity = now.AddSeconds(10);
+                    }
+                    if (myLobby != 0 && now >= nextPublish)
+                    {
+                        var rooms = ApiGet("/api/rooms", out var error);
+                        lock (Steam.Lock)
+                            Publish(rooms, error);
+                        nextPublish = DateTime.UtcNow.AddSeconds(3);
+                    }
+                    if (now >= nextUdp)
+                    {
+                        var udp = ApiGet("/api/udp", out _);
+                        lock (Steam.Lock)
+                            ReadUdpState(udp);
+                        nextUdp = DateTime.UtcNow.AddSeconds(2);
+                    }
+                    if (now >= nextMail)
+                    {
+                        var outbox = ApiGet("/api/guest/outbox", out _);
+                        lock (Steam.Lock)
+                            PollMail(outbox);
+                        nextMail = DateTime.UtcNow.AddMilliseconds(300);
+                    }
+                    if (myLobby != 0 && now >= nextStudioPublish)
+                    {
+                        var catalog = ApiGet("/studio/net/catalog", out _);
+                        lock (Steam.Lock)
+                            PublishStudio(catalog);
+                        nextStudioPublish = DateTime.UtcNow.AddSeconds(10);
+                    }
+                    if (now >= nextStudio)
+                    {
+                        var requests = ApiGet("/studio/net/outbox", out _);
+                        lock (Steam.Lock)
+                            PollStudio(requests);
+                        nextStudio = DateTime.UtcNow.AddMilliseconds(500);
+                    }
+                }
+                catch (Exception ex) { log("Bridge (server loop): " + ex.Message); }
+                Thread.Sleep(20);
+            }
+        }
+
+        // GET on this PC's server: the text, or null (error says why). A slow answer is logged, once a minute at most:
+        // everything online that goes through this PC's server waits for it.
+        DateTime nextSlowLog = DateTime.MinValue;
+        string ApiGet(string path, out Exception error)
+        {
+            error = null;
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            try { return http.GetStringAsync(apiUrl + path).GetAwaiter().GetResult(); }
+            catch (Exception ex)
+            {
+                error = ex.InnerException ?? ex;
+                return null;
+            }
+            finally
+            {
+                if (watch.Elapsed.TotalSeconds >= 1.5 && DateTime.UtcNow >= nextSlowLog && (DateTime.Now - started).TotalSeconds > 60)
+                {
+                    nextSlowLog = DateTime.UtcNow.AddMinutes(1);
+                    log("This PC's server took " + watch.Elapsed.TotalSeconds.ToString("0.0") + " s to answer " + path + " (" +
+                        (error != null ? error.Message : "it did answer") + "): it's slow, so other players wait for this PC's rooms and profiles. " +
+                        "Something may be slowing this PC down (an antivirus scanning the server, a busy disk or CPU).");
+                }
+            }
         }
 
         // ------------------------------------------------------------ call results
@@ -289,18 +346,17 @@ namespace SteamBridge
         }
 
         // ------------------------------------------------------------ hosting
-        void Publish()
+        // rooms: GET /api/rooms's answer (ServerLoop), null when it failed (error)
+        void Publish(string rooms, Exception error)
         {
-            string rooms;
-            try { rooms = http.GetStringAsync(apiUrl + "/api/rooms").GetAwaiter().GetResult(); }
-            catch (Exception ex)
+            if (rooms == null)
             {
                 // the server isn't up (yet); said once a minute in, when it should be: other players see no rooms
                 if (!publishFailLogged && (DateTime.Now - started).TotalSeconds > 60)
                 {
                     publishFailLogged = true;
                     log("This PC's rooms can't be published: the local server's " + apiUrl + "/api/rooms doesn't answer (" +
-                        (ex.InnerException ?? ex).Message + "). Other players see this PC's lobby without rooms.");
+                        error?.Message + "). Other players see this PC's lobby without rooms.");
                 }
                 return;
             }
@@ -494,6 +550,9 @@ namespace SteamBridge
                 for (int i = 0; i < 200 && !loopback && !h.Joined; i++)
                     Thread.Sleep(50);
                 log("Game connection " + id + " to " + h.Name + "'s server" + (loopback ? " (loopback)" : ""));
+                // the game waits for the server's first message: no answer at all counts as stuck too
+                c.SentAt = DateTime.UtcNow;
+                c.AwaitingReply = true;
                 Send(peer, Open, id, null, 0);
                 new Thread(() => Pump(c)) { IsBackground = true }.Start();
             }
@@ -595,28 +654,53 @@ namespace SteamBridge
                     HandleStudio(peer, msg);
                     break;
                 case Open:
-                    // a player's game connects to this PC's server
-                    try
+                {
+                    // a player's game connects to this PC's server: made on the connection's own thread (the P2P loop
+                    // doesn't wait for this PC's server); what comes in meanwhile waits in Pending
+                    var c = new Conn { Peer = peer, Id = id, Tcp = new TcpClient { NoDelay = true }, Pending = new List<byte[]>() };
+                    conns[key] = c;
+                    new Thread(() =>
                     {
-                        var tcp = new TcpClient();
-                        tcp.NoDelay = true;
-                        tcp.Connect(IPAddress.Loopback, ServerPort);
-                        var c = new Conn { Peer = peer, Id = id, Tcp = tcp };
-                        conns[key] = c;
-                        new Thread(() => Pump(c)) { IsBackground = true }.Start();
-                        log("A player (" + peer + ") connects to this PC's server, connection " + id);
-                    }
-                    catch (Exception ex)
-                    {
-                        log("This PC's server didn't take the connection: " + ex.Message);
-                        Send(peer, Close, id, null, 0);
-                    }
+                        var watch = System.Diagnostics.Stopwatch.StartNew();
+                        try
+                        {
+                            c.Tcp.Connect(IPAddress.Loopback, ServerPort);
+                            lock (c)
+                            {
+                                foreach (var p in c.Pending)
+                                    c.Tcp.GetStream().Write(p, 0, p.Length);
+                                c.Pending = null;
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            log("This PC's server didn't take a player's connection (" + watch.Elapsed.TotalSeconds.ToString("0.0") + " s): " + ex.Message);
+                            c.Closed = true;
+                            Send(peer, Close, id, null, 0);
+                            CloseConn(c);
+                            return;
+                        }
+                        log("A player (" + peer + ") connects to this PC's server, connection " + id +
+                            (watch.Elapsed.TotalSeconds >= 1 ? " (the server took " + watch.Elapsed.TotalSeconds.ToString("0.0") + " s to take it)" : ""));
+                        Pump(c);
+                    }) { IsBackground = true }.Start();
                     break;
+                }
                 case Data:
                     if (conns.TryGetValue(key, out var d))
                     {
                         d.Received += msg.Length - 5;
                         d.AwaitingReply = false;
+                        lock (d)
+                        {
+                            if (d.Pending != null)
+                            {
+                                var piece = new byte[msg.Length - 5];
+                                Buffer.BlockCopy(msg, 5, piece, 0, piece.Length);
+                                d.Pending.Add(piece);
+                                break;
+                            }
+                        }
                         try { d.Tcp.GetStream().Write(msg, 5, msg.Length - 5); }
                         catch { CloseConn(d); }
                     }
@@ -649,11 +733,11 @@ namespace SteamBridge
         readonly HashSet<ulong> mailPeers = new HashSet<ulong>();
         readonly HttpClient mailHttp = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
 
-        void PollMail()
+        // text: GET /api/guest/outbox's answer (ServerLoop)
+        void PollMail(string text)
         {
-            string text;
-            try { text = http.GetStringAsync(apiUrl + "/api/guest/outbox").GetAwaiter().GetResult(); }
-            catch { return; } // the server isn't up, or is older than this bridge
+            if (text == null)
+                return; // the server isn't up, or is older than this bridge
             Dictionary<string, object> box;
             try { box = json.Deserialize<Dictionary<string, object>>(text); }
             catch { return; }
@@ -715,14 +799,15 @@ namespace SteamBridge
             }
         }
 
+        // (on its own thread: callers hold Steam.Lock)
         void MailSent(int id, bool ok, string error)
         {
-            try
+            var body = json.Serialize(new Dictionary<string, object> { { "id", id }, { "ok", ok }, { "error", error ?? "" } });
+            new Thread(() =>
             {
-                var body = json.Serialize(new Dictionary<string, object> { { "id", id }, { "ok", ok }, { "error", error ?? "" } });
-                mailHttp.PostAsync(apiUrl + "/api/guest/sent", new StringContent(body, Encoding.UTF8, "application/json")).GetAwaiter().GetResult();
-            }
-            catch (Exception ex) { log("Couldn't tell this PC's server about profile mail " + id + ": " + ex.Message); }
+                try { mailHttp.PostAsync(apiUrl + "/api/guest/sent", new StringContent(body, Encoding.UTF8, "application/json")).GetAwaiter().GetResult(); }
+                catch (Exception ex) { log("Couldn't tell this PC's server about profile mail " + id + ": " + ex.Message); }
+            }) { IsBackground = true }.Start();
         }
 
         void HandleMail(ulong peer, byte[] msg)
@@ -760,26 +845,31 @@ namespace SteamBridge
                 return;
             int bodyAt = text.IndexOf(",\"body\":", StringComparison.Ordinal);
             string bodyText = bodyAt < 0 ? "null" : text.Substring(bodyAt + 8, text.Length - bodyAt - 9);
-            bool taken = false;
-            string why = "this PC's server didn't answer";
-            try
+            string post = "{\"from\":\"" + (loopback ? steam.MySteamID : peer) + "\",\"body\":" + bodyText + "}";
+            // to this PC's server on a thread of its own (the P2P loop doesn't wait for it), then the ack
+            new Thread(() =>
             {
-                var post = "{\"from\":\"" + (loopback ? steam.MySteamID : peer) + "\",\"body\":" + bodyText + "}";
-                var resp = mailHttp.PostAsync(apiUrl + "/api/guest/inbox", new StringContent(post, Encoding.UTF8, "application/json")).GetAwaiter().GetResult();
-                var answer = json.Deserialize<Dictionary<string, object>>(resp.Content.ReadAsStringAsync().GetAwaiter().GetResult());
-                taken = answer.TryGetValue("ok", out var o) && o is bool b && b;
-                why = answer.TryGetValue("error", out var e) ? e?.ToString() : null;
-            }
-            catch (Exception ex) { why = "this PC's server: " + ex.Message; }
-            log("Profile mail from " + peer + (taken ? " handed to this PC's server" : " not taken: " + why));
-            var reply = Encoding.UTF8.GetBytes(json.Serialize(new Dictionary<string, object> { { "t", "ack" }, { "id", id }, { "ok", taken }, { "error", why ?? "" } }));
-            var r = new byte[5 + reply.Length];
-            r[0] = Mail;
-            reply.CopyTo(r, 5);
-            if (loopback)
-                loop.Enqueue(Tuple.Create(LoopHostSide, r));
-            else
-                SendRaw(peer, r);
+                bool taken = false;
+                string why = "this PC's server didn't answer";
+                try
+                {
+                    var resp = mailHttp.PostAsync(apiUrl + "/api/guest/inbox", new StringContent(post, Encoding.UTF8, "application/json")).GetAwaiter().GetResult();
+                    var answer = json.Deserialize<Dictionary<string, object>>(resp.Content.ReadAsStringAsync().GetAwaiter().GetResult());
+                    taken = answer.TryGetValue("ok", out var o) && o is bool b && b;
+                    why = answer.TryGetValue("error", out var e) ? e?.ToString() : null;
+                }
+                catch (Exception ex) { why = "this PC's server: " + ex.Message; }
+                log("Profile mail from " + peer + (taken ? " handed to this PC's server" : " not taken: " + why));
+                var reply = Encoding.UTF8.GetBytes(json.Serialize(new Dictionary<string, object> { { "t", "ack" }, { "id", id }, { "ok", taken }, { "error", why ?? "" } }));
+                var r = new byte[5 + reply.Length];
+                r[0] = Mail;
+                reply.CopyTo(r, 5);
+                if (loopback)
+                    loop.Enqueue(Tuple.Create(LoopHostSide, r));
+                else
+                    lock (Steam.Lock)
+                        SendRaw(peer, r);
+            }) { IsBackground = true }.Start();
         }
 
         static byte[] Gzip(byte[] data)
@@ -830,11 +920,11 @@ namespace SteamBridge
         }
         readonly Dictionary<string, Partial> partials = new Dictionary<string, Partial>();
 
-        void PublishStudio()
+        // catalog: GET /studio/net/catalog's answer (ServerLoop)
+        void PublishStudio(string catalog)
         {
-            string catalog;
-            try { catalog = http.GetStringAsync(apiUrl + "/studio/net/catalog").GetAwaiter().GetResult(); }
-            catch { return; } // the server isn't up, or is older than this bridge
+            if (catalog == null)
+                return; // the server isn't up, or is older than this bridge
             if (catalog == publishedStudio)
                 return;
             publishedStudio = catalog;
@@ -900,11 +990,11 @@ namespace SteamBridge
             return false;
         }
 
-        void PollStudio()
+        // text: GET /studio/net/outbox's answer (ServerLoop)
+        void PollStudio(string text)
         {
-            string text;
-            try { text = http.GetStringAsync(apiUrl + "/studio/net/outbox").GetAwaiter().GetResult(); }
-            catch { return; }
+            if (text == null)
+                return;
             try
             {
                 if (json.Deserialize<Dictionary<string, object>>(text)["requests"] is System.Collections.IEnumerable list)
@@ -1061,10 +1151,14 @@ namespace SteamBridge
             StudioResult("{\"id\":" + q + ",\"from\":" + json.Serialize(from) + "," + text.Substring(okAt));
         }
 
+        // (on its own thread: callers hold Steam.Lock)
         void StudioResult(string body)
         {
-            try { studioHttp.PostAsync(apiUrl + "/studio/net/result", new StringContent(body, Encoding.UTF8, "application/json")).GetAwaiter().GetResult(); }
-            catch (Exception ex) { log("Studio: couldn't hand the result to this PC's server: " + ex.Message); }
+            new Thread(() =>
+            {
+                try { studioHttp.PostAsync(apiUrl + "/studio/net/result", new StringContent(body, Encoding.UTF8, "application/json")).GetAwaiter().GetResult(); }
+                catch (Exception ex) { log("Studio: couldn't hand the result to this PC's server: " + ex.Message); }
+            }) { IsBackground = true }.Start();
         }
 
         // ------------------------------------------------------------ match traffic (UDP)
@@ -1200,8 +1294,8 @@ namespace SteamBridge
             UdpNote("dropped " + what);
         }
 
-        // GET /api/udp: this PC's game ports and the remote players on this PC's server
-        void ReadUdpState()
+        // text: GET /api/udp's answer (ServerLoop): this PC's game ports and the remote players on this PC's server
+        void ReadUdpState(string text)
         {
             var now = DateTime.UtcNow;
             if (now >= nextUdpReport && (udpToPeer != reportedTo || udpFromPeer != reportedFrom || udpDropped != reportedDropped))
@@ -1212,9 +1306,8 @@ namespace SteamBridge
                 reportedDropped = udpDropped;
                 log("UDP: " + udpToPeer + " match packets sent to the other PC, " + udpFromPeer + " received, " + udpDropped + " dropped");
             }
-            string text;
-            try { text = http.GetStringAsync(apiUrl + "/api/udp").GetAwaiter().GetResult(); }
-            catch { return; }
+            if (text == null)
+                return;
             Dictionary<string, object> state;
             try { state = json.Deserialize<Dictionary<string, object>>(text); }
             catch { return; }
