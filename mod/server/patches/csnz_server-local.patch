@@ -2877,10 +2877,10 @@ index 0000000..39fc076
 +}
 diff --git a/src/manager/guestprofile.cpp b/src/manager/guestprofile.cpp
 new file mode 100644
-index 0000000..f20bb9d
+index 0000000..76b3ed3
 --- /dev/null
 +++ b/src/manager/guestprofile.cpp
-@@ -0,0 +1,636 @@
+@@ -0,0 +1,673 @@
 +// offline build: a player's profile on another PC's server and back (see guestprofile.h)
 +#include "guestprofile.h"
 +#include "transfer.h"
@@ -2949,6 +2949,16 @@ index 0000000..f20bb9d
 +		vector<json> family; // their matches for their family at home, until their PC took them
 +	};
 +	int g_NextFamilyMatch = 1;
++
++	// host: guests on their way home (GoHome), waiting for their PC to take their profile
++	const int kGoHomeWait = 15;
++	struct GoingHome_s
++	{
++		IExtendedSocket* socket;
++		string back;
++		time_t deadline;
++	};
++	map<int, GoingHome_s> g_GoingHome;
 +	map<int, Guest_s> g_Guests;
 +
 +	void LoadCheckouts()
@@ -3279,14 +3289,23 @@ index 0000000..f20bb9d
 +	int userID = user->GetID();
 +	IExtendedSocket* socket = user->GetExtendedSocket();
 +	g_PacketManager.SendUMsgNoticeMessageInChat(socket, "Sending your profile home...");
-+	SendResult(userID, true, [userID, socket, back](bool ok)
++	// the transfer waits for their PC to take the profile, 15 s at most (Tick): over a slow Steam connection the player
++	// waited up to two minutes and took /home for broken. The profile goes on being sent for 10 minutes; the copies sent
++	// after every match are home already.
++	g_GoingHome[userID] = { socket, back, time(NULL) + kGoHomeWait };
++	SendResult(userID, true, [userID](bool ok)
 +	{
++		auto it = g_GoingHome.find(userID);
++		if (it == g_GoingHome.end())
++			return;
++		GoingHome_s go = it->second;
++		g_GoingHome.erase(it);
 +		IUser* u = g_UserManager.GetUserById(userID);
-+		if (!u || u->GetExtendedSocket() != socket)
++		if (!u || u->GetExtendedSocket() != go.socket)
 +			return;
 +		if (!ok)
-+			g_PacketManager.SendUMsgNoticeMessageInChat(socket, "Your PC didn't answer: this server keeps trying to send your profile home for 10 minutes.");
-+		g_PacketManager.SendTransfer(socket, "127.0.0.1", 30002, back);
++			g_PacketManager.SendUMsgNoticeMessageInChat(go.socket, "Your PC didn't answer: this server keeps trying to send your profile home for 10 minutes.");
++		g_PacketManager.SendTransfer(go.socket, "127.0.0.1", 30002, go.back);
 +	});
 +	return true;
 +}
@@ -3497,6 +3516,24 @@ index 0000000..f20bb9d
 +
 +void GuestProfiles::Tick(time_t now)
 +{
++	// guests who asked to go home: the transfer doesn't wait for their profile any longer
++	for (auto it = g_GoingHome.begin(); it != g_GoingHome.end();)
++	{
++		if (now < it->second.deadline)
++		{
++			++it;
++			continue;
++		}
++		GoingHome_s go = it->second;
++		int userID = it->first;
++		it = g_GoingHome.erase(it);
++		IUser* u = g_UserManager.GetUserById(userID);
++		if (!u || u->GetExtendedSocket() != go.socket)
++			continue;
++		Logger().Info("GuestProfiles: user %d goes home without waiting longer for their PC to take their profile\n", userID);
++		g_PacketManager.SendUMsgNoticeMessageInChat(go.socket, "Your PC is slow to answer: you go home now, and this server keeps sending your profile for 10 minutes.");
++		g_PacketManager.SendTransfer(go.socket, "127.0.0.1", 30002, go.back);
++	}
 +	// mail the bridge took but never answered for, or that no bridge picked up (online play isn't running), fails
 +	for (size_t i = 0; i < g_Outbox.size(); )
 +	{
@@ -8709,10 +8746,10 @@ index 0000000..62948ed
 +static CCommand studiofetch("studiofetch", "Fetch a Studio map from the other PCs (Steam bridge)", "studiofetch <code>", StudioFetch);
 diff --git a/src/manager/transfer.cpp b/src/manager/transfer.cpp
 new file mode 100644
-index 0000000..1d46a54
+index 0000000..dc4d88d
 --- /dev/null
 +++ b/src/manager/transfer.cpp
-@@ -0,0 +1,348 @@
+@@ -0,0 +1,392 @@
 +#include "transfer.h"
 +#include "main.h"
 +#include "net/sendpacket.h"
@@ -8980,6 +9017,50 @@ index 0000000..1d46a54
 +	return ticket;
 +}
 +
++bool ServerTransfer::ReadRemoteTicket(const string& ticket, string& steamID, string& back)
++{
++	// r1|<Steam ID>|<character name>|<room id>|<room password>|<return ticket>[|<port>]
++	if (ticket.rfind("r1|", 0) != 0)
++		return false;
++	vector<string> f;
++	size_t from = 0;
++	for (;;)
++	{
++		size_t bar = ticket.find('|', from);
++		f.push_back(ticket.substr(from, bar == string::npos ? string::npos : bar - from));
++		if (bar == string::npos)
++			break;
++		from = bar + 1;
++	}
++	if (f.size() < 6)
++		return false;
++	steamID = f[1];
++	back = f[5];
++	return !steamID.empty() && !back.empty();
++}
++
++namespace
++{
++	string g_FallbackHost;
++	time_t g_FallbackAt = 0;
++}
++
++void ServerTransfer::ExpectFallback(const string& host)
++{
++	g_FallbackHost = host;
++	g_FallbackAt = time(NULL);
++	Logger().Info("Steam bridge: %s's server never answered, this PC's game comes back here instead\n", host.c_str());
++}
++
++bool ServerTransfer::TakeFallback(string& host)
++{
++	if (!g_FallbackAt || time(NULL) - g_FallbackAt > 120)
++		return false;
++	host = g_FallbackHost;
++	g_FallbackAt = 0;
++	return true;
++}
++
 +bool ServerTransfer::TakeTicket(const string& ticket, string& userName)
 +{
 +	auto it = g_Tickets.find(ticket);
@@ -9063,10 +9144,10 @@ index 0000000..1d46a54
 +}
 diff --git a/src/manager/transfer.h b/src/manager/transfer.h
 new file mode 100644
-index 0000000..d31ead4
+index 0000000..b97e082
 --- /dev/null
 +++ b/src/manager/transfer.h
-@@ -0,0 +1,56 @@
+@@ -0,0 +1,64 @@
 +#pragma once
 +
 +// offline build: online play through Steam (the Steam bridge, mod/tools/steambridge).
@@ -9122,6 +9203,14 @@ index 0000000..d31ead4
 +	// a one-use ticket for a TransferLogin to this server
 +	std::string IssueTicket(const std::string& userName, int seconds = 120);
 +	bool TakeTicket(const std::string& ticket, std::string& userName);
++
++	// an "r1" ticket (a player going into another PC's room): the player's Steam ID and their return ticket home
++	bool ReadRemoteTicket(const std::string& ticket, std::string& steamID, std::string& back);
++	// The other PC's server never answered this PC's game, so the bridge connected the game to this server instead
++	// (POST /api/transfer/fallback): the game's TransferLogin with the ticket meant for that PC logs the player in here
++	// with its return ticket. TakeFallback: one was announced in the last 2 minutes (then it's used up); host = their name.
++	void ExpectFallback(const std::string& host);
++	bool TakeFallback(std::string& host);
 +}
 diff --git a/src/manager/userdatabase.cpp b/src/manager/userdatabase.cpp
 index 0d23de4..757e94b 100644
@@ -9909,7 +9998,7 @@ index 0e1d7d2..b204040 100644
  
  	// clan related
 diff --git a/src/manager/usermanager.cpp b/src/manager/usermanager.cpp
-index b426874..bd14908 100644
+index b426874..c212a54 100644
 --- a/src/manager/usermanager.cpp
 +++ b/src/manager/usermanager.cpp
 @@ -1,3 +1,8 @@
@@ -9942,7 +10031,7 @@ index b426874..bd14908 100644
  	if (g_UserDatabase.IsHWIDBanned(hwid))
  	{
  		Logger().Info("Client (%s) disconnected from the server due to banned HWID\n", socket->GetIP().c_str());
-@@ -171,6 +183,217 @@ bool CUserManager::OnLoginPacket(CReceivePacket* msg, IExtendedSocket* socket)
+@@ -171,6 +183,254 @@ bool CUserManager::OnLoginPacket(CReceivePacket* msg, IExtendedSocket* socket)
  	return true;
  }
  
@@ -9974,6 +10063,33 @@ index b426874..bd14908 100644
 +	string userName, password, roomPassword, back, remoteSteamID;
 +	int joinRoom = 0, tunnelPort = 0;
 +	bool guestProfile = false;
++
++	// this PC's own player, whose game the bridge brought back here: the other PC's server never answered it. Their
++	// ticket was meant for that server; its return ticket logs them in here (transfer.h, ExpectFallback).
++	string fallbackHost;
++	{
++		string steamID, home, mySteamID, myName;
++		if (ServerTransfer::ReadRemoteTicket(ticket, steamID, home) && ServerTransfer::LoadSteamIdentity(mySteamID, myName) &&
++			steamID == mySteamID && ServerTransfer::TakeFallback(fallbackHost))
++		{
++			Logger().Info("TransferLogin: %s's server never answered, the player is back with their return ticket\n", fallbackHost.c_str());
++			ticket = home;
++		}
++	}
++	// a player from another PC who can't be let in here goes back to their own server, instead of losing the connection
++	// (their game would sit in front of a dead connection, or close)
++	auto sendBack = [&](const char* why)
++	{
++		string steamID, home;
++		if (ServerTransfer::ReadRemoteTicket(ticket, steamID, home))
++		{
++			Logger().Info("TransferLogin: %s; the player goes back to their own server\n", why);
++			g_PacketManager.SendTransfer(socket, "127.0.0.1", 30002, home);
++			return;
++		}
++		g_pServerInstance->DisconnectClient(socket);
++	};
++
 +	if (ticket.rfind("r1|", 0) == 0)
 +	{
 +		// a guest's earlier connection must be gone before their profile is loaded (and it sends nothing home)
@@ -9992,7 +10108,7 @@ index b426874..bd14908 100644
 +		// a player from another PC, through the Steam bridge
 +		if (!PrepareRemotePlayer(socket, ticket, userName, password, joinRoom, roomPassword, back, remoteSteamID, tunnelPort, guestProfile))
 +		{
-+			g_pServerInstance->DisconnectClient(socket);
++			sendBack("their account here couldn't be made");
 +			return true;
 +		}
 +	}
@@ -10033,7 +10149,10 @@ index b426874..bd14908 100644
 +	Logger().Info("TransferLogin: '%s' %s (code %d)\n", userName.c_str(), result == LOGIN_OK ? "logged in" : "failed", result);
 +	if (result != LOGIN_OK)
 +	{
-+		g_pServerInstance->DisconnectClient(socket);
++		if (ticket.rfind("r1|", 0) == 0)
++			sendBack("the login failed");
++		else
++			g_pServerInstance->DisconnectClient(socket);
 +		return true;
 +	}
 +
@@ -10049,9 +10168,16 @@ index b426874..bd14908 100644
 +	if (user && joinRoom)
 +	{
 +		Logger().Info("TransferLogin: '%s' enters room %d\n", userName.c_str(), joinRoom);
++		// a room that's gone, full or started meanwhile: back home at once (with the profile), not stuck in their lobby
 +		if (!g_ChannelManager.JoinRoom(user, joinRoom, roomPassword))
-+			g_PacketManager.SendUMsgNoticeMessageInChat(socket, "That room isn't available anymore. Type /home to go back to your own server.");
++		{
++			g_PacketManager.SendUMsgNoticeMessageInChat(socket, "That room isn't available anymore: you go back to your own server.");
++			g_ChannelManager.SendUserHome(user, "the room wasn't available");
++		}
 +	}
++	if (user && !fallbackHost.empty())
++		g_PacketManager.SendUMsgNoticeMsgBoxToUuid(socket, fallbackHost + "'s server didn't answer, so you're back on your own server.\n"
++			"Their PC or the Steam connection to it may be slow: try again in a moment.");
 +	return true;
 +}
 +
@@ -10160,7 +10286,7 @@ index b426874..bd14908 100644
  bool CUserManager::OnUdpPacket(CReceivePacket* msg, IExtendedSocket* socket)
  {
  	LOG_PACKET;
-@@ -316,7 +539,7 @@ bool CUserManager::OnVersionPacket(CReceivePacket* msg, IExtendedSocket* socket)
+@@ -316,7 +576,7 @@ bool CUserManager::OnVersionPacket(CReceivePacket* msg, IExtendedSocket* socket)
  		GuestData_s& data = socket->GetGuestData();
  		if (!data.isGuest)
  			g_PacketManager.SendVersion(socket, 0);
@@ -10169,7 +10295,7 @@ index b426874..bd14908 100644
  			SendGuestUserPacket(socket);
  
  		data.isGuest = true;
-@@ -623,11 +846,267 @@ vector<CUserInventoryItem>& CUserManager::GetDefaultInventoryItems()
+@@ -623,11 +883,267 @@ vector<CUserInventoryItem>& CUserManager::GetDefaultInventoryItems()
  	return m_DefaultItems;
  }
  
@@ -10438,7 +10564,7 @@ index b426874..bd14908 100644
  }
  
  void CUserManager::SendLoginPacket(IUser* user, const CUserCharacter& character)
-@@ -650,16 +1129,26 @@ void CUserManager::SendLoginPacket(IUser* user, const CUserCharacter& character)
+@@ -650,16 +1166,26 @@ void CUserManager::SendLoginPacket(IUser* user, const CUserCharacter& character)
  
  	SendMetadata(socket);
  
@@ -10472,7 +10598,7 @@ index b426874..bd14908 100644
  
  	if (g_pServerConfig->activeMiniGamesFlag & kEventFlag_WeaponRelease)
  		g_MiniGameManager.SendWeaponReleaseUpdate(user);
-@@ -673,11 +1162,17 @@ void CUserManager::SendLoginPacket(IUser* user, const CUserCharacter& character)
+@@ -673,11 +1199,17 @@ void CUserManager::SendLoginPacket(IUser* user, const CUserCharacter& character)
  	g_PacketManager.SendShopPopularProducts(socket, g_ShopManager.GetPopularProducts());
  
  	// CN: 欢迎来到CSN服务器! 我们的服务器是非商业性的, 不要相信任何人说的售卖CSOL私服的信息.\n官方Discord: https://discord.gg/EvUAY6D \n
@@ -10482,19 +10608,19 @@ index b426874..bd14908 100644
 +	{
 +		const char* text = OBFUSCATE("Welcome to Counter-Strike Nexon: Revived!\n\nThe local server is CSNZ_Server, made by Jusic, Hardee, NekoMeow, Smilex_Gamer and xRiseless (based on Ochii's CSO2 server). Thank you for making it!\nOffline port and rework by ItsYuri: bot AI, game modes, items, shop, missions, gameplay, new features and quality of life.\n\nDiscord: https://discord.gg/fjxubwyhYv");
 +		g_PacketManager.SendUMsgNoticeMsgBoxToUuid(socket, text);
++
++		if (!g_pServerConfig->welcomeMessage.empty())
++			g_PacketManager.SendUMsgNoticeMsgBoxToUuid(socket, g_pServerConfig->welcomeMessage);
  
 -	if (!g_pServerConfig->welcomeMessage.empty())
 -		g_PacketManager.SendUMsgNoticeMsgBoxToUuid(socket, g_pServerConfig->welcomeMessage);
-+		if (!g_pServerConfig->welcomeMessage.empty())
-+			g_PacketManager.SendUMsgNoticeMsgBoxToUuid(socket, g_pServerConfig->welcomeMessage);
-+
 +		// offline build: the day's login reward (Data/DailyLogin.json), shown after the welcome box
 +		g_MissionManager.OnLogin(user); // Login Supplies: the calendar, and a chat line when today's is ready
 +	}
  
  	g_ChannelManager.JoinChannel(user, g_ChannelManager.channelServers[0]->GetID(), g_ChannelManager.channelServers[0]->GetChannels()[0]->GetID(), false);
  
-@@ -749,7 +1244,15 @@ void CUserManager::SendMetadata(IExtendedSocket* socket)
+@@ -749,7 +1281,15 @@ void CUserManager::SendMetadata(IExtendedSocket* socket)
  	if (flag & kMetadataFlag_PPSystem)
  		g_PacketManager.SendMetadataPPSystem(socket);
  	if (flag & kMetadataFlag_Item)
@@ -10510,7 +10636,7 @@ index b426874..bd14908 100644
  	if (flag & kMetadataFlag_VoxelList)
  		g_PacketManager.SendMetadataVoxelList(socket);
  	if (flag & kMetadataFlag_VoxelItem)
-@@ -877,8 +1380,10 @@ bool CUserManager::OnCharacterPacket(CReceivePacket* msg, IExtendedSocket* socke
+@@ -877,8 +1417,10 @@ bool CUserManager::OnCharacterPacket(CReceivePacket* msg, IExtendedSocket* socke
  	g_ItemManager.OnUserLogin(user);
  	g_ClanManager.OnUserLogin(user);
  	g_QuestManager.OnUserLogin(user);
@@ -10521,7 +10647,7 @@ index b426874..bd14908 100644
  
  	return true;
  }
-@@ -951,7 +1456,7 @@ bool CUserManager::OnUpdateInfoPacket(CReceivePacket* msg, IExtendedSocket* sock
+@@ -951,7 +1493,7 @@ bool CUserManager::OnUpdateInfoPacket(CReceivePacket* msg, IExtendedSocket* sock
  	case UpdateInfoPacketType::RequestUpdateTutorial:
  	{
  		int tutorial = msg->ReadUInt8();
@@ -10530,7 +10656,7 @@ index b426874..bd14908 100644
  
  		break;
  	}
-@@ -989,6 +1494,16 @@ void CUserManager::OnSecondTick(time_t curTime)
+@@ -989,6 +1531,16 @@ void CUserManager::OnSecondTick(time_t curTime)
  {
  	for (auto u : m_Users)
  		u->OnTick();
@@ -10547,7 +10673,7 @@ index b426874..bd14908 100644
  }
  
  void CUserManager::SendNoticeMessageToAll(const string& msg)
-@@ -1049,6 +1564,7 @@ int CUserManager::LoginUser(IExtendedSocket* socket, const string& userName, con
+@@ -1049,6 +1601,7 @@ int CUserManager::LoginUser(IExtendedSocket* socket, const string& userName, con
  	}
  
  	Logger().Info(OBFUSCATE("User logged in (IP: %s, UID: %d, Username: %s)\n"), newUser->GetNetworkConfig().m_szExternalIpAddress.c_str(), userID, userName.c_str());
@@ -10555,7 +10681,7 @@ index b426874..bd14908 100644
  
  	// Update last login time, last IP and last HWID
  	CUserData data = newUser->GetUser(UDATA_FLAG_FIRSTLOGONTIME);
-@@ -1080,8 +1596,10 @@ int CUserManager::LoginUser(IExtendedSocket* socket, const string& userName, con
+@@ -1080,8 +1633,10 @@ int CUserManager::LoginUser(IExtendedSocket* socket, const string& userName, con
  		g_ItemManager.OnUserLogin(newUser);
  		g_ClanManager.OnUserLogin(newUser);
  		g_QuestManager.OnUserLogin(newUser);
@@ -10566,7 +10692,7 @@ index b426874..bd14908 100644
  	}
  
  	return LOGIN_OK;
-@@ -1197,6 +1715,9 @@ void CUserManager::RemoveUserBySocket(IExtendedSocket* socket)
+@@ -1197,6 +1752,9 @@ void CUserManager::RemoveUserBySocket(IExtendedSocket* socket)
  
  bool CUserManager::RemoveUserInternal(IUser* user)
  {
@@ -10576,7 +10702,7 @@ index b426874..bd14908 100644
  	m_Users.erase(remove(begin(m_Users), end(m_Users), user), end(m_Users));
  
  	CleanUpUser(user);
-@@ -1285,7 +1806,7 @@ bool CUserManager::OnUserSurveyPacket(CReceivePacket* msg, IExtendedSocket* sock
+@@ -1285,7 +1843,7 @@ bool CUserManager::OnUserSurveyPacket(CReceivePacket* msg, IExtendedSocket* sock
  
  	IUser* user = GetUserBySocket(socket);
  	if (user == NULL)
@@ -10786,10 +10912,10 @@ index c7d2bdb..75d0ee9 100644
 +extern CVoxelManager g_VoxelManager;
 diff --git a/src/manager/warbondmanager.cpp b/src/manager/warbondmanager.cpp
 new file mode 100644
-index 0000000..0627e5e
+index 0000000..8eb8fb0
 --- /dev/null
 +++ b/src/manager/warbondmanager.cpp
-@@ -0,0 +1,1179 @@
+@@ -0,0 +1,1186 @@
 +#include "channelmanager.h"
 +#include "guestprofile.h"
 +#include "transfer.h"
@@ -11036,6 +11162,13 @@ index 0000000..0627e5e
 +	else if (req.method == "POST" && req.path == "/api/guest/inbox")
 +	{
 +		result = GuestProfiles::Inbox(json::parse(req.body));
++	}
++	else if (req.method == "POST" && req.path == "/api/transfer/fallback")
++	{
++		// the bridge sends this PC's game back here: the other PC's server never answered it (transfer.h)
++		json body = json::parse(req.body, nullptr, false);
++		ServerTransfer::ExpectFallback(body.is_object() ? body.value("host", string("The other player")) : string("The other player"));
++		result = { { "ok", true } };
 +	}
 +	else if (!user)
 +	{

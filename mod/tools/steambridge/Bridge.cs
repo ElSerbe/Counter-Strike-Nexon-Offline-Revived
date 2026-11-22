@@ -137,6 +137,9 @@ namespace SteamBridge
             public bool AwaitingReply;
             // host side: what came in while the connection to this PC's server was still being made (null once made)
             public List<byte[]> Pending;
+            // joining side: the other server never answered, the game goes to this PC's own server (FallBackHome)
+            public volatile bool FallingBack;
+            public volatile TcpClient Local;
         }
 
         // The game connecting to another player's server (the first 32 KB, its login) waits for every answer: when that
@@ -149,6 +152,11 @@ namespace SteamBridge
             var now = DateTime.UtcNow;
             foreach (var c in conns.Values.ToList())
             {
+                if (c.HostName != null && c.AwaitingReply && c.Received == 0 && !c.Closed && (now - c.SentAt).TotalSeconds >= FallbackSeconds)
+                {
+                    FallBackHome(c);
+                    continue;
+                }
                 if (c.HostName == null || !c.AwaitingReply || c.Received >= 32768 || (now - c.SentAt).TotalSeconds < StallSeconds)
                     continue;
                 log(c.HostName + "'s server didn't answer for " + StallSeconds + " s while this PC's game was connecting to it (" +
@@ -200,6 +208,43 @@ namespace SteamBridge
                     log(LinkState(peer) + ": Steam sends this PC's data to them slowly");
                 }
             }
+        }
+
+        // The other player's server sent nothing at all for 40 s (not even its greeting): the game hasn't sent anything yet
+        // either, so it can still be given this PC's own server instead. The server is told first (POST
+        // /api/transfer/fallback): the game's login with the ticket meant for the other server then logs the player in at
+        // home with their return ticket, and a message says what happened. Without this, the game sat in front of a dead
+        // connection and had to be restarted.
+        const int FallbackSeconds = 40, HomeServerPort = 30002;
+        void FallBackHome(Conn c)
+        {
+            c.FallingBack = true;
+            c.Closed = true;
+            Send(c.Peer, Close, c.Id, null, 0);
+            conns.TryRemove(Key(c.Peer, c.Id), out _);
+            log(c.HostName + "'s server didn't answer for " + FallbackSeconds + " s while this PC's game was connecting to it (connection " +
+                c.Id + "): the game goes back to this PC's own server. " + LinkState(c.Peer) + ".");
+            new Thread(() =>
+            {
+                try
+                {
+                    var body = json.Serialize(new Dictionary<string, object> { { "host", c.HostName } });
+                    http.PostAsync(apiUrl + "/api/transfer/fallback", new StringContent(body, Encoding.UTF8, "application/json")).GetAwaiter().GetResult();
+                    var local = new TcpClient { NoDelay = true };
+                    local.Connect("127.0.0.1", HomeServerPort);
+                    c.Local = local;
+                    // this PC's server -> the game
+                    var buf = new byte[16384];
+                    var from = local.GetStream();
+                    var to = c.Tcp.GetStream();
+                    int n;
+                    while ((n = from.Read(buf, 0, buf.Length)) > 0)
+                        to.Write(buf, 0, n);
+                }
+                catch (Exception ex) { log("The game couldn't be taken back to this PC's server: " + ex.Message); }
+                try { c.Tcp.Close(); } catch { }
+                try { c.Local?.Close(); } catch { }
+            }) { IsBackground = true }.Start();
         }
 
         readonly ConcurrentDictionary<string, Conn> conns = new ConcurrentDictionary<string, Conn>();
@@ -613,6 +658,16 @@ namespace SteamBridge
                 int n;
                 while ((n = s.Read(buf, 0, buf.Length)) > 0)
                 {
+                    if (c.FallingBack)
+                    {
+                        // the game talks to this PC's own server now (FallBackHome): once that connection is made
+                        for (int i = 0; i < 200 && c.Local == null; i++)
+                            Thread.Sleep(50);
+                        if (c.Local == null)
+                            break;
+                        c.Local.GetStream().Write(buf, 0, n);
+                        continue;
+                    }
                     if (c.HostName != null && !c.AwaitingReply)
                     {
                         c.SentAt = DateTime.UtcNow;
@@ -629,6 +684,7 @@ namespace SteamBridge
             }
             conns.TryRemove(Key(c.Peer, c.Id), out _);
             try { c.Tcp.Close(); } catch { }
+            try { c.Local?.Close(); } catch { }
         }
 
         void Send(ulong peer, byte type, uint id, byte[] data, int n)
