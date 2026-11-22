@@ -57,7 +57,31 @@ main { height: calc(100% - 56px); }
 
 /* ---------- acquisition centre (pass list) ---------- */
 .centre { display: flex; height: 100%; }
-.pass-list { width: 290px; flex: none; border-right: 1px solid var(--line); overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.pass-col { width: 290px; flex: none; border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+.pass-list { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 14px 14px; display: flex; flex-direction: column; gap: 10px; }
+
+/* the search over weapons, characters and passes */
+.search { position: relative; flex: none; padding: 14px 14px 10px; }
+.search input { width: 100%; box-sizing: border-box; background: #0b0e11; border: 1px solid var(--line-strong); color: var(--text); padding: 9px 12px; font: 14px var(--font); letter-spacing: .5px; }
+.search input:focus { outline: none; border-color: var(--accent); }
+.search input::placeholder { color: var(--muted); }
+.search-count { position: absolute; right: 24px; top: 50%; margin-top: 2px; transform: translateY(-50%); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); pointer-events: none; }
+.search-empty { color: var(--muted); font-size: 13px; line-height: 1.5; padding: 6px 2px; }
+.pass-card.with-found { height: 112px; }
+.pass-card .found { font-size: 11px; color: var(--accent); letter-spacing: .5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.found-items { margin: 4px 0 14px; }
+.found-items .label { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+.found-items .chips { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.found-items .chip { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px 0 4px; border: 1px solid var(--line-strong); background: var(--panel); color: var(--text); font: 12px var(--font); letter-spacing: .5px; text-transform: uppercase; cursor: pointer; }
+.found-items .chip:hover { border-color: var(--accent); }
+.found-items .chip-art { width: 54px; height: 32px; display: flex; align-items: center; justify-content: center; }
+.found-items .chip-art img, .found-items .chip-art svg { max-width: 100%; max-height: 100%; }
+.found-items .chip-art .fallback { width: 100%; height: 100%; align-items: center; justify-content: center; }
+.found-items .chip-owned { color: var(--owned); font-size: 10px; }
+.found-items .more { color: var(--muted); font-size: 12px; }
+.featured.nothing { opacity: .3; pointer-events: none; }   /* the search found no pass */
+.tile.found { border-color: var(--gold); }
+.tile .found-tag { position: absolute; top: 6px; left: 6px; z-index: 2; padding: 1px 6px; font-size: 10px; letter-spacing: 1px; text-transform: uppercase; background: var(--gold); color: #111; }
 .pass-card { position: relative; flex: none; height: 92px; border: 1px solid var(--line); background: var(--panel); text-align: left; color: var(--text); padding: 0; overflow: hidden; }
 .pass-card:hover { border-color: var(--line-strong); }
 .pass-card.selected { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }

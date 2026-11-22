@@ -161,6 +161,25 @@
 
   const passById = id => state.warbonds.find(w => w.id === id);
 
+  // ---------- search: the passes with a weapon, a character, any item (or the pass's own name) ----------
+  // Every word typed must start a word of the name, or run on over the next ones (accents, case, spaces and dashes don't
+  // count): "ak" finds AK47 Dragon but not Fake Ladder, "thanatos7" finds Thanatos-7, "47" finds AK47.
+  let query = "";
+  const fold = s => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  const terms = () => fold(query).split(/[^a-z0-9]+/).filter(Boolean);
+  function hit(text, ts) {
+    const words = fold(text).replace(/([a-z])([0-9])/g, "$1 $2").replace(/([0-9])([a-z])/g, "$1 $2").split(/[^a-z0-9]+/).filter(Boolean);
+    const runs = words.map((_, i) => words.slice(i).join(""));
+    return ts.every(t => runs.some(r => r.startsWith(t)));
+  }
+  const itemHit = (it, ts) => ts.length > 0 && hit((it.name || "") + " " + (it.category || ""), ts);
+  // null: not found; { all: true } the pass's name, type or text; { items } the items found in it
+  function passHit(w, ts) {
+    if (!ts.length || hit(w.name + " " + w.type + " " + (w.description || ""), ts)) return { all: true, items: [] };
+    const items = w.pages.flatMap(p => p.items).filter(it => itemHit(it, ts));
+    return items.length ? { all: false, items } : null;
+  }
+
   function render() {
     medalsEl.textContent = state.medals.toLocaleString("en-US");
     const inPass = openPass !== null;
@@ -180,24 +199,53 @@
       view.innerHTML = '<div class="message">No battle passes available.</div>';
       return;
     }
+    const ts = terms();
+    const found = new Map();
+    state.warbonds.forEach(w => { const h = passHit(w, ts); if (h) found.set(w.id, h); });
+    const shown = state.warbonds.filter(w => found.has(w.id));
+    // the pass on the right is one of those the search found
+    if (shown.length && !found.has(selectedPass)) selectedPass = shown[0].id;
     const pass = passById(selectedPass) || state.warbonds[0];
     const passTag = w => !w.cost ? '<span class="pass-tag free">Free</span>' : !w.purchased ? '<span class="pass-tag locked">' + medal(true) + w.cost + "</span>" : "";
-    const list = state.warbonds.map(w =>
-      '<button type="button" class="pass-card' + (w.id === pass.id ? " selected" : "") + (w.purchased ? "" : " not-owned") + '" data-pass="' + w.id + '">' +
+    const foundLine = w => {
+      const h = found.get(w.id);
+      if (!h || h.all) return "";
+      const names = h.items.slice(0, 3).map(it => esc(it.name || "Item " + it.id)).join(", ");
+      return '<div class="found">' + names + (h.items.length > 3 ? " +" + (h.items.length - 3) : "") + "</div>";
+    };
+    const list = shown.map(w =>
+      '<button type="button" class="pass-card' + (w.id === pass.id ? " selected" : "") + (w.purchased ? "" : " not-owned") +
+        (foundLine(w) ? " with-found" : "") + '" data-pass="' + w.id + '">' +
         passArt(w) +
-        '<div class="info"><div class="name">' + esc(w.name) + '</div>' +
+        '<div class="info"><div class="name">' + esc(w.name) + '</div>' + foundLine(w) +
         '<div class="meta"><span class="badge ' + esc(w.type.toLowerCase()) + '">' + esc(w.type) + "</span>" + passTag(w) +
         '<span>' + (w.resetsIn !== undefined ? "New in " + restock(w.resetsIn) : w.total ? w.owned + " / " + w.total : "Supplies") + '</span></div>' +
         '<div class="progress mini-progress"><span style="width:' + pct(w.owned, w.total) + '%"></span></div></div>' +
-      "</button>").join("");
+      "</button>").join("") ||
+      '<div class="search-empty">No battle pass has &ldquo;' + esc(query.trim()) + "&rdquo;.</div>";
+
+    // the items the search found in the pass on the right: a click opens the pass on that item
+    const passFound = found.get(pass.id);
+    const foundHere = passFound && !passFound.all && shown.length ?
+      '<div class="found-items"><div class="label">Found in this pass</div><div class="chips">' +
+        passFound.items.slice(0, 12).map(it =>
+          '<button type="button" class="chip" data-found="' + it.id + '"><span class="chip-art">' + itemImage(it) + "</span>" +
+          "<span>" + esc(it.name || "Item " + it.id) + "</span>" + (it.owned ? '<span class="chip-owned">Owned</span>' : "") + "</button>").join("") +
+        (passFound.items.length > 12 ? '<span class="more">+' + (passFound.items.length - 12) + " more</span>" : "") +
+      "</div></div>" : "";
+
+    const search =
+      '<div class="search"><input id="shop-search" type="search" autocomplete="off" spellcheck="false" maxlength="40" ' +
+        'placeholder="Search weapons, characters, passes..." value="' + esc(query) + '">' +
+        (ts.length ? '<span class="search-count">' + shown.length + (shown.length === 1 ? " pass" : " passes") + "</span>" : "") + "</div>";
 
     const html =
-      '<div class="centre"><div class="pass-list">' + list + "</div>" +
-      '<section class="featured">' +
+      '<div class="centre"><div class="pass-col">' + search + '<div class="pass-list">' + list + "</div></div>" +
+      '<section class="featured' + (shown.length ? "" : " nothing") + '">' +
         '<div class="banner">' + passArt(pass) +
           '<div class="caption"><span class="badge ' + esc(pass.type.toLowerCase()) + '">' + esc(pass.type) + "</span>" +
           "<h2>" + esc(pass.name) + "</h2></div></div>" +
-        '<p class="desc">' + esc(pass.description) + "</p>" +
+        '<p class="desc">' + esc(pass.description) + "</p>" + foundHere +
         (pass.resetsIn !== undefined ? '<p class="restock">New weapons in ' + restock(pass.resetsIn) + "</p>" : "") +
         '<div class="stats">' +
           '<div class="stat grow"><div class="label">Unlocked</div><div class="value">' + pass.owned + " / " + pass.total + "</div>" +
@@ -217,10 +265,20 @@
 
     const oldList = view.querySelector(".pass-list");
     if (oldList) listScroll = oldList.scrollTop;   // kept while browsing a pass too
+    // typing re-renders the page: the search box keeps the focus and the caret (also through the 15 s refresh)
+    const typing = document.activeElement && document.activeElement.id === "shop-search";
+    const caret = typing ? document.activeElement.selectionStart : 0;
     view.innerHTML = html;
     view.querySelector(".pass-list").scrollTop = listScroll;
+    const searchBox = document.getElementById("shop-search");
+    if (typing) { searchBox.focus(); searchBox.setSelectionRange(caret, caret); }
+    searchBox.oninput = () => { query = searchBox.value; listScroll = 0; renderCentre(); };
+    searchBox.onkeydown = e => { if (e.key === "Escape" && query) { e.stopPropagation(); query = ""; renderCentre(); } };
     view.querySelectorAll("[data-pass]").forEach(b => b.onclick = () => { selectedPass = +b.dataset.pass; render(); });
-    view.querySelector("[data-open]").onclick = () => { openPass = pass.id; selectedItem = null; render(); };
+    // opened from a search, the pass starts on the first item found
+    const firstFound = passFound && !passFound.all && passFound.items.length ? passFound.items[0].id : null;
+    view.querySelector("[data-open]").onclick = () => { openPass = pass.id; selectedItem = firstFound; render(); };
+    view.querySelectorAll("[data-found]").forEach(b => b.onclick = () => { openPass = pass.id; selectedItem = +b.dataset.found; quantity = 1; render(); });
     bindPassHold(pass, document.getElementById("unlock-pass"));
   }
 
@@ -240,6 +298,7 @@
     const sel = items.find(i => i.id === selectedItem) || items[0];
     const theme = passTheme(pass);
     passOpen = pass.purchased;
+    const searchTerms = terms();   // the items the shop's search found are marked
 
     const pages = pass.pages.map((p, i) => {
       const owned = p.items.filter(it => it.owned).length;
@@ -248,9 +307,11 @@
       const tiles = p.items.map(it => {
         const it2 = items.find(x => x.id === it.id);
         const isSel = sel && it.id === sel.id;
+        const isFound = itemHit(it, searchTerms);
         return '<button type="button" class="tile' + (it.owned ? " owned" : "") + (it.rebuy ? " rebuy" : "") + (isSel ? " selected" : "") +
-            (isSel && buyable(it2) ? " can-buy" : "") + '" data-item="' + it.id + '">' +
+            (isSel && buyable(it2) ? " can-buy" : "") + (isFound ? " found" : "") + '" data-item="' + it.id + '">' +
           '<div class="art">' + itemImage(it) + "</div>" +
+          (isFound ? '<span class="found-tag">Found</span>' : "") +
           (it.owned ? '<span class="check"></span>' : "") +
           (it.rebuy ? '<span class="rebuy-tag">Buying again</span>' : "") +
           (isSel && buyable(it2) ? '<span class="hold-hint">Hold to unlock</span>' : "") +
