@@ -72,6 +72,7 @@ mod/server/CSNZ_Server/bin/Data/StudioNet.json
 mod/server/CSNZ_Server/bin/Data/GuestCheckouts.json
 mod/server/CSNZ_Server/bin/Data/RoomDefaults.json
 mod/server/CSNZ_Server/bin/Data/FamilyState.json
+mod/server/CSNZ_Server/bin/Data/FamilyAway.json
 mod/server/CSNZ_Server/bin/Data/GuestBackups/
 mod/server/CSNZ_Server/bin/Data/SteamBridge.stop
 

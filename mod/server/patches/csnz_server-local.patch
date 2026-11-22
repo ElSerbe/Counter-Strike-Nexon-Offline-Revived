@@ -1914,10 +1914,10 @@ index e4e7c83..30aa227 100644
 \ No newline at end of file
 diff --git a/src/manager/familymanager.cpp b/src/manager/familymanager.cpp
 new file mode 100644
-index 0000000..4c28403
+index 0000000..63ba902
 --- /dev/null
 +++ b/src/manager/familymanager.cpp
-@@ -0,0 +1,734 @@
+@@ -0,0 +1,898 @@
 +// Offline build: Family EXP, level, points and the game's Family Achievements (see familymanager.h).
 +#include "familymanager.h"
 +#include "itemmanager.h"
@@ -2039,9 +2039,12 @@ index 0000000..4c28403
 +		f << out.dump(1, '\t');
 +	}
 +
++	static void LoadAway();
++
 +	void Load()
 +	{
 +		lock_guard<mutex> lock(g_lock);
++		LoadAway();
 +		g_achievements.clear();
 +		ifstream f("Data/FamilyAchievements.json");
 +		json d = json::parse(f, nullptr, false, true);
@@ -2288,8 +2291,61 @@ index 0000000..4c28403
 +			}
 +	}
 +
++	// a member who played: online here, or (user null) away on another PC's server
++	struct Present
++	{
++		int userID;
++		IUser* user;
++	};
++
++	// rewards of members who were away on another PC's server: they get them at their next login here
++	struct AwayRewards
++	{
++		long long medals = 0;
++		vector<RewardItem> items;
++	};
++	static map<int, AwayRewards> g_away;
++	static const char* AWAY_FILE = "Data/FamilyAway.json";
++
++	static void SaveAway()
++	{
++		json out = json::object();
++		for (auto& kv : g_away)
++		{
++			json items = json::array();
++			for (auto& it : kv.second.items)
++				items.push_back({ it.itemID, it.count, it.duration });
++			out[to_string(kv.first)] = { { "Medals", kv.second.medals }, { "Items", items } };
++		}
++		ofstream f(AWAY_FILE);
++		f << out.dump(1, '\t');
++	}
++
++	static void LoadAway()
++	{
++		g_away.clear();
++		ifstream f(AWAY_FILE);
++		json j = json::parse(f, nullptr, false);
++		if (!j.is_object())
++			return;
++		for (auto& [key, v] : j.items())
++		{
++			AwayRewards& w = g_away[atoi(key.c_str())];
++			w.medals = v.value("Medals", 0LL);
++			for (auto& it : v.value("Items", json::array()))
++				if (it.is_array() && it.size() >= 3)
++				{
++					RewardItem r = {};
++					r.itemID = it[0];
++					r.count = it[1];
++					r.duration = it[2];
++					w.items.push_back(r);
++				}
++		}
++	}
++
 +	// an achievement done: its rewards to the members who were there, the parents checked
-+	static void Complete(int clanID, ClanState& c, const Achievement& a, const vector<IUser*>& present)
++	static void Complete(int clanID, ClanState& c, const Achievement& a, const vector<Present>& present)
 +	{
 +		if (c.done.count(a.id))
 +			return;
@@ -2303,13 +2359,24 @@ index 0000000..4c28403
 +			const char* name = it.count > 1 ? va(" x%d", it.count) : "";
 +			items += string(items.empty() ? "" : ", ") + "item " + to_string(it.itemID) + name + (it.duration ? va(" (%d days)", it.duration) : "");
 +		}
-+		for (IUser* u : present)
++		bool away = false;
++		for (auto& u : present)
 +		{
++			if (!u.user)
++			{
++				AwayRewards& w = g_away[u.userID];
++				w.medals += a.medals;
++				w.items.insert(w.items.end(), a.items.begin(), a.items.end());
++				away = true;
++				continue;
++			}
 +			for (auto& it : a.items)
-+				g_ItemManager.AddItem(u->GetID(), u, it.itemID, it.count, it.duration);
++				g_ItemManager.AddItem(u.userID, u.user, it.itemID, it.count, it.duration);
 +			if (a.medals)
-+				u->UpdatePoints(a.medals);
++				u.user->UpdatePoints(a.medals);
 +		}
++		if (away)
++			SaveAway();
 +		string reward = va("+%d medals", a.medals);
 +		if (!a.items.empty())
 +			reward += " and the achievement's items";
@@ -2329,7 +2396,7 @@ index 0000000..4c28403
 +			}
 +	}
 +
-+	static void Advance(int clanID, ClanState& c, const Achievement& a, long long add, const vector<IUser*>& present)
++	static void Advance(int clanID, ClanState& c, const Achievement& a, long long add, const vector<Present>& present)
 +	{
 +		if (add <= 0 || c.done.count(a.id))
 +			return;
@@ -2339,6 +2406,137 @@ index 0000000..4c28403
 +			Complete(clanID, c, a, present);
 +	}
 +
++	// a member's part of a match, here or on another PC's server
++	struct Member
++	{
++		Present who;
++		int team = 0;
++		bool won = false;
++		long long kills = 0;
++		map<string, long long> counters; // "Family.<kind>": kills by weapon kind
++	};
++
++	// one family's members in one match: EXP, points, weekly missions, achievements. real = the match's real players.
++	static void Account(int clanID, int mode, const string& mapFile, int difficulty, int real, const vector<Member>& members)
++	{
++		ClanState& c = g_state[clanID];
++		vector<Present> present;
++		for (auto& m : members)
++			present.push_back(m.who);
++		bool everyone = (int)members.size() >= real;
++
++		// EXP and points, with the achievements' bonus
++		int bonus = Buff(c);
++		long long exp = 0, points = 0;
++		for (auto& m : members)
++		{
++			exp += g_expMatch + (m.won ? g_expWin : 0) + (long long)g_expKill * min<long long>(m.kills, g_expMaxKills);
++			points += g_pointsMatch + (m.won ? g_pointsWin : 0) + m.kills / g_killsPerPoint;
++		}
++		exp += exp * bonus / 100;
++		points += points * bonus / 100;
++		int levelBefore = Level(c.exp);
++		c.exp += exp;
++		c.points += points;
++
++		// the weekly missions: every member's match counts
++		{
++			long long wins = 0, kills = 0, best = 0;
++			for (auto& m : members)
++			{
++				wins += m.won;
++				kills += m.kills;
++				best = max(best, m.kills);
++			}
++			AdvanceWeekly(clanID, c, "Matches", mode, (long long)members.size());
++			AdvanceWeekly(clanID, c, "Wins", mode, wins);
++			AdvanceWeekly(clanID, c, "Kills", mode, kills);
++			AdvanceWeekly(clanID, c, "BestKills", mode, best, true);
++			AdvanceWeekly(clanID, c, "FamilyExp", mode, exp);
++		}
++
++		for (auto& a : g_achievements)
++		{
++			const Condition& k = a.cond;
++			if (k.type != "win" && k.type != "play" && k.type != "kills")
++				continue;
++			if (!k.modes.empty() && find(k.modes.begin(), k.modes.end(), mode) == k.modes.end())
++				continue;
++			if (!k.map.empty() && _stricmp(k.map.c_str(), mapFile.c_str()))
++				continue;
++			if (k.difficulty >= 0 && difficulty < k.difficulty)
++				continue;
++			if (k.members > 1 && !everyone && (int)members.size() < k.members)
++				continue;
++			long long add = 0;
++			bool any = false;
++			for (auto& m : members)
++			{
++				if (k.team && m.team != k.team)
++					continue;
++				any = any || k.type == "play" || (k.type == "win" && m.won);
++				if (k.type == "kills")
++				{
++					if (k.weapon.empty())
++						add += m.kills;
++					else
++					{
++						auto it = m.counters.find("Family." + k.weapon);
++						add += it == m.counters.end() ? 0 : it->second;
++					}
++				}
++			}
++			if (k.type != "kills")
++				add = any ? 1 : 0;
++			Advance(clanID, c, a, add, present);
++		}
++
++		long long into = 0, need = 0;
++		int level = Level(c.exp, &into, &need);
++		ApplyMemberLimit(clanID, level);
++		string msg = va("[Family] +%lld EXP, +%lld Family Points%s. Level %d%s", exp, points,
++			bonus ? va(" (bonus +%d%%)", bonus) : "", level, need ? va(" (%lld / %lld EXP)", into, need) : " (max)");
++		bool here = false;
++		for (auto& p : present)
++			if (p.user)
++			{
++				g_PacketManager.SendUMsgNoticeMessageInChat(p.user->GetExtendedSocket(), msg);
++				here = true;
++			}
++		if (!here)
++			Notify(clanID, msg + " (from a match on another player's PC)");
++		if (level > levelBefore)
++		{
++			// (new families may hold 450 members already: the level's reward is medals for the members online)
++			c.chronicle.push_back({ Today(), 2, va("Family Level %d", level) });
++			int medals = g_levelMedals * level;
++			vector<ClanUser> users;
++			g_UserDatabase.GetClanUserList(clanID, false, users);
++			for (auto& u : users)
++				if (u.user)
++				{
++					u.user->UpdatePoints(medals);
++					g_PacketManager.SendUMsgNoticeMessageInChat(u.user->GetExtendedSocket(),
++						va("[Family] The family reached level %d! +%d medals for every member online.", level, medals));
++				}
++		}
++		Logger().Info("Family: clan %d, mode %d, %d of %d players%s: +%lld EXP (level %d), +%lld points\n", clanID, mode,
++			(int)members.size(), real, here ? "" : " (on another PC's server)", exp, level, points);
++	}
++
++	static Member MemberOf(const MatchPlayer& p)
++	{
++		Member m;
++		m.who = { p.stat->m_pUser->GetID(), p.stat->m_pUser };
++		m.team = p.team;
++		m.won = p.won;
++		m.kills = p.stat->m_nKills;
++		for (auto& kv : p.stat->m_Counters)
++			if (kv.first.rfind("Family.", 0) == 0)
++				m.counters[kv.first] = kv.second;
++		return m;
++	}
++
 +	void OnMatchEnd(CGameMatch* match, int difficulty, const vector<MatchPlayer>& players)
 +	{
 +		if (!match || players.empty())
@@ -2346,10 +2544,9 @@ index 0000000..4c28403
 +		lock_guard<mutex> lock(g_lock);
 +		if (g_achievements.empty())
 +			return;
-+		int mode = match->m_nGameMode;
 +		string mapFile = g_mapFiles.count(match->m_nMapID) ? g_mapFiles[match->m_nMapID] : "";
 +		int real = 0;
-+		map<int, vector<const MatchPlayer*>> clans;
++		map<int, vector<Member>> clans;
 +		for (auto& p : players)
 +		{
 +			if (!p.stat || !p.stat->m_pUser)
@@ -2357,111 +2554,78 @@ index 0000000..4c28403
 +			real++;
 +			int clanID = ClanOf(p.stat->m_pUser);
 +			if (clanID > 0)
-+				clans[clanID].push_back(&p);
++				clans[clanID].push_back(MemberOf(p));
 +		}
 +		for (auto& kv : clans)
-+		{
-+			int clanID = kv.first;
-+			auto& members = kv.second;
-+			ClanState& c = g_state[clanID];
-+			vector<IUser*> present;
-+			for (auto* p : members)
-+				present.push_back(p->stat->m_pUser);
-+			bool everyone = (int)members.size() >= real;
-+
-+			// EXP and points, with the achievements' bonus
-+			int bonus = Buff(c);
-+			long long exp = 0, points = 0;
-+			for (auto* p : members)
-+			{
-+				int kills = p->stat->m_nKills;
-+				exp += g_expMatch + (p->won ? g_expWin : 0) + (long long)g_expKill * min(kills, g_expMaxKills);
-+				points += g_pointsMatch + (p->won ? g_pointsWin : 0) + kills / g_killsPerPoint;
-+			}
-+			exp += exp * bonus / 100;
-+			points += points * bonus / 100;
-+			int levelBefore = Level(c.exp);
-+			c.exp += exp;
-+			c.points += points;
-+
-+			// the weekly missions: every member's match counts
-+			{
-+				long long wins = 0, kills = 0, best = 0;
-+				for (auto* p : members)
-+				{
-+					wins += p->won;
-+					kills += p->stat->m_nKills;
-+					best = max<long long>(best, p->stat->m_nKills);
-+				}
-+				AdvanceWeekly(clanID, c, "Matches", mode, (long long)members.size());
-+				AdvanceWeekly(clanID, c, "Wins", mode, wins);
-+				AdvanceWeekly(clanID, c, "Kills", mode, kills);
-+				AdvanceWeekly(clanID, c, "BestKills", mode, best, true);
-+				AdvanceWeekly(clanID, c, "FamilyExp", mode, exp);
-+			}
-+
-+			for (auto& a : g_achievements)
-+			{
-+				const Condition& k = a.cond;
-+				if (k.type != "win" && k.type != "play" && k.type != "kills")
-+					continue;
-+				if (!k.modes.empty() && find(k.modes.begin(), k.modes.end(), mode) == k.modes.end())
-+					continue;
-+				if (!k.map.empty() && _stricmp(k.map.c_str(), mapFile.c_str()))
-+					continue;
-+				if (k.difficulty >= 0 && difficulty < k.difficulty)
-+					continue;
-+				if (k.members > 1 && !everyone && (int)members.size() < k.members)
-+					continue;
-+				long long add = 0;
-+				bool any = false;
-+				for (auto* p : members)
-+				{
-+					if (k.team && p->team != k.team)
-+						continue;
-+					any = any || k.type == "play" || (k.type == "win" && p->won);
-+					if (k.type == "kills")
-+					{
-+						if (k.weapon.empty())
-+							add += p->stat->m_nKills;
-+						else
-+						{
-+							auto it = p->stat->m_Counters.find("Family." + k.weapon);
-+							add += it == p->stat->m_Counters.end() ? 0 : it->second;
-+						}
-+					}
-+				}
-+				if (k.type != "kills")
-+					add = any ? 1 : 0;
-+				Advance(clanID, c, a, add, present);
-+			}
-+
-+			long long into = 0, need = 0;
-+			int level = Level(c.exp, &into, &need);
-+			ApplyMemberLimit(clanID, level);
-+			string msg = va("[Family] +%lld EXP, +%lld Family Points%s. Level %d%s", exp, points,
-+				bonus ? va(" (bonus +%d%%)", bonus) : "", level, need ? va(" (%lld / %lld EXP)", into, need) : " (max)");
-+			for (IUser* u : present)
-+				g_PacketManager.SendUMsgNoticeMessageInChat(u->GetExtendedSocket(), msg);
-+			if (level > levelBefore)
-+			{
-+				// (new families may hold 450 members already: the level's reward is medals for the members online)
-+				c.chronicle.push_back({ Today(), 2, va("Family Level %d", level) });
-+				int medals = g_levelMedals * level;
-+				vector<ClanUser> users;
-+				g_UserDatabase.GetClanUserList(clanID, false, users);
-+				for (auto& u : users)
-+					if (u.user)
-+					{
-+						u.user->UpdatePoints(medals);
-+						g_PacketManager.SendUMsgNoticeMessageInChat(u.user->GetExtendedSocket(),
-+							va("[Family] The family reached level %d! +%d medals for every member online.", level, medals));
-+					}
-+			}
-+			Logger().Info("Family: clan %d, mode %d, %d of %d players: +%lld EXP (level %d), +%lld points\n", clanID, mode,
-+				(int)members.size(), real, exp, level, points);
-+		}
++			Account(kv.first, match->m_nGameMode, mapFile, difficulty, real, kv.second);
 +		Save();
++	}
++
++	json MatchRecord(CGameMatch* match, int difficulty, const vector<MatchPlayer>& players, const MatchPlayer& player)
++	{
++		int real = 0;
++		for (auto& p : players)
++			real += p.stat && p.stat->m_pUser ? 1 : 0;
++		Member m = MemberOf(player);
++		return { { "mode", match->m_nGameMode }, { "map", match->m_nMapID }, { "difficulty", difficulty }, { "real", real },
++			{ "team", m.team }, { "won", m.won }, { "kills", m.kills }, { "counters", m.counters } };
++	}
++
++	void OnRemoteMatch(int userID, int clanID, const json& record)
++	{
++		if (clanID <= 0 || !record.is_object())
++			return;
++		lock_guard<mutex> lock(g_lock);
++		if (g_achievements.empty())
++			return;
++		try
++		{
++			Member m;
++			m.who = { userID, nullptr };
++			m.team = record.value("team", 0);
++			m.won = record.value("won", false);
++			m.kills = max(0LL, min(record.value("kills", 0LL), 1000LL));
++			json counters = record.value("counters", json::object());
++			for (auto& [name, v] : counters.items())
++				if (name.rfind("Family.", 0) == 0 && v.is_number_integer())
++					m.counters[name] = max(0LL, min(v.get<long long>(), 1000LL));
++			int mapID = record.value("map", 0);
++			string mapFile = g_mapFiles.count(mapID) ? g_mapFiles[mapID] : "";
++			Account(clanID, record.value("mode", 0), mapFile, record.value("difficulty", 0), max(1, record.value("real", 1)), { m });
++			Save();
++		}
++		catch (exception& e)
++		{
++			Logger().Warn("Family: a match from another PC couldn't be read: %s\n", e.what());
++		}
++	}
++
++	void GrantAway(int userID)
++	{
++		AwayRewards w;
++		{
++			lock_guard<mutex> lock(g_lock);
++			auto it = g_away.find(userID);
++			if (it == g_away.end())
++				return;
++			w = it->second;
++			g_away.erase(it);
++			SaveAway();
++		}
++		for (auto& it : w.items)
++			g_ItemManager.AddItem(userID, nullptr, it.itemID, it.count, it.duration);
++		if (w.medals)
++		{
++			CUserCharacter character = {};
++			character.lowFlag = UFLAG_LOW_POINTS;
++			if (g_UserDatabase.GetCharacter(userID, character) > 0)
++			{
++				character.points += w.medals;
++				g_UserDatabase.UpdateCharacter(userID, character);
++			}
++		}
++		Logger().Info("Family: user %d got the rewards of family achievements done while they played on another PC (%lld medals, %d items)\n",
++			userID, w.medals, (int)w.items.size());
 +	}
 +
 +	void OnOrderDone(IUser* user, const string& period)
@@ -2473,7 +2637,7 @@ index 0000000..4c28403
 +		ClanState& c = g_state[clanID];
 +		for (auto& a : g_achievements)
 +			if (a.cond.type == "orders" && a.cond.period == period)
-+				Advance(clanID, c, a, 1, { user });
++				Advance(clanID, c, a, 1, { { user->GetID(), user } });
 +		if (period == "Daily")
 +			AdvanceWeekly(clanID, c, "Orders", -1, 1);
 +		Save();
@@ -2654,10 +2818,10 @@ index 0000000..4c28403
 +}
 diff --git a/src/manager/familymanager.h b/src/manager/familymanager.h
 new file mode 100644
-index 0000000..66a1504
+index 0000000..39fc076
 --- /dev/null
 +++ b/src/manager/familymanager.h
-@@ -0,0 +1,47 @@
+@@ -0,0 +1,53 @@
 +#pragma once
 +
 +// Offline build: what a family (clan) gains by playing - Family EXP and level (the game's resource/ClanLevel.csv), Family
@@ -2690,6 +2854,12 @@ index 0000000..66a1504
 +	void OnKill(CGameMatchUserStat* stat, int gunID);
 +	// the end of a match: EXP, points and achievement progress of every family in it
 +	void OnMatchEnd(CGameMatch* match, int difficulty, const std::vector<MatchPlayer>& players);
++	// a guest from another PC (their family isn't on this server): their part of the match, for their PC's family
++	nlohmann::json MatchRecord(CGameMatch* match, int difficulty, const std::vector<MatchPlayer>& players, const MatchPlayer& player);
++	// back home: a match a member played on another PC's server (MatchRecord) counts for their family here; the
++	// achievements' rewards wait for their next login here (GrantAway, Data/FamilyAway.json)
++	void OnRemoteMatch(int userID, int clanID, const nlohmann::json& record);
++	void GrantAway(int userID);
 +	// a daily or weekly order done by a member
 +	void OnOrderDone(IUser* user, const std::string& period);
 +	// the client's Family Achievements window (clan packet 0xa1)
@@ -2707,10 +2877,10 @@ index 0000000..66a1504
 +}
 diff --git a/src/manager/guestprofile.cpp b/src/manager/guestprofile.cpp
 new file mode 100644
-index 0000000..13016e4
+index 0000000..fca2be3
 --- /dev/null
 +++ b/src/manager/guestprofile.cpp
-@@ -0,0 +1,552 @@
+@@ -0,0 +1,636 @@
 +// offline build: a player's profile on another PC's server and back (see guestprofile.h)
 +#include "guestprofile.h"
 +#include "transfer.h"
@@ -2719,6 +2889,7 @@ index 0000000..13016e4
 +#include "userdatabase.h"
 +#include "bingomanager.h"
 +#include "zsriftmanager.h"
++#include "familymanager.h"
 +#include "interface/iroom.h"
 +#include "interface/iuser.h"
 +#include "command.h"
@@ -2759,6 +2930,7 @@ index 0000000..13016e4
 +	{
 +		string hostID, hostName, userName;
 +		time_t since;
++		vector<string> familySeen; // the matches on the host already counted for the player's family here
 +	};
 +	map<int, Checkout_s> g_Checkouts;
 +	bool g_CheckoutsLoaded = false;
@@ -2774,7 +2946,9 @@ index 0000000..13016e4
 +	{
 +		string steamID;
 +		bool finalSent = false;
++		vector<json> family; // their matches for their family at home, until their PC took them
 +	};
++	int g_NextFamilyMatch = 1;
 +	map<int, Guest_s> g_Guests;
 +
 +	void LoadCheckouts()
@@ -2789,14 +2963,16 @@ index 0000000..13016e4
 +		if (!j.is_object())
 +			return;
 +		for (auto& [key, c] : j.items())
-+			g_Checkouts[atoi(key.c_str())] = { c.value("hostID", string()), c.value("hostName", string()), c.value("userName", string()), (time_t)c.value("since", (int64_t)0) };
++			g_Checkouts[atoi(key.c_str())] = { c.value("hostID", string()), c.value("hostName", string()), c.value("userName", string()),
++				(time_t)c.value("since", (int64_t)0), c.value("familySeen", vector<string>()) };
 +	}
 +
 +	void SaveCheckouts()
 +	{
 +		json j = json::object();
 +		for (auto& [userID, c] : g_Checkouts)
-+			j[to_string(userID)] = { { "hostID", c.hostID }, { "hostName", c.hostName }, { "userName", c.userName }, { "since", (int64_t)c.since } };
++			j[to_string(userID)] = { { "hostID", c.hostID }, { "hostName", c.hostName }, { "userName", c.userName }, { "since", (int64_t)c.since },
++				{ "familySeen", c.familySeen } };
 +		ofstream f(kCheckoutsFile);
 +		f << j.dump(1);
 +	}
@@ -2829,6 +3005,20 @@ index 0000000..13016e4
 +	}
 +
 +	string CharacterName(const json& profile);
++
++	// every row of a profile table gets that value in that column
++	void SetColumn(json& profile, const string& table, const string& column, int value)
++	{
++		auto t = profile["tables"].find(table);
++		if (t == profile["tables"].end() || !t->is_object())
++			return;
++		const json& cols = (*t)["columns"];
++		for (size_t c = 0; c < cols.size(); c++)
++			if (cols[c] == column)
++				for (auto& row : (*t)["rows"])
++					if (row.is_array() && c < row.size())
++						row[c] = value;
++	}
 +
 +	bool Import(int userID, json profile, bool asGuest)
 +	{
@@ -2863,15 +3053,17 @@ index 0000000..13016e4
 +		if (asGuest)
 +		{
 +			// no game master rights on someone else's server
-+			auto ext = profile["tables"].find("UserCharacterExtended");
-+			if (ext != profile["tables"].end())
-+			{
-+				const json& cols = (*ext)["columns"];
-+				for (size_t c = 0; c < cols.size(); c++)
-+					if (cols[c] == "gameMaster")
-+						for (auto& row : (*ext)["rows"])
-+							row[c] = 0;
-+			}
++			SetColumn(profile, "UserCharacterExtended", "gameMaster", 0);
++			// their family is on their PC: a family here with the same number would take them in
++			SetColumn(profile, "UserCharacter", "clanID", 0);
++		}
++		else
++		{
++			// the family they have here stays (the profile comes back from the host without it)
++			CUserCharacter character = {};
++			character.lowFlag = UFLAG_LOW_CLAN;
++			if (g_UserDatabase.GetCharacter(userID, character) > 0)
++				SetColumn(profile, "UserCharacter", "clanID", character.clanID);
 +		}
 +		if (!g_UserDatabase.ImportUserData(userID, json({ { "tables", profile["tables"] } }).dump(), asGuest, !asGuest))
 +			return false;
@@ -2928,8 +3120,23 @@ index 0000000..13016e4
 +				then(false);
 +			return;
 +		}
-+		Logger().Info("GuestProfiles: sending guest %d's profile back to their PC (Steam %s)%s\n", userID, g->second.steamID.c_str(), final ? ", their last copy" : "");
-+		SendResultMail(g->second.steamID, { { "kind", "result" }, { "final", final }, { "profile", profile } }, final, then, 0);
++		json family = g->second.family;
++		Logger().Info("GuestProfiles: sending guest %d's profile back to their PC (Steam %s)%s%s\n", userID, g->second.steamID.c_str(),
++			family.empty() ? "" : (" with " + to_string(family.size()) + " match(es) for their family").c_str(), final ? ", their last copy" : "");
++		// the family's matches stay until their PC took them (home counts each one once)
++		auto taken = [userID, family, then](bool ok)
++		{
++			auto g = g_Guests.find(userID);
++			if (ok && g != g_Guests.end())
++			{
++				auto& list = g->second.family;
++				for (auto& sent : family)
++					list.erase(remove(list.begin(), list.end(), sent), list.end());
++			}
++			if (then)
++				then(ok);
++		};
++		SendResultMail(g->second.steamID, { { "kind", "result" }, { "final", final }, { "profile", profile }, { "family", family } }, final, taken, 0);
 +	}
 +}
 +// ------------------------------------------------------------ home side
@@ -2965,7 +3172,7 @@ index 0000000..13016e4
 +			g_PacketManager.SendUMsgNoticeMsgBoxToUuid(socket, "Your profile couldn't be sent to " + hostName + "'s PC (" + error + ").\nTry again in a moment.");
 +			return;
 +		}
-+		g_Checkouts[userID] = { hostID, hostName, userName, time(NULL) };
++		g_Checkouts[userID] = { hostID, hostName, userName, time(NULL), {} };
 +		SaveCheckouts();
 +		Logger().Info("GuestProfiles: user %d plays on %s's server now; their profile comes back after every match\n", userID, hostName.c_str());
 +		g_PacketManager.SendTransfer(socket, "127.0.0.1", port, ticket);
@@ -2976,6 +3183,7 @@ index 0000000..13016e4
 +void GuestProfiles::OnLocalLogin(int userID)
 +{
 +	LoadCheckouts();
++	Family::GrantAway(userID); // family achievements done in their matches on another PC
 +	auto it = g_Checkouts.find(userID);
 +	if (it == g_Checkouts.end())
 +		return;
@@ -3033,7 +3241,7 @@ index 0000000..13016e4
 +
 +void GuestProfiles::OnGuestLogin(int userID, const string& steamID)
 +{
-+	g_Guests[userID] = { steamID, false };
++	g_Guests[userID] = { steamID, false, {} };
 +}
 +
 +bool GuestProfiles::IsGuest(int userID)
@@ -3048,6 +3256,18 @@ index 0000000..13016e4
 +	for (auto u : room->GetUsers())
 +		if (IsGuest(u->GetID()))
 +			SendResult(u->GetID(), false);
++}
++
++void GuestProfiles::OnFamilyMatch(int userID, json record)
++{
++	auto g = g_Guests.find(userID);
++	if (g == g_Guests.end() || !record.is_object())
++		return;
++	// unique on this server's run; home also knows the host by its Steam ID
++	record["id"] = to_string((long long)time(NULL)) + "-" + to_string(g_NextFamilyMatch++);
++	g->second.family.push_back(record);
++	if (g->second.family.size() > 50)
++		g->second.family.erase(g->second.family.begin());
 +}
 +
 +bool GuestProfiles::GoHome(IUser* user, const string& back)
@@ -3114,6 +3334,7 @@ index 0000000..13016e4
 +	if (!Export(userID, profile))
 +		return;
 +	auto points = [](int id) { CUserCharacter c = {}; c.lowFlag = UFLAG_LOW_POINTS | UFLAG_LOW_GAMENAME; g_UserDatabase.GetCharacter(id, c); return c; };
++	auto clanOf = [](int id) { CUserCharacter c = {}; c.lowFlag = UFLAG_LOW_CLAN; g_UserDatabase.GetCharacter(id, c); return c.clanID; };
 +	Logger().Info("guesttest: '%s' has %d points; sending their profile to this PC's own Steam ID %s\n", userName.c_str(), points(userID).points, steamID.c_str());
 +	Send(steamID, { { "kind", "profile" }, { "name", userName }, { "profile", profile } }, [=](bool ok, const string& error)
 +	{
@@ -3138,15 +3359,28 @@ index 0000000..13016e4
 +		add.lowFlag = UFLAG_LOW_POINTS;
 +		add.points = g.points + 1000;
 +		g_UserDatabase.UpdateCharacter(guestID, add);
-+		g_Checkouts[userID] = { steamID, "this PC (test)", userName, time(NULL) };
++		g_Checkouts[userID] = { steamID, "this PC (test)", userName, time(NULL), {} };
 +		SaveCheckouts();
 +		GuestProfiles::OnGuestLogin(guestID, steamID);
-+		SendResult(guestID, true, [=](bool back)
++		// a won match with 10 kills for their family at home (the guest account has no family here)
++		int homeClan = clanOf(userID);
++		Logger().Info("guesttest: family here %d (%s), the guest account's family %d (should be 0)\n", homeClan,
++			homeClan > 0 ? Family::Summary(homeClan).c_str() : "none", clanOf(guestID));
++		GuestProfiles::OnFamilyMatch(guestID, { { "mode", 3 }, { "map", 1 }, { "difficulty", 0 }, { "real", 1 }, { "team", 2 }, { "won", true },
++			{ "kills", 10 }, { "counters", json::object() } });
++		// a copy after a match, then the last one: the match must count once
++		SendResult(guestID, false, [=](bool first)
 +		{
-+			g_Guests.erase(guestID);
-+			CUserCharacter after = points(userID);
-+			Logger().Info("guesttest: %s; '%s' (%s) has %d points now, checkout %s\n", back ? "the profile came back" : "the profile did NOT come back",
-+				userName.c_str(), after.gameName.c_str(), after.points, g_Checkouts.count(userID) ? "still open" : "closed");
++			Logger().Info("guesttest: the copy after the match %s\n", first ? "came back" : "did NOT come back");
++			SendResult(guestID, true, [=](bool back)
++			{
++				g_Guests.erase(guestID);
++				CUserCharacter after = points(userID);
++				int clan = clanOf(userID);
++				Logger().Info("guesttest: %s; '%s' (%s) has %d points now, checkout %s, family %d (%s)\n", back ? "the profile came back" : "the profile did NOT come back",
++					userName.c_str(), after.gameName.c_str(), after.points, g_Checkouts.count(userID) ? "still open" : "closed", clan,
++					clan > 0 ? Family::Summary(clan).c_str() : "none");
++			});
 +		});
 +	});
 +}
@@ -3228,6 +3462,26 @@ index 0000000..13016e4
 +			if (!Import(userID, mail.value("profile", json()), false))
 +				return { { "ok", false }, { "error", "couldn't store the profile" } };
 +			Logger().Info("GuestProfiles: user %d's profile came back from %s's server%s\n", userID, c.hostName.c_str(), final ? " (they left it)" : "");
++			// their matches there count for their family here, each once
++			const json& family = mail.contains("family") && mail["family"].is_array() ? mail["family"] : json::array();
++			if (!family.empty())
++			{
++				CUserCharacter character = {};
++				character.lowFlag = UFLAG_LOW_CLAN;
++				int clanID = g_UserDatabase.GetCharacter(userID, character) > 0 ? character.clanID : 0;
++				for (auto& record : family)
++				{
++					string id = record.is_object() ? record.value("id", string()) : string();
++					if (id.empty() || find(c.familySeen.begin(), c.familySeen.end(), id) != c.familySeen.end())
++						continue;
++					c.familySeen.push_back(id);
++					if (clanID > 0)
++						Family::OnRemoteMatch(userID, clanID, record);
++				}
++				while (c.familySeen.size() > 200)
++					c.familySeen.erase(c.familySeen.begin());
++				SaveCheckouts();
++			}
 +			if (final)
 +			{
 +				g_Checkouts.erase(userID);
@@ -3265,10 +3519,10 @@ index 0000000..13016e4
 +}
 diff --git a/src/manager/guestprofile.h b/src/manager/guestprofile.h
 new file mode 100644
-index 0000000..361d895
+index 0000000..80b2178
 --- /dev/null
 +++ b/src/manager/guestprofile.h
-@@ -0,0 +1,46 @@
+@@ -0,0 +1,51 @@
 +#pragma once
 +
 +// offline build: a player's own profile travels with them to another PC's server (Steam online play) and back.
@@ -3305,6 +3559,11 @@ index 0000000..361d895
 +	bool IsGuest(int userID);
 +	// host: the profiles go back after every match and when the guest leaves
 +	void OnMatchEnd(IRoom* room);
++	// host: a guest's part of a match for their family at home (Family::MatchRecord): it goes with the next profile
++	// home until their PC took it; home counts each one once (Family::OnRemoteMatch). The guest's family isn't on this
++	// server: their profile comes without it (a family here with the same number would take them in) and home keeps
++	// the one they have there.
++	void OnFamilyMatch(int userID, nlohmann::json record);
 +	bool GoHome(IUser* user, const std::string& back); // /home: profile back first, then the transfer
 +	void OnGuestLeft(int userID);
 +	void Forget(int userID); // an old connection of a guest who is coming in again: nothing goes home from it
@@ -12971,10 +13230,10 @@ index 4c688f4..c1e0b2a 100644
 +	bool m_bWouldBlock; // last read hit WOLFSSL_ERROR_WANT_READ/WRITE (non-blocking SSL, retry on next poll)
  };
 diff --git a/src/room/gamematch.cpp b/src/room/gamematch.cpp
-index 65418d8..b536080 100644
+index 65418d8..ce7c796 100644
 --- a/src/room/gamematch.cpp
 +++ b/src/room/gamematch.cpp
-@@ -6,6 +6,10 @@
+@@ -6,6 +6,11 @@
  #include "manager/itemmanager.h"
  #include "manager/hostmanager.h"
  #include "manager/userdatabase.h"
@@ -12982,10 +13241,11 @@ index 65418d8..b536080 100644
 +#include "manager/medalmanager.h"
 +#include "manager/moderewards.h"
 +#include "manager/familymanager.h"
++#include "manager/guestprofile.h"
  
  #include "user/userinventoryitem.h"
  
-@@ -19,6 +23,7 @@ CGameMatchUserStat::CGameMatchUserStat()
+@@ -19,6 +24,7 @@ CGameMatchUserStat::CGameMatchUserStat()
  	m_nDeaths = 0;
  	m_nPointsEarned = 0;
  	m_nBonusPointsEarned = 0;
@@ -12993,7 +13253,7 @@ index 65418d8..b536080 100644
  	m_nExpEarned = 0;
  	m_nBonusExpEarned = 0;
  	m_nItemBonusPoints = 0;
-@@ -209,6 +214,7 @@ void CGameMatch::Connect(IUser* user)
+@@ -209,6 +215,7 @@ void CGameMatch::Connect(IUser* user)
  	{
  		CGameMatchUserStat* userStat = new CGameMatchUserStat();
  		userStat->m_pUser = user;
@@ -13001,7 +13261,7 @@ index 65418d8..b536080 100644
  
  		m_UserStats.push_back(userStat);
  	}
-@@ -220,6 +226,7 @@ void CGameMatch::Disconnect(IUser* user)
+@@ -220,6 +227,7 @@ void CGameMatch::Disconnect(IUser* user)
  	if (stat)
  	{
  		g_QuestManager.OnGameMatchLeave(user, stat->m_TempQuestProgress, stat->m_TempQuestEventProgress);
@@ -13009,7 +13269,7 @@ index 65418d8..b536080 100644
  
  		delete stat;
  		m_UserStats.erase(remove(begin(m_UserStats), end(m_UserStats), stat), end(m_UserStats));
-@@ -271,6 +278,8 @@ void CGameMatch::OnUpdateKillCounter(IUser* user, int kills)
+@@ -271,6 +279,8 @@ void CGameMatch::OnUpdateKillCounter(IUser* user, int kills)
  	if (stat)
  	{
  		stat->UpdateKillsCount(kills);
@@ -13018,7 +13278,7 @@ index 65418d8..b536080 100644
  	}
  }
  
-@@ -292,7 +301,15 @@ void CGameMatch::OnKillEvent(IUser* user, GameMatch_KillEvent& killEvent)
+@@ -292,7 +302,15 @@ void CGameMatch::OnKillEvent(IUser* user, GameMatch_KillEvent& killEvent)
  
  	// don't count player suicide
  	if (killEvent.killerUserID != killEvent.victimUserID)
@@ -13034,7 +13294,7 @@ index 65418d8..b536080 100644
  
  	g_QuestManager.OnKillEvent(stat, this, killEvent);
  
-@@ -356,6 +373,7 @@ void CGameMatch::OnBombExplode(IUser* user)
+@@ -356,6 +374,7 @@ void CGameMatch::OnBombExplode(IUser* user)
  	if (!stat)
  		return;
  
@@ -13042,7 +13302,7 @@ index 65418d8..b536080 100644
  	g_QuestManager.OnBombExplode(stat, this);
  }
  
-@@ -365,6 +383,7 @@ void CGameMatch::OnBombDefuse(IUser* user)
+@@ -365,6 +384,7 @@ void CGameMatch::OnBombDefuse(IUser* user)
  	if (!stat)
  		return;
  
@@ -13050,7 +13310,7 @@ index 65418d8..b536080 100644
  	g_QuestManager.OnBombDefuse(stat, this);
  }
  
-@@ -374,6 +393,7 @@ void CGameMatch::OnHostageEscape(IUser* user)
+@@ -374,6 +394,7 @@ void CGameMatch::OnHostageEscape(IUser* user)
  	if (!stat)
  		return;
  
@@ -13058,7 +13318,7 @@ index 65418d8..b536080 100644
  	g_QuestManager.OnHostageEscape(stat, this);
  }
  
-@@ -383,6 +403,7 @@ void CGameMatch::OnMonsterKill(IUser* user, int monsterType)
+@@ -383,6 +404,7 @@ void CGameMatch::OnMonsterKill(IUser* user, int monsterType)
  	if (!stat)
  		return;	
  
@@ -13066,7 +13326,7 @@ index 65418d8..b536080 100644
  	g_QuestManager.OnMonsterKill(stat, this, monsterType);
  }
  
-@@ -391,6 +412,7 @@ void CGameMatch::OnDropBoxPickup(IUser* user, int rewardID)
+@@ -391,6 +413,7 @@ void CGameMatch::OnDropBoxPickup(IUser* user, int rewardID)
  	CGameMatchUserStat* stat = GetGameUserStat(user);
  	if (!stat)
  		return;
@@ -13074,7 +13334,7 @@ index 65418d8..b536080 100644
  
  #ifndef PUBLIC_RELEASE
  	if (m_nGameMode != 15 && m_nGameMode != 17 && m_nGameMode != 26 && m_nGameMode != 28)
-@@ -430,8 +452,51 @@ void CGameMatch::OnKiteKill(IUser* user)
+@@ -430,8 +453,55 @@ void CGameMatch::OnKiteKill(IUser* user)
  
  void CGameMatch::OnGameMatchEnd()
  {
@@ -13114,6 +13374,10 @@ index 65418d8..b536080 100644
 +			players.push_back({ stat, (int)team, won });
 +		}
 +		Family::OnMatchEnd(this, m_pParentRoom->GetSettings()->zsDifficulty, players);
++		// players from other PCs: their part goes home with their profile, for their family there
++		for (auto& p : players)
++			if (GuestProfiles::IsGuest(p.stat->m_pUser->GetID()))
++				GuestProfiles::OnFamilyMatch(p.stat->m_pUser->GetID(), Family::MatchRecord(this, m_pParentRoom->GetSettings()->zsDifficulty, players, p));
 +	}
 +
 +	if (m_bCheats)
@@ -13126,7 +13390,7 @@ index 65418d8..b536080 100644
  
  	Logger().Info("CGameMatch::OnGameMatchEnd: gamemode: %d, CT rounds win count: %d, T rounds win count: %d\n", m_nGameMode, m_nCtWinCount, m_nTerWinCount);
  }
-@@ -532,7 +597,6 @@ void CGameMatch::CalculateGameResult()
+@@ -532,7 +602,6 @@ void CGameMatch::CalculateGameResult()
  	CalculateFirstPlace();
  
  	int expCoef = GetExpCoefficient();
@@ -13134,7 +13398,7 @@ index 65418d8..b536080 100644
  
  	for (auto stat : m_UserStats)
  	{
-@@ -541,8 +605,23 @@ void CGameMatch::CalculateGameResult()
+@@ -541,8 +610,23 @@ void CGameMatch::CalculateGameResult()
  		// calc exp
  		stat->m_nExpEarned = stat->m_nKills > 0 ? expCoef * stat->m_nKills : expCoef;
  
@@ -13160,7 +13424,7 @@ index 65418d8..b536080 100644
  
  		// calc bonus exp/points
  		auto bonusPercentageClass = find_if(g_pServerConfig->gameMatch.bonusPercentageClasses.begin(), g_pServerConfig->gameMatch.bonusPercentageClasses.end(),
-@@ -601,6 +680,10 @@ void CGameMatch::CalculateGameResult()
+@@ -601,6 +685,10 @@ void CGameMatch::CalculateGameResult()
  			}
  		}
  
@@ -13171,7 +13435,7 @@ index 65418d8..b536080 100644
  		if (stat->m_nExpEarned > 9999)
  		{
  			stat->m_nExpEarned = 9999;
-@@ -623,6 +706,9 @@ void CGameMatch::ApplyGameResult()
+@@ -623,6 +711,9 @@ void CGameMatch::ApplyGameResult()
  
  		int totalPoints = stat->m_nPointsEarned + stat->m_nBonusPointsEarned;
  		user->UpdatePoints(totalPoints);
