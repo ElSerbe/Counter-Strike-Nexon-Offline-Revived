@@ -8440,15 +8440,16 @@ index 0000000..62948ed
 +static CCommand studiofetch("studiofetch", "Fetch a Studio map from the other PCs (Steam bridge)", "studiofetch <code>", StudioFetch);
 diff --git a/src/manager/transfer.cpp b/src/manager/transfer.cpp
 new file mode 100644
-index 0000000..382153f
+index 0000000..c351f2f
 --- /dev/null
 +++ b/src/manager/transfer.cpp
-@@ -0,0 +1,299 @@
+@@ -0,0 +1,304 @@
 +#include "transfer.h"
 +#include "main.h"
 +#include "net/sendpacket.h"
 +#include "definitions.h"
 +#include "interface/iroom.h"
++#include "room/roomsettings.h"
 +#include "interface/iuser.h"
 +
 +#include "nlohmann/json.hpp"
@@ -8615,6 +8616,10 @@ index 0000000..382153f
 +	for (auto room : rooms)
 +	{
 +		if (!room || !room->GetHostUser())
++			continue;
++		// a room still being made (or left half-made) has no places yet: other players saw it as a nameless
++		// "0 of 0" room that turns them away
++		if (room->GetSettings()->maxPlayers <= 0)
 +			continue;
 +		CSendPacket entry(0, 0);
 +		BuildRoomInfo(&entry, room, RLFLAG_ALL, RLHFLAG_ALL);
