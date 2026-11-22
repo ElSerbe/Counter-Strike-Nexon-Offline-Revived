@@ -369,6 +369,15 @@ namespace CsnzLauncher
             Log($"Launcher v{Paths.LauncherVersion.ToString(3)} in {Paths.Root}");
             // the previous launcher, renamed by an update (SwapLauncher)
             try { File.Delete(Application.ExecutablePath + ".old"); } catch { }
+            // ... and the copy under the old name that moved to this one (MoveToCurrentName)
+            try { File.Delete(Path.Combine(Path.GetDirectoryName(Application.ExecutablePath), Program.OldExeName + ".old")); } catch { }
+            // an old-named launcher left beside this one: its desktop shortcuts open this one, and it goes
+            var oldExe = Path.Combine(Path.GetDirectoryName(Application.ExecutablePath), Program.OldExeName);
+            if (!Path.GetFileName(Application.ExecutablePath).Equals(Program.OldExeName, StringComparison.OrdinalIgnoreCase) && File.Exists(oldExe))
+            {
+                Program.RetargetShortcuts(oldExe, Application.ExecutablePath);
+                try { File.Delete(oldExe); Log("The launcher's copy under its old name (" + Program.OldExeName + ") was removed: this one replaces it."); } catch { }
+            }
             if (!GameLocator.IsGame(settings.GamePath))
             {
                 var found = GameLocator.Find();
@@ -1048,6 +1057,76 @@ namespace CsnzLauncher
             }
         }
 
+        // The launcher's name until v1.1.30. Its own updates keep the name the .exe has, so players who started with an old
+        // launcher still had it under that name: it moves to the current one (the newer copy wins when both are there),
+        // the desktop shortcuts that opened it open the new one, and it starts again from there. True: this one ends.
+        internal const string OldExeName = "CSNZ-Offline-Revived-Launcher.exe", ExeName = "CSNZ-Revived-Launcher.exe";
+        static bool MoveToCurrentName(string[] args)
+        {
+            var exe = Application.ExecutablePath;
+            if (!Path.GetFileName(exe).Equals(OldExeName, StringComparison.OrdinalIgnoreCase))
+                return false;
+            var dir = Path.GetDirectoryName(exe);
+            var target = Path.Combine(dir, ExeName);
+            try
+            {
+                Version VersionOf(string f)
+                {
+                    try { return Version.Parse(FileVersionInfo.GetVersionInfo(f).FileVersion ?? "0.0"); }
+                    catch { return new Version(0, 0); }
+                }
+                if (File.Exists(target) && VersionOf(target) >= VersionOf(exe))
+                {
+                    // the current name has this version or a newer one: this copy goes (a running .exe can be renamed;
+                    // Startup deletes it)
+                    if (File.Exists(exe + ".old"))
+                        File.Delete(exe + ".old");
+                    File.Move(exe, exe + ".old");
+                }
+                else
+                {
+                    if (File.Exists(target))
+                    {
+                        if (File.Exists(target + ".old"))
+                            File.Delete(target + ".old");
+                        File.Move(target, target + ".old");
+                    }
+                    File.Move(exe, target);
+                }
+            }
+            catch
+            {
+                return false; // it goes on under the old name
+            }
+            RetargetShortcuts(exe, target);
+            var line = string.Join(" ", args.Select(a => "\"" + a.Replace("\"", "") + "\""));
+            Process.Start(new ProcessStartInfo(target, line) { WorkingDirectory = dir, UseShellExecute = false });
+            return true;
+        }
+
+        // the desktop shortcuts (the current one and the old name's) that opened the old .exe open the new one
+        internal static void RetargetShortcuts(string oldExe, string newExe)
+        {
+            try
+            {
+                var desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+                var shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell"));
+                foreach (var name in new[] { "Counter-Strike Nexon Revived.lnk", "Counter-Strike Nexon Offline Revived.lnk" })
+                {
+                    var link = Path.Combine(desktop, name);
+                    if (!File.Exists(link))
+                        continue;
+                    dynamic sc = shell.GetType().InvokeMember("CreateShortcut", System.Reflection.BindingFlags.InvokeMethod, null, shell, new object[] { link });
+                    if (!string.Equals((string)sc.TargetPath, oldExe, StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    sc.TargetPath = newExe;
+                    sc.IconLocation = newExe + ",0";
+                    sc.Save();
+                }
+            }
+            catch { }
+        }
+
         [STAThread]
         static void Main(string[] args)
         {
@@ -1160,6 +1239,8 @@ namespace CsnzLauncher
                 File.WriteAllLines(Path.Combine(Paths.Root, "launcher-check.txt"), lines);
                 return;
             }
+            if (MoveToCurrentName(args))
+                return;
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             int pd = Array.IndexOf(args, "--preview-dialog");

@@ -124,12 +124,10 @@ def main():
         z.writestr("mod/patches.json", json.dumps(patch_list(version), indent=1))
         z.writestr("mod/VERSION", version + "\n")
     print(f"{zpath.name}: {count + 2} files, {zpath.stat().st_size / 1048576:.1f} MB")
-    # launchers up to v1.1.30 only take a zip named CSNZ-Offline-Revived-*.zip (the project's old name): the same zip
-    # under that name too, so they can still update (and get the new launcher along with it). They check only the start
-    # and the .zip end, so the name also says who it's for (players took it for a second download)
-    legacy = DIST / f"{LEGACY_PREFIX}{version}-for-old-launchers.zip"
-    shutil.copy2(zpath, legacy)
-    print(f"{legacy.name}: the same zip for launchers up to v1.1.30")
+    # (until v1.1.40 the same zip went out a second time as CSNZ-Offline-Revived-<v>-for-old-launchers.zip, for launchers
+    # up to v1.1.30; the user's decision (2026-11-22): one zip, those players download the new launcher by hand)
+    for old in DIST.glob(f"{LEGACY_PREFIX}*.zip"):
+        old.unlink()
 
     # the launcher, with the same version
     out = DIST / "launcher-build"
@@ -176,13 +174,14 @@ def install_into_play(zpath: Path, exe: Path):
     except PermissionError as e:
         sys.exit(f"Play: {e.filename or 'a file of the mod'} is in use. Close the game and the server started from Play, "
                  f"then run build_release.py --play-only")
-    # the launcher's own update keeps the name its .exe has, so an older Play keeps CSNZ-Offline-Revived-Launcher.exe
+    # the launcher under its current name; an old-named copy (CSNZ-Offline-Revived-Launcher.exe, which a desktop shortcut
+    # may still open) gets the new one too: started, it moves itself to the current name and fixes the shortcut
     target = play / exe.name
     old = play / f"{LEGACY_PREFIX}Launcher.exe"
-    if not target.exists() and old.exists():
-        target = old
     try:
         shutil.copy2(exe, target)
+        if old.exists():
+            shutil.copy2(exe, old)
         launcher = "and the launcher"
     except PermissionError:
         # the launcher is open (its own .exe can't be replaced while it runs): the mod's files are in all the same
