@@ -25,10 +25,15 @@ namespace CsnzLauncher
         CancellationTokenSource cancel;
         ArchiveGame.ZipInfo zipInfo;
 
-        // preview: the window as a player without the game sees it (no watch, which would find the game here)
-        public GetGameForm(bool preview = false, Logger log = null)
+        readonly bool manual;
+
+        // preview: the window as a player without the game sees it (no watch, which would find the game here).
+        // manual: opened from More while the game is there (another copy, or the game again): no watch either, which
+        // would find the game at once and close the window.
+        public GetGameForm(bool preview = false, Logger log = null, string current = null)
         {
             this.log = log ?? (l => { });
+            manual = current != null;
             Text = "Get Counter-Strike Nexon";
             ClientSize = new Size(560, 556);
             FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -39,7 +44,7 @@ namespace CsnzLauncher
             ForeColor = Theme.Text;
 
             bool steam = GameLocator.SteamDir() != null;
-            var head = new Label { Text = "COUNTER-STRIKE NEXON ISN'T INSTALLED ON THIS PC", Font = Theme.Display(22), ForeColor = Theme.Accent, AutoSize = true, Location = new Point(14, 10) };
+            var head = new Label { Text = manual ? "GET COUNTER-STRIKE NEXON" : "COUNTER-STRIKE NEXON ISN'T INSTALLED ON THIS PC", Font = Theme.Display(22), ForeColor = Theme.Accent, AutoSize = true, Location = new Point(14, 10) };
             var info = new Label
             {
                 Location = new Point(16, 44),
@@ -137,7 +142,9 @@ namespace CsnzLauncher
             };
 
             watch.Tick += (s, e) => Look();
-            if (preview)
+            if (manual)
+                status.Text = "You have the game in " + current + ". Here you can install it again or get another copy.";
+            else if (preview)
                 status.Text = "Waiting for the game: this window closes by itself once Steam has installed it.";
             else
                 Shown += (s, e) => { Look(); watch.Start(); };
@@ -198,7 +205,8 @@ namespace CsnzLauncher
             {
                 DarkBox.Show(this, $"The drive of {folder} has {Gb(free)} free, and installing needs {Gb(need)}. Choose a folder on another drive, or make room.", Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 progressText.Text = DownloadedSoFar();
-                watch.Start();
+                if (!manual)
+                    watch.Start();
                 return;
             }
             cancel = new CancellationTokenSource();
@@ -234,7 +242,8 @@ namespace CsnzLauncher
                 {
                     download.Text = "Download from archive.org";
                     folderBox.Enabled = folderButton.Enabled = true;
-                    watch.Start();
+                    if (!manual)
+                        watch.Start();
                 }
             }
         }

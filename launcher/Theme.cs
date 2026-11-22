@@ -87,6 +87,7 @@ namespace CsnzLauncher
     {
         public bool Primary;
         public string Sub; // a second, smaller line
+        public Color? Tint; // a coloured button (the Auto switch: green on, red off)
         bool hot, down;
 
         public FlatButton()
@@ -121,6 +122,14 @@ namespace CsnzLauncher
                     top = bottom = Color.FromArgb(28, 33, 35);
                     line = Theme.PanelLine;
                     text = Color.FromArgb(90, 100, 100);
+                }
+                else if (Tint is Color c)
+                {
+                    Color Mix(Color a, Color m, float k) => Color.FromArgb((int)(a.R + (m.R - a.R) * k), (int)(a.G + (m.G - a.G) * k), (int)(a.B + (m.B - a.B) * k));
+                    top = hot ? Mix(c, Color.White, 0.15f) : c;
+                    bottom = Mix(c, Color.Black, down ? 0.55f : 0.35f);
+                    line = Mix(c, Color.White, 0.35f);
+                    text = Color.FromArgb(16, 20, 22);
                 }
                 else if (Primary)
                 {

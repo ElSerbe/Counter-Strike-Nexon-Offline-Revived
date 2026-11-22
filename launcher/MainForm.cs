@@ -17,7 +17,8 @@ namespace CsnzLauncher
         readonly Card logCard = new Card { Title = "Activity" };
         readonly TextBox gameBox = new TextBox { ReadOnly = true };
         readonly Label versionLabel = new Label { AutoSize = true };
-        readonly FlatButton updateButton = new FlatButton { Text = "Check for updates" };
+        readonly FlatButton updateButton = new FlatButton { Text = "Check" };
+        readonly FlatButton autoButton = new FlatButton(); // automatic updates on (green) / off (red)
         readonly FlatButton playButton = new FlatButton { Text = "Play", Primary = true, Sub = "Starts the local server and the game" };
         readonly FlatButton moreButton = new FlatButton { Text = "More  \u25BE" };
         readonly FlatButton logsButton = new FlatButton { Text = "Logs  \u25BE" };
@@ -91,7 +92,11 @@ namespace CsnzLauncher
             // the actions
             playButton.SetBounds(648, 222, 308, 100);
             playButton.Font = Theme.Display(34);
-            updateButton.SetBounds(648, 330, 150, 44);
+            updateButton.SetBounds(648, 330, 86, 44);
+            autoButton.SetBounds(740, 330, 58, 44);
+            tips.SetToolTip(updateButton, "Checks GitHub for a new version, or installs it when there is one");
+            tips.SetToolTip(autoButton, "Automatic updates: the launcher checks GitHub on start and every hour, and installs a new\n" +
+                                        "version by itself (after you close the game). Click to turn them on or off.");
             patchButton.SetBounds(806, 330, 150, 44);
             moreButton.SetBounds(648, 384, 98, 44);
             logsButton.SetBounds(753, 384, 98, 44);
@@ -100,6 +105,8 @@ namespace CsnzLauncher
                                             "for the in-game web pages. Installs Python for your Windows user first if it isn't there.");
             foreach (var bt in new[] { updateButton, patchButton, moreButton, logsButton, picturesButton })
                 bt.Font = Theme.Display(16);
+            autoButton.Font = Theme.Display(14);
+            RefreshAutoButton();
 
             // the log
             logCard.SetBounds(24, 440, 932, 178);
@@ -110,7 +117,7 @@ namespace CsnzLauncher
             logBox.ForeColor = Color.FromArgb(170, 184, 184);
             logCard.Controls.Add(logBox);
 
-            Controls.AddRange(new Control[] { gameCard, playButton, updateButton, patchButton, moreButton, logsButton, picturesButton, logCard, header });
+            Controls.AddRange(new Control[] { gameCard, playButton, updateButton, autoButton, patchButton, moreButton, logsButton, picturesButton, logCard, header });
             picturesButton.Click += (s, e) => PicturesClicked();
             onlineBox.Checked = settings.OnlinePlay;
             onlineBox.CheckedChanged += (s, e) => { settings.OnlinePlay = onlineBox.Checked; settings.Save(); onlineBox.Invalidate(); };
@@ -135,7 +142,7 @@ namespace CsnzLauncher
             var more = new ContextMenuStrip { Renderer = new DarkMenuRenderer(), BackColor = Theme.Panel, ForeColor = Theme.Text, ShowImageMargin = false, Font = Theme.UiFont(13) };
             more.Items.Add("Create a desktop shortcut that starts the game", null, (s, e) => CreateShortcut());
             more.Items.Add("Verify the game's files with Steam", null, (s, e) => OpenSteam(GameLocator.VerifyCommand));
-            more.Items.Add("Get the game (Steam or archive.org)...", null, (s, e) => GetGame());
+            more.Items.Add("Download the game (Steam or archive.org)...", null, (s, e) => GetGame());
             more.Items.Add("Antivirus warnings: is this safe?", null, (s, e) => ShowAntivirusInfo());
             more.Items.Add(new ToolStripSeparator());
             more.Items.Add("Add the hosts block", null, (s, e) => _ = Run("hosts", () => Hosts.Run("add", Log)));
@@ -169,18 +176,11 @@ namespace CsnzLauncher
                 settings.Save();
                 Log(settings.AutoCheckUpdates ? "Updates: checked automatically (on start and every hour)." :
                                                 "Updates: not checked automatically any more (Check for updates does it).");
+                RefreshAutoButton();
                 if (settings.AutoCheckUpdates)
                     _ = AutoUpdateTick();
             });
-            var autoItem = more.Items.Add("", null, (s, e) =>
-            {
-                settings.AutoUpdate = !settings.AutoUpdate;
-                settings.Save();
-                Log(settings.AutoUpdate ? "Updates: installed automatically when one comes out." :
-                                          "Updates: shown, but installed only when you press Update.");
-                if (settings.AutoUpdate)
-                    _ = AutoUpdateTick();
-            });
+            var autoItem = more.Items.Add("", null, (s, e) => SetAutoUpdates(!settings.AutoUpdate));
             more.Opening += (s, e) =>
             {
                 musicItem.Text = settings.MusicOff ? "Turn the launcher music on" : "Turn the launcher music off";
@@ -196,6 +196,7 @@ namespace CsnzLauncher
 
             browseButton.Click += (s, e) => BrowseGame();
             updateButton.Click += (s, e) => UpdateClicked();
+            autoButton.Click += (s, e) => SetAutoUpdates(!(settings.AutoCheckUpdates && settings.AutoUpdate));
             playButton.Click += (s, e) => PlayClicked();
             patchButton.Click += (s, e) => PatchClicked();
             getGame.LinkClicked += (s, e) => GetGame();
@@ -310,7 +311,7 @@ namespace CsnzLauncher
                 text += "    Latest on GitHub: v" + latest.Version.ToString(3) + (installed == null || latest.Version > installed ? "  (update available)" : "  (up to date)");
             versionLabel.Text = text + "    Launcher v" + Paths.LauncherVersion.ToString(3);
             updateButton.Text = latest != null && (installed == null || latest.Version > installed || latest.Version > Paths.LauncherVersion) ?
-                (installed == null ? "Install" : "Update") : "Check for updates";
+                (installed == null ? "Install" : "Update") : "Check";
             RefreshGameState();
         }
 
@@ -409,10 +410,11 @@ namespace CsnzLauncher
             }
         }
 
-        // the game isn't on this PC: how to get it from Steam, and a watch that picks it up once installed
+        // the game isn't on this PC: how to get it from Steam, and a watch that picks it up once installed. From More while
+        // the game is there: the same window, to install it again or get another copy (no watch)
         void GetGame()
         {
-            using (var f = new GetGameForm(false, Log))
+            using (var f = new GetGameForm(false, Log, GameLocator.IsGame(settings.GamePath) ? settings.GamePath : null))
             {
                 if (f.ShowDialog(this) != DialogResult.OK)
                     return;
@@ -681,6 +683,29 @@ namespace CsnzLauncher
                 return;
             }
             await UpdateAsync(false);
+        }
+
+        // the Auto button and More: automatic updates on (the check and the install) or off (the install; More can also
+        // turn the check off)
+        void SetAutoUpdates(bool on)
+        {
+            settings.AutoUpdate = on;
+            if (on)
+                settings.AutoCheckUpdates = true;
+            settings.Save();
+            RefreshAutoButton();
+            Log(on ? "Automatic updates on: the launcher checks GitHub on start and every hour and installs a new version by itself." :
+                     "Automatic updates off: a new version is shown, and Update installs it.");
+            if (on)
+                _ = AutoUpdateTick();
+        }
+
+        void RefreshAutoButton()
+        {
+            bool on = settings.AutoCheckUpdates && settings.AutoUpdate;
+            autoButton.Text = on ? "Auto ON" : "Auto OFF";
+            autoButton.Tint = on ? Theme.Good : Theme.Bad;
+            autoButton.Invalidate();
         }
 
         // an installed mod or launcher older than the latest release (a mod not installed yet is Install, not an update)
