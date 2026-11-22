@@ -344,11 +344,13 @@
   // ---------- hold to unlock: charge sound + glow, unlocks when the bar fills ----------
   const HOLD_MS = 1300;
   const sounds = { charge: new Audio("sounds/charge.wav"), unlock: new Audio("sounds/item.wav"), pass: new Audio("sounds/pass.wav") };
+  // a quarter of what they were until v1.1.41 (the user: "extremely loud", 75% lower)
+  const VOLUME = 0.25;
   // pictures extracted before item.wav existed: the old sound, quieter
-  sounds.unlock.addEventListener("error", () => { sounds.unlock.src = "sounds/unlock.wav"; sounds.unlock.volume = 0.35; }, { once: true });
-  sounds.charge.volume = 0.6;
-  sounds.unlock.volume = 0.5;
-  sounds.pass.volume = 0.8;
+  sounds.unlock.addEventListener("error", () => { sounds.unlock.src = "sounds/unlock.wav"; sounds.unlock.volume = 0.35 * VOLUME; }, { once: true });
+  sounds.charge.volume = 0.6 * VOLUME;
+  sounds.unlock.volume = 0.5 * VOLUME;
+  sounds.pass.volume = 0.8 * VOLUME;
   let hold = null;   // { pass, item, start, frame, soundTimer }
 
   function holdTargets(id) {
