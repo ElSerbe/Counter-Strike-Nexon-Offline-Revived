@@ -673,7 +673,8 @@ namespace CsnzLauncher
                 if (latest == null)
                     return;
             }
-            if (!UpdateAvailable())
+            // (Install: the mod isn't there yet, which UpdateAvailable leaves to this button; v1.1.33-1.1.35 said "up to date")
+            if (Paths.InstalledVersion() != null && !UpdateAvailable())
             {
                 Log("Everything is up to date.");
                 SetBusy(true);

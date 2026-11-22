@@ -204,8 +204,8 @@ The logs help a lot. For a problem that's hard to catch:
    (`mod/server/README.md`) and `nartool.exe` (`mod/tools/nartool/build.cmd`).
 2. Raise `mod/VERSION`, commit, then `python mod/tools/release/build_release.py`. With `CSNZ_SIGN_CERT` set to a code
    signing certificate's thumbprint it signs our programs first (see the script's header).
-3. `gh release create v<version> dist/CSNZ-Revived-<version>.zip dist/CSNZ-Offline-Revived-<version>.zip
-   dist/CSNZ-Revived-Launcher.exe`. The second zip is the same one under the project's old name: launchers up to
-   v1.1.30 only look for that name.
+3. `gh release create v<version> dist/CSNZ-Revived-<version>.zip
+   dist/CSNZ-Offline-Revived-<version>-for-old-launchers.zip dist/CSNZ-Revived-Launcher.exe`. The second zip is the
+   same one under the project's old name: launchers up to v1.1.30 only look for that name. Players don't need it.
 
 The launcher compares the release's tag with `mod\VERSION` (and with its own version) to offer the update.

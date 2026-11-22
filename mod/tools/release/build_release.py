@@ -3,7 +3,8 @@
   dist/CSNZ-Revived-<version>.zip          the mod: every file Git tracks under mod/ at HEAD, the built binaries
                                            (botassist.asi, CSNZ_Server.exe and its DLLs, nartool.exe) and
                                            mod/patches.json (the client patches with their file offsets)
-  dist/CSNZ-Offline-Revived-<version>.zip  the same zip under the project's old name, for launchers up to v1.1.30
+  dist/CSNZ-Offline-Revived-<version>-for-old-launchers.zip  the same zip under the project's old name, for
+                                           launchers up to v1.1.30
   dist/CSNZ-Revived-Launcher.exe           the launcher (launcher/, .NET Framework 4.8)
 
 No file of the game goes in: the launcher patches the player's own Steam copy. Nor does anything of the player's:
@@ -124,8 +125,9 @@ def main():
         z.writestr("mod/VERSION", version + "\n")
     print(f"{zpath.name}: {count + 2} files, {zpath.stat().st_size / 1048576:.1f} MB")
     # launchers up to v1.1.30 only take a zip named CSNZ-Offline-Revived-*.zip (the project's old name): the same zip
-    # under that name too, so they can still update (and get the new launcher along with it)
-    legacy = DIST / f"{LEGACY_PREFIX}{version}.zip"
+    # under that name too, so they can still update (and get the new launcher along with it). They check only the start
+    # and the .zip end, so the name also says who it's for (players took it for a second download)
+    legacy = DIST / f"{LEGACY_PREFIX}{version}-for-old-launchers.zip"
     shutil.copy2(zpath, legacy)
     print(f"{legacy.name}: the same zip for launchers up to v1.1.30")
 
