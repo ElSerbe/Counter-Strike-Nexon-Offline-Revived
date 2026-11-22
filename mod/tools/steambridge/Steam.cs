@@ -61,6 +61,22 @@ namespace SteamBridge
         public static extern bool SteamAPI_ISteamNetworking_AllowP2PPacketRelay(IntPtr self, [MarshalAs(UnmanagedType.I1)] bool allow);
         [DllImport(Dll, CallingConvention = C)] [return: MarshalAs(UnmanagedType.I1)]
         public static extern bool SteamAPI_ISteamNetworking_CloseP2PSessionWithUser(IntPtr self, ulong remote);
+        [DllImport(Dll, CallingConvention = C)] [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool SteamAPI_ISteamNetworking_GetP2PSessionState(IntPtr self, ulong remote, out P2PSessionState state);
+    }
+
+    // the SDK's P2PSessionState_t: how a P2P session with another PC goes
+    [StructLayout(LayoutKind.Sequential, Pack = 8)]
+    struct P2PSessionState
+    {
+        public byte ConnectionActive;
+        public byte Connecting;
+        public byte SessionError;
+        public byte UsingRelay;
+        public int BytesQueuedForSend;
+        public int PacketsQueuedForSend;
+        public uint RemoteIP;
+        public ushort RemotePort;
     }
 
     // one Steam session; every call is made under Steam.Lock

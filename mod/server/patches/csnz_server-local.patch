@@ -2877,7 +2877,7 @@ index 0000000..39fc076
 +}
 diff --git a/src/manager/guestprofile.cpp b/src/manager/guestprofile.cpp
 new file mode 100644
-index 0000000..fca2be3
+index 0000000..f20bb9d
 --- /dev/null
 +++ b/src/manager/guestprofile.cpp
 @@ -0,0 +1,636 @@
@@ -2908,7 +2908,7 @@ index 0000000..fca2be3
 +namespace
 +{
 +	const char* kCheckoutsFile = "Data/GuestCheckouts.json";
-+	const int kMailTimeout = 30;          // s: the bridge answers within 20 s
++	const int kMailTimeout = 120;         // s: the bridge answers within 90 s (a slow Steam connection took 25 s for a profile)
 +	const int kProfileLifetime = 10 * 60; // s: a profile that came for a transfer that never happened is dropped
 +	const int kResultRetries = 20, kResultRetryEvery = 30;
 +
@@ -3158,7 +3158,7 @@ index 0000000..fca2be3
 +	string gameName = user->GetCharacter(UFLAG_LOW_GAMENAME).gameName;
 +	int userID = user->GetID();
 +	string userName = user->GetUsername(), hostID = room.hostID, hostName = room.host;
-+	g_PacketManager.SendUMsgNoticeMessageInChat(socket, "Sending your profile to " + hostName + "'s PC...");
++	g_PacketManager.SendUMsgNoticeMessageInChat(socket, "Sending your profile to " + hostName + "'s PC (up to a minute over a slow connection)...");
 +	Logger().Info("GuestProfiles: sending user %d's profile to %s (Steam %s) before joining their room\n", userID, hostName.c_str(), hostID.c_str());
 +	Send(hostID, { { "kind", "profile" }, { "name", gameName }, { "profile", profile } },
 +		[userID, userName, hostID, hostName, port, ticket, socket](bool ok, const string& error)

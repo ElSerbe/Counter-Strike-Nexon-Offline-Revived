@@ -140,9 +140,10 @@ namespace SteamBridge
         }
 
         // The game connecting to another player's server (the first 32 KB, its login) waits for every answer: when that
-        // server stops answering, the game spun in its TLS connect for good (a "frozen" game). After 25 s without an
-        // answer the connection is closed and logged, and the game gets a disconnection instead.
-        const int StallSeconds = 25;
+        // server stops answering, the game spun in its TLS connect for good (a "frozen" game). After 60 s without an
+        // answer the connection is closed and logged, and the game gets a disconnection instead. (25 s until v1.1.40: a
+        // friend's Steam connection that delivered after 20-35 s was cut although their server had answered at once.)
+        const int StallSeconds = 60;
         void CheckStalled()
         {
             var now = DateTime.UtcNow;
@@ -151,13 +152,56 @@ namespace SteamBridge
                 if (c.HostName == null || !c.AwaitingReply || c.Received >= 32768 || (now - c.SentAt).TotalSeconds < StallSeconds)
                     continue;
                 log(c.HostName + "'s server didn't answer for " + StallSeconds + " s while this PC's game was connecting to it (" +
-                    c.Received + " bytes in so far): connection " + c.Id + " closed. Their PC or the Steam connection to it is stuck; " +
-                    "their logs (Logs > Copy the last session's logs) say why.");
+                    c.Received + " bytes in so far): connection " + c.Id + " closed. " + LinkState(c.Peer) + ". Their PC or the Steam " +
+                    "connection to it is stuck; their logs (Logs > Copy the last session's logs) say why.");
                 c.Closed = true;
                 Send(c.Peer, Close, c.Id, null, 0);
                 CloseConn(c);
             }
         }
+        // how Steam carries the traffic to another PC: straight or through Steam's relay, and what waits to be sent
+        string PeerName(ulong peer) => hosts.Values.FirstOrDefault(h => h.SteamID == peer)?.Name ?? peer.ToString();
+        string LinkState(ulong peer)
+        {
+            if (loopback || !Native.SteamAPI_ISteamNetworking_GetP2PSessionState(steam.Networking, peer, out var s))
+                return "Steam connection to " + PeerName(peer) + ": no state";
+            string how = s.ConnectionActive != 0 ? (s.UsingRelay != 0 ? "through Steam's relay" : "direct") :
+                s.Connecting != 0 ? "still connecting" : "not connected (error " + s.SessionError + ")";
+            return "Steam connection to " + PeerName(peer) + ": " + how + ", " + (s.BytesQueuedForSend / 1024) + " KB (" +
+                s.PacketsQueuedForSend + " packets) waiting to be sent from this PC";
+        }
+
+        // every 2 s: the PCs with open connections or profile mail. Logged when the route changes and when this PC's sending
+        // backs up (a friend's PC whose traffic arrived 20-35 s late: was it their upload, the relay, the other side?)
+        readonly Dictionary<ulong, string> linkRoute = new Dictionary<ulong, string>();
+        readonly Dictionary<ulong, DateTime> linkBacklogLogged = new Dictionary<ulong, DateTime>();
+        void WatchLinks()
+        {
+            if (loopback)
+                return;
+            var peers = new HashSet<ulong>(conns.Values.Where(c => !c.Closed).Select(c => c.Peer));
+            foreach (var m in outMail)
+                if (m.Sent)
+                    peers.Add(m.To);
+            var now = DateTime.UtcNow;
+            foreach (var peer in peers)
+            {
+                if (!Native.SteamAPI_ISteamNetworking_GetP2PSessionState(steam.Networking, peer, out var s) || s.ConnectionActive == 0)
+                    continue;
+                string route = s.UsingRelay != 0 ? "through Steam's relay" : "direct";
+                if (!linkRoute.TryGetValue(peer, out var was) || was != route)
+                {
+                    linkRoute[peer] = route;
+                    log("Steam connection to " + PeerName(peer) + ": " + route);
+                }
+                if (s.BytesQueuedForSend >= 8192 && (!linkBacklogLogged.TryGetValue(peer, out var at) || (now - at).TotalSeconds >= 20))
+                {
+                    linkBacklogLogged[peer] = now;
+                    log(LinkState(peer) + ": Steam sends this PC's data to them slowly");
+                }
+            }
+        }
+
         readonly ConcurrentDictionary<string, Conn> conns = new ConcurrentDictionary<string, Conn>();
         static string Key(ulong peer, uint id) => peer + ":" + id;
         int nextConn = 1;
@@ -204,6 +248,7 @@ namespace SteamBridge
                     {
                         KeepSessions();
                         CheckStalled();
+                        WatchLinks();
                         nextHello = now.AddSeconds(2);
                     }
                     ReadP2P();
@@ -726,9 +771,11 @@ namespace SteamBridge
             public int Id;
             public ulong To;
             public string Text;
-            public DateTime Deadline;
+            public DateTime Deadline, SentAt;
             public bool Sent;
         }
+        // a profile (20-200 KB of text, gzipped) over a slow Steam connection took 25 s: 20 s was too short until v1.1.40
+        const int MailSeconds = 90;
         readonly List<OutMail> outMail = new List<OutMail>();
         readonly HashSet<ulong> mailPeers = new HashSet<ulong>();
         readonly HttpClient mailHttp = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
@@ -755,7 +802,7 @@ namespace SteamBridge
                 {
                     if (!ulong.TryParse(m["to"]?.ToString(), out ulong to))
                         continue;
-                    outMail.Add(new OutMail { Id = Convert.ToInt32(m["id"]), To = to, Text = m["text"]?.ToString() ?? "{}", Deadline = DateTime.UtcNow.AddSeconds(20) });
+                    outMail.Add(new OutMail { Id = Convert.ToInt32(m["id"]), To = to, Text = m["text"]?.ToString() ?? "{}", Deadline = DateTime.UtcNow.AddSeconds(MailSeconds) });
                     Detail("mail " + m["id"] + " for " + to + ", " + ((string)m["text"]).Length + " characters");
                 }
             foreach (var m in outMail.ToList())
@@ -765,7 +812,7 @@ namespace SteamBridge
                     if (DateTime.UtcNow > m.Deadline)
                     {
                         outMail.Remove(m);
-                        log("Profile mail " + m.Id + " to " + m.To + ": no answer");
+                        log("Profile mail " + m.Id + " to " + PeerName(m.To) + ": no answer in " + MailSeconds + " s. " + LinkState(m.To));
                         MailSent(m.Id, false, "no answer from the other PC");
                     }
                     continue;
@@ -794,7 +841,8 @@ namespace SteamBridge
                 else
                     SendRaw(m.To, msg);
                 m.Sent = true;
-                m.Deadline = DateTime.UtcNow.AddSeconds(20);
+                m.SentAt = DateTime.UtcNow;
+                m.Deadline = m.SentAt.AddSeconds(MailSeconds);
                 log("Profile mail " + m.Id + " sent to " + (h?.Name ?? m.To.ToString()) + " (" + payload.Length / 1024 + " KB)");
             }
         }
@@ -837,7 +885,8 @@ namespace SteamBridge
                 var ack = json.Deserialize<Dictionary<string, object>>(text);
                 bool ok = ack.TryGetValue("ok", out var o) && o is bool b && b;
                 string error = ack.TryGetValue("error", out var e) ? e?.ToString() : null;
-                log("Profile mail " + id + " " + (ok ? "taken by" : "refused by (" + error + ")") + " " + peer);
+                double took = (DateTime.UtcNow - m.SentAt).TotalSeconds;
+                log("Profile mail " + id + " " + (ok ? "taken by" : "refused by (" + error + ")") + " " + peer + (took >= 5 ? " after " + took.ToString("0") + " s" : ""));
                 MailSent(id, ok, error);
                 return;
             }
