@@ -87,8 +87,34 @@ namespace CsnzLauncher
     {
         public bool Primary;
         public string Sub; // a second, smaller line
-        public Color? Tint; // a coloured button (the Auto switch: green on, red off)
-        bool hot, down;
+        // a switch cut into the button's right end (the Update button's automatic updates): SegmentWidth pixels, green
+        // and "ON" or red and "OFF" under SegmentLabel; a click there raises SegmentClick instead of Click
+        public int SegmentWidth;
+        public bool SegmentOn;
+        public string SegmentLabel = "AUTO";
+        public event EventHandler SegmentClick;
+        bool hot, down, hotSegment;
+        int pressX = -1;
+
+        bool InSegment(int x) => SegmentWidth > 0 && x >= Width - SegmentWidth;
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            bool s = InSegment(e.X);
+            if (s != hotSegment) { hotSegment = s; Invalidate(); }
+            base.OnMouseMove(e);
+        }
+        protected override void OnClick(EventArgs e)
+        {
+            // (the keyboard's Enter/Space click the main part)
+            if (pressX >= 0 && InSegment(pressX))
+            {
+                pressX = -1;
+                SegmentClick?.Invoke(this, e);
+                return;
+            }
+            pressX = -1;
+            base.OnClick(e);
+        }
 
         public FlatButton()
         {
@@ -100,8 +126,8 @@ namespace CsnzLauncher
         }
 
         protected override void OnMouseEnter(EventArgs e) { hot = true; Invalidate(); base.OnMouseEnter(e); }
-        protected override void OnMouseLeave(EventArgs e) { hot = down = false; Invalidate(); base.OnMouseLeave(e); }
-        protected override void OnMouseDown(MouseEventArgs e) { down = true; Invalidate(); base.OnMouseDown(e); }
+        protected override void OnMouseLeave(EventArgs e) { hot = down = hotSegment = false; Invalidate(); base.OnMouseLeave(e); }
+        protected override void OnMouseDown(MouseEventArgs e) { down = true; pressX = e.X; Invalidate(); base.OnMouseDown(e); }
         protected override void OnMouseUp(MouseEventArgs e) { down = false; Invalidate(); base.OnMouseUp(e); }
         protected override void OnEnabledChanged(EventArgs e) { Invalidate(); base.OnEnabledChanged(e); }
         protected override void OnTextChanged(EventArgs e) { Invalidate(); base.OnTextChanged(e); }
@@ -123,14 +149,6 @@ namespace CsnzLauncher
                     line = Theme.PanelLine;
                     text = Color.FromArgb(90, 100, 100);
                 }
-                else if (Tint is Color c)
-                {
-                    Color Mix(Color a, Color m, float k) => Color.FromArgb((int)(a.R + (m.R - a.R) * k), (int)(a.G + (m.G - a.G) * k), (int)(a.B + (m.B - a.B) * k));
-                    top = hot ? Mix(c, Color.White, 0.15f) : c;
-                    bottom = Mix(c, Color.Black, down ? 0.55f : 0.35f);
-                    line = Mix(c, Color.White, 0.35f);
-                    text = Color.FromArgb(16, 20, 22);
-                }
                 else if (Primary)
                 {
                     top = hot ? Color.FromArgb(70, 228, 180) : Theme.Accent;
@@ -140,8 +158,9 @@ namespace CsnzLauncher
                 }
                 else
                 {
-                    top = hot ? Theme.ButtonHot : Theme.Button;
-                    bottom = down ? Color.FromArgb(24, 28, 30) : Color.FromArgb(30, 35, 37);
+                    bool mainHot = hot && !hotSegment;
+                    top = mainHot ? Theme.ButtonHot : Theme.Button;
+                    bottom = down && !hotSegment ? Color.FromArgb(24, 28, 30) : Color.FromArgb(30, 35, 37);
                     line = hot ? Theme.Accent : Theme.ButtonLine;
                     text = Theme.Text;
                 }
@@ -155,6 +174,8 @@ namespace CsnzLauncher
                         g.DrawLine(p, cut + 1, 1, Width - 2, 1);
 
                 var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+                if (SegmentWidth > 0)
+                    PaintSegment(g, path, r, ref r);
                 using (var tb = new SolidBrush(text))
                 {
                     if (string.IsNullOrEmpty(Sub))
@@ -170,6 +191,42 @@ namespace CsnzLauncher
                     }
                 }
             }
+        }
+
+        // the switch: a slanted cut, then the coloured end of the button with its label and ON / OFF; `main` becomes the
+        // rest, where the button's own text goes
+        void PaintSegment(Graphics g, GraphicsPath button, Rectangle r, ref Rectangle main)
+        {
+            int sx = Width - SegmentWidth, slant = 6;
+            var c = !Enabled ? Color.FromArgb(52, 58, 60) : SegmentOn ? Theme.Good : Theme.Bad;
+            Color Mix(Color a, Color m, float k) => Color.FromArgb((int)(a.R + (m.R - a.R) * k), (int)(a.G + (m.G - a.G) * k), (int)(a.B + (m.B - a.B) * k));
+            var top = hotSegment && Enabled ? Mix(c, Color.White, 0.18f) : c;
+            var bottom = Mix(c, Color.Black, down && hotSegment ? 0.55f : 0.38f);
+            var oldClip = g.Clip;
+            using (var seg = new GraphicsPath())
+            using (var region = new Region(button))
+            {
+                seg.AddPolygon(new[] { new Point(sx + slant, 0), new Point(Width, 0), new Point(Width, Height), new Point(sx - slant, Height) });
+                region.Intersect(seg);
+                g.SetClip(region, CombineMode.Replace);
+                using (var b = new LinearGradientBrush(r, top, bottom, LinearGradientMode.Vertical))
+                    g.FillRectangle(b, 0, 0, Width, Height);
+                g.Clip = oldClip;
+            }
+            // the cut: a dark gap along the slant
+            using (var gap = new Pen(Parent?.BackColor ?? Theme.Back, 2.5f))
+                g.DrawLine(gap, sx + slant, 1, sx - slant, Height - 1);
+            var dark = Color.FromArgb(Enabled ? 255 : 140, 14, 18, 20);
+            var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+            var box = new Rectangle(sx, 0, SegmentWidth, Height);
+            using (var small = Theme.Display(10))
+            using (var big = Theme.Display(16))
+            using (var tb = new SolidBrush(dark))
+            {
+                g.DrawString(SegmentLabel, small, tb, new Rectangle(box.X, 5, box.Width, 14), sf);
+                g.DrawString(SegmentOn ? "ON" : "OFF", big, tb, new Rectangle(box.X, 16, box.Width, Height - 20), sf);
+            }
+            main = new Rectangle(0, 0, sx - slant, Height);
         }
     }
 

@@ -17,8 +17,8 @@ namespace CsnzLauncher
         readonly Card logCard = new Card { Title = "Activity" };
         readonly TextBox gameBox = new TextBox { ReadOnly = true };
         readonly Label versionLabel = new Label { AutoSize = true };
-        readonly FlatButton updateButton = new FlatButton { Text = "Check" };
-        readonly FlatButton autoButton = new FlatButton(); // automatic updates on (green) / off (red)
+        // its right end is the automatic updates switch (green ON / red OFF)
+        readonly FlatButton updateButton = new FlatButton { Text = "Check updates", SegmentWidth = 46 };
         readonly FlatButton playButton = new FlatButton { Text = "Play", Primary = true, Sub = "Starts the local server and the game" };
         readonly FlatButton moreButton = new FlatButton { Text = "More  \u25BE" };
         readonly FlatButton logsButton = new FlatButton { Text = "Logs  \u25BE" };
@@ -92,11 +92,10 @@ namespace CsnzLauncher
             // the actions
             playButton.SetBounds(648, 222, 308, 100);
             playButton.Font = Theme.Display(34);
-            updateButton.SetBounds(648, 330, 86, 44);
-            autoButton.SetBounds(740, 330, 58, 44);
-            tips.SetToolTip(updateButton, "Checks GitHub for a new version, or installs it when there is one");
-            tips.SetToolTip(autoButton, "Automatic updates: the launcher checks GitHub on start and every hour, and installs a new\n" +
-                                        "version by itself (after you close the game). Click to turn them on or off.");
+            updateButton.SetBounds(648, 330, 150, 44);
+            tips.SetToolTip(updateButton, "Left: checks GitHub for a new version, or installs it when there is one.\n" +
+                                          "AUTO ON / OFF: automatic updates. The launcher checks GitHub on start and every hour and installs\n" +
+                                          "a new version by itself (after you close the game). Click it to turn them on or off.");
             patchButton.SetBounds(806, 330, 150, 44);
             moreButton.SetBounds(648, 384, 98, 44);
             logsButton.SetBounds(753, 384, 98, 44);
@@ -105,7 +104,7 @@ namespace CsnzLauncher
                                             "for the in-game web pages. Installs Python for your Windows user first if it isn't there.");
             foreach (var bt in new[] { updateButton, patchButton, moreButton, logsButton, picturesButton })
                 bt.Font = Theme.Display(16);
-            autoButton.Font = Theme.Display(14);
+            updateButton.Font = Theme.Display(15);
             RefreshAutoButton();
 
             // the log
@@ -117,7 +116,7 @@ namespace CsnzLauncher
             logBox.ForeColor = Color.FromArgb(170, 184, 184);
             logCard.Controls.Add(logBox);
 
-            Controls.AddRange(new Control[] { gameCard, playButton, updateButton, autoButton, patchButton, moreButton, logsButton, picturesButton, logCard, header });
+            Controls.AddRange(new Control[] { gameCard, playButton, updateButton, patchButton, moreButton, logsButton, picturesButton, logCard, header });
             picturesButton.Click += (s, e) => PicturesClicked();
             onlineBox.Checked = settings.OnlinePlay;
             onlineBox.CheckedChanged += (s, e) => { settings.OnlinePlay = onlineBox.Checked; settings.Save(); onlineBox.Invalidate(); };
@@ -196,7 +195,7 @@ namespace CsnzLauncher
 
             browseButton.Click += (s, e) => BrowseGame();
             updateButton.Click += (s, e) => UpdateClicked();
-            autoButton.Click += (s, e) => SetAutoUpdates(!(settings.AutoCheckUpdates && settings.AutoUpdate));
+            updateButton.SegmentClick += (s, e) => SetAutoUpdates(!(settings.AutoCheckUpdates && settings.AutoUpdate));
             playButton.Click += (s, e) => PlayClicked();
             patchButton.Click += (s, e) => PatchClicked();
             getGame.LinkClicked += (s, e) => GetGame();
@@ -311,7 +310,7 @@ namespace CsnzLauncher
                 text += "    Latest on GitHub: v" + latest.Version.ToString(3) + (installed == null || latest.Version > installed ? "  (update available)" : "  (up to date)");
             versionLabel.Text = text + "    Launcher v" + Paths.LauncherVersion.ToString(3);
             updateButton.Text = latest != null && (installed == null || latest.Version > installed || latest.Version > Paths.LauncherVersion) ?
-                (installed == null ? "Install" : "Update") : "Check";
+                (installed == null ? "Install" : "Update") : "Check updates";
             RefreshGameState();
         }
 
@@ -702,10 +701,8 @@ namespace CsnzLauncher
 
         void RefreshAutoButton()
         {
-            bool on = settings.AutoCheckUpdates && settings.AutoUpdate;
-            autoButton.Text = on ? "Auto ON" : "Auto OFF";
-            autoButton.Tint = on ? Theme.Good : Theme.Bad;
-            autoButton.Invalidate();
+            updateButton.SegmentOn = settings.AutoCheckUpdates && settings.AutoUpdate;
+            updateButton.Invalidate();
         }
 
         // an installed mod or launcher older than the latest release (a mod not installed yet is Install, not an update)

@@ -32,9 +32,9 @@ launcher gets it for you.
    your own PC).
 
 That's it. Updates install by themselves: the launcher checks GitHub when it opens and every hour while it's open,
-and updates the mod and itself when a new version is out (after you close the game, if it's running). The **Auto**
-button next to Update turns that on (green) or off (red); when it's off, the button says **Update** and one click
-does it.
+and updates the mod and itself when a new version is out (after you close the game, if it's running). The **AUTO**
+end of the update button turns that on (green, ON) or off (red, OFF); when it's off, the button says **Update**
+and one click does it.
 
 Don't have the game, or want it again? **More > Download the game (Steam or archive.org)...** opens the same window
 the launcher shows when it can't find the game.
