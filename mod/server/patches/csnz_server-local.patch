@@ -5882,7 +5882,7 @@ index 0000000..4de865d
 +	void OnMatchEnd(IUser* user, int gameMode, int mapID, int difficulty, bool won, int place, int kills);
 +}
 diff --git a/src/manager/packetmanager.cpp b/src/manager/packetmanager.cpp
-index 0defb02..f05e797 100644
+index 0defb02..763857a 100644
 --- a/src/manager/packetmanager.cpp
 +++ b/src/manager/packetmanager.cpp
 @@ -1,4 +1,7 @@
@@ -6059,7 +6059,20 @@ index 0defb02..f05e797 100644
  
  	socket->Send(msg);
  }
-@@ -2245,12 +2302,17 @@ void CPacketManager::SendRoomListFull(IExtendedSocket* socket, const vector<IRoo
+@@ -2036,6 +2093,12 @@ void BuildRoomInfo(CSendPacket* msg, IRoom* room, int lFlag, int hFlag)
+ 	msg->WriteUInt8(0);
+ 	msg->WriteUInt16(0);
+ 
++	// offline build: this game reads no field for the high flag 1<<6 (hw 0x25ff470 reads bits 0-3, 5, 7-20): the byte
++	// written for it put every room after the first one byte off, and the game read the rest as garbage. A second room
++	// in the list (two players' online rooms, or this server's room and someone's) could close the game: a map number
++	// taken for the map playlist's length overran the room's playlist (Error.log "PacketReader Error - curpacketID : 151").
++	hFlag &= ~RLHFLAG_UNK6;
++
+ 	// room info
+ 	msg->WriteUInt32(lFlag);
+ 	msg->WriteUInt32(hFlag);
+@@ -2245,12 +2308,17 @@ void CPacketManager::SendRoomListFull(IExtendedSocket* socket, const vector<IRoo
  
  	msg->WriteUInt16(2);
  	msg->WriteUInt16(1);
@@ -6078,7 +6091,7 @@ index 0defb02..f05e797 100644
  
  	socket->Send(msg);
  }
-@@ -2732,7 +2794,7 @@ void WriteSettings(CSendPacket* msg, CRoomSettings* newSettings, int low, int lo
+@@ -2732,7 +2800,7 @@ void WriteSettings(CSendPacket* msg, CRoomSettings* newSettings, int low, int lo
  		}
  	}
  	if (lowMidFlag & ROOM_LOWMID_VOXEL) {
@@ -6087,7 +6100,7 @@ index 0defb02..f05e797 100644
  		if (newSettings->voxelFlag & VOXELFLAG_ID) {
  			msg->WriteString(newSettings->voxel_id);
  		}
-@@ -2934,7 +2996,7 @@ void CPacketManager::SendRoomCreateAndJoin(IExtendedSocket* socket, IRoom* roomI
+@@ -2934,7 +3002,7 @@ void CPacketManager::SendRoomCreateAndJoin(IExtendedSocket* socket, IRoom* roomI
  	msg->WriteUInt8((unsigned int)roomInfo->GetUsers().size());
  	for (auto user : roomInfo->GetUsers())
  	{
@@ -6096,7 +6109,7 @@ index 0defb02..f05e797 100644
  
  		msg->WriteUInt32(user->GetID());
  		msg->WriteUInt32(0);
-@@ -2972,7 +3034,7 @@ void CPacketManager::SendRoomPlayerJoin(IExtendedSocket* socket, IUser* user, Ro
+@@ -2972,7 +3040,7 @@ void CPacketManager::SendRoomPlayerJoin(IExtendedSocket* socket, IUser* user, Ro
  	msg->WriteUInt32(0);
  	msg->WriteString(user->GetUsername());
  
@@ -6105,7 +6118,7 @@ index 0defb02..f05e797 100644
  
  	// user network info
  	msg->WriteUInt8(num);
-@@ -3044,6 +3106,62 @@ void CPacketManager::SendRoomSetHost(IExtendedSocket* socket, IUser* user)
+@@ -3044,6 +3112,62 @@ void CPacketManager::SendRoomSetHost(IExtendedSocket* socket, IUser* user)
  	socket->Send(msg);
  }
  
@@ -6168,7 +6181,7 @@ index 0defb02..f05e797 100644
  void CPacketManager::SendRoomPlayerLeave(IExtendedSocket* socket, int userId)
  {
  	CSendPacket* msg = CreatePacket(socket, PacketId::Room);
-@@ -3144,7 +3262,7 @@ void CPacketManager::SendRoomGameResult(IExtendedSocket* socket, IRoom* room, CG
+@@ -3144,7 +3268,7 @@ void CPacketManager::SendRoomGameResult(IExtendedSocket* socket, IRoom* room, CG
  		msg->WriteUInt16(0);
  		msg->WriteUInt16(0);
  		msg->WriteUInt8(0); // kakaito huita sleva
@@ -6177,7 +6190,7 @@ index 0defb02..f05e797 100644
  		msg->WriteUInt8(0); // frag kills
  		msg->WriteUInt8(0); // knife kills
  
-@@ -3636,6 +3754,25 @@ void CPacketManager::SendHostGameStart(IExtendedSocket* socket, int userId)
+@@ -3636,6 +3760,25 @@ void CPacketManager::SendHostGameStart(IExtendedSocket* socket, int userId)
  	socket->Send(msg);
  }
  
@@ -6203,7 +6216,7 @@ index 0defb02..f05e797 100644
  void CPacketManager::SendHostZBAddon(IExtendedSocket* socket, int userID, const vector<int>& addons)
  {
  	CSendPacket* msg = CreatePacket(socket, PacketId::Host);
-@@ -3662,7 +3799,7 @@ void CPacketManager::SendHostJoin(IExtendedSocket* socket, IUser* host)
+@@ -3662,7 +3805,7 @@ void CPacketManager::SendHostJoin(IExtendedSocket* socket, IUser* host)
  	msg->WriteUInt32(host->GetID());
  	msg->WriteUInt64(0); // что это?
  
@@ -6212,15 +6225,15 @@ index 0defb02..f05e797 100644
  
  	msg->WriteUInt32(ip_string_to_int(network.m_szExternalIpAddress), false);
  	msg->WriteUInt16(network.m_nExternalClientPort);
-@@ -6072,10 +6209,85 @@ void CPacketManager::SendTitle(IExtendedSocket* socket, int id)
+@@ -6072,7 +6215,82 @@ void CPacketManager::SendTitle(IExtendedSocket* socket, int id)
  
  	msg->WriteUInt8(0);
  	msg->WriteUInt16(id);
 +	msg->WriteUInt8(0); // read by the client too (Packet_Title type 0: u16 title, u8), passed to its listeners
- 
- 	socket->Send(msg);
- }
- 
++
++	socket->Send(msg);
++}
++
 +// offline build: the medals as the client's honor quests (hw.dll Packet_Quest type 1, the full quest list): they are
 +// what My Info's Medals tab shows, with a gauge per requirement. Quest ID = 2000 + title ID.
 +void CPacketManager::SendHonorQuests(IExtendedSocket* socket, const vector<HonorQuest_s>& quests, int honorPoints)
@@ -6285,20 +6298,17 @@ index 0defb02..f05e797 100644
 +		}
 +		socket->Send(msg);
 +	}
-+
+ 
 +	CSendPacket* msg = CreatePacket(socket, PacketId::Steam);
 +	msg->BuildHeader();
 +	msg->WriteUInt8(1);
 +	msg->WriteUInt16(achievements.size());
 +	for (auto& a : achievements)
 +		msg->WriteString(a);
-+	socket->Send(msg);
-+}
-+
- void CPacketManager::SendUDPHostData(IExtendedSocket* socket, bool host, int userID, const string& ipAddress, int port)
- {
- 	CSendPacket* msg = CreatePacket(socket, PacketId::Udp);
-@@ -6186,9 +6398,12 @@ void BuildClanInfo(CSendPacket* msg, const Clan_s& clan)
+ 	socket->Send(msg);
+ }
+ 
+@@ -6186,9 +6404,12 @@ void BuildClanInfo(CSendPacket* msg, const Clan_s& clan)
  	}
  
  	//msg->WriteUInt8(clan.time);
@@ -8699,10 +8709,10 @@ index 0000000..62948ed
 +static CCommand studiofetch("studiofetch", "Fetch a Studio map from the other PCs (Steam bridge)", "studiofetch <code>", StudioFetch);
 diff --git a/src/manager/transfer.cpp b/src/manager/transfer.cpp
 new file mode 100644
-index 0000000..c351f2f
+index 0000000..1d46a54
 --- /dev/null
 +++ b/src/manager/transfer.cpp
-@@ -0,0 +1,304 @@
+@@ -0,0 +1,348 @@
 +#include "transfer.h"
 +#include "main.h"
 +#include "net/sendpacket.h"
@@ -8832,6 +8842,50 @@ index 0000000..c351f2f
 +	return out;
 +}
 +
++// An entry from a server older than v1.1.43 has the byte of the high flag 1<<6, which the game doesn't read (see
++// BuildRoomInfo): it goes, so the rooms after this one aren't read one byte off. The fields are walked in BuildRoomInfo's
++// order; an entry that doesn't parse is left as it is.
++static vector<unsigned char> WithoutUnreadField(const vector<unsigned char>& entry)
++{
++	if (entry.size() < ROOM_ENTRY_NAME || !(entry[13] & 0x40))
++		return entry;
++	uint32_t low = entry[9] | entry[10] << 8 | entry[11] << 16 | (uint32_t)entry[12] << 24;
++	uint32_t high = entry[13] | entry[14] << 8 | entry[15] << 16 | (uint32_t)entry[16] << 24;
++	size_t pos = ROOM_ENTRY_NAME;
++	auto skip = [&](size_t n) { pos += n; return pos <= entry.size(); };
++	// the low flags' field sizes (bit: bytes; the name and the map playlist are counted below)
++	static const int lowSizes[31] = { 0, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 2, 0, 2, 1, 2, 1, 2, 1, 1, 1, 1, 0, 1, 1, 2, 1, 1, 0, 17, 1 };
++	for (int bit = 0; bit < 31; bit++)
++	{
++		if (!(low & (1u << bit)))
++			continue;
++		if (bit == 0)
++		{
++			while (pos < entry.size() && entry[pos] != 0)
++				pos++;
++			if (!skip(1))
++				return entry;
++		}
++		else if (bit == 22)
++		{
++			if (pos >= entry.size() || !skip(1 + 3 * (size_t)entry[pos]))
++				return entry;
++		}
++		else if (!skip(lowSizes[bit]))
++			return entry;
++	}
++	// the high flags before 1<<6: bits 0-3 and 5, a byte each
++	for (int bit : { 0, 1, 2, 3, 5 })
++		if ((high & (1u << bit)) && !skip(1))
++			return entry;
++	if (pos >= entry.size())
++		return entry;
++	vector<unsigned char> out(entry);
++	out.erase(out.begin() + pos);
++	out[13] &= ~0x40;
++	return out;
++}
++
 +// "BOT Frank's 'Come get some.' 32/32 (password)": what the player sees, for the log
 +static string Describe(const RemoteRoom_s& room)
 +{
@@ -8853,7 +8907,7 @@ index 0000000..c351f2f
 +	string summary;
 +	for (int i = 0; i < count && i < (int)rooms.size(); i++)
 +	{
-+		vector<unsigned char> entry = WithHostName(rooms[i].entry, rooms[i].host);
++		vector<unsigned char> entry = WithHostName(WithoutUnreadField(rooms[i].entry), rooms[i].host);
 +		entry[1] = rooms[i].vid & 0xff;
 +		entry[2] = (rooms[i].vid >> 8) & 0xff;
 +		entry[3] = 0;
@@ -9855,7 +9909,7 @@ index 0e1d7d2..b204040 100644
  
  	// clan related
 diff --git a/src/manager/usermanager.cpp b/src/manager/usermanager.cpp
-index b426874..f9b8114 100644
+index b426874..bd14908 100644
 --- a/src/manager/usermanager.cpp
 +++ b/src/manager/usermanager.cpp
 @@ -1,3 +1,8 @@
@@ -10440,7 +10494,23 @@ index b426874..f9b8114 100644
  
  	g_ChannelManager.JoinChannel(user, g_ChannelManager.channelServers[0]->GetID(), g_ChannelManager.channelServers[0]->GetChannels()[0]->GetID(), false);
  
-@@ -877,8 +1372,10 @@ bool CUserManager::OnCharacterPacket(CReceivePacket* msg, IExtendedSocket* socke
+@@ -749,7 +1244,15 @@ void CUserManager::SendMetadata(IExtendedSocket* socket)
+ 	if (flag & kMetadataFlag_PPSystem)
+ 		g_PacketManager.SendMetadataPPSystem(socket);
+ 	if (flag & kMetadataFlag_Item)
++	{
+ 		g_PacketManager.SendMetadataItem(socket);
++		// offline build: the game names each decoder's box after the decoder's ItemBoxName in its item table as it is
++		// when the boxes arrive. Two decoders have their box name only in this server's Item.csv (165 "Decoder", 2198:
++		// tools/gen_decoders.py), which came after the boxes: their box was "" on a game's first login, and opening them
++		// closed the game (the box they name wasn't there). The boxes again, now that the game has the names.
++		if (flag & kMetadataFlag_ItemBox)
++			g_PacketManager.SendMetadataItemBox(socket, g_LuckyItemManager.GetItems());
++	}
+ 	if (flag & kMetadataFlag_VoxelList)
+ 		g_PacketManager.SendMetadataVoxelList(socket);
+ 	if (flag & kMetadataFlag_VoxelItem)
+@@ -877,8 +1380,10 @@ bool CUserManager::OnCharacterPacket(CReceivePacket* msg, IExtendedSocket* socke
  	g_ItemManager.OnUserLogin(user);
  	g_ClanManager.OnUserLogin(user);
  	g_QuestManager.OnUserLogin(user);
@@ -10451,7 +10521,7 @@ index b426874..f9b8114 100644
  
  	return true;
  }
-@@ -951,7 +1448,7 @@ bool CUserManager::OnUpdateInfoPacket(CReceivePacket* msg, IExtendedSocket* sock
+@@ -951,7 +1456,7 @@ bool CUserManager::OnUpdateInfoPacket(CReceivePacket* msg, IExtendedSocket* sock
  	case UpdateInfoPacketType::RequestUpdateTutorial:
  	{
  		int tutorial = msg->ReadUInt8();
@@ -10460,7 +10530,7 @@ index b426874..f9b8114 100644
  
  		break;
  	}
-@@ -989,6 +1486,16 @@ void CUserManager::OnSecondTick(time_t curTime)
+@@ -989,6 +1494,16 @@ void CUserManager::OnSecondTick(time_t curTime)
  {
  	for (auto u : m_Users)
  		u->OnTick();
@@ -10477,7 +10547,7 @@ index b426874..f9b8114 100644
  }
  
  void CUserManager::SendNoticeMessageToAll(const string& msg)
-@@ -1049,6 +1556,7 @@ int CUserManager::LoginUser(IExtendedSocket* socket, const string& userName, con
+@@ -1049,6 +1564,7 @@ int CUserManager::LoginUser(IExtendedSocket* socket, const string& userName, con
  	}
  
  	Logger().Info(OBFUSCATE("User logged in (IP: %s, UID: %d, Username: %s)\n"), newUser->GetNetworkConfig().m_szExternalIpAddress.c_str(), userID, userName.c_str());
@@ -10485,7 +10555,7 @@ index b426874..f9b8114 100644
  
  	// Update last login time, last IP and last HWID
  	CUserData data = newUser->GetUser(UDATA_FLAG_FIRSTLOGONTIME);
-@@ -1080,8 +1588,10 @@ int CUserManager::LoginUser(IExtendedSocket* socket, const string& userName, con
+@@ -1080,8 +1596,10 @@ int CUserManager::LoginUser(IExtendedSocket* socket, const string& userName, con
  		g_ItemManager.OnUserLogin(newUser);
  		g_ClanManager.OnUserLogin(newUser);
  		g_QuestManager.OnUserLogin(newUser);
@@ -10496,7 +10566,7 @@ index b426874..f9b8114 100644
  	}
  
  	return LOGIN_OK;
-@@ -1197,6 +1707,9 @@ void CUserManager::RemoveUserBySocket(IExtendedSocket* socket)
+@@ -1197,6 +1715,9 @@ void CUserManager::RemoveUserBySocket(IExtendedSocket* socket)
  
  bool CUserManager::RemoveUserInternal(IUser* user)
  {
@@ -10506,7 +10576,7 @@ index b426874..f9b8114 100644
  	m_Users.erase(remove(begin(m_Users), end(m_Users), user), end(m_Users));
  
  	CleanUpUser(user);
-@@ -1285,7 +1798,7 @@ bool CUserManager::OnUserSurveyPacket(CReceivePacket* msg, IExtendedSocket* sock
+@@ -1285,7 +1806,7 @@ bool CUserManager::OnUserSurveyPacket(CReceivePacket* msg, IExtendedSocket* sock
  
  	IUser* user = GetUserBySocket(socket);
  	if (user == NULL)
