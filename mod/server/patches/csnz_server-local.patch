@@ -6684,7 +6684,7 @@ index 0000000..d8baaed
 +	nlohmann::json MatchJson();
 +}
 diff --git a/src/manager/shopmanager.cpp b/src/manager/shopmanager.cpp
-index b9bdc08..6c33370 100644
+index b9bdc08..e767461 100644
 --- a/src/manager/shopmanager.cpp
 +++ b/src/manager/shopmanager.cpp
 @@ -4,6 +4,7 @@
@@ -6695,60 +6695,65 @@ index b9bdc08..6c33370 100644
  
  using namespace std;
  using ordered_json = nlohmann::ordered_json;
-@@ -272,9 +273,53 @@ void CShopManager::OnShopPacket(CReceivePacket* msg, IExtendedSocket* socket)
+@@ -272,7 +273,58 @@ void CShopManager::OnShopPacket(CReceivePacket* msg, IExtendedSocket* socket)
  	case ShopPacketType::RequestBuyProduct:
  		BuyProduct(user, msg->ReadUInt8(), msg->ReadUInt8());
  		break;
 +	default:
 +		OnCouponCode(user, type, msg);
 +		break;
- 	}
- }
- 
-+// Offline build: the red Coupon button of the game's web event window (GameUI CCouponDlg, Popup_Coupon.res) sends the
-+// typed code in a shop packet. Its exact layout isn't known yet (logged below): the code is whatever text fills the
-+// rest of the packet after its length byte(s), so other shop requests (numbers) don't count as codes. Gift codes:
-+// manager/redeemcodes.cpp, the same as /redeem and the shop page's Redeem code button.
++	}
++}
++
++// Offline build: the red Coupon button of the game's web event window (GameUI CCouponDlg, Popup_Coupon.res) sends
++// request 6 with the typed code as a null-terminated string (up to 32 characters). Gift codes: manager/redeemcodes.cpp,
++// the same as /redeem and the shop page's Redeem code button. Other requests the server doesn't know are logged.
 +void CShopManager::OnCouponCode(IUser* user, int type, CReceivePacket* msg)
 +{
 +	string raw;
 +	while (msg->CanReadBytes(1))
 +		raw += (char)msg->ReadUInt8();
-+	string hex;
-+	for (unsigned char c : raw)
++	if (type != 6)
 +	{
-+		char b[4];
-+		snprintf(b, sizeof(b), "%02x ", c);
-+		hex += b;
-+	}
-+	Logger().Info("[Shop] request %d from %s, %d bytes: %s\n", type, user->GetLogName(), (int)raw.size(), hex.c_str());
-+
-+	// letters, digits, spaces and dashes after the length byte(s); UTF-16 text loses its zero bytes
-+	string code;
-+	size_t i = 0;
-+	while (i < raw.size() && (unsigned char)raw[i] < 0x20)
-+		i++;
-+	for (; i < raw.size(); i++)
-+	{
-+		unsigned char c = raw[i];
-+		if (c == 0)
-+			continue;
-+		if (!isalnum(c) && c != '-' && c != ' ' && c != '_')
-+			return; // not a code
-+		code += (char)c;
-+	}
-+	if (code.size() < 2)
++		if (!raw.empty())
++		{
++			string hex;
++			for (unsigned char c : raw)
++			{
++				char b[4];
++				snprintf(b, sizeof(b), "%02x ", c);
++				hex += b;
++			}
++			Logger().Info("[Shop] request %d from %s, %d bytes: %s\n", type, user->GetLogName(), (int)raw.size(), hex.c_str());
++		}
 +		return;
-+	int status = 200;
-+	nlohmann::json result = RedeemCode(user, code, status);
-+	string text = result.contains("error") ? result["error"].get<string>() : result.value("message", string("Code redeemed."));
-+	Logger().Info("[Shop] coupon window code '%s' from %s: %s\n", code.c_str(), user->GetLogName(), text.c_str());
-+	g_PacketManager.SendUMsgNoticeMsgBoxToUuid(user->GetExtendedSocket(), text);
-+}
++	}
 +
++	string code = raw.substr(0, raw.find('\0'));
++	string text;
++	if (code.empty())
++		text = "Type a code first.";
++	else
++	{
++		int status = 200;
++		nlohmann::json result = RedeemCode(user, code, status);
++		text = result.contains("error") ? result["error"].get<string>() : result.value("message", string("Code redeemed."));
+ 	}
++	Logger().Info("[Shop] coupon window code '%s' from %s: %s\n", code.c_str(), user->GetLogName(), text.c_str());
++
++	// The client's reply to request 6 (hw.dll Packet_Shop parser 0x2670cb0, case 6 -> GiftBox vfunc 0x18): a result
++	// byte and a null-terminated text. 0 shows the text and frees the window for the next code (GiftBox +0x34, the
++	// "waiting" flag: without this reply the window sends nothing more until the game restarts). A non-zero result
++	// would make the client ask again with request 7 and expect the won items' full data, so the text carries them.
++	CSendPacket* reply = g_PacketManager.CreatePacket(user->GetExtendedSocket(), PacketId::Shop);
++	reply->BuildHeader();
++	reply->WriteUInt8(6);
++	reply->WriteUInt8(0);
++	reply->WriteString(text);
++	user->GetExtendedSocket()->Send(reply);
+ }
+ 
  void CShopManager::GetProductBySubId(int productId, Product& product, SubProduct& subProduct)
- {
- 	for (auto& p : m_Products)
 diff --git a/src/manager/shopmanager.h b/src/manager/shopmanager.h
 index 294872b..0166467 100644
 --- a/src/manager/shopmanager.h
