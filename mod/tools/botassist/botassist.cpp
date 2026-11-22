@@ -2040,6 +2040,7 @@ struct MatchBot
     std::vector<int> allowCharacter; // the filter's characters (both teams): a random character comes from them
     void* edict = nullptr; // the bot playing it
     bool fakePlayer = false; // Zombie Giant: played by a fake player who can be the giant (no bot), see ZgPlayer
+    bool gone = false;       // a person took its place in this match: kicked, and not added again (KickForJoiners)
 };
 static std::vector<MatchBot> g_matchBots;
 static CRITICAL_SECTION g_matchLock;
@@ -2231,10 +2232,10 @@ static MatchBot* RoomBotOf(void* bot, BotState& st)
         int team = TeamOf(bot);
         int pick = -1;
         for (size_t i = 0; team && i < g_matchBots.size() && pick < 0; i++)
-            if (!g_matchBots[i].edict && !g_matchBots[i].fakePlayer && g_matchBots[i].team == team)
+            if (!g_matchBots[i].edict && !g_matchBots[i].fakePlayer && !g_matchBots[i].gone && g_matchBots[i].team == team)
                 pick = (int)i;
         for (size_t i = 0; team && i < g_matchBots.size() && pick < 0; i++)
-            if (!g_matchBots[i].edict && !g_matchBots[i].fakePlayer)
+            if (!g_matchBots[i].edict && !g_matchBots[i].fakePlayer && !g_matchBots[i].gone)
                 pick = (int)i;
         for (size_t i = (size_t)(pick < 0 ? g_matchBots.size() : pick); i < g_matchBots.size() && (int)i == pick; i++)
             {
@@ -3574,6 +3575,86 @@ static void UpdateRefill(void* bot, BotState& st)
             F<float>(Vars(bot), EV_ARMORVALUE));
 }
 
+// ---------------------------------------------------------------- a person takes an AI player's place
+// A person joining this match while the room is full takes an AI player's place (CSNZ_Server's JoinRoom): the server
+// names it in GET /api/matchkicks (asked every 3 s, on a thread of its own); here, on the game's thread, the bot that
+// plays it is kicked, and the room's list no longer counts it, so the game's bot manager doesn't add another.
+static std::vector<std::string> g_kickNames;
+static volatile LONG g_kickFetching = 0;
+static float g_nextKickPoll = 0;
+
+static DWORD WINAPI FetchKicks(LPVOID)
+{
+    std::string json = HttpGet(L"/api/matchkicks");
+    std::vector<std::string> names;
+    size_t i = json.find("\"kicks\":[");
+    if (i != std::string::npos)
+    {
+        i += 9;
+        size_t end = json.find(']', i);
+        while (end != std::string::npos)
+        {
+            size_t a = json.find('"', i);
+            if (a == std::string::npos || a > end)
+                break;
+            size_t b = json.find('"', a + 1);
+            if (b == std::string::npos)
+                break;
+            names.push_back(json.substr(a + 1, b - a - 1));
+            i = b + 1;
+        }
+    }
+    if (!names.empty())
+    {
+        EnterCriticalSection(&g_matchLock);
+        g_kickNames.insert(g_kickNames.end(), names.begin(), names.end());
+        LeaveCriticalSection(&g_matchLock);
+    }
+    InterlockedExchange(&g_kickFetching, 0);
+    return 0;
+}
+
+static void KickForJoiners()
+{
+    if (!g_ServerCommand || g_matchFetch != 2)
+        return;
+    float now = Now();
+    if (now >= g_nextKickPoll || now < g_nextKickPoll - 10.0f)
+    {
+        g_nextKickPoll = now + 3.0f;
+        if (InterlockedCompareExchange(&g_kickFetching, 1, 0) == 0)
+        {
+            HANDLE h = CreateThread(NULL, 0, FetchKicks, NULL, 0, NULL);
+            if (h)
+                CloseHandle(h);
+            else
+                InterlockedExchange(&g_kickFetching, 0);
+        }
+    }
+    std::vector<std::string> kick;
+    EnterCriticalSection(&g_matchLock);
+    for (auto& n : g_kickNames)
+        for (auto& m : g_matchBots)
+            if (!m.gone && !m.fakePlayer && m.name == n)
+            {
+                m.gone = true;
+                const char* net = m.edict ? String(F<int>(Vars(m.edict), EV_NETNAME)) : nullptr;
+                kick.push_back(net && *net ? net : m.name);
+                break;
+            }
+    g_kickNames.clear();
+    LeaveCriticalSection(&g_matchLock);
+    for (auto& k : kick)
+    {
+        if (k.empty() || strchr(k.c_str(), '"'))
+            continue;
+        char cmd[96];
+        snprintf(cmd, sizeof(cmd), "kick \"%s\"\n", k.c_str());
+        g_ServerCommand(cmd);
+        Log("a person takes AI player '%s''s place in this match: kicked", k.c_str());
+    }
+}
+
 static void UpdateCvars(void* anyPlayer)
 {
     float now = Now();
@@ -4313,7 +4394,7 @@ static int RoomBotQuota(int team, const char* which)
         int total = 0;
         EnterCriticalSection(&g_matchLock);
         for (auto& m : g_matchBots)
-            if (!m.fakePlayer)
+            if (!m.fakePlayer && !m.gone)
                 total++;
         LeaveCriticalSection(&g_matchLock);
         if (g_matchAdded[1] + g_matchAdded[2] >= total)
@@ -4330,7 +4411,7 @@ static int RoomBotQuota(int team, const char* which)
     int want[3] = { 0, 0, 0 };
     EnterCriticalSection(&g_matchLock);
     for (auto& m : g_matchBots)
-        if (!m.fakePlayer)
+        if (!m.fakePlayer && !m.gone)
             want[m.team == 1 ? 1 : 2]++;
     LeaveCriticalSection(&g_matchLock);
     // Manhunt starts when everyone in the room is in (humans on CT, the zombie is drawn from them); the game asks
@@ -6462,6 +6543,7 @@ static void HookedRunPlayerMove(void* fakeclient, const float* angles, float fwd
             LoadNav();
             UpdateHurtZones();
             UpdateMatchBots();
+            KickForJoiners();
             UpdateZgPlayers();
             PerfMark(0, perfPart);
             if (F<int>(v, EV_FLAGS) & FL_FAKECLIENT)

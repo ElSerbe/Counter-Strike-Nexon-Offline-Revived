@@ -1311,7 +1311,7 @@ index 0000000..5c99d8e
 +
 +extern CBingoManager g_BingoManager;
 diff --git a/src/manager/channelmanager.cpp b/src/manager/channelmanager.cpp
-index 35561e8..5b82253 100644
+index 35561e8..ff995fd 100644
 --- a/src/manager/channelmanager.cpp
 +++ b/src/manager/channelmanager.cpp
 @@ -1,4 +1,9 @@
@@ -1621,7 +1621,7 @@ index 35561e8..5b82253 100644
  	Logger().Info("User '%s' created a new room (RID: %d, name: '%s')\n", user->GetLogName(), newRoom->GetID(), roomSettings->roomName.c_str());
  
  	if (roomSettings->familyBattle)
-@@ -1270,10 +1518,50 @@ bool CChannelManager::OnNewRoomRequest(CReceivePacket* msg, IUser* user)
+@@ -1270,10 +1518,71 @@ bool CChannelManager::OnNewRoomRequest(CReceivePacket* msg, IUser* user)
  
  bool CChannelManager::OnJoinRoomRequest(CReceivePacket* msg, IUser* user)
  {
@@ -1656,6 +1656,27 @@ index 35561e8..5b82253 100644
 +	if (user->GetCurrentRoom())
 +		return false;
 +
++	// the host on another version of the mod: said first (different versions may not get along: a room list the other
++	// version reads wrong closed the game). Joining the same player's room again within a minute goes ahead.
++	string mine = ServerTransfer::ModVersion();
++	if (!mine.empty() && room.version != mine)
++	{
++		static map<int, pair<string, time_t>> warned; // by user: the host they were told about, and when
++		auto w = warned.find(user->GetID());
++		bool again = w != warned.end() && w->second.first == room.hostID && time(NULL) - w->second.second < 60;
++		if (!again)
++		{
++			warned[user->GetID()] = { room.hostID, time(NULL) };
++			string theirs = room.version.empty() ? "an older version (before 1.1.44)" : "version " + room.version;
++			Logger().Info("User '%s' is told that %s plays %s (this PC: %s)\n", user->GetLogName(), room.host.c_str(), theirs.c_str(), mine.c_str());
++			g_PacketManager.SendUMsgNoticeMsgBoxToUuid(socket, room.host + " plays " + theirs + " of Counter-Strike Nexon: Revived; you have version " +
++				mine + ".\nDifferent versions may not work together (the game can even close). Both of you should have the latest one "
++				"(the launcher's Update button).\n\nJoin the room again to try anyway.");
++			return false;
++		}
++		warned.erase(user->GetID());
++	}
++
 +	auto clean = [](string s) { for (auto& c : s) if (c == '|') c = '/'; return s; };
 +	string gameName = user->GetCharacter(UFLAG_LOW_GAMENAME).gameName;
 +	// a way back to this server (the /home command over there): valid for a day
@@ -1673,19 +1694,21 @@ index 35561e8..5b82253 100644
  	CChannel* channel = user->GetCurrentChannel();
  	if (channel == NULL)
  	{
-@@ -1294,6 +1582,28 @@ bool CChannelManager::OnJoinRoomRequest(CReceivePacket* msg, IUser* user)
+@@ -1294,6 +1603,37 @@ bool CChannelManager::OnJoinRoomRequest(CReceivePacket* msg, IUser* user)
  		return false;
  	}
  
 +	// offline build: a room filled up with AI players makes room for a person (a friend coming through the Steam
-+	// bridge, say): the last AI player of the joiner's side goes. Not during a match, where the game's own bots play
-+	// them and the game server has its own count.
-+	if (room->HasFreeSlots() == false && room->GetStatus() != RoomStatus::STATUS_INGAME &&
-+		(!room->HasPassword() || room->GetSettings()->password == password))
++	// bridge, say): the last AI player of the joiner's side goes. During a match too: the host's game kicks the bot
++	// that plays it (botassist polls GET /api/matchkicks), and the game's bot count doesn't add it again. That needs the
++	// host's game on this PC (a host from another PC has its own server and botassist).
++	if (room->HasFreeSlots() == false && (!room->HasPassword() || room->GetSettings()->password == password))
 +	{
 +		CRoom* full = static_cast<CRoom*>(room);
 +		const auto& bots = full->GetBots();
-+		if (!bots.empty())
++		bool inGame = room->GetStatus() == RoomStatus::STATUS_INGAME;
++		IUser* host = room->GetHostUser();
++		if (!bots.empty() && (!inGame || (host && !ServerTransfer::IsRemote(host->GetID()))))
 +		{
 +			int id = bots.back().id;
 +			for (auto it = bots.rbegin(); it != bots.rend(); ++it)
@@ -1694,15 +1717,22 @@ index 35561e8..5b82253 100644
 +					id = it->id;
 +					break;
 +				}
-+			Logger().Info("Room %d is full of AI players: one leaves for '%s'\n", room->GetID(), user->GetLogName());
++			string name;
++			for (auto& b : bots)
++				if (b.id == id)
++					name = b.name;
++			Logger().Info("Room %d is full of AI players: '%s' leaves for '%s'%s\n", room->GetID(), name.c_str(), user->GetLogName(),
++				inGame ? " (kicked from the running match)" : "");
 +			full->RemoveBot(id);
++			if (inGame)
++				KickMatchBot(name);
 +		}
 +	}
 +
  	if (room->HasFreeSlots() == false)
  	{
  		g_PacketManager.SendUMsgNoticeMsgBoxToUuid(user->GetExtendedSocket(), OBFUSCATE("ROOM_JOIN_FAILED_FULL"));
-@@ -1396,6 +1706,9 @@ bool CChannelManager::OnJoinRoomRequest(CReceivePacket* msg, IUser* user)
+@@ -1396,6 +1736,9 @@ bool CChannelManager::OnJoinRoomRequest(CReceivePacket* msg, IUser* user)
  
  	channel->SendUpdateRoomList(room);
  
@@ -1712,7 +1742,7 @@ index 35561e8..5b82253 100644
  	Logger().Info("User '%s' joined a room (RID: %d)\n", user->GetLogName(), room->GetID());
  
  	return true;
-@@ -1450,6 +1763,22 @@ bool CChannelManager::OnSetTeamRequest(CReceivePacket* msg, IUser* user)
+@@ -1450,6 +1793,22 @@ bool CChannelManager::OnSetTeamRequest(CReceivePacket* msg, IUser* user)
  	return true;
  }
  
@@ -1735,7 +1765,7 @@ index 35561e8..5b82253 100644
  bool CChannelManager::OnLeaveRoomRequest(IUser* user)
  {
  	IRoom* currentRoom = user->GetCurrentRoom();
-@@ -1501,6 +1830,10 @@ bool CChannelManager::OnLeaveRoomRequest(IUser* user)
+@@ -1501,6 +1860,10 @@ bool CChannelManager::OnLeaveRoomRequest(IUser* user)
  		}
  
  		currentRoom->RemoveUser(user);
@@ -1746,7 +1776,7 @@ index 35561e8..5b82253 100644
  	}
  
  	currentChannel->SendFullUpdateRoomList(user);
-@@ -1705,13 +2038,43 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
+@@ -1705,13 +2068,43 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
  		return false;
  	}
  
@@ -1790,7 +1820,7 @@ index 35561e8..5b82253 100644
  	if (newSettings.familyBattle)
  	{
  		CUserCharacter character = user->GetCharacter(UFLAG_LOW_CLAN);
-@@ -1787,6 +2150,7 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
+@@ -1787,6 +2180,7 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
  		}
  	}
  
@@ -1798,7 +1828,7 @@ index 35561e8..5b82253 100644
  	currentRoom->UpdateSettings(newSettings);
  
  	// inform every user in the room of the changes
-@@ -1795,6 +2159,10 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
+@@ -1795,6 +2189,10 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
  		currentRoom->SendUpdateRoomSettings(u, roomSettings, newSettings.lowFlag, newSettings.lowMidFlag, newSettings.highMidFlag, newSettings.highFlag);
  	}
  
@@ -1809,7 +1839,7 @@ index 35561e8..5b82253 100644
  	currentChannel->SendUpdateRoomList(currentRoom);
  
  	Logger().Info("Host '%s' updated room settings (RID: %d)\n", user->GetLogName(), currentRoom->GetID());
-@@ -1921,7 +2289,12 @@ bool CChannelManager::OnRoomKickRequest(CReceivePacket* msg, IUser* user)
+@@ -1921,7 +2319,12 @@ bool CChannelManager::OnRoomKickRequest(CReceivePacket* msg, IUser* user)
  		return false;
  	}
  
@@ -1823,7 +1853,7 @@ index 35561e8..5b82253 100644
  	if (destUser == NULL)
  	{
  		Logger().Warn("User '%s' tried to kick a user from a room, although destUser == NULL (RID: %d)\n", user->GetLogName(), currentRoom->GetID());
-@@ -2089,7 +2462,7 @@ bool CChannelManager::OnVoxelRoomListRequest(CReceivePacket* msg, IUser* user)
+@@ -2089,7 +2492,7 @@ bool CChannelManager::OnVoxelRoomListRequest(CReceivePacket* msg, IUser* user)
  {
  	string voxel_id = msg->ReadString();
  
@@ -8746,10 +8776,10 @@ index 0000000..62948ed
 +static CCommand studiofetch("studiofetch", "Fetch a Studio map from the other PCs (Steam bridge)", "studiofetch <code>", StudioFetch);
 diff --git a/src/manager/transfer.cpp b/src/manager/transfer.cpp
 new file mode 100644
-index 0000000..dc4d88d
+index 0000000..3de3486
 --- /dev/null
 +++ b/src/manager/transfer.cpp
-@@ -0,0 +1,392 @@
+@@ -0,0 +1,408 @@
 +#include "transfer.h"
 +#include "main.h"
 +#include "net/sendpacket.h"
@@ -8829,6 +8859,7 @@ index 0000000..dc4d88d
 +			room.port = r.value("port", 0);
 +			room.host = r.value("host", string());
 +		room.hostID = r.value("hostID", string());
++		room.version = r.value("version", string());
 +			room.entry = FromHex(r.value("entry", string()));
 +			// the client's patch only lets ports 30002-30199 through; an entry starts with a byte and the u32 room id
 +			if (room.vid < REMOTE_ROOM_FIRST_ID || room.vid > 65000 || room.port < 30003 || room.port > 30199 || room.entry.size() < 16)
@@ -8979,6 +9010,16 @@ index 0000000..dc4d88d
 +	return json({ { "rooms", list } }).dump();
 +}
 +
++string ServerTransfer::ModVersion()
++{
++	ifstream f("../../../VERSION");
++	string v;
++	getline(f, v);
++	while (!v.empty() && (v.back() == '\r' || v.back() == ' '))
++		v.pop_back();
++	return v;
++}
++
 +bool ServerTransfer::LoadSteamIdentity(string& steamID, string& name)
 +{
 +	ifstream f("Data/SteamIdentity.json");
@@ -9090,6 +9131,11 @@ index 0000000..dc4d88d
 +		HOST_UDP_BASE + slot * 2, HOST_UDP_BASE + slot * 2 + 1, tunnelPort);
 +}
 +
++bool ServerTransfer::IsRemote(int userID)
++{
++	return g_Remotes.count(userID) != 0;
++}
++
 +void ServerTransfer::UnregisterRemote(int userID)
 +{
 +	g_Remotes.erase(userID);
@@ -9144,10 +9190,10 @@ index 0000000..dc4d88d
 +}
 diff --git a/src/manager/transfer.h b/src/manager/transfer.h
 new file mode 100644
-index 0000000..b97e082
+index 0000000..b0eb988
 --- /dev/null
 +++ b/src/manager/transfer.h
-@@ -0,0 +1,64 @@
+@@ -0,0 +1,68 @@
 +#pragma once
 +
 +// offline build: online play through Steam (the Steam bridge, mod/tools/steambridge).
@@ -9173,6 +9219,7 @@ index 0000000..b97e082
 +	int port;                         // 127.0.0.1:port = the bridge's tunnel to that server
 +	std::string host;                 // the host's Steam name
 +	std::string hostID;               // the host's Steam ID (bridges from 1.1.8 on)
++	std::string version;              // the host's mod version (bridges from 1.1.44 on; "" before)
 +	std::vector<unsigned char> entry; // the room list entry, as that server writes it
 +};
 +
@@ -9187,12 +9234,15 @@ index 0000000..b97e082
 +	// the local rooms for the bridge: [{ "id", "entry" (hex), "players", "max", "status" }]
 +	std::string LocalRoomsJson(const std::vector<IRoom*>& rooms);
 +	bool LoadSteamIdentity(std::string& steamID, std::string& name);
++	// this PC's mod version (mod/VERSION, three folders up from the server's), "" when it can't be read
++	std::string ModVersion();
 +
 +	// players from other PCs on this server: their Steam ID, a slot (their match ports on this PC's bridge:
 +	// 127.0.0.1:33000+slot*2+portID) and the bridge port they came through on their PC (30003+k: this PC's
 +	// player is at 127.0.0.1:31000+k*2+portID over there). portID 0 = the game's server port, 1 = its client port.
 +	void RegisterRemote(int userID, const std::string& steamID, int tunnelPort);
 +	void UnregisterRemote(int userID);
++	bool IsRemote(int userID); // a player from another PC (their game runs there)
 +	// the match addresses of subject as viewer's game must use them
 +	UserNetworkConfig_s NetworkFor(IUser* subject, IUser* viewer);
 +	// UDP holepunch from this PC's game (any account): its two ports, for the bridge
@@ -10912,10 +10962,10 @@ index c7d2bdb..75d0ee9 100644
 +extern CVoxelManager g_VoxelManager;
 diff --git a/src/manager/warbondmanager.cpp b/src/manager/warbondmanager.cpp
 new file mode 100644
-index 0000000..8eb8fb0
+index 0000000..1950f1a
 --- /dev/null
 +++ b/src/manager/warbondmanager.cpp
-@@ -0,0 +1,1186 @@
+@@ -0,0 +1,1191 @@
 +#include "channelmanager.h"
 +#include "guestprofile.h"
 +#include "transfer.h"
@@ -11105,7 +11155,12 @@ index 0000000..8eb8fb0
 +	json result;
 +
 +	IUser* user = FindWebUser(req.clientIP);
-+	if (req.method == "GET" && req.path == "/api/matchbots")
++	if (req.method == "GET" && req.path == "/api/matchkicks")
++	{
++		// for botassist.asi in the host's game: the AI players people took the place of during the match (room.h)
++		result = { { "kicks", TakeMatchBotKicks() } };
++	}
++	else if (req.method == "GET" && req.path == "/api/matchbots")
 +	{
 +		// for botassist.asi (runs in the game): the AI players of the last match a host started
 +		json bots = json::array();
@@ -13677,7 +13732,7 @@ index 68a4dc7..5c924cb 100644
  	int m_nTerWinCount;
  	int m_nFirstPlaceUserId;
 diff --git a/src/room/room.cpp b/src/room/room.cpp
-index 616959e..6cf4a86 100644
+index 616959e..b47e55b 100644
 --- a/src/room/room.cpp
 +++ b/src/room/room.cpp
 @@ -1,4 +1,5 @@
@@ -13709,7 +13764,7 @@ index 616959e..6cf4a86 100644
  }
  
  int CRoom::GetFreeSlots()
-@@ -239,6 +241,320 @@ void CRoom::SetStatus(RoomStatus newStatus)
+@@ -239,6 +241,339 @@ void CRoom::SetStatus(RoomStatus newStatus)
  void CRoom::SendJoinNewRoom(IUser* user)
  {
  	g_PacketManager.SendRoomCreateAndJoin(user->GetExtendedSocket(), this);
@@ -13718,6 +13773,25 @@ index 616959e..6cf4a86 100644
 +
 +// ---------------------------------------------------------------- offline build: room AI players
 +vector<RoomBot> g_LastMatchBots;
++static vector<string> g_MatchBotKicks;
++
++void KickMatchBot(const string& name)
++{
++	for (size_t i = 0; i < g_LastMatchBots.size(); i++)
++		if (g_LastMatchBots[i].name == name)
++		{
++			g_LastMatchBots.erase(g_LastMatchBots.begin() + i); // the next map of the match doesn't bring it back
++			break;
++		}
++	g_MatchBotKicks.push_back(name);
++}
++
++vector<string> TakeMatchBotKicks()
++{
++	vector<string> kicks;
++	kicks.swap(g_MatchBotKicks);
++	return kicks;
++}
 +int g_LastMatchMode = 0;
 +int g_LastMatchHostTeam = 2;
 +int g_LastMatchHostID = 0;
@@ -14030,7 +14104,7 @@ index 616959e..6cf4a86 100644
  }
  
  void CRoom::UpdateSettings(CRoomSettings& newSettings)
-@@ -564,6 +880,13 @@ void CRoom::UpdateSettings(CRoomSettings& newSettings)
+@@ -564,6 +899,13 @@ void CRoom::UpdateSettings(CRoomSettings& newSettings)
  	if (newSettings.highFlag & ROOM_HIGH_UNK77) {
  		m_pSettings->unk77 = newSettings.unk77;
  	}
@@ -14044,7 +14118,7 @@ index 616959e..6cf4a86 100644
  }
  
  void CRoom::OnUserMessage(CReceivePacket* msg, IUser* user)
-@@ -575,6 +898,9 @@ void CRoom::OnUserMessage(CReceivePacket* msg, IUser* user)
+@@ -575,6 +917,9 @@ void CRoom::OnUserMessage(CReceivePacket* msg, IUser* user)
  
  	Logger().Info("User '%s' write to room chat: '%s'\n", senderName.c_str(), message.c_str());
  
@@ -14054,7 +14128,7 @@ index 616959e..6cf4a86 100644
  	CUserCharacterExtended characterExtended = user->GetCharacterExtended(EXT_UFLAG_GAMEMASTER);
  	if (characterExtended.gameMaster && m_pHostUser == user)
  	{
-@@ -1052,6 +1378,8 @@ void CRoom::HostStartGame()
+@@ -1052,6 +1397,8 @@ void CRoom::HostStartGame()
  		return;
  	}
  
@@ -14063,7 +14137,7 @@ index 616959e..6cf4a86 100644
  	SendStartMatch(m_pHostUser);
  
  	OnGameStart();
-@@ -1092,10 +1420,16 @@ void CRoom::UserGameJoin(IUser* user)
+@@ -1092,10 +1439,16 @@ void CRoom::UserGameJoin(IUser* user)
  void CRoom::EndGame(bool forcedEnd)
  {
  	m_pGameMatch->OnGameMatchEnd();
@@ -14081,10 +14155,10 @@ index 616959e..6cf4a86 100644
  		g_PacketManager.SendHostStop(m_pServer->GetSocket());
  
 diff --git a/src/room/room.h b/src/room/room.h
-index 13a4ee8..8112215 100644
+index 13a4ee8..dc8e872 100644
 --- a/src/room/room.h
 +++ b/src/room/room.h
-@@ -25,6 +25,52 @@ public:
+@@ -25,6 +25,55 @@ public:
  	bool m_bIsIngame;
  };
  
@@ -14124,6 +14198,9 @@ index 13a4ee8..8112215 100644
 +
 +// bots of the last match a host started (read by botassist.asi through the web API)
 +extern std::vector<RoomBot> g_LastMatchBots;
++// a person took this AI player's place in a running match: the host's game kicks the bot (GET /api/matchkicks)
++void KickMatchBot(const std::string& name);
++std::vector<std::string> TakeMatchBotKicks();
 +extern int g_LastMatchMode;
 +extern int g_LastMatchHostTeam;
 +extern int g_LastMatchHostID;
@@ -14137,7 +14214,7 @@ index 13a4ee8..8112215 100644
  class CRoom : public IRoom
  {
  public:
-@@ -103,11 +149,37 @@ public:
+@@ -103,11 +152,37 @@ public:
  
  	bool IsUserInFamilyBattleUsers(int userId);
  

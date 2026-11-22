@@ -59,6 +59,7 @@ namespace SteamBridge
         {
             public ulong SteamID, Lobby;
             public string Name;
+            public string Version; // their mod's version ("" before v1.1.44, which didn't say)
             public int Port;
             public TcpListener Listener;
             public bool Joined;
@@ -247,6 +248,20 @@ namespace SteamBridge
             }) { IsBackground = true }.Start();
         }
 
+        // this PC's mod version (mod\VERSION, three folders up from the bridge's out folder): published in the lobby ("ver"),
+        // so a player joining a room on a different version is told before they try (the server's JoinRemoteRoom)
+        static readonly string ModVersion = ReadModVersion();
+        static string ReadModVersion()
+        {
+            try
+            {
+                var dir = AppDomain.CurrentDomain.BaseDirectory;
+                var file = Path.GetFullPath(Path.Combine(dir, "..", "..", "..", "VERSION"));
+                return File.Exists(file) ? File.ReadAllText(file).Trim() : "";
+            }
+            catch { return ""; }
+        }
+
         readonly ConcurrentDictionary<string, Conn> conns = new ConcurrentDictionary<string, Conn>();
         static string Key(ulong peer, uint id) => peer + ":" + id;
         int nextConn = 1;
@@ -404,6 +419,7 @@ namespace SteamBridge
                             steam.SetLobbyData(myLobby, Tag, Protocol);
                             steam.SetLobbyData(myLobby, "owner", steam.MySteamID.ToString());
                             steam.SetLobbyData(myLobby, "name", steam.MyName);
+                            steam.SetLobbyData(myLobby, "ver", ModVersion);
                             log("Steam lobby " + myLobby + " is open: this PC's rooms are visible to other players.");
                         }
                     }
@@ -538,6 +554,7 @@ namespace SteamBridge
                 }
                 h.Lobby = lobby;
                 h.Name = steam.LobbyData(lobby, "name");
+                h.Version = steam.LobbyData(lobby, "ver") ?? "";
                 h.Seen = now;
                 h.Rooms.Clear();
                 int.TryParse(steam.LobbyData(lobby, "parts"), out int parts);
@@ -591,7 +608,7 @@ namespace SteamBridge
                     int rid = Convert.ToInt32(r["id"]);
                     rooms.Add(new Dictionary<string, object> {
                         { "vid", FirstVirtualRoom + (h.Port - FirstTunnelPort) * 100 + rid % 100 },
-                        { "rid", rid }, { "port", h.Port }, { "host", h.Name ?? "" }, { "hostID", h.SteamID.ToString() }, { "entry", r["entry"] } });
+                        { "rid", rid }, { "port", h.Port }, { "host", h.Name ?? "" }, { "hostID", h.SteamID.ToString() }, { "version", h.Version ?? "" }, { "entry", r["entry"] } });
                 }
             WriteJson("RemoteRooms.json", new Dictionary<string, object> { { "rooms", rooms } });
         }

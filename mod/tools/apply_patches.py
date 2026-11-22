@@ -604,6 +604,43 @@ PATCHES += [
 ]
 
 
+# Room lists from servers older than v1.1.43: they write a byte for the room entry's high flag 1<<6, which this game never
+# reads (its parser hw 0x25ff470 reads the high bits 0-3, 5, 7-20), so every room after the first was read one byte off and a
+# map number taken for the map playlist's length overran the room: the game closed (hw.dll+0x2b3aa7) on joining or leaving
+# an online room when the list had two or more rooms. The parser now reads (and drops) that byte when the bit is set, so the
+# lists of old servers read right too; servers from v1.1.43 on leave the bit out. ebx = the high flags, esi = the reader.
+_ROOMFLAG_AT = 0x26002DB       # after the high bit 5 field, before bit 7's: mov ecx,ebx / xor eax,eax / and ecx,0x80
+_ROOMFLAG_CAVE = 0x1D45500     # in the same int3 padding as _UDP_CAVE, after it
+_PACKET_READ = 0x2750C00       # the packet reader's Read(dest, size) (thiscall)
+PATCHES += [
+    (
+        "hw.dll",
+        _ROOMFLAG_CAVE,
+        b"\xcc" * 33,
+        bytes.fromhex(
+            "f6c340"        # test bl,0x40           high flag 1<<6 set?
+            "740d"          # jz skip
+            "6a01"          # push 1
+            "8d45d7"        # lea eax,[ebp-0x29]     the parser's byte scratch
+            "8bce"          # mov ecx,esi
+            "50"            # push eax
+            "e8") + _rel32(_ROOMFLAG_CAVE + 18, _PACKET_READ) + bytes.fromhex(  # call Read: the byte is dropped
+            "8bcb"          # skip: mov ecx,ebx      (the instructions the jump replaced)
+            "33c0"          # xor eax,eax
+            "81e180000000"  # and ecx,0x80
+            "e9") + _rel32(_ROOMFLAG_CAVE + 33, _ROOMFLAG_AT + 10),  # back to "or eax,ecx"
+        "Room lists: the byte old servers write for the high flag 1<<6 is read and dropped (code cave)",
+    ),
+    (
+        "hw.dll",
+        _ROOMFLAG_AT,
+        bytes.fromhex("8bcb33c081e180000000"),
+        b"\xe9" + _rel32(_ROOMFLAG_AT + 5, _ROOMFLAG_CAVE) + b"\x90" * 5,
+        "Room lists: jump to the high flag 1<<6 reader",
+    ),
+]
+
+
 # what older releases wrote at a place whose patch changed since: replaced by the current bytes, not an abort
 PREVIOUS = {
     ("hw.dll", 0x2754F80): [bytes.fromhex("52ff7104c7410c7f00000166c7410a753290")],  # 1.0.x: port always 30002
