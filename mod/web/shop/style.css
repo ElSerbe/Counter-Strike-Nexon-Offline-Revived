@@ -177,6 +177,14 @@ main { height: calc(100% - 56px); }
 .toast.ok { border-color: var(--owned); color: var(--owned); }
 .toast.error { border-color: var(--danger); color: #ff9a86; }
 
+/* ---------- "no item pictures" note (app.js iconMissing) ---------- */
+.icons-note { position: fixed; left: 16px; bottom: 16px; z-index: 15; max-width: 360px; display: flex; align-items: flex-start; gap: 10px;
+  background: #15191e; border: 1px solid var(--line-strong); border-left: 3px solid var(--accent); padding: 8px 10px 8px 12px;
+  font-size: 12px; line-height: 1.45; color: var(--muted); box-shadow: 0 6px 18px rgba(0,0,0,.45); }
+.icons-note b { color: var(--text); font-weight: 600; }
+.icons-note button { flex: none; background: none; border: none; color: var(--muted); font-size: 16px; line-height: 1; padding: 0 2px; }
+.icons-note button:hover { color: var(--text); }
+
 ::-webkit-scrollbar { width: 8px; }
 ::-webkit-scrollbar-thumb { background: #2a3139; }
 ::-webkit-scrollbar-track { background: transparent; }

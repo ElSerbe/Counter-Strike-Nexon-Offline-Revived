@@ -61,6 +61,8 @@ namespace CsnzLauncher
         public bool PicturesAsked = false;  // the "extract the pictures?" question was shown once (yes or no): not again
         public string PicturesRefreshAsked = ""; // the mod version whose new shop items' pictures were offered (once per version)
         public bool AntivirusInfoShown = false; // the antivirus explanation was shown on the first start (More shows it again)
+        public bool AutoCheckUpdates = true; // GitHub is asked for a new release on start and every hour while open (More)
+        public bool AutoUpdate = true;       // ...and a new release is installed by itself when nothing of ours runs (More)
 
         static readonly JavaScriptSerializer Json = new JavaScriptSerializer();
 
@@ -1173,10 +1175,10 @@ namespace CsnzLauncher
                 p.WaitForExit();
                 try { File.Delete(file); } catch { }
                 if (p.ExitCode != 0 && p.ExitCode != 3010)
-                    throw new Exception($"The Python installer stopped with code {p.ExitCode}. Install Python from https://www.python.org/downloads/ and press Pictures again.");
+                    throw new Exception($"The Python installer stopped with code {p.ExitCode}. Install Python from https://www.python.org/downloads/ and press Store assets again.");
             }
             if (!HasPython())
-                throw new Exception("Python was installed but the launcher can't find it: restart the launcher and press Pictures again.");
+                throw new Exception("Python was installed but the launcher can't find it: restart the launcher and press Store assets again.");
             log($"Python {version} is installed.");
         }
 
@@ -1184,7 +1186,7 @@ namespace CsnzLauncher
         {
             var py = FindPython(out var pre);
             if (py == null)
-                throw new Exception("Python 3 isn't installed: press Pictures to let the launcher install it, or get it from https://www.python.org/downloads/.\n" +
+                throw new Exception("Python 3 isn't installed: press Store assets to let the launcher install it, or get it from https://www.python.org/downloads/.\n" +
                                     "Without these pictures the in-game shop and profile pages show no item images; everything else works.");
             log("Python: " + py);
             if (Run(py, pre + "-c \"import pefile\"", _ => { }) != 0)

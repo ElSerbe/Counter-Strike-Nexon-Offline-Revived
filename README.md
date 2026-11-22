@@ -31,12 +31,15 @@ launcher gets it for you.
 4. Click **Play**. The first time, Windows asks for administrator rights: say yes (it keeps the game offline, on
    your own PC).
 
-That's it. When a new version is out, the button says **Update**: one click updates the mod and the launcher.
+That's it. Updates install by themselves: the launcher checks GitHub when it opens and every hour while it's open,
+and updates the mod and itself when a new version is out (after you close the game, if it's running). **More**
+turns the automatic check or the automatic install off; then the button says **Update** and one click does it.
 
 Handy extras in the launcher:
 
 - **More > Create a desktop shortcut that starts the game**: one double click and you're in the game.
-- **Pictures**: extracts the item pictures and 3D previews for the in-game shop and pages (it asks once).
+- **Store assets**: extracts the item pictures and 3D previews for the in-game shop and pages (it asks once). The
+  shop shows a small note when they're missing.
 - **Online play**: play with friends through Steam (Steam must be open).
 - **Logs > Report a problem on GitHub...**: something went wrong? See [Reporting a problem](#reporting-a-problem).
 
@@ -56,7 +59,7 @@ Handy extras in the launcher:
 - **Play:** the first time, it adds the hosts block (the game's Nexon addresses go to 127.0.0.1; the only thing that
   needs administrator rights), makes the local server's certificate, patches the game, starts the local server and the
   game (which asks for administrator rights itself), and stops the server when the game closes.
-- **Pictures:** runs the mod's Python scripts on your game's files. Without Python, it offers to download the newest
+- **Store assets:** runs the mod's Python scripts on your game's files. Without Python, it offers to download the newest
   installer from python.org (checked to be signed by the Python Software Foundation) and installs it for your Windows
   user only, then adds the `pefile` package.
 - **Under the game's folder** it shows the game's state (original, patched, or not matching this release) and a

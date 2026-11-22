@@ -21,7 +21,7 @@ namespace CsnzLauncher
         readonly FlatButton playButton = new FlatButton { Text = "Play", Primary = true, Sub = "Starts the local server and the game" };
         readonly FlatButton moreButton = new FlatButton { Text = "More  \u25BE" };
         readonly FlatButton logsButton = new FlatButton { Text = "Logs  \u25BE" };
-        readonly FlatButton picturesButton = new FlatButton { Text = "Pictures" };
+        readonly FlatButton picturesButton = new FlatButton { Text = "Store assets" };
         readonly ToolTip tips = new ToolTip();
         readonly Toggle detailBox = new Toggle { Text = "Detailed logs: the server and the Steam bridge log every packet (for bug reports)" };
         readonly FlatButton patchButton = new FlatButton { Text = "Patch game" };
@@ -162,7 +162,36 @@ namespace CsnzLauncher
                     StartMusic();
                 }
             });
-            more.Opening += (s, e) => musicItem.Text = settings.MusicOff ? "Turn the launcher music on" : "Turn the launcher music off";
+            more.Items.Add(new ToolStripSeparator());
+            var checkItem = more.Items.Add("", null, (s, e) =>
+            {
+                settings.AutoCheckUpdates = !settings.AutoCheckUpdates;
+                settings.Save();
+                Log(settings.AutoCheckUpdates ? "Updates: checked automatically (on start and every hour)." :
+                                                "Updates: not checked automatically any more (Check for updates does it).");
+                if (settings.AutoCheckUpdates)
+                    _ = AutoUpdateTick();
+            });
+            var autoItem = more.Items.Add("", null, (s, e) =>
+            {
+                settings.AutoUpdate = !settings.AutoUpdate;
+                settings.Save();
+                Log(settings.AutoUpdate ? "Updates: installed automatically when one comes out." :
+                                          "Updates: shown, but installed only when you press Update.");
+                if (settings.AutoUpdate)
+                    _ = AutoUpdateTick();
+            });
+            more.Opening += (s, e) =>
+            {
+                musicItem.Text = settings.MusicOff ? "Turn the launcher music on" : "Turn the launcher music off";
+                checkItem.Text = "Check for updates automatically: " + (settings.AutoCheckUpdates ? "on" : "off");
+                autoItem.Text = "Install updates automatically: " + (settings.AutoUpdate ? "on" : "off");
+                autoItem.Enabled = settings.AutoCheckUpdates;
+            };
+            // a new release while the launcher stays open (the game isn't running: Play keeps the launcher busy)
+            var updateTimer = new System.Windows.Forms.Timer { Interval = 60 * 60 * 1000 };
+            updateTimer.Tick += async (s, e) => await AutoUpdateTick();
+            updateTimer.Start();
             moreButton.Click += (s, e) => more.Show(moreButton, new Point(0, moreButton.Height));
 
             browseButton.Click += (s, e) => BrowseGame();
@@ -359,7 +388,15 @@ namespace CsnzLauncher
             StartMusic();
             if (!GameLocator.IsGame(settings.GamePath))
                 GetGame();
-            await CheckLatest(false);
+            if (settings.AutoCheckUpdates)
+            {
+                await CheckLatest(false);
+                // a new release goes in before anything else (the shortcut's Play too): the new launcher restarts with --play
+                if (settings.AutoUpdate && UpdateAvailable() && await UpdateAsync(true))
+                    return;
+            }
+            else
+                Log("Updates aren't checked automatically (More turns it on; Check for updates asks GitHub now).");
             if (!autoPlay && !settings.AntivirusInfoShown)
                 ShowAntivirusInfo();
             else if (!autoPlay)
@@ -461,7 +498,7 @@ namespace CsnzLauncher
         Task<bool> ExportPictures(bool install)
         {
             var game = settings.GamePath;
-            return Run("Pictures", () =>
+            return Run("Store assets", () =>
             {
                 if (install)
                     Assets.InstallPython(Log);
@@ -475,7 +512,7 @@ namespace CsnzLauncher
             "They're made from your own game's files (a few minutes) and stay through updates.\n\n" +
             (hasPython ? "" : "Python isn't on this PC: the launcher first downloads the latest one from python.org (about 30 MB) and installs it " +
                               "for your Windows user, without administrator rights.\n\n") +
-            "Not now: the game works without them, and the Pictures button extracts them any time. This question won't come back.";
+            "Not now: the game works without them, and the Store assets button extracts them any time. This question won't come back.";
 
         public static string[] PicturesButtons(bool beforePlay) => new[] { beforePlay ? "Extract, then play" : "Extract now", "Not now" };
 
@@ -494,13 +531,13 @@ namespace CsnzLauncher
             settings.Save();
             if (answer != DialogResult.Yes)
             {
-                Log("Item pictures: not now (the Pictures button extracts them any time).");
+                Log("Item pictures: not now (the Store assets button extracts them any time).");
                 return;
             }
             if (await ExportPictures(!hasPython))
                 Log("The item pictures are ready: the in-game shop, profile and missions pages show them.");
             else
-                Log("The item pictures weren't extracted: press Pictures to try again.");
+                Log("The item pictures weren't extracted: press Store assets to try again.");
         }
 
         // After an update (or before Play): the shop has items the exported pictures don't (new battle passes). Asked once
@@ -522,17 +559,17 @@ namespace CsnzLauncher
             var answer = DarkBox.Show(this,
                 $"The shop has {fresh} item{(fresh == 1 ? "" : "s")} your pictures don't have yet (new battle passes came with an update).\n\n" +
                 "Extract their pictures and 3D models from your game now (a few minutes)?\n\n" +
-                "Not now: the game works without them, and the Pictures button extracts them any time.",
+                "Not now: the game works without them, and the Store assets button extracts them any time.",
                 "Item pictures", MessageBoxButtons.YesNo, MessageBoxIcon.Question, PicturesButtons(beforePlay));
             if (answer != DialogResult.Yes)
             {
-                Log("New items' pictures: not now (the Pictures button extracts them any time).");
+                Log("New items' pictures: not now (the Store assets button extracts them any time).");
                 return;
             }
             if (await ExportPictures(!hasPython))
                 Log("The new items' pictures are ready.");
             else
-                Log("The pictures weren't extracted: press Pictures to try again.");
+                Log("The pictures weren't extracted: press Store assets to try again.");
         }
 
         // ------------------------------------------------------------ logs
@@ -635,9 +672,7 @@ namespace CsnzLauncher
                 if (latest == null)
                     return;
             }
-            var installed = Paths.InstalledVersion();
-            bool modOld = installed == null || latest.Version > installed, launcherOld = latest.Version > Paths.LauncherVersion;
-            if (!modOld && !launcherOld)
+            if (!UpdateAvailable())
             {
                 Log("Everything is up to date.");
                 SetBusy(true);
@@ -645,13 +680,51 @@ namespace CsnzLauncher
                 SetBusy(false);
                 return;
             }
+            await UpdateAsync(false);
+        }
+
+        // an installed mod or launcher older than the latest release (a mod not installed yet is Install, not an update)
+        bool UpdateAvailable()
+        {
+            var installed = Paths.InstalledVersion();
+            return latest?.Version != null && installed != null && (latest.Version > installed || latest.Version > Paths.LauncherVersion);
+        }
+
+        // every hour (and when More turns it on): asks GitHub, then installs a new release by itself when allowed
+        async Task AutoUpdateTick()
+        {
+            if (!settings.AutoCheckUpdates || busy || Runner.GameRunning())
+                return;
+            await CheckLatest(false);
+            if (settings.AutoUpdate && UpdateAvailable() && !busy)
+                await UpdateAsync(true);
+        }
+
+        // automatic: no questions; skipped (and logged) while the game, the server or the bridge runs or in a Git checkout.
+        // True when the launcher closes itself for its new version.
+        async Task<bool> UpdateAsync(bool automatic)
+        {
+            var installed = Paths.InstalledVersion();
+            bool modOld = installed == null || latest.Version > installed, launcherOld = latest.Version > Paths.LauncherVersion;
             if (Paths.IsDevCheckout)
             {
-                DarkBox.Show(this, "This launcher sits in a Git checkout of the project: updating would overwrite the sources. Copy it to its own folder.", Text);
-                return;
+                if (automatic)
+                    Log("Automatic update skipped: this launcher sits in a Git checkout of the project.");
+                else
+                    DarkBox.Show(this, "This launcher sits in a Git checkout of the project: updating would overwrite the sources. Copy it to its own folder.", Text);
+                return false;
             }
-            if (!CloseRunning("Updating"))
-                return;
+            if (automatic)
+            {
+                if (Runner.OursRunning().Length > 0)
+                {
+                    Log($"{latest.Tag} is out: it installs by itself once the game is closed (or press Update).");
+                    return false;
+                }
+                Log($"Installing {latest.Tag} automatically (More turns automatic updates off)...");
+            }
+            else if (!CloseRunning("Updating"))
+                return false;
             var token = GitHub.FindToken(settings, out _);
             string newLauncher = null;
             var ok = await Run("Update", () =>
@@ -670,12 +743,16 @@ namespace CsnzLauncher
                 }
             });
             if (ok && newLauncher != null && File.Exists(newLauncher))
-                SwapLauncher(newLauncher);
-            else if (ok && await CheckRemoved())
+                return SwapLauncher(newLauncher);
+            if (ok)
+                Log($"Updated to {latest.Tag}.");
+            // (automatic: Play asks about the pictures before the game starts, nothing pops up on its own)
+            if (ok && !automatic && await CheckRemoved())
             {
                 await OfferPictures(false); // the new launcher asks before its first Play instead
                 await OfferPicturesRefresh(false);
             }
+            return false;
         }
 
         // the latest release's mod package, downloaded and installed over the mod (the player's own files are kept)
@@ -735,7 +812,7 @@ namespace CsnzLauncher
 
         // The running exe can't be overwritten, but it can be renamed: it becomes .old (deleted by the new launcher when it
         // starts), the new one takes its name and is started. No script and no hidden console.
-        void SwapLauncher(string newExe)
+        bool SwapLauncher(string newExe)
         {
             var exe = Application.ExecutablePath;
             var old = exe + ".old";
@@ -752,12 +829,14 @@ namespace CsnzLauncher
                 Log("The new launcher couldn't replace this one (" + ex.Message + "): it's in " + newExe);
                 DarkBox.Show(this, "The mod is updated, but the new launcher couldn't replace this one (" + ex.Message + ").\n\n" +
                                    "It was downloaded to:\n" + newExe + "\n\nClose this launcher and rename it to " + Path.GetFileName(exe) + ".", Text);
-                return;
+                return false;
             }
             Log("Restarting the launcher with its new version...");
-            Process.Start(new ProcessStartInfo(exe) { WorkingDirectory = Paths.Root, UseShellExecute = false });
+            // the desktop shortcut's --play carries over, so the new launcher goes on into the game
+            Process.Start(new ProcessStartInfo(exe, autoPlay ? "--play" : "") { WorkingDirectory = Paths.Root, UseShellExecute = false });
             busy = false;
             Close();
+            return true;
         }
 
         // ------------------------------------------------------------ play
@@ -797,7 +876,7 @@ namespace CsnzLauncher
             await OfferPictures(true);
             await OfferPicturesRefresh(true);
             if (!Assets.Present)
-                Log("Note: the shop and profile pictures aren't exported yet (the Pictures button). The game works without them.");
+                Log("Note: the shop and profile pictures aren't exported yet (the Store assets button). The game works without them.");
 
             // the music fades out while the game starts (the window minimizes; the fade keeps running)
             music.FadeOut();

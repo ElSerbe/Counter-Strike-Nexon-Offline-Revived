@@ -63,7 +63,7 @@
 
   // Real item picture exported from the game files (tools/export_shop_assets.py), silhouette if missing.
   const itemImage = it =>
-    '<img class="icon" src="icons/' + it.id + '.png" alt="" onerror="this.nextElementSibling.style.display=\'flex\';this.remove()">' +
+    '<img class="icon" src="icons/' + it.id + '.png" alt="" onerror="this.nextElementSibling.style.display=\'flex\';this.remove();window.iconMissing&&iconMissing()">' +
     '<div class="fallback" style="display:none">' + itemArt(it.category) + "</div>";
 
   // Item sheets like the native inventory tooltips (data from iteminfo.json, written by tools/export_shop_assets.py)
@@ -108,6 +108,23 @@
   function closeShop() {
     location.href = "http://127.0.0.1:1/";
   }
+
+  // A small note when item pictures are missing (they're never shipped: the launcher's Store assets button extracts
+  // them from the player's own game). Shown after a few failed icons, so one item without a picture doesn't nag;
+  // hidden for good with its x.
+  const iconsNote = document.getElementById("icons-note");
+  let iconsMissing = 0;
+  let iconsNoteHidden = false;
+  try { iconsNoteHidden = localStorage.getItem("iconsNoteHidden") === "1"; } catch (e) {}
+  window.iconMissing = () => {
+    if (++iconsMissing >= 3 && !iconsNoteHidden)
+      iconsNote.classList.remove("hidden");
+  };
+  document.getElementById("icons-note-close").onclick = () => {
+    iconsNoteHidden = true;
+    iconsNote.classList.add("hidden");
+    try { localStorage.setItem("iconsNoteHidden", "1"); } catch (e) {}
+  };
 
   function toast(text, kind) {
     toastEl.textContent = text;
