@@ -130,6 +130,31 @@ namespace SteamBridge
             public uint Id;
             public TcpClient Tcp;
             public bool Closed;
+            // joining side: the game connecting to another player's server (CheckStalled)
+            public string HostName;
+            public long Received;
+            public DateTime SentAt;
+            public bool AwaitingReply;
+        }
+
+        // The game connecting to another player's server (the first 32 KB, its login) waits for every answer: when that
+        // server stops answering, the game spun in its TLS connect for good (a "frozen" game). After 25 s without an
+        // answer the connection is closed and logged, and the game gets a disconnection instead.
+        const int StallSeconds = 25;
+        void CheckStalled()
+        {
+            var now = DateTime.UtcNow;
+            foreach (var c in conns.Values.ToList())
+            {
+                if (c.HostName == null || !c.AwaitingReply || c.Received >= 32768 || (now - c.SentAt).TotalSeconds < StallSeconds)
+                    continue;
+                log(c.HostName + "'s server didn't answer for " + StallSeconds + " s while this PC's game was connecting to it (" +
+                    c.Received + " bytes in so far): connection " + c.Id + " closed. Their PC or the Steam connection to it is stuck; " +
+                    "their logs (Logs > Copy the last session's logs) say why.");
+                c.Closed = true;
+                Send(c.Peer, Close, c.Id, null, 0);
+                CloseConn(c);
+            }
         }
         readonly ConcurrentDictionary<string, Conn> conns = new ConcurrentDictionary<string, Conn>();
         static string Key(ulong peer, uint id) => peer + ":" + id;
@@ -187,6 +212,7 @@ namespace SteamBridge
                     if (now >= nextUdp)
                     {
                         ReadUdpState();
+                        CheckStalled();
                         nextUdp = now.AddSeconds(2);
                     }
                     ReadP2P();
@@ -457,7 +483,7 @@ namespace SteamBridge
                 tcp.NoDelay = true;
                 uint id = (uint)Interlocked.Increment(ref nextConn);
                 ulong peer = loopback ? LoopHostSide : h.SteamID;
-                var c = new Conn { Peer = peer, Id = id, Tcp = tcp };
+                var c = new Conn { Peer = peer, Id = id, Tcp = tcp, HostName = h.Name ?? "The other player" };
                 conns[Key(peer, id)] = c;
                 lock (Steam.Lock)
                 {
@@ -482,7 +508,14 @@ namespace SteamBridge
                 var s = c.Tcp.GetStream();
                 int n;
                 while ((n = s.Read(buf, 0, buf.Length)) > 0)
+                {
+                    if (c.HostName != null && !c.AwaitingReply)
+                    {
+                        c.SentAt = DateTime.UtcNow;
+                        c.AwaitingReply = true;
+                    }
                     Send(c.Peer, Data, c.Id, buf, n);
+                }
             }
             catch { }
             if (!c.Closed)
@@ -581,8 +614,12 @@ namespace SteamBridge
                     break;
                 case Data:
                     if (conns.TryGetValue(key, out var d))
+                    {
+                        d.Received += msg.Length - 5;
+                        d.AwaitingReply = false;
                         try { d.Tcp.GetStream().Write(msg, 5, msg.Length - 5); }
                         catch { CloseConn(d); }
+                    }
                     break;
                 case Close:
                     if (conns.TryGetValue(key, out var x))
