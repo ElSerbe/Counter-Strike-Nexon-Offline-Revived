@@ -56,7 +56,8 @@ namespace CsnzLauncher
         public string GamePath = "";
         public string TokenProtected = ""; // a GitHub token, encrypted for this Windows user (DPAPI)
         public bool OnlinePlay = true;      // the Steam bridge runs with the server (offline play works without it)
-        public bool DetailedLogs = false;   // the server and the bridge log every packet (--verbose), for bug reports
+        public bool DetailedLogs = true;    // the server and the bridge log every packet (--verbose), for bug reports (on by default from v1.1.45)
+        public bool DetailedLogsDefaulted;  // v1.1.45 turned detailed logs on once for settings saved before it
         public bool MusicOff = false;       // More > the launcher music: never plays when true
         public bool PicturesAsked = false;  // the "extract the pictures?" question was shown once (yes or no): not again
         public string PicturesRefreshAsked = ""; // the mod version whose new shop items' pictures were offered (once per version)
@@ -71,7 +72,16 @@ namespace CsnzLauncher
             try
             {
                 if (File.Exists(Paths.SettingsFile))
-                    return Json.Deserialize<Settings>(File.ReadAllText(Paths.SettingsFile)) ?? new Settings();
+                {
+                    var s = Json.Deserialize<Settings>(File.ReadAllText(Paths.SettingsFile)) ?? new Settings();
+                    if (!s.DetailedLogsDefaulted)
+                    {
+                        s.DetailedLogs = true; // the user's call (2026-11-24): bug reports need them
+                        s.DetailedLogsDefaulted = true;
+                        try { s.Save(); } catch { }
+                    }
+                    return s;
+                }
             }
             catch { }
             return new Settings();
@@ -564,6 +574,8 @@ namespace CsnzLauncher
         // had no backup (then Steam's "Verify integrity of game files" fetches it again).
         public static bool Restore(string game, Logger log)
         {
+            // a Steam install gets Valve's steam_api.dll back (online play off had put the emulator's there)
+            SteamApi.ForPlayMode(game, true, log);
             var bin = Path.Combine(game, "Bin");
             var list = PatchList.Load();
             var states = Survey(bin, list);

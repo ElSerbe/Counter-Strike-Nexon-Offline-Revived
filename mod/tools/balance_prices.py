@@ -45,13 +45,17 @@ def round5(value):
     return int(math.ceil(value / 5.0) * 5)
 
 
+# the user's call (2026-11-24, after the public release): the raised weapons cost 25% less than this rule gives
+OP_DISCOUNT = 0.75
+
+
 def new_price(base, grades):
     total = sum(grades)
     for need, factor, floor in TIERS:
         if total >= need:
             if base >= floor * 2:
-                return base
-            return min(CAP, max(round5(base * factor), floor))
+                return round5(base * OP_DISCOUNT)
+            return round5(min(CAP, max(round5(base * factor), floor)) * OP_DISCOUNT)
     return base
 
 

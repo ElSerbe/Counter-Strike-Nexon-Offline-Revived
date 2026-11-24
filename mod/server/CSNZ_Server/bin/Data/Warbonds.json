@@ -300,7 +300,7 @@
 					{ "ItemID": 150, "Cost": 90 }, { "ItemID": 155, "Cost": 90 }
 				] },
 				{ "Unlock": 90, "Items": [
-					{ "ItemID": 457, "Cost": 100 }, { "ItemID": 8164, "Cost": 300 }
+					{ "ItemID": 457, "Cost": 100 }, { "ItemID": 8164, "Cost": 225 }
 				] },
 				{ "Unlock": 90, "Title": "Cosmetics", "Items": [
 					{ "ItemID": 475, "Cost": 50 }, { "ItemID": 477, "Cost": 50 }
@@ -316,7 +316,7 @@
 					{ "ItemID": 152, "Cost": 90 }, { "ItemID": 154, "Cost": 90 }
 				] },
 				{ "Unlock": 90, "Items": [
-					{ "ItemID": 814, "Cost": 75 }, { "ItemID": 8108, "Cost": 450 }
+					{ "ItemID": 814, "Cost": 75 }, { "ItemID": 8108, "Cost": 340 }
 				] }
 			]
 		},
@@ -342,7 +342,7 @@
 					{ "ItemID": 392, "Cost": 90 }, { "ItemID": 393, "Cost": 90 }
 				] },
 				{ "Unlock": 90, "Items": [
-					{ "ItemID": 8136, "Cost": 100 }, { "ItemID": 8133, "Cost": 450 }
+					{ "ItemID": 8136, "Cost": 100 }, { "ItemID": 8133, "Cost": 340 }
 				] }
 			]
 		},
@@ -355,7 +355,7 @@
 					{ "ItemID": 418, "Cost": 90 }, { "ItemID": 419, "Cost": 90 }
 				] },
 				{ "Unlock": 90, "Items": [
-					{ "ItemID": 8179, "Cost": 120 }, { "ItemID": 609, "Cost": 125 }, { "ItemID": 556, "Cost": 100 }, { "ItemID": 8220, "Cost": 300 }
+					{ "ItemID": 8179, "Cost": 120 }, { "ItemID": 609, "Cost": 95 }, { "ItemID": 556, "Cost": 100 }, { "ItemID": 8220, "Cost": 225 }
 				] }
 			]
 		},
@@ -381,7 +381,7 @@
 					{ "ItemID": 432, "Cost": 90 }, { "ItemID": 433, "Cost": 90 }
 				] },
 				{ "Unlock": 90, "Items": [
-					{ "ItemID": 8180, "Cost": 120 }, { "ItemID": 399, "Cost": 100 }, { "ItemID": 8247, "Cost": 300 }
+					{ "ItemID": 8180, "Cost": 120 }, { "ItemID": 399, "Cost": 100 }, { "ItemID": 8247, "Cost": 225 }
 				] },
 				{ "Unlock": 90, "Title": "Cosmetics", "Items": [
 					{ "ItemID": 8280, "Cost": 60 }
@@ -475,7 +475,7 @@
 					{ "ItemID": 692, "Cost": 90 }, { "ItemID": 377, "Cost": 90 }, { "ItemID": 362, "Cost": 90 }
 				] },
 				{ "Unlock": 90, "Items": [
-					{ "ItemID": 892, "Cost": 125 }, { "ItemID": 978, "Cost": 300 }
+					{ "ItemID": 892, "Cost": 95 }, { "ItemID": 978, "Cost": 225 }
 				] },
 				{ "Unlock": 90, "Title": "Cosmetics", "Items": [
 					{ "ItemID": 786, "Cost": 40 }
@@ -514,10 +514,10 @@
 			"Image": "",
 			"Pages": [
 				{ "Unlock": 0, "Items": [
-					{ "ItemID": 517, "Cost": 30 }, { "ItemID": 407, "Cost": 100 }, { "ItemID": 532, "Cost": 55 }, { "ItemID": 151, "Cost": 155 }
+					{ "ItemID": 517, "Cost": 30 }, { "ItemID": 407, "Cost": 75 }, { "ItemID": 532, "Cost": 55 }, { "ItemID": 151, "Cost": 155 }
 				] },
 				{ "Unlock": 130, "Items": [
-					{ "ItemID": 482, "Cost": 80 }, { "ItemID": 367, "Cost": 80 }, { "ItemID": 554, "Cost": 100 }, { "ItemID": 153, "Cost": 155 }
+					{ "ItemID": 482, "Cost": 80 }, { "ItemID": 367, "Cost": 80 }, { "ItemID": 554, "Cost": 75 }, { "ItemID": 153, "Cost": 155 }
 				] },
 				{ "Unlock": 330, "Items": [
 					{ "ItemID": 466, "Cost": 175 }, { "ItemID": 327, "Cost": 175 }, { "ItemID": 483, "Cost": 90 }, { "ItemID": 154, "Cost": 155 }
@@ -530,10 +530,10 @@
 			"Image": "", "Theme": ["#240f12", "#ff5a4f"],
 			"Pages": [
 				{ "Unlock": 0, "Items": [
-					{ "ItemID": 812, "Cost": 135 }, { "ItemID": 834, "Cost": 185 }, { "ItemID": 776, "Cost": 340 }
+					{ "ItemID": 812, "Cost": 105 }, { "ItemID": 834, "Cost": 185 }, { "ItemID": 776, "Cost": 255 }
 				] },
 				{ "Unlock": 340, "Items": [
-					{ "ItemID": 784, "Cost": 300 }, { "ItemID": 764, "Cost": 250 }, { "ItemID": 752, "Cost": 660 }
+					{ "ItemID": 784, "Cost": 300 }, { "ItemID": 764, "Cost": 250 }, { "ItemID": 752, "Cost": 495 }
 				] }
 			]
 		},
@@ -559,7 +559,7 @@
 			"Image": "", "Theme": ["#0e1c22", "#4fd1c5"],
 			"Pages": [
 				{ "Unlock": 0, "Items": [
-					{ "ItemID": 598, "Cost": 125 }, { "ItemID": 711, "Cost": 230 }, { "ItemID": 673, "Cost": 210 }
+					{ "ItemID": 598, "Cost": 125 }, { "ItemID": 711, "Cost": 230 }, { "ItemID": 673, "Cost": 160 }
 				] },
 				{ "Unlock": 330, "Items": [
 					{ "ItemID": 587, "Cost": 300 }, { "ItemID": 684, "Cost": 250 }, { "ItemID": 595, "Cost": 660 }
@@ -572,10 +572,10 @@
 			"Image": "",
 			"Pages": [
 				{ "Unlock": 0, "Items": [
-					{ "ItemID": 8219, "Cost": 100 }, { "ItemID": 8119, "Cost": 200 }, { "ItemID": 8132, "Cost": 200 }
+					{ "ItemID": 8219, "Cost": 75 }, { "ItemID": 8119, "Cost": 150 }, { "ItemID": 8132, "Cost": 150 }
 				] },
 				{ "Unlock": 100, "Items": [
-					{ "ItemID": 8118, "Cost": 200 }, { "ItemID": 8193, "Cost": 305 }, { "ItemID": 8327, "Cost": 200 }
+					{ "ItemID": 8118, "Cost": 150 }, { "ItemID": 8193, "Cost": 230 }, { "ItemID": 8327, "Cost": 150 }
 				] }
 			]
 		},
@@ -649,7 +649,7 @@
 					{ "ItemID": 670, "Cost": 45 }, { "ItemID": 671, "Cost": 45 }, { "ItemID": 683, "Cost": 55 }, { "ItemID": 709, "Cost": 155 }
 				] },
 				{ "Unlock": 110, "Items": [
-					{ "ItemID": 672, "Cost": 45 }, { "ItemID": 8088, "Cost": 100 }, { "ItemID": 523, "Cost": 55 }, { "ItemID": 710, "Cost": 155 }
+					{ "ItemID": 672, "Cost": 45 }, { "ItemID": 8088, "Cost": 75 }, { "ItemID": 523, "Cost": 55 }, { "ItemID": 710, "Cost": 155 }
 				] },
 				{ "Unlock": 280, "Items": [
 					{ "ItemID": 706, "Cost": 50 }, { "ItemID": 8320, "Cost": 55 }, { "ItemID": 8323, "Cost": 30 }, { "ItemID": 592, "Cost": 155 }
@@ -683,19 +683,19 @@
 					{ "ItemID": 379, "Cost": 80 }, { "ItemID": 783, "Cost": 30 }, { "ItemID": 720, "Cost": 50 }, { "ItemID": 818, "Cost": 155 }
 				] },
 				{ "Unlock": 320, "Items": [
-					{ "ItemID": 548, "Cost": 55 }, { "ItemID": 495, "Cost": 100 }, { "ItemID": 8194, "Cost": 450 }, { "ItemID": 925, "Cost": 155 }
+					{ "ItemID": 548, "Cost": 55 }, { "ItemID": 495, "Cost": 75 }, { "ItemID": 8194, "Cost": 340 }, { "ItemID": 925, "Cost": 155 }
 				] },
 				{ "Unlock": 540, "Items": [
-					{ "ItemID": 564, "Cost": 80 }, { "ItemID": 435, "Cost": 150 }, { "ItemID": 8221, "Cost": 450 }, { "ItemID": 8128, "Cost": 155 }
+					{ "ItemID": 564, "Cost": 80 }, { "ItemID": 435, "Cost": 150 }, { "ItemID": 8221, "Cost": 340 }, { "ItemID": 8128, "Cost": 155 }
 				] },
 				{ "Unlock": 790, "Items": [
-					{ "ItemID": 789, "Cost": 175 }, { "ItemID": 899, "Cost": 85 }, { "ItemID": 8381, "Cost": 300 }, { "ItemID": 8129, "Cost": 170 }
+					{ "ItemID": 789, "Cost": 175 }, { "ItemID": 899, "Cost": 85 }, { "ItemID": 8381, "Cost": 225 }, { "ItemID": 8129, "Cost": 170 }
 				] },
 				{ "Unlock": 1080, "Items": [
-					{ "ItemID": 8393, "Cost": 85 }, { "ItemID": 8394, "Cost": 85 }, { "ItemID": 8258, "Cost": 450 }, { "ItemID": 8195, "Cost": 170 }
+					{ "ItemID": 8393, "Cost": 85 }, { "ItemID": 8394, "Cost": 85 }, { "ItemID": 8258, "Cost": 340 }, { "ItemID": 8195, "Cost": 170 }
 				] },
 				{ "Unlock": 1400, "Items": [
-					{ "ItemID": 815, "Cost": 220 }, { "ItemID": 924, "Cost": 55 }, { "ItemID": 8385, "Cost": 450 }, { "ItemID": 8288, "Cost": 170 }
+					{ "ItemID": 815, "Cost": 165 }, { "ItemID": 924, "Cost": 55 }, { "ItemID": 8385, "Cost": 340 }, { "ItemID": 8288, "Cost": 170 }
 				] },
 				{ "Unlock": 1400, "Title": "Cosmetics", "Items": [
 					{ "ItemID": 8399, "Cost": 50 }
@@ -708,13 +708,13 @@
 			"Image": "", "Theme": ["#1f1a08", "#ffd24a"],
 			"Pages": [
 				{ "Unlock": 0, "Items": [
-					{ "ItemID": 341, "Cost": 60 }, { "ItemID": 172, "Cost": 100 }, { "ItemID": 549, "Cost": 60 }, { "ItemID": 416, "Cost": 60 }
+					{ "ItemID": 341, "Cost": 60 }, { "ItemID": 172, "Cost": 75 }, { "ItemID": 549, "Cost": 60 }, { "ItemID": 416, "Cost": 60 }
 				] },
 				{ "Unlock": 220, "Items": [
 					{ "ItemID": 309, "Cost": 110 }, { "ItemID": 346, "Cost": 110 }, { "ItemID": 496, "Cost": 110 }, { "ItemID": 220, "Cost": 110 }
 				] },
 				{ "Unlock": 560, "Items": [
-					{ "ItemID": 441, "Cost": 110 }, { "ItemID": 583, "Cost": 110 }, { "ItemID": 8055, "Cost": 200 }, { "ItemID": 8106, "Cost": 880 }
+					{ "ItemID": 441, "Cost": 110 }, { "ItemID": 583, "Cost": 110 }, { "ItemID": 8055, "Cost": 150 }, { "ItemID": 8106, "Cost": 660 }
 				] },
 				{ "Unlock": 960, "Items": [
 					{ "ItemID": 170, "Cost": 160 }, { "ItemID": 244, "Cost": 160 }, { "ItemID": 221, "Cost": 160 }, { "ItemID": 420, "Cost": 160 }
@@ -748,13 +748,13 @@
 					{ "ItemID": 282, "Cost": 55 }, { "ItemID": 681, "Cost": 45 }, { "ItemID": 8330, "Cost": 80 }, { "ItemID": 8336, "Cost": 155 }
 				] },
 				{ "Unlock": 430, "Items": [
-					{ "ItemID": 279, "Cost": 85 }, { "ItemID": 280, "Cost": 85 }, { "ItemID": 405, "Cost": 55 }, { "ItemID": 8110, "Cost": 420 }
+					{ "ItemID": 279, "Cost": 85 }, { "ItemID": 280, "Cost": 85 }, { "ItemID": 405, "Cost": 55 }, { "ItemID": 8110, "Cost": 315 }
 				] },
 				{ "Unlock": 640, "Items": [
 					{ "ItemID": 8331, "Cost": 85 }, { "ItemID": 480, "Cost": 55 }, { "ItemID": 610, "Cost": 65 }, { "ItemID": 8328, "Cost": 55 }
 				] },
 				{ "Unlock": 870, "Items": [
-					{ "ItemID": 428, "Cost": 355 }, { "ItemID": 679, "Cost": 165 }, { "ItemID": 8143, "Cost": 900 }, { "ItemID": 959, "Cost": 440 }, { "ItemID": 929, "Cost": 100 }
+					{ "ItemID": 428, "Cost": 270 }, { "ItemID": 679, "Cost": 165 }, { "ItemID": 8143, "Cost": 675 }, { "ItemID": 959, "Cost": 330 }, { "ItemID": 929, "Cost": 100 }
 				] },
 				{ "Unlock": 870, "Title": "Cosmetics", "Items": [
 					{ "ItemID": 375, "Cost": 30 }
@@ -815,7 +815,7 @@
 					{ "ItemID": 566, "Cost": 45 }, { "ItemID": 572, "Cost": 75 }, { "ItemID": 983, "Cost": 75 }, { "ItemID": 977, "Cost": 75 }
 				] },
 				{ "Unlock": 160, "Items": [
-					{ "ItemID": 567, "Cost": 90 }, { "ItemID": 568, "Cost": 90 }, { "ItemID": 968, "Cost": 200 }, { "ItemID": 569, "Cost": 135 }
+					{ "ItemID": 567, "Cost": 90 }, { "ItemID": 568, "Cost": 90 }, { "ItemID": 968, "Cost": 150 }, { "ItemID": 569, "Cost": 135 }
 				] },
 				{ "Unlock": 300, "Items": [
 					{ "ItemID": 920, "Cost": 180 }, { "ItemID": 8054, "Cost": 180 }, { "ItemID": 928, "Cost": 75 }
@@ -828,10 +828,10 @@
 			"Image": "", "Theme": ["#170d0d", "#e2483c"],
 			"Pages": [
 				{ "Unlock": 0, "Items": [
-					{ "ItemID": 828, "Cost": 200 }, { "ItemID": 363, "Cost": 100 }, { "ItemID": 427, "Cost": 100 }, { "ItemID": 437, "Cost": 100 }
+					{ "ItemID": 828, "Cost": 150 }, { "ItemID": 363, "Cost": 75 }, { "ItemID": 427, "Cost": 100 }, { "ItemID": 437, "Cost": 100 }
 				] },
 				{ "Unlock": 120, "Items": [
-					{ "ItemID": 538, "Cost": 120 }, { "ItemID": 504, "Cost": 75 }, { "ItemID": 689, "Cost": 75 }, { "ItemID": 690, "Cost": 125 }
+					{ "ItemID": 538, "Cost": 120 }, { "ItemID": 504, "Cost": 75 }, { "ItemID": 689, "Cost": 75 }, { "ItemID": 690, "Cost": 95 }
 				] },
 				{ "Unlock": 250, "Items": [
 					{ "ItemID": 562, "Cost": 180 }, { "ItemID": 577, "Cost": 180 }, { "ItemID": 688, "Cost": 180 }, { "ItemID": 685, "Cost": 80 }, { "ItemID": 686, "Cost": 135 }, { "ItemID": 687, "Cost": 165 }
@@ -857,7 +857,7 @@
 			"Image": "", "Theme": ["#0b1a1d", "#4fe0e8"],
 			"Pages": [
 				{ "Unlock": 0, "Items": [
-					{ "ItemID": 8086, "Cost": 60 }, { "ItemID": 8077, "Cost": 100 }, { "ItemID": 8041, "Cost": 100 }, { "ItemID": 8100, "Cost": 100 }
+					{ "ItemID": 8086, "Cost": 60 }, { "ItemID": 8077, "Cost": 100 }, { "ItemID": 8041, "Cost": 75 }, { "ItemID": 8100, "Cost": 100 }
 				] },
 				{ "Unlock": 120, "Items": [
 					{ "ItemID": 962, "Cost": 120 }, { "ItemID": 934, "Cost": 180 }
@@ -870,13 +870,13 @@
 			"Image": "", "Theme": ["#1d1608", "#ffcf4a"],
 			"Pages": [
 				{ "Unlock": 0, "Items": [
-					{ "ItemID": 877, "Cost": 200 }, { "ItemID": 8047, "Cost": 450 }, { "ItemID": 919, "Cost": 300 }, { "ItemID": 8383, "Cost": 300 }
+					{ "ItemID": 877, "Cost": 150 }, { "ItemID": 8047, "Cost": 340 }, { "ItemID": 919, "Cost": 225 }, { "ItemID": 8383, "Cost": 225 }
 				] },
 				{ "Unlock": 180, "Items": [
-					{ "ItemID": 8426, "Cost": 300 }, { "ItemID": 841, "Cost": 300 }, { "ItemID": 809, "Cost": 360 }, { "ItemID": 810, "Cost": 360 }
+					{ "ItemID": 8426, "Cost": 225 }, { "ItemID": 841, "Cost": 225 }, { "ItemID": 809, "Cost": 270 }, { "ItemID": 810, "Cost": 270 }
 				] },
 				{ "Unlock": 440, "Items": [
-					{ "ItemID": 891, "Cost": 360 }, { "ItemID": 8033, "Cost": 450 }, { "ItemID": 825, "Cost": 225 }, { "ItemID": 8117, "Cost": 660 }, { "ItemID": 8414, "Cost": 660 }
+					{ "ItemID": 891, "Cost": 270 }, { "ItemID": 8033, "Cost": 340 }, { "ItemID": 825, "Cost": 170 }, { "ItemID": 8117, "Cost": 495 }, { "ItemID": 8414, "Cost": 495 }
 				] }
 			]
 		},
@@ -886,16 +886,16 @@
 			"Image": "", "Theme": ["#0f1420", "#7fb2ff"],
 			"Pages": [
 				{ "Unlock": 0, "Items": [
-					{ "ItemID": 8155, "Cost": 100 }, { "ItemID": 8150, "Cost": 200 }, { "ItemID": 8160, "Cost": 100 }, { "ItemID": 8157, "Cost": 125 }
+					{ "ItemID": 8155, "Cost": 75 }, { "ItemID": 8150, "Cost": 150 }, { "ItemID": 8160, "Cost": 75 }, { "ItemID": 8157, "Cost": 95 }
 				] },
 				{ "Unlock": 100, "Items": [
-					{ "ItemID": 8154, "Cost": 200 }, { "ItemID": 8151, "Cost": 125 }, { "ItemID": 8149, "Cost": 200 }, { "ItemID": 8153, "Cost": 200 }
+					{ "ItemID": 8154, "Cost": 150 }, { "ItemID": 8151, "Cost": 95 }, { "ItemID": 8149, "Cost": 150 }, { "ItemID": 8153, "Cost": 150 }
 				] },
 				{ "Unlock": 260, "Items": [
-					{ "ItemID": 8152, "Cost": 200 }, { "ItemID": 8162, "Cost": 150 }, { "ItemID": 8156, "Cost": 200 }, { "ItemID": 8159, "Cost": 200 }
+					{ "ItemID": 8152, "Cost": 150 }, { "ItemID": 8162, "Cost": 115 }, { "ItemID": 8156, "Cost": 150 }, { "ItemID": 8159, "Cost": 150 }
 				] },
 				{ "Unlock": 420, "Items": [
-					{ "ItemID": 8161, "Cost": 200 }, { "ItemID": 8158, "Cost": 225 }
+					{ "ItemID": 8161, "Cost": 150 }, { "ItemID": 8158, "Cost": 170 }
 				] }
 			]
 		},
@@ -917,7 +917,7 @@
 					{ "ItemID": 8178, "Cost": 120 }, { "ItemID": 8181, "Cost": 2 }, { "ItemID": 8182, "Cost": 2 }, { "ItemID": 8183, "Cost": 2 }, { "ItemID": 8184, "Cost": 2 }
 				] },
 				{ "Unlock": 380, "Items": [
-					{ "ItemID": 8179, "Cost": 120 }, { "ItemID": 8180, "Cost": 120 }, { "ItemID": 8192, "Cost": 300 }
+					{ "ItemID": 8179, "Cost": 120 }, { "ItemID": 8180, "Cost": 120 }, { "ItemID": 8192, "Cost": 225 }
 				] }
 			]
 		},
@@ -930,7 +930,7 @@
 					{ "ItemID": 742, "Cost": 60 }, { "ItemID": 743, "Cost": 75 }, { "ItemID": 8358, "Cost": 120 }, { "ItemID": 8359, "Cost": 120 }
 				] },
 				{ "Unlock": 140, "Items": [
-					{ "ItemID": 8360, "Cost": 165 }, { "ItemID": 8361, "Cost": 265 }, { "ItemID": 741, "Cost": 180 }
+					{ "ItemID": 8360, "Cost": 165 }, { "ItemID": 8361, "Cost": 200 }, { "ItemID": 741, "Cost": 180 }
 				] },
 				{ "Unlock": 140, "Title": "Cosmetics", "Items": [
 					{ "ItemID": 8364, "Cost": 50 }
@@ -943,13 +943,13 @@
 			"Image": "", "Theme": ["#160c22", "#c08bff"],
 			"Pages": [
 				{ "Unlock": 0, "Items": [
-					{ "ItemID": 788, "Cost": 80 }, { "ItemID": 8192, "Cost": 300 }, { "ItemID": 8248, "Cost": 450 }, { "ItemID": 8384, "Cost": 200 }
+					{ "ItemID": 788, "Cost": 80 }, { "ItemID": 8192, "Cost": 225 }, { "ItemID": 8248, "Cost": 340 }, { "ItemID": 8384, "Cost": 150 }
 				] },
 				{ "Unlock": 150, "Items": [
-					{ "ItemID": 8332, "Cost": 75 }, { "ItemID": 703, "Cost": 165 }, { "ItemID": 8282, "Cost": 330 }, { "ItemID": 8295, "Cost": 220 }
+					{ "ItemID": 8332, "Cost": 75 }, { "ItemID": 703, "Cost": 165 }, { "ItemID": 8282, "Cost": 250 }, { "ItemID": 8295, "Cost": 165 }
 				] },
 				{ "Unlock": 340, "Items": [
-					{ "ItemID": 8249, "Cost": 395 }, { "ItemID": 8356, "Cost": 600 }, { "ItemID": 8314, "Cost": 875 }, { "ItemID": 8171, "Cost": 875 }, { "ItemID": 8425, "Cost": 875 }
+					{ "ItemID": 8249, "Cost": 300 }, { "ItemID": 8356, "Cost": 450 }, { "ItemID": 8314, "Cost": 660 }, { "ItemID": 8171, "Cost": 660 }, { "ItemID": 8425, "Cost": 660 }
 				] }
 			]
 		},
@@ -959,7 +959,7 @@
 			"Image": "", "Theme": ["#1c140c", "#e0a060"],
 			"Pages": [
 				{ "Unlock": 0, "Items": [
-					{ "ItemID": 727, "Cost": 100 }, { "ItemID": 771, "Cost": 135 }, { "ItemID": 875, "Cost": 170 }, { "ItemID": 601, "Cost": 265 }, { "ItemID": 691, "Cost": 245 }
+					{ "ItemID": 727, "Cost": 100 }, { "ItemID": 771, "Cost": 135 }, { "ItemID": 875, "Cost": 130 }, { "ItemID": 601, "Cost": 200 }, { "ItemID": 691, "Cost": 245 }
 				] }
 			]
 		},
@@ -972,13 +972,13 @@
 					{ "ItemID": 845, "Cost": 225 }, { "ItemID": 8148, "Cost": 300 }, { "ItemID": 8333, "Cost": 225 }, { "ItemID": 8104, "Cost": 225 }
 				] },
 				{ "Unlock": 350, "Items": [
-					{ "ItemID": 761, "Cost": 300 }, { "ItemID": 589, "Cost": 225 }, { "ItemID": 844, "Cost": 480 }, { "ItemID": 461, "Cost": 100 }
+					{ "ItemID": 761, "Cost": 300 }, { "ItemID": 589, "Cost": 225 }, { "ItemID": 844, "Cost": 360 }, { "ItemID": 461, "Cost": 100 }
 				] },
 				{ "Unlock": 670, "Items": [
 					{ "ItemID": 530, "Cost": 225 }, { "ItemID": 339, "Cost": 100 }, { "ItemID": 417, "Cost": 120 }, { "ItemID": 753, "Cost": 120 }
 				] },
 				{ "Unlock": 870, "Items": [
-					{ "ItemID": 984, "Cost": 225 }, { "ItemID": 8094, "Cost": 600 }, { "ItemID": 8350, "Cost": 360 }
+					{ "ItemID": 984, "Cost": 225 }, { "ItemID": 8094, "Cost": 450 }, { "ItemID": 8350, "Cost": 270 }
 				] }
 			]
 		},
@@ -988,13 +988,13 @@
 			"Image": "", "Theme": ["#141414", "#c8c8c8"],
 			"Pages": [
 				{ "Unlock": 0, "Items": [
-					{ "ItemID": 365, "Cost": 180 }, { "ItemID": 767, "Cost": 75 }, { "ItemID": 8382, "Cost": 360 }, { "ItemID": 719, "Cost": 135 }
+					{ "ItemID": 365, "Cost": 180 }, { "ItemID": 767, "Cost": 75 }, { "ItemID": 8382, "Cost": 270 }, { "ItemID": 719, "Cost": 135 }
 				] },
 				{ "Unlock": 200, "Items": [
-					{ "ItemID": 857, "Cost": 210 }, { "ItemID": 213, "Cost": 135 }, { "ItemID": 397, "Cost": 135 }, { "ItemID": 893, "Cost": 245 }
+					{ "ItemID": 857, "Cost": 160 }, { "ItemID": 213, "Cost": 135 }, { "ItemID": 397, "Cost": 135 }, { "ItemID": 893, "Cost": 245 }
 				] },
 				{ "Unlock": 440, "Items": [
-					{ "ItemID": 717, "Cost": 150 }, { "ItemID": 792, "Cost": 120 }, { "ItemID": 8286, "Cost": 300 }
+					{ "ItemID": 717, "Cost": 115 }, { "ItemID": 792, "Cost": 120 }, { "ItemID": 8286, "Cost": 300 }
 				] }
 			]
 		},
@@ -1017,7 +1017,7 @@
 			"Image": "", "Theme": ["#141a0c", "#b8d46a"],
 			"Pages": [
 				{ "Unlock": 0, "Items": [
-					{ "ItemID": 158, "Cost": 45 }, { "ItemID": 8051, "Cost": 100 }, { "ItemID": 8321, "Cost": 100 }, { "ItemID": 611, "Cost": 100 }
+					{ "ItemID": 158, "Cost": 45 }, { "ItemID": 8051, "Cost": 75 }, { "ItemID": 8321, "Cost": 100 }, { "ItemID": 611, "Cost": 100 }
 				] },
 				{ "Unlock": 110, "Items": [
 					{ "ItemID": 283, "Cost": 225 }, { "ItemID": 763, "Cost": 225 }, { "ItemID": 582, "Cost": 165 }, { "ItemID": 6007, "Cost": 75 }, { "ItemID": 6009, "Cost": 90 }
@@ -1030,7 +1030,7 @@
 			"Image": "", "Theme": ["#0a1a16", "#4fe0b0"],
 			"Pages": [
 				{ "Unlock": 0, "Items": [
-					{ "ItemID": 954, "Cost": 80 }, { "ItemID": 8351, "Cost": 300 }, { "ItemID": 8050, "Cost": 170 }, { "ItemID": 487, "Cost": 165 }
+					{ "ItemID": 954, "Cost": 80 }, { "ItemID": 8351, "Cost": 225 }, { "ItemID": 8050, "Cost": 130 }, { "ItemID": 487, "Cost": 165 }
 				] },
 				{ "Unlock": 170, "Items": [
 					{ "ItemID": 8048, "Cost": 165 }, { "ItemID": 561, "Cost": 90 }
@@ -1145,7 +1145,7 @@
 			"Image": "", "Theme": ["#060a1f", "#7ad7ff"],
 			"Pages": [
 				{ "Unlock": 0, "Items": [
-					{ "ItemID": 8113, "Cost": 165 }, { "ItemID": 8395, "Cost": 165 }, { "ItemID": 8078, "Cost": 265 }, { "ItemID": 8396, "Cost": 265 }
+					{ "ItemID": 8113, "Cost": 165 }, { "ItemID": 8395, "Cost": 165 }, { "ItemID": 8078, "Cost": 200 }, { "ItemID": 8396, "Cost": 200 }
 				] },
 				{ "Unlock": 340, "Items": [
 					{ "ItemID": 8457, "Cost": 300, "Name": "Jet Gun MA" }, { "ItemID": 9117, "Cost": 450, "Name": "SF Sniper MB" }, { "ItemID": 8820, "Cost": 600, "Name": "Cousteau" }, { "ItemID": 9369, "Cost": 825, "Name": "SF MG (Hero)" }

@@ -1154,7 +1154,15 @@
 		"Points": [ 3000 ] 
 	},
 	"3021": { // Oberon
-		"Points": [ 3000 ] 
+		"Points": [ 3000 ]
+	},
+	"2626": { // reinforceweaponbox: weapon enhancement reward box (the 1000 downloads code)
+		"Title": "Weapon Enhancement Box",
+		"Description": "You obtained the following items:",
+		"Items": {
+			"5203": { "Count": 10, "Duration": 0 },
+			"5204": { "Count": 3, "Duration": 0 }
+		}
 	},
 	// >>> gen_mode_rewards.py (begin)
 		"1009": {

@@ -922,6 +922,7 @@ namespace CsnzLauncher
                 Certificates.Ensure(Log);
                 Patcher.Apply(game, Log);
                 SteamApi.UseEmulatorIfNotSteam(game, Log); // the archive.org copy: starts without the game on the Steam account
+                SteamApi.ForPlayMode(game, online, Log);   // online play off: no Steam needed at all
                 if (verbose)
                     Log("Game state after patching: " + Patcher.Check(game) + ", Steam build " + GameLocator.BuildId(game) + ", hosts block " + (Hosts.HasBlock() ? "yes" : "no"));
                 if (Runner.Listening(Runner.ServerPort))

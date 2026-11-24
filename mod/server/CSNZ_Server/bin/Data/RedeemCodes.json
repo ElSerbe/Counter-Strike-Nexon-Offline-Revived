@@ -35,6 +35,27 @@
 				{ "ItemID": 173, "Count": 5 }               // Advanced Decoder
 			]
 		},
+		// thanks for the first 1000 downloads (2026-11-24)
+		"1000DOWNLOADS": {
+			"Message": "Thank you for 1000 downloads! Transcendence Decoders, weapons, characters, coupons, medical kits and Double UP added to your inventory.",
+			"Items": [
+				{ "ItemID": 8292, "Count": 10 },            // Transcendence Decoder
+				{ "ItemID": 408, "Count": 1 },              // AK47L (AK-47 60R / "AK47 Custom")
+				{ "ItemID": 608, "Count": 1 },              // M2
+				{ "ItemID": 728, "Count": 1 },              // Brick Piece V2
+				{ "ItemID": 425, "Count": 1 },              // Natasha (Casual)
+				{ "ItemID": 592, "Count": 1 },              // Walter (CT)
+				{ "ItemID": 377, "Count": 1 },              // Spade (T)
+				{ "ItemID": 433, "Count": 1 },              // Michaela (T)
+				{ "ItemID": 8149, "Count": 1 },             // AKM CSOGS Edition
+				{ "ItemID": 8153, "Count": 1 },             // M4A1 CSOGS Edition
+				{ "ItemID": 1031, "Count": 3 },             // Point Coupon Lv. 2
+				{ "ItemID": 2626, "Count": 1 },             // weapon enhancement reward box (ItemRewards.json)
+				{ "ItemID": 259, "Count": 20 },             // Large Medical Kit (100%)
+				{ "ItemID": 73, "Count": 1, "Days": 10 },   // Double UP
+				{ "ItemID": 180, "Count": 1, "Days": 10 }   // Zombie Mode Double UP
+			]
+		},
 		// for Patreon supporters: secret codes, only their SHA-256 here (the codes are given on Patreon)
 		"PATREON1": {
 			"Hash": "f9695da9a3f0d6c1eb88370a9804e0313f844bbc7a1bbde75b196256ed57d80a", // the code is secret (given on Patreon)

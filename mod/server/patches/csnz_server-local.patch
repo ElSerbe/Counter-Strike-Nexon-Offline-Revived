@@ -1311,7 +1311,7 @@ index 0000000..5c99d8e
 +
 +extern CBingoManager g_BingoManager;
 diff --git a/src/manager/channelmanager.cpp b/src/manager/channelmanager.cpp
-index 35561e8..ff995fd 100644
+index 35561e8..a1c9340 100644
 --- a/src/manager/channelmanager.cpp
 +++ b/src/manager/channelmanager.cpp
 @@ -1,4 +1,9 @@
@@ -1621,15 +1621,40 @@ index 35561e8..ff995fd 100644
  	Logger().Info("User '%s' created a new room (RID: %d, name: '%s')\n", user->GetLogName(), newRoom->GetID(), roomSettings->roomName.c_str());
  
  	if (roomSettings->familyBattle)
-@@ -1270,10 +1518,71 @@ bool CChannelManager::OnNewRoomRequest(CReceivePacket* msg, IUser* user)
+@@ -1270,9 +1518,94 @@ bool CChannelManager::OnNewRoomRequest(CReceivePacket* msg, IUser* user)
  
  bool CChannelManager::OnJoinRoomRequest(CReceivePacket* msg, IUser* user)
  {
 -	int unk = msg->ReadUInt8();
 +	msg->ReadUInt8();
  	int roomID = msg->ReadUInt16();
- 	string password = msg->ReadString();
- 
+-	string password = msg->ReadString();
++	// offline build: the password didn't arrive: with the game's join request read as u8, u16, string, password rooms
++	// turned everyone away (the tickets of joins to online rooms carried an empty password). The bytes after the room id
++	// are logged, and the password is the first run of printable characters among them (zeros and small numbers
++	// around it are other fields).
++	string password;
++	{
++		const vector<unsigned char>& raw = msg->GetData().getBuffer();
++		size_t from = (size_t)msg->GetData().getReadOffset();
++		string hex;
++		char h[4];
++		for (size_t i = from; i < raw.size() && i < from + 48; i++)
++		{
++			snprintf(h, sizeof(h), "%02x ", raw[i]);
++			hex += h;
++		}
++		for (size_t i = from; i < raw.size(); i++)
++		{
++			if (raw[i] >= 0x20 && raw[i] < 0x7f)
++				password += (char)raw[i];
++			else if (!password.empty())
++				break;
++		}
++		Logger().Info("User '%s' asks to join room %d (after the id: %s)%s\n", user->GetLogName(), roomID, hex.c_str(),
++			password.empty() ? "" : ", with a password");
++	}
++
 +	// offline build: another player's room (Steam bridge) -> the client's server transfer to that player's server
 +	if (roomID >= ServerTransfer::REMOTE_ROOM_FIRST_ID)
 +		return JoinRemoteRoom(user, roomID, password);
@@ -1690,11 +1715,10 @@ index 35561e8..ff995fd 100644
 +
 +bool CChannelManager::JoinRoom(IUser* user, int roomID, const string& password)
 +{
-+
+ 
  	CChannel* channel = user->GetCurrentChannel();
  	if (channel == NULL)
- 	{
-@@ -1294,6 +1603,37 @@ bool CChannelManager::OnJoinRoomRequest(CReceivePacket* msg, IUser* user)
+@@ -1294,6 +1627,37 @@ bool CChannelManager::OnJoinRoomRequest(CReceivePacket* msg, IUser* user)
  		return false;
  	}
  
@@ -1732,7 +1756,7 @@ index 35561e8..ff995fd 100644
  	if (room->HasFreeSlots() == false)
  	{
  		g_PacketManager.SendUMsgNoticeMsgBoxToUuid(user->GetExtendedSocket(), OBFUSCATE("ROOM_JOIN_FAILED_FULL"));
-@@ -1396,6 +1736,9 @@ bool CChannelManager::OnJoinRoomRequest(CReceivePacket* msg, IUser* user)
+@@ -1396,6 +1760,9 @@ bool CChannelManager::OnJoinRoomRequest(CReceivePacket* msg, IUser* user)
  
  	channel->SendUpdateRoomList(room);
  
@@ -1742,7 +1766,7 @@ index 35561e8..ff995fd 100644
  	Logger().Info("User '%s' joined a room (RID: %d)\n", user->GetLogName(), room->GetID());
  
  	return true;
-@@ -1450,6 +1793,22 @@ bool CChannelManager::OnSetTeamRequest(CReceivePacket* msg, IUser* user)
+@@ -1450,6 +1817,22 @@ bool CChannelManager::OnSetTeamRequest(CReceivePacket* msg, IUser* user)
  	return true;
  }
  
@@ -1765,7 +1789,7 @@ index 35561e8..ff995fd 100644
  bool CChannelManager::OnLeaveRoomRequest(IUser* user)
  {
  	IRoom* currentRoom = user->GetCurrentRoom();
-@@ -1501,6 +1860,10 @@ bool CChannelManager::OnLeaveRoomRequest(IUser* user)
+@@ -1501,6 +1884,10 @@ bool CChannelManager::OnLeaveRoomRequest(IUser* user)
  		}
  
  		currentRoom->RemoveUser(user);
@@ -1776,7 +1800,7 @@ index 35561e8..ff995fd 100644
  	}
  
  	currentChannel->SendFullUpdateRoomList(user);
-@@ -1705,13 +2068,43 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
+@@ -1705,13 +2092,43 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
  		return false;
  	}
  
@@ -1820,7 +1844,7 @@ index 35561e8..ff995fd 100644
  	if (newSettings.familyBattle)
  	{
  		CUserCharacter character = user->GetCharacter(UFLAG_LOW_CLAN);
-@@ -1787,6 +2180,7 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
+@@ -1787,6 +2204,7 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
  		}
  	}
  
@@ -1828,7 +1852,7 @@ index 35561e8..ff995fd 100644
  	currentRoom->UpdateSettings(newSettings);
  
  	// inform every user in the room of the changes
-@@ -1795,6 +2189,10 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
+@@ -1795,6 +2213,10 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
  		currentRoom->SendUpdateRoomSettings(u, roomSettings, newSettings.lowFlag, newSettings.lowMidFlag, newSettings.highMidFlag, newSettings.highFlag);
  	}
  
@@ -1839,7 +1863,7 @@ index 35561e8..ff995fd 100644
  	currentChannel->SendUpdateRoomList(currentRoom);
  
  	Logger().Info("Host '%s' updated room settings (RID: %d)\n", user->GetLogName(), currentRoom->GetID());
-@@ -1921,7 +2319,12 @@ bool CChannelManager::OnRoomKickRequest(CReceivePacket* msg, IUser* user)
+@@ -1921,7 +2343,12 @@ bool CChannelManager::OnRoomKickRequest(CReceivePacket* msg, IUser* user)
  		return false;
  	}
  
@@ -1853,7 +1877,7 @@ index 35561e8..ff995fd 100644
  	if (destUser == NULL)
  	{
  		Logger().Warn("User '%s' tried to kick a user from a room, although destUser == NULL (RID: %d)\n", user->GetLogName(), currentRoom->GetID());
-@@ -2089,7 +2492,7 @@ bool CChannelManager::OnVoxelRoomListRequest(CReceivePacket* msg, IUser* user)
+@@ -2089,7 +2516,7 @@ bool CChannelManager::OnVoxelRoomListRequest(CReceivePacket* msg, IUser* user)
  {
  	string voxel_id = msg->ReadString();
  

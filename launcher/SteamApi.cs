@@ -175,6 +175,43 @@ namespace CsnzLauncher
             }
         }
 
+        // Online play off: the game plays without Steam open (2026-11-24, the user's request): Valve's DLL makes it close
+        // (or restart through Steam) without the Steam client, so its Bin gets the emulator's while online play is off;
+        // Valve's is kept next to the bridge and goes back into a Steam install when online play is on again.
+        public static void ForPlayMode(string game, bool online, Logger log)
+        {
+            if (!GameLocator.IsGame(game))
+                return;
+            var inGame = InGame(game);
+            bool steamInstall = !string.IsNullOrEmpty(GameLocator.BuildId(game));
+            try
+            {
+                if (!online)
+                {
+                    if (File.Exists(inGame) && !IsValves(inGame))
+                        return; // the emulator already, or someone's own DLL
+                    if (!EnsureEmulator(log))
+                        return;
+                    if (File.Exists(inGame) && !IsValves(Kept))
+                    {
+                        Directory.CreateDirectory(Path.GetDirectoryName(Kept));
+                        File.Copy(inGame, Kept, true);
+                    }
+                    File.Copy(Emulator, inGame, true);
+                    log("Online play is off: the game starts without Steam (its steam_api.dll is the Goldberg emulator's until online play is on again).");
+                }
+                else if (steamInstall && File.Exists(inGame) && IsEmulator(inGame) && IsValves(Kept))
+                {
+                    File.Copy(Kept, inGame, true);
+                    log("Online play is on: the game's steam_api.dll is Valve's again (Steam must be open).");
+                }
+            }
+            catch (Exception ex)
+            {
+                log("Couldn't switch the game's steam_api.dll: " + ex.Message);
+            }
+        }
+
         // the DLL for the bridge, or null when there's no way to get Valve's
         public static string ForBridge(string game, Logger log)
         {
