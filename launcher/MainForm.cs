@@ -153,6 +153,33 @@ namespace CsnzLauncher
             more.Items.Add("Join the Discord", null, (s, e) => Process.Start(DiscordUrl));
             more.Items.Add("Support the project on Patreon", null, (s, e) => Process.Start(PatreonUrl));
             more.Items.Add(new ToolStripSeparator());
+            // field of view and frame rate: botassist puts them in the game (botassist.ini [Display]) when it starts
+            var fovItem = new ToolStripMenuItem("Field of view");
+            foreach (int fov in new[] { 0, 100, 110, 120 })
+            {
+                int f = fov;
+                var item = new ToolStripMenuItem(f == 0 ? "90 (the game's)" : f.ToString(), null, (s, e) =>
+                {
+                    settings.Fov = f;
+                    settings.Save();
+                    Log("Field of view: " + (f == 0 ? "the game's own (90)" : f.ToString()) + ", from the next Play (in game: default_fov in the console).");
+                });
+                fovItem.DropDownItems.Add(item);
+            }
+            fovItem.DropDownOpening += (s, e) =>
+            {
+                foreach (ToolStripMenuItem i in fovItem.DropDownItems)
+                    i.Checked = i.Text.StartsWith(settings.Fov == 0 ? "90" : settings.Fov.ToString());
+            };
+            more.Items.Add(fovItem);
+            var fpsItem = more.Items.Add("", null, (s, e) =>
+            {
+                settings.FpsUncapped = !settings.FpsUncapped;
+                settings.Save();
+                Log(settings.FpsUncapped ? "Frame rate uncapped (fps_max 1000) from the next Play." : "Frame rate capped as the game does (fps_max 101) from the next Play.");
+            });
+            more.Opening += (s, e) => fpsItem.Text = "Uncapped frame rate: " + (settings.FpsUncapped ? "on" : "off");
+            more.Items.Add(new ToolStripSeparator());
             var musicItem = more.Items.Add("", null, (s, e) =>
             {
                 settings.MusicOff = !settings.MusicOff;
@@ -614,6 +641,14 @@ namespace CsnzLauncher
         // issue (too big for the address; GitHub takes files dropped on a text box). Needs a GitHub account.
         void ReportProblem()
         {
+            BuildLogs(); // last-session.txt, which the report's folder takes too
+            using (var f = new ReportForm(settings.GamePath, false))
+                f.ShowDialog(this);
+        }
+
+        // (the form before v1.1.45: the browser and the logs on the clipboard)
+        void ReportProblemOld()
+        {
             var text = BuildLogs();
             bool copied = false;
             if (text != null && text.Length < 60000) // (an issue's text box takes up to 65536 characters)
@@ -913,6 +948,7 @@ namespace CsnzLauncher
             // the music fades out while the game starts (the window minimizes; the fade keeps running)
             music.FadeOut();
             Process server = null, bridge = null;
+            bool crashed = false;
             bool online = settings.OnlinePlay, verbose = settings.DetailedLogs;
             // where the Logs button's "last session" starts
             Log($"{LogBundle.PlayMark} {DateTime.Now:yyyy-MM-dd HH:mm:ss}: mod v{Paths.InstalledVersion()?.ToString(3)}, online play {(online ? "on" : "off")}, detailed logs {(verbose ? "on" : "off")} ===");
@@ -923,6 +959,7 @@ namespace CsnzLauncher
                 Patcher.Apply(game, Log);
                 SteamApi.UseEmulatorIfNotSteam(game, Log); // the archive.org copy: starts without the game on the Steam account
                 SteamApi.ForPlayMode(game, online, Log);   // online play off: no Steam needed at all
+                Display.Write(game, settings, Log);        // field of view and frame rate for botassist
                 if (verbose)
                     Log("Game state after patching: " + Patcher.Check(game) + ", Steam build " + GameLocator.BuildId(game) + ", hosts block " + (Hosts.HasBlock() ? "yes" : "no"));
                 if (Runner.Listening(Runner.ServerPort))
@@ -935,7 +972,8 @@ namespace CsnzLauncher
                 {
                     Runner.StartGame(game, Log);
                     Runner.WaitForGame();
-                    Log("The game was closed.");
+                    crashed = ReportForm.GameCrashed(game);
+                    Log(crashed ? "The game closed unexpectedly (its log doesn't say it closed): a crash." : "The game was closed.");
                     Leftovers.CloseAfterGame(game, Log); // (a helper left over keeps Steam showing the game as running)
                 }
                 finally
@@ -951,6 +989,13 @@ namespace CsnzLauncher
             });
             WindowState = FormWindowState.Normal;
             Activate();
+            // a crash: offered as a problem report on GitHub, with the logs ready
+            if (crashed)
+            {
+                BuildLogs();
+                using (var f = new ReportForm(game, true))
+                    f.ShowDialog(this);
+            }
             return played;
         }
 

@@ -58,6 +58,8 @@ namespace CsnzLauncher
         public bool OnlinePlay = true;      // the Steam bridge runs with the server (offline play works without it)
         public bool DetailedLogs = true;    // the server and the bridge log every packet (--verbose), for bug reports (on by default from v1.1.45)
         public bool DetailedLogsDefaulted;  // v1.1.45 turned detailed logs on once for settings saved before it
+        public int Fov;                     // the game's field of view (default_fov): 0 = the game's own (90)
+        public bool FpsUncapped;            // fps_max 1000 instead of the game's 101
         public bool MusicOff = false;       // More > the launcher music: never plays when true
         public bool PicturesAsked = false;  // the "extract the pictures?" question was shown once (yes or no): not again
         public string PicturesRefreshAsked = ""; // the mod version whose new shop items' pictures were offered (once per version)

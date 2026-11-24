@@ -7914,13 +7914,53 @@ static void DecoderDiag()
     Log("decoder window: %d item boxes registered: %s", n, text);
 }
 
+// ---------------------------------------------------------------- the player's field of view and frame rate
+// botassist.ini [Display] (the launcher's More > Field of view / Uncapped frame rate): Fov -> default_fov (the client's
+// field of view when the server sets none), FpsMax -> fps_max (the game's is 101; it raises anything under 60 to 60).
+// 0 = the game's own. Typed into hw.dll's command buffer (Cbuf_AddText 0x23d8710) a while after the game started and
+// again when a match's server starts (its configs may set them back). The console takes them too.
+static void ApplyDisplay()
+{
+    char ini[MAX_PATH];
+    snprintf(ini, sizeof(ini), "%sbotassist.ini", g_dir);
+    int fov = GetPrivateProfileIntA("Display", "Fov", 0, ini);
+    int fps = GetPrivateProfileIntA("Display", "FpsMax", 0, ini);
+    HMODULE hw = GetModuleHandleA("hw.dll");
+    if (!hw || (fov <= 0 && fps <= 0))
+        return;
+    typedef void (*CbufAddTextFn)(const char* text);
+    auto addText = (CbufAddTextFn)((DWORD)hw - 0x1D00000 + 0x23D8710);
+    char cmd[96] = "";
+    if (fov >= 60 && fov <= 150)
+        snprintf(cmd + strlen(cmd), sizeof(cmd) - strlen(cmd), "default_fov %d\n", fov);
+    if (fps >= 60 && fps <= 1000)
+        snprintf(cmd + strlen(cmd), sizeof(cmd) - strlen(cmd), "fps_max %d\n", fps);
+    if (!*cmd)
+        return;
+    __try { addText(cmd); }
+    __except (EXCEPTION_EXECUTE_HANDLER) { return; }
+    Log("display: field of view %d, fps_max %d (botassist.ini [Display])", fov, fps);
+}
+
 static DWORD WINAPI Watcher(LPVOID)
 {
     HMODULE hooked = NULL;
     HMODULE uiHooked = NULL;
     HMODULE clientFixed = NULL;
+    DWORD uiSince = 0;
+    bool displayDone = false;
     for (;;)
     {
+        if (!displayDone && GetModuleHandleA("GameUI.dll"))
+        {
+            if (!uiSince)
+                uiSince = GetTickCount();
+            else if (GetTickCount() - uiSince > 15000)
+            {
+                ApplyDisplay();
+                displayDone = true;
+            }
+        }
         InstallModelAliases(); // weapons this client has no model for
         HMODULE client = GetModuleHandleA("client.dll");
         if (client && client != clientFixed)
@@ -7955,6 +7995,7 @@ static DWORD WINAPI Watcher(LPVOID)
             g_nav.map.clear();
             if (Install(mp))
                 hooked = mp;
+            ApplyDisplay(); // a match's server: its configs may have set them back
         }
         else if (!mp)
             hooked = NULL;
