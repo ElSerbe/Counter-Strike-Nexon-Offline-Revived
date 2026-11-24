@@ -139,7 +139,7 @@ lobby chat, in any case and with or without spaces.
 - **Welcome**: 3 Point Coupons (100 points each), M1911 A1 (permanent), MP7A1 Unicorn (90 days), MG42 (permanent),
   15 Bingo Tickets and 5 Advanced Decoders.
 
-The codes are in `mod\server\CSNZ_Server\bin\Data\RedeemCodes.json`. Advanced Decoders aren't sold in the game's
+Advanced Decoders aren't sold in the game's
 shop; the shop page's Supply Depot sells them for 60 medals each.
 
 ### Antivirus warnings
@@ -178,17 +178,6 @@ The logs help a lot. For a problem that's hard to catch:
 2. Play until the problem happens, then close the game.
 3. **Logs > Copy the last session's logs** puts everything in the clipboard: the launcher, the Steam bridge, the
    local server and the game (`Bin\Error.log`, `botassist.log`). The same text is in `mod\logs\last-session.txt`.
-
-## The repository
-
-| Path | What |
-|---|---|
-| `launcher/` | The launcher (C#, .NET Framework 4.8, no install needed on Windows 10/11). |
-| `mod/server/` | The local server, based on [JusicP/CSNZ_Server](https://github.com/JusicP/CSNZ_Server) (GPL-3.0); our changes are `mod/server/patches/`. |
-| `mod/tools/apply_patches.py` | The client patches (each one checks the original bytes first). |
-| `mod/tools/botassist/` | The bots' AI, loaded by the game as `botassist.asi`; one file per mode in `modes/`. Its README has the reverse-engineering notes. |
-| `mod/web/` | The in-game web pages (shop, profile, missions, AI player editor). |
-| `mod/tools/release/build_release.py` | Builds a release into `dist/`. |
 
 ## Authors
 
