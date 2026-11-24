@@ -199,3 +199,13 @@ The logs help a lot. For a problem that's hard to catch:
    `CSNZ-Offline-Revived-Launcher.exe` renames itself when it starts (and fixes its desktop shortcut).
 
 The launcher compares the release's tag with `mod\VERSION` (and with its own version) to offer the update.
+
+## License
+
+This project's own work is licensed under [Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 International](LICENSE)
+(CC BY-NC-ND 4.0). In short: you may use and share it, with credit, for non-commercial purposes only, but you may not
+modify it, or share modified versions, without explicit written permission from the author (ItsYuri). Ask first:
+https://discord.gg/fjxubwyhYv
+
+Parts that come from others keep their own licenses: the local server's base is [JusicP/CSNZ_Server](https://github.com/JusicP/CSNZ_Server)
+(GPL-3.0), the Goldberg Steam Emulator is LGPL v3, and the game's files and Nexon's trademarks are not part of this project.
