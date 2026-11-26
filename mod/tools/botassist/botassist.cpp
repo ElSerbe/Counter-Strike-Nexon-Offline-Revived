@@ -7958,8 +7958,30 @@ static void ApplyDisplay()
     Log("display: field of view %d, fps_max %d (botassist.ini [Display])", fov, fps);
 }
 
+// The frame rate stuck at 64-65 for many players, uncapped or not (reports 2026-11-25/26): the engine waits between
+// frames with Sleep, and Sleep lasts at least one tick of the system timer, 15.6 ms (64 per second) unless the
+// process asks for 1 ms ticks. Windows 10 2004 and later honour that per process only, and Windows 11 drops it for a
+// process whose window isn't visible unless it opts out (ProcessPowerThrottling, IGNORE_TIMER_RESOLUTION).
+static void AskForFineTimer()
+{
+    HMODULE winmm = LoadLibraryA("winmm.dll");
+    typedef UINT(WINAPI * TimeBeginPeriodFn)(UINT);
+    auto begin = winmm ? (TimeBeginPeriodFn)GetProcAddress(winmm, "timeBeginPeriod") : nullptr;
+    UINT r = begin ? begin(1) : (UINT)-1;
+    struct
+    {
+        ULONG Version, ControlMask, StateMask;
+    } throttling = { 1, 0x4 /* PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION */, 0 /* off: keep honouring it */ };
+    typedef BOOL(WINAPI * SetProcessInformationFn)(HANDLE, int, void*, DWORD);
+    auto setInfo = (SetProcessInformationFn)GetProcAddress(GetModuleHandleA("kernel32.dll"), "SetProcessInformation");
+    BOOL t = setInfo ? setInfo(GetCurrentProcess(), 4 /* ProcessPowerThrottling */, &throttling, sizeof(throttling)) : FALSE;
+    Log("timer: 1 ms ticks %s%s (the frame rate is no longer held at 64)", r == 0 ? "on" : "NOT on",
+        t ? ", kept while the window is hidden" : "");
+}
+
 static DWORD WINAPI Watcher(LPVOID)
 {
+    AskForFineTimer();
     HMODULE hooked = NULL;
     HMODULE uiHooked = NULL;
     HMODULE clientFixed = NULL;
