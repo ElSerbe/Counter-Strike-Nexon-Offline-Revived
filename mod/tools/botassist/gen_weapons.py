@@ -9,7 +9,11 @@ import re
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ITEM_CSV = os.path.join(HERE, "..", "..", "server", "CSNZ_Server", "bin", "Data", "Item.csv")
-SKIP = re.compile(r"^(vxl|zhe|standalone|zsh_|zbs|monkeywpnset|hand|dummy)|toolbox|firstaid", re.I)
+# CRASHING: weapons the game crashes on when they're fired in a zombie mode (client.dll for the player, mp.dll for a bot):
+# dualuziw (Dual Uzi W) reads a property past the end of the Dual Uzi's table (2026-11-26, see README "Weapons without
+# models of their own"). Players can't get it (no shop, box or reward), so only bots could.
+CRASHING = r"^(dualuziw)$"
+SKIP = re.compile(r"^(vxl|zhe|standalone|zsh_|zbs|monkeywpnset|hand|dummy)|toolbox|firstaid|" + CRASHING, re.I)
 
 rows = []
 with open(ITEM_CSV, encoding="latin1") as f:

@@ -9,7 +9,8 @@ import re
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ITEM_CSV = os.path.join(HERE, "..", "..", "server", "CSNZ_Server", "bin", "Data", "Item.csv")
-SKIP = re.compile(r"^(vxl|zhe|standalone|zsh_|zbs|monkeywpnset|hand|dummy)|toolbox|firstaid|zhc$", re.I)
+CRASHING = r"^(dualuziw)$"  # the game crashes when they're fired (gen_weapons.py)
+SKIP = re.compile(r"^(vxl|zhe|standalone|zsh_|zbs|monkeywpnset|hand|dummy)|toolbox|firstaid|zhc$|" + CRASHING, re.I)
 SNIPER = re.compile(r"^(awp|svd|m95|m24|m40|m82|as50|sl8|sg550|g3sg1|scout|xm2010|trg42|l115|wa2000|dragunov|vsk94|"
                     r"sv98|bendita|railcannon|crossbow|bow)", re.I)
 # ids from 4000 on aren't bought by name (the game's own bots give them another way)

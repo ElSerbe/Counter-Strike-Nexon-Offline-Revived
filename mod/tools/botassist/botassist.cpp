@@ -200,6 +200,18 @@ static float IniFloat(const char* ini, const char* key, const char* def)
     return (float)atof(buf);
 }
 
+// weapons the game crashes on when they're fired (gen_weapons.py CRASHING): Dual Uzi W in a zombie mode (README "Weapons
+// without models of their own"). Left out whatever botassist_weapons.txt and botassist_gdm_weapons.txt say: the
+// launcher keeps the player's copies of those lists, so installs made before still list it.
+static bool CrashingWeapon(const char* res)
+{
+    static const char* const kCrashing[] = { "dualuziw" };
+    for (const char* c : kCrashing)
+        if (!_stricmp(res, c))
+            return true;
+    return false;
+}
+
 static void LoadSettings()
 {
     char ini[MAX_PATH], buf[1024];
@@ -266,16 +278,22 @@ static void LoadSettings()
     cfg.melees.clear();
     if (FILE* f = fopen(list, "r"))
     {
-        int id, cat;
+        int id, cat, crashing = 0;
         char line[256], res[128];
         cfg.weaponCategory.clear();
         while (fgets(line, sizeof(line), f))
         {
             if (line[0] == ';' || sscanf(line, "%d %d", &id, &cat) != 2)
                 continue;
-            (cat == 1 ? cfg.pistols : cat == 11 ? cfg.melees : cfg.primaries).push_back(id);
             const char* semi = strchr(line, ';');
-            if (semi && sscanf(semi + 1, " %127s", res) == 1)
+            bool named = semi && sscanf(semi + 1, " %127s", res) == 1;
+            if (named && CrashingWeapon(res))
+            {
+                crashing++;
+                continue;
+            }
+            (cat == 1 ? cfg.pistols : cat == 11 ? cfg.melees : cfg.primaries).push_back(id);
+            if (named)
             {
                 std::string model = std::string("models/p_") + res + ".mdl";
                 for (auto& ch : model)
@@ -285,6 +303,8 @@ static void LoadSettings()
             }
         }
         fclose(f);
+        if (crashing)
+            Log("botassist_weapons.txt: %d weapon(s) left out: the game crashes when they're fired (Dual Uzi W)", crashing);
         // Counter-Strike's own weapons whose model isn't named after the item (usp45 -> p_usp.mdl...): the pistols
         // everyone spawns with must be known to drop them ("None" secondary)
         static const struct { const char* model; int cat; } aliases[] = {
@@ -3058,13 +3078,30 @@ static void UpdateBuying(void* bot, BotState& st)
     bool chosen = rb && (rb->primary != 0 || rb->secondary != 0 || rb->melee != 0 || !rb->allowPrimary.empty() ||
                          !rb->allowSecondary.empty() || !rb->allowMelee.empty() ||
                          (cfg.buyAnyWeapon && !cfg.primaries.empty()));
+    // A gun the room chose is bought only when botassist_weapons.txt lists it: the guns kept away from bots there
+    // (gen_weapons.py CRASHING: Dual Uzi W crashes the game when fired in a zombie mode) count as not chosen, also in
+    // rooms saved before. Every gun of the room's AI player editor is in the list; melee isn't checked (the editor
+    // offers some the list leaves out: bare hands, crowbar...). Without the list, nothing is refused.
+    auto gunListed = [&](int id) { return id <= 0 || cfg.weaponModel.empty() || cfg.weaponModel.count(id) != 0; };
     // a slot: the room's weapon, -1 for "None", else a random one from the bot's filter, else 0
-    auto pick = [](int fixed, const std::vector<int>& allow) {
-        return fixed != 0 ? fixed : allow.empty() ? 0 : allow[rand() % allow.size()];
+    auto pick = [&](int fixed, const std::vector<int>& allow, bool gun) {
+        if (fixed != 0 && (!gun || gunListed(fixed)))
+            return fixed;
+        if (fixed != 0)
+        {
+            static int reports = 0;
+            if (reports++ < 20)
+                Log("room weapon item_%d isn't in botassist_weapons.txt (kept away from bots): another one instead", fixed);
+        }
+        std::vector<int> ok;
+        for (int x : allow)
+            if (!gun || gunListed(x))
+                ok.push_back(x);
+        return ok.empty() ? 0 : ok[rand() % ok.size()];
     };
     // the same, falling back on any weapon of the slot (BuyAnyWeapon)
-    auto pickAny = [&](int fixed, const std::vector<int>& allow, const std::vector<int>& any) {
-        int id = pick(fixed, allow);
+    auto pickAny = [&](int fixed, const std::vector<int>& allow, const std::vector<int>& any, bool gun) {
+        int id = pick(fixed, allow, gun);
         return id != 0 || !cfg.buyAnyWeapon || any.empty() ? id : any[rand() % any.size()];
     };
     // "None": the bot drops its weapon of that slot (the game gives a pistol, some modes a primary, and bots pick
@@ -3160,9 +3197,9 @@ static void UpdateBuying(void* bot, BotState& st)
             // a new life: new random weapons from the filter; buying again (the game's AI changed it): the same
             if (st.loadoutBuys == 0)
             {
-                st.loadoutPrimary = pickAny(rb->primary, rb->allowPrimary, cfg.primaries);
-                st.loadoutSecondary = pickAny(rb->secondary, rb->allowSecondary, cfg.pistols);
-                st.loadoutMelee = pickAny(rb->melee, rb->allowMelee, cfg.melees);
+                st.loadoutPrimary = pickAny(rb->primary, rb->allowPrimary, cfg.primaries, true);
+                st.loadoutSecondary = pickAny(rb->secondary, rb->allowSecondary, cfg.pistols, true);
+                st.loadoutMelee = pickAny(rb->melee, rb->allowMelee, cfg.melees, false);
                 st.nonePrimary = st.loadoutPrimary < 0;
                 st.noneSecondary = st.loadoutSecondary < 0;
             }
@@ -3228,14 +3265,14 @@ static void UpdateBuying(void* bot, BotState& st)
             Log("bot %d buys the room's weapons: %d %d %d", st.slot, st.loadoutPrimary, st.loadoutSecondary, st.loadoutMelee);
             return;
         }
-        int roomPrimary = rb && st.buyTries == 0 ? pick(rb->primary, rb->allowPrimary) : 0;
+        int roomPrimary = rb && st.buyTries == 0 ? pick(rb->primary, rb->allowPrimary, true) : 0;
         if (rb && (rb->primary < 0 || (st.buyTries > 0 && st.nonePrimary)))
             roomPrimary = -1; // (None drawn for this life stays on the retries)
         else if (rb && !rb->allowPrimary.empty() && roomPrimary == 0)
         {
             std::vector<int> real; // retries stay within the filter's weapons
             for (int x : rb->allowPrimary)
-                if (x > 0)
+                if (x > 0 && gunListed(x))
                     real.push_back(x);
             if (!real.empty())
                 roomPrimary = real[rand() % real.size()];
@@ -3251,12 +3288,12 @@ static void UpdateBuying(void* bot, BotState& st)
         FakeCommand(bot, "client_buy_open");
         if (st.boughtPrimary > 0)
             BuyAs(bot, st.boughtPrimary);
-        int roomSecondary = rb ? (st.buyTries > 1 && st.noneSecondary ? -1 : pick(rb->secondary, rb->allowSecondary)) : 0;
+        int roomSecondary = rb ? (st.buyTries > 1 && st.noneSecondary ? -1 : pick(rb->secondary, rb->allowSecondary, true)) : 0;
         if (rb && st.buyTries == 1)
             st.noneSecondary = roomSecondary < 0;
         if (roomSecondary >= 0 && (roomSecondary > 0 || !cfg.pistols.empty()))
             BuyAs(bot, roomSecondary > 0 ? roomSecondary : cfg.pistols[rand() % cfg.pistols.size()]);
-        int roomMelee = rb ? pickAny(rb->melee, rb->allowMelee, cfg.melees) : 0;
+        int roomMelee = rb ? pickAny(rb->melee, rb->allowMelee, cfg.melees, false) : 0;
         if (roomMelee > 0)
             BuyAs(bot, roomMelee);
         FakeCommand(bot, "item_28"); // kevlar + helmet

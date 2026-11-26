@@ -442,6 +442,17 @@ slot 12 = +0x30, thiscall; Nexon's has two more functions before it than Valve's
 else - hooking those crashed the game in the lobby): a missing models/v_, p_ or w_<res>.mdl of
 botassist_model_aliases.txt (gen_model_aliases.py) is opened as its base weapon's. botassist.log "model aliases: ... shown instead".
 
+Of the 7, dualuziw (Dual Uzi W, item 9710, weapon id 734) crashes the game when it's fired in a zombie mode: its code
+reads a weapon property past the end of the Dual Uzi's table (`fld [edx+ecx*4]` in the property getter, mp.dll
+0x106444d0 for a bot, client.dll's copy for the player; 2026-11-26, both crash dumps, and `give dualuziw` then firing
+it in Zombie Hero Classic). Bots used it in mode 1 without trouble. The other 6 fire fine or can't be given. Players
+can't get it (no shop, item box, reward or random-weapon list), so it's kept away from bots only: gen_weapons.py and
+gen_gdm_weapons.py leave it out (`CRASHING`), and web/bots/catalog.json doesn't offer it. The launcher never overwrites
+the player's botassist_weapons.txt and botassist_gdm_weapons.txt, so older installs still list it: botassist leaves it
+out when it reads them (`CrashingWeapon`; botassist.log "botassist_weapons.txt: 1 weapon(s) left out"), and a room that
+chose it gets another weapon (UpdateBuying buys only room guns botassist_weapons.txt gave it; botassist.log "room
+weapon item_9710 isn't in botassist_weapons.txt").
+
 ## Divine Titan EX doesn't crash the game (mp_fixes.inl)
 Drawing Divine Titan EX (weapon id 0x23e) creates its drone by name, "divinetitanex_drone", which this mp.dll doesn't
 export (only "divinetitan_drone"): the creation gave nothing and the game crashed (0x10c6aa1b, a bot at a Zombie Hero
