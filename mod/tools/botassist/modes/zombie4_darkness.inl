@@ -154,7 +154,12 @@ static void Z4Watch()
         if (!p || !Readable(p, 0x2f20))
             return;
         const char* name = String(F<int>(v, EV_NETNAME));
-        bool dead = F<int>(v, EV_DEADFLAG) != 0 || F<float>(v, EV_HEALTH) <= 0;
+        // Groggy (0x11465b00) leaves the zombie at 1 health, untouchable, with PlayerDeathThink as its entity think to
+        // get it up 5 s later (the rules' vfunc 0x118, 0x11462970): a bot's think doesn't run, so groggy bots lay there
+        // all night and took no damage (reports 2026-11-23/24). Down too, then: the same death think gets them up.
+        bool groggy = p[Z4_ZOMBIE] && p[Z4_GROGGY] && F<int>(v, EV_DEADFLAG) == 0 && F<float>(v, EV_HEALTH) > 0 &&
+                      (F<int>(v, EV_FLAGS) & FL_FAKECLIENT);
+        bool dead = F<int>(v, EV_DEADFLAG) != 0 || F<float>(v, EV_HEALTH) <= 0 || groggy;
         auto it = g_z4Dead.find(e);
         if (!dead)
         {
