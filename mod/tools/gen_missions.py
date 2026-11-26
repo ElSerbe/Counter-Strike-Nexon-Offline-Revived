@@ -72,7 +72,8 @@ EVENTS = [
       ([c("TopPlayer", 3)], 15, 40)], 25, 100),
     ("Outbreak Week", "The infection is spreading across every zone. Hold the line, or join the horde.",
      [([c("ZombieKills", 100, ZOMBIE_ALL)], 10, 30), ([c("Infections", 50, ZOMBIE_ALL)], 10, 30),
-      ([c("Wins", 5, ZOMBIE_ALL)], 15, 40), ([c("Matches", 10, ZOMBIE_ALL)], 10, 30)], 25, 100),
+      # Zombie Shelter counts as a zombie mode for winning and playing (its zombies are monsters: no ZombieKills)
+      ([c("Wins", 5, ZOMBIE_ALL + SHELTER)], 15, 40), ([c("Matches", 10, ZOMBIE_ALL + SHELTER)], 10, 30)], 25, 100),
     ("Scenario Siege", "The labs are overrun. Clear the scenarios and bring the survivors home.",
      [([c("MonsterKills", 1000, SCENARIO)], 10, 30), ([c("Wins", 3, SCENARIO)], 15, 40),
       ([c("MonsterKills", 3000, SCENARIO)], 15, 40), ([c("DropBoxes", 10)], 10, 30)], 25, 100),

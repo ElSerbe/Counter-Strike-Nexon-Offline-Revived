@@ -4345,10 +4345,10 @@ index 0000000..b5024a4
 +}
 diff --git a/src/manager/medalmanager.cpp b/src/manager/medalmanager.cpp
 new file mode 100644
-index 0000000..4911081
+index 0000000..1998e7d
 --- /dev/null
 +++ b/src/manager/medalmanager.cpp
-@@ -0,0 +1,509 @@
+@@ -0,0 +1,511 @@
 +#include "medalmanager.h"
 +#include "warbondmanager.h"
 +#include "userdatabase.h"
@@ -4493,9 +4493,11 @@ index 0000000..4911081
 +	}
 +	if (IsZombieModeOffline(match->m_nGameMode))
 +	{
++		// a human (team 2) only kills zombies there; the game reports a bot victim with team 0 (killing the room's
++		// zombie bots never counted: "kill zombies" missions only moved with players, 2026-11-24 reports)
 +		if (ev.killerTeam == 1)
 +			c["Infections"]++;
-+		else if (ev.killerTeam == 2 && ev.victimTeam == 1)
++		else if (ev.killerTeam == 2 && ev.victimTeam != 2)
 +			c["ZombieKills"]++;
 +	}
 +}
@@ -5652,13 +5654,13 @@ index 0000000..31377e4
 +extern CMissionManager g_MissionManager;
 diff --git a/src/manager/moderewards.cpp b/src/manager/moderewards.cpp
 new file mode 100644
-index 0000000..45071a5
+index 0000000..d37fae0
 --- /dev/null
 +++ b/src/manager/moderewards.cpp
-@@ -0,0 +1,298 @@
+@@ -0,0 +1,247 @@
 +// Offline build: what each mode gives for completing it, on top of EXP and medals (Data/ModeRewards.json):
 +// - rules per mode and per map: items for a clear, one item of a list for a clear, items for the top 3;
-+// - Zombie Scenario's Daily Reward Box: one box a day by difficulty, upgraded while it's kept unopened;
++// - Zombie Scenario's Daily Reward Box: one box of its difficulty for every clear;
 +// - Dr. A's sets: when a player holds every clue of a set, Dr. A takes them and leaves his bag;
 +// - any mode: a chance of a Game Result Reward.
 +#include "moderewards.h"
@@ -5738,24 +5740,6 @@ index 0000000..45071a5
 +		return r;
 +	}
 +
-+	int DayNumber()
-+	{
-+		time_t now = time(NULL);
-+		tm midnight = *localtime(&now);
-+		midnight.tm_hour = midnight.tm_min = midnight.tm_sec = 0;
-+		return (int)((mktime(&midnight) + 43200) / 86400); // noon of that day: safe against DST
-+	}
-+
-+	long long ReadCounter(IUser* user, const char* name)
-+	{
-+		vector<UserCounter_s> counters;
-+		g_UserDatabase.GetCounters(user->GetID(), counters);
-+		for (auto& c : counters)
-+			if (c.mode == -1 && c.name == name)
-+				return c.value;
-+		return 0;
-+	}
-+
 +	bool Holds(IUser* user, int itemID, CUserInventoryItem* out = NULL)
 +	{
 +		CUserInventoryItem item;
@@ -5789,8 +5773,8 @@ index 0000000..45071a5
 +			Give(user, rule.top3[place - 1], 0, notice);
 +	}
 +
-+	// One box a day: a clear gives the box of its difficulty; a harder clear upgrades a box still unopened; once it's
-+	// been opened, the next one comes after midnight.
++	// Every clear gives the box of its difficulty (2026-11-26, the user's decision: no daily limit; it used to be one box a
++	// day, upgraded while kept unopened)
 +	void GiveClearBox(IUser* user, const ClearBox& box, int difficulty, RewardNotice& notice)
 +	{
 +		if (box.items.empty())
@@ -5799,39 +5783,6 @@ index 0000000..45071a5
 +		for (size_t i = 0; i < box.items.size() && i < box.minDifficulty.size(); i++)
 +			if (difficulty >= box.minDifficulty[i])
 +				grade = (int)i;
-+
-+		int held = -1;
-+		CUserInventoryItem heldItem;
-+		for (size_t i = 0; i < box.items.size(); i++)
-+		{
-+			CUserInventoryItem item;
-+			if (Holds(user, box.items[i], &item))
-+			{
-+				held = (int)i;
-+				heldItem = item;
-+			}
-+		}
-+
-+		IExtendedSocket* socket = user->GetExtendedSocket();
-+		if (held >= grade)
-+		{
-+			g_PacketManager.SendUMsgNoticeMessageInChat(socket, "Daily Reward Box: a harder difficulty upgrades the box you hold. Open it to get a new one tomorrow.");
-+			return;
-+		}
-+		if (held >= 0)
-+		{
-+			g_ItemManager.RemoveItem(user->GetID(), user, heldItem);
-+			Give(user, box.items[grade], 0, notice);
-+			g_PacketManager.SendUMsgNoticeMessageInChat(socket, "Daily Reward Box upgraded.");
-+			return;
-+		}
-+		int today = DayNumber();
-+		if (ReadCounter(user, "ZbsBoxDay") == today)
-+		{
-+			g_PacketManager.SendUMsgNoticeMessageInChat(socket, "Today's Daily Reward Box is already collected: the next one comes after midnight.");
-+			return;
-+		}
-+		g_UserDatabase.SetCounter(user->GetID(), { -1, "ZbsBoxDay", (long long)today });
 +		Give(user, box.items[grade], 0, notice);
 +	}
 +
@@ -10997,10 +10948,10 @@ index c7d2bdb..75d0ee9 100644
 +extern CVoxelManager g_VoxelManager;
 diff --git a/src/manager/warbondmanager.cpp b/src/manager/warbondmanager.cpp
 new file mode 100644
-index 0000000..1950f1a
+index 0000000..70c7506
 --- /dev/null
 +++ b/src/manager/warbondmanager.cpp
-@@ -0,0 +1,1191 @@
+@@ -0,0 +1,1227 @@
 +#include "channelmanager.h"
 +#include "guestprofile.h"
 +#include "transfer.h"
@@ -11724,6 +11675,41 @@ index 0000000..1950f1a
 +	return owned;
 +}
 +
++// the shop's "owned": items the user has for good. A copy for some days (from a decoder, a code, a mission...) doesn't
++// stop buying the item: the pass unlocks it for good (players couldn't buy the passes' weapons they had for days, and
++// with them the pages after; 2026-11-24 reports)
++set<int> CWarbondManager::OwnedForGood(IUser* user)
++{
++	vector<CUserInventoryItem> inventory;
++	g_UserDatabase.GetInventoryItems(user->GetID(), inventory);
++	set<int> owned;
++	for (auto& item : inventory)
++		if (item.m_nItemID && item.m_nExpiryDate == 0)
++			owned.insert(item.m_nItemID);
++	return owned;
++}
++
++// the user's copy of an item for some days becomes permanent (a second copy would sit in the inventory beside it)
++bool CWarbondManager::MakePermanent(IUser* user, int itemID)
++{
++	vector<CUserInventoryItem> inventory;
++	g_UserDatabase.GetInventoryItems(user->GetID(), inventory);
++	for (auto& item : inventory)
++	{
++		if (item.m_nItemID != itemID || item.m_nExpiryDate == 0)
++			continue;
++		item.m_nExpiryDate = 0;
++		item.m_nInUse = 1;
++		if (g_UserDatabase.UpdateInventoryItem(user->GetID(), item, UITEM_FLAG_EXPIRYDATE | UITEM_FLAG_INUSE) <= 0)
++			return false;
++		vector<CUserInventoryItem> items;
++		item.PushItem(items, item);
++		g_PacketManager.SendInventoryAdd(user->GetExtendedSocket(), items);
++		return true;
++	}
++	return false;
++}
++
 +// A rotating pass ("Rotation" in Warbonds.json): its one page holds Count weapons picked at random from the other
 +// passes' items (weapons, melee and equipment; no characters, costumes or supplies), at PriceFactor x their price there,
 +// rounded up to 5. The pick is made from the day only, so it's the same for everyone all day and a purchase never
@@ -11800,7 +11786,7 @@ index 0000000..1950f1a
 +
 +	// "owned" means it's in the inventory right now: items unlocked earlier can be gone (used for crafting,
 +	// deleted...), and then they can be unlocked again. Unlock records only count the medals spent per pass.
-+	set<int> owned = OwnedItems(user);
++	set<int> owned = OwnedForGood(user);
 +	map<int, int> spent;
 +	set<int> unlockedBefore, passes;
 +	for (auto& u : unlocks)
@@ -11936,7 +11922,7 @@ index 0000000..1950f1a
 +		Logger().Info("WarbondManager: user %d bought %d x item %d (supplies) for %d medals\n", user->GetID(), quantity, itemID, total);
 +		return BuildState(user);
 +	}
-+	if (OwnedItems(user).count(itemID))
++	if (OwnedForGood(user).count(itemID))
 +		return fail(409, "You already own this item.");
 +	// items unlocked before and lost since (used for crafting, deleted...) cost half to get back
 +	int cost = rebuy ? RebuyCost(item->cost) : item->cost;
@@ -11947,7 +11933,8 @@ index 0000000..1950f1a
 +	if (character.points < cost)
 +		return fail(409, "Not enough medals.");
 +
-+	int added = g_ItemManager.AddItem(user->GetID(), user, itemID, 1, 0);
++	// a copy for some days becomes permanent; otherwise the item is added
++	int added = MakePermanent(user, itemID) ? ITEM_ADD_SUCCESS : g_ItemManager.AddItem(user->GetID(), user, itemID, 1, 0);
 +	if (added == ITEM_ADD_INVENTORY_FULL)
 +		return fail(409, "Your inventory is full.");
 +	if (added != ITEM_ADD_SUCCESS)
@@ -12194,10 +12181,10 @@ index 0000000..1950f1a
 +}
 diff --git a/src/manager/warbondmanager.h b/src/manager/warbondmanager.h
 new file mode 100644
-index 0000000..8879e39
+index 0000000..861c197
 --- /dev/null
 +++ b/src/manager/warbondmanager.h
-@@ -0,0 +1,131 @@
+@@ -0,0 +1,133 @@
 +#pragma once
 +
 +#include <string>
@@ -12289,6 +12276,8 @@ index 0000000..8879e39
 +	// non-repeatable items of the battle passes with their medal cost (bingo prizes)
 +	std::vector<std::pair<int, int>> PassItems() const;
 +	std::set<int> OwnedItems(IUser* user);
++	std::set<int> OwnedForGood(IUser* user);
++	bool MakePermanent(IUser* user, int itemID);
 +	// battle passes whose every item (supplies aside) the player owns or has unlocked
 +	int CompletedPasses(IUser* user);
 +
