@@ -74,6 +74,309 @@ static void CrashWatchArm()
     g_crashWatchUntil = GetTickCount() + 4000;
 }
 
+// ---------------------------------------------------------------- the game's own crashes and hangs (2026-11-26)
+// Players' reports said only "the game closed" or "it stopped responding": the game writes nothing when it dies, and
+// the watch above is armed only after botassist's own gun shots. Now, for the whole session:
+//  - a vectored handler notes every serious exception (access violation, stack overflow, bad instruction, division by
+//    zero, stack buffer overrun) raised in the game's modules, with the module and offset (and the address in the
+//    module's own numbering, as the disassembler shows it), the registers and the return addresses on the stack; the
+//    first one also gets a minidump. The game may catch some of them: the last ones before a crash are the cause.
+//  - an unhandled-exception filter (put back every few seconds: the game sets its own) notes the fatal one, with a dump.
+//  - a hang watch: when the game's window doesn't answer for 6 s (Windows' "not responding"), where its thread is, three
+//    times in a stall.
+// All of it goes to Bin\botassist_crash.log with plain Win32 calls (no CRT, no locks: the crash may have happened in
+// them), the dumps to Bin\crash-<time>.dmp (the last 3 kept). The launcher adds both to problem reports.
+typedef BOOL(WINAPI* MiniDumpWriteDumpFn)(HANDLE, DWORD, HANDLE, int, void*, void*, void*);
+static MiniDumpWriteDumpFn g_miniDump;
+static volatile LONG g_crashLogged = 0, g_crashDumps = 0;
+static LPTOP_LEVEL_EXCEPTION_FILTER g_prevFilter;
+static char g_crashLogPath[MAX_PATH];
+
+static void CrashWrite(const char* text)
+{
+    HANDLE h = CreateFileA(g_crashLogPath, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_ALWAYS,
+                           FILE_ATTRIBUTE_NORMAL, NULL);
+    if (h == INVALID_HANDLE_VALUE)
+        return;
+    DWORD n;
+    WriteFile(h, text, lstrlenA(text), &n, NULL);
+    CloseHandle(h);
+}
+
+// "mp.dll+0x1234 (0x11001234)": the second number in the module's own image base, as Ghidra shows it
+static int CrashWhere(DWORD addr, char* out, int size)
+{
+    HMODULE m = nullptr;
+    if (!GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                            (LPCSTR)addr, &m) ||
+        !m)
+        return wnsprintfA(out, size, "0x%08lX", addr);
+    char path[MAX_PATH];
+    GetModuleFileNameA(m, path, sizeof(path));
+    const char* base = strrchr(path, '\\');
+    DWORD off = addr - (DWORD)m, image = (DWORD)m;
+    IMAGE_DOS_HEADER* dos = (IMAGE_DOS_HEADER*)m;
+    if (Readable(dos, sizeof(*dos)) && dos->e_magic == IMAGE_DOS_SIGNATURE)
+    {
+        IMAGE_NT_HEADERS32* nt = (IMAGE_NT_HEADERS32*)((BYTE*)m + dos->e_lfanew);
+        if (Readable(nt, sizeof(*nt)) && nt->Signature == IMAGE_NT_SIGNATURE)
+            image = nt->OptionalHeader.ImageBase;
+    }
+    return wnsprintfA(out, size, "%s+0x%lx (0x%08lX)", base ? base + 1 : path, off, image + off);
+}
+
+static bool GameModule(DWORD addr)
+{
+    HMODULE m = nullptr;
+    if (!GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                            (LPCSTR)addr, &m) ||
+        !m)
+        return true; // code outside any module (a jump into nowhere): worth noting
+    char path[MAX_PATH];
+    GetModuleFileNameA(m, path, sizeof(path));
+    CharLowerA(path);
+    // Windows' own and the browser's (CEF raises and catches its own) are left out
+    return !strstr(path, "\\windows\\") && !strstr(path, "libcef") && !strstr(path, "chrome_elf");
+}
+
+// the registers and up to 16 return addresses (stack words that point into a module's code)
+static void CrashDescribe(const char* what, DWORD code, DWORD at, DWORD info, const CONTEXT* c, const DWORD* stackCopy = nullptr)
+{
+    static char buf[4096];
+    SYSTEMTIME t;
+    GetLocalTime(&t);
+    char where[160];
+    CrashWhere(at, where, sizeof(where));
+    int n = stackCopy ? wnsprintfA(buf, sizeof(buf), "[%04d-%02d-%02d %02d:%02d:%02d] %s %s\r\n", t.wYear, t.wMonth,
+                                   t.wDay, t.wHour, t.wMinute, t.wSecond, what, where)
+                      : wnsprintfA(buf, sizeof(buf), "[%04d-%02d-%02d %02d:%02d:%02d] %s: 0x%08lX at %s, address 0x%08lX, thread %lu\r\n",
+                                   t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond, what, code, where, info,
+                                   GetCurrentThreadId());
+    n += wnsprintfA(buf + n, sizeof(buf) - n,
+                    "  eax=%08lX ebx=%08lX ecx=%08lX edx=%08lX esi=%08lX edi=%08lX ebp=%08lX esp=%08lX\r\n  stack:", c->Eax,
+                    c->Ebx, c->Ecx, c->Edx, c->Esi, c->Edi, c->Ebp, c->Esp);
+    // a stopped thread's stack is read from its copy (2048 words at most)
+    const DWORD* sp = stackCopy ? stackCopy : (const DWORD*)c->Esp;
+    for (int i = 0, found = 0; i < (stackCopy ? 2048 : 1024) && found < 16 && n < (int)sizeof(buf) - 200 && Readable(sp + i, 4); i++)
+    {
+        DWORD v = sp[i];
+        MEMORY_BASIC_INFORMATION mbi;
+        if (v < 0x10000 || !VirtualQuery((void*)v, &mbi, sizeof(mbi)) || mbi.Type != MEM_IMAGE ||
+            !(mbi.Protect & (PAGE_EXECUTE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY)))
+            continue;
+        n += wnsprintfA(buf + n, sizeof(buf) - n, "\r\n    ");
+        n += CrashWhere(v, buf + n, sizeof(buf) - n);
+        found++;
+    }
+    lstrcpynA(buf + n, "\r\n", sizeof(buf) - n);
+    CrashWrite(buf);
+}
+
+static void CrashDump(EXCEPTION_POINTERS* ep, const char* why)
+{
+    if (!g_miniDump || InterlockedIncrement(&g_crashDumps) > 2)
+        return;
+    // the last 3 dumps are kept
+    char pattern[MAX_PATH];
+    wnsprintfA(pattern, sizeof(pattern), "%scrash-*.dmp", g_dir);
+    WIN32_FIND_DATAA fd;
+    char oldest[MAX_PATH] = "";
+    int count = 0;
+    HANDLE f = FindFirstFileA(pattern, &fd);
+    if (f != INVALID_HANDLE_VALUE)
+    {
+        do
+        {
+            count++;
+            if (!oldest[0] || lstrcmpA(fd.cFileName, oldest) < 0)
+                lstrcpynA(oldest, fd.cFileName, sizeof(oldest));
+        } while (FindNextFileA(f, &fd));
+        FindClose(f);
+    }
+    if (count >= 3 && oldest[0])
+    {
+        char p[MAX_PATH];
+        wnsprintfA(p, sizeof(p), "%s%s", g_dir, oldest);
+        DeleteFileA(p);
+    }
+    SYSTEMTIME t;
+    GetLocalTime(&t);
+    char path[MAX_PATH];
+    wnsprintfA(path, sizeof(path), "%scrash-%04d%02d%02d-%02d%02d%02d-%s.dmp", g_dir, t.wYear, t.wMonth, t.wDay, t.wHour,
+               t.wMinute, t.wSecond, why);
+    HANDLE h = CreateFileA(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (h == INVALID_HANDLE_VALUE)
+        return;
+    struct
+    {
+        DWORD ThreadId;
+        EXCEPTION_POINTERS* ExceptionPointers;
+        BOOL ClientPointers;
+    } info = { GetCurrentThreadId(), ep, FALSE };
+    // MiniDumpWithIndirectlyReferencedMemory: the stacks and the memory they point to (a few MB; the modules' data
+    // sections would make it tens of MB)
+    g_miniDump(GetCurrentProcess(), GetCurrentProcessId(), h, 0x40, ep ? &info : nullptr, nullptr, nullptr);
+    CloseHandle(h);
+    char line[MAX_PATH + 32];
+    wnsprintfA(line, sizeof(line), "  dump: %s\r\n", path);
+    CrashWrite(line);
+}
+
+static bool SeriousException(DWORD code)
+{
+    return code == EXCEPTION_ACCESS_VIOLATION || code == EXCEPTION_STACK_OVERFLOW || code == EXCEPTION_ILLEGAL_INSTRUCTION ||
+           code == EXCEPTION_INT_DIVIDE_BY_ZERO || code == EXCEPTION_PRIV_INSTRUCTION || code == 0xC0000409 /* fast fail */ ||
+           code == EXCEPTION_IN_PAGE_ERROR;
+}
+
+static LONG CALLBACK GameExceptionWatch(EXCEPTION_POINTERS* ep)
+{
+    DWORD code = ep->ExceptionRecord->ExceptionCode;
+    DWORD at = (DWORD)ep->ExceptionRecord->ExceptionAddress;
+    if (!SeriousException(code) || !GameModule(at))
+        return EXCEPTION_CONTINUE_SEARCH;
+    // botassist's own are caught where they happen and noted in botassist.log; the same place is noted once
+    static DWORD seen[64];
+    static volatile LONG seenCount = 0;
+    for (LONG i = 0; i < seenCount && i < 64; i++)
+        if (seen[i] == at)
+            return EXCEPTION_CONTINUE_SEARCH;
+    LONG slot = InterlockedIncrement(&seenCount) - 1;
+    if (slot >= 64)
+        return EXCEPTION_CONTINUE_SEARCH;
+    seen[slot] = at;
+    DWORD info = ep->ExceptionRecord->NumberParameters >= 2 ? (DWORD)ep->ExceptionRecord->ExceptionInformation[1] : 0;
+    CrashDescribe("exception (the game may still catch it)", code, at, info, ep->ContextRecord);
+    if (slot == 0)
+        CrashDump(ep, "first");
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+
+static LONG WINAPI GameCrashFilter(EXCEPTION_POINTERS* ep)
+{
+    if (InterlockedIncrement(&g_crashLogged) == 1)
+    {
+        DWORD code = ep->ExceptionRecord->ExceptionCode;
+        DWORD info = ep->ExceptionRecord->NumberParameters >= 2 ? (DWORD)ep->ExceptionRecord->ExceptionInformation[1] : 0;
+        CrashDescribe("THE GAME CRASHED", code, (DWORD)ep->ExceptionRecord->ExceptionAddress, info, ep->ContextRecord);
+        g_crashDumps = 0; // the fatal one always gets its dump
+        CrashDump(ep, "crash");
+    }
+    return g_prevFilter ? g_prevFilter(ep) : EXCEPTION_CONTINUE_SEARCH;
+}
+
+// the game's main window (the biggest visible top-level window of this process) and the thread that runs it
+static BOOL CALLBACK FindGameWindow(HWND w, LPARAM out)
+{
+    DWORD pid = 0;
+    GetWindowThreadProcessId(w, &pid);
+    RECT r;
+    if (pid == GetCurrentProcessId() && IsWindowVisible(w) && !GetWindow(w, GW_OWNER) && GetWindowRect(w, &r) &&
+        r.right - r.left >= 320)
+    {
+        *(HWND*)out = w;
+        return FALSE;
+    }
+    return TRUE;
+}
+
+// called every half second by the Watcher thread
+static void CrashWatchTick()
+{
+    // the game (or a library it loads) sets its own filter: ours goes back in front, the other one is called after it
+    LPTOP_LEVEL_EXCEPTION_FILTER prev = SetUnhandledExceptionFilter(GameCrashFilter);
+    if (prev && prev != GameCrashFilter)
+        g_prevFilter = prev;
+
+    static HWND window = nullptr;
+    static DWORD nextFind = 0, stallSince = 0;
+    static int stallSamples = 0;
+    DWORD now = GetTickCount();
+    if ((!window || !IsWindow(window)) && now >= nextFind)
+    {
+        window = nullptr;
+        EnumWindows(FindGameWindow, (LPARAM)&window);
+        nextFind = now + 5000;
+    }
+    if (!window)
+        return;
+    DWORD_PTR result;
+    if (SendMessageTimeoutA(window, WM_NULL, 0, 0, SMTO_ABORTIFHUNG | SMTO_BLOCK, 1500, &result))
+    {
+        if (stallSince && stallSamples)
+        {
+            char line[128];
+            wnsprintfA(line, sizeof(line), "  the game answered again after %lu s\r\n", (now - stallSince) / 1000);
+            CrashWrite(line);
+        }
+        stallSince = 0;
+        stallSamples = 0;
+        return;
+    }
+    if (!stallSince)
+        stallSince = now;
+    // samples at 6, 15 and 40 s: the same place each time is where it hangs
+    static const DWORD at[] = { 6000, 15000, 40000 };
+    if (stallSamples >= 3 || now - stallSince < at[stallSamples])
+        return;
+    stallSamples++;
+    DWORD tid = GetWindowThreadProcessId(window, nullptr);
+    HANDLE th = OpenThread(THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT | THREAD_QUERY_INFORMATION, FALSE, tid);
+    if (!th)
+        return;
+    // the thread is stopped only while its registers and stack are copied: it may hold the heap's or the CRT's
+    // locks, so nothing here allocates or logs until it runs again
+    static DWORD stackCopy[2048];
+    CONTEXT c = {};
+    c.ContextFlags = CONTEXT_CONTROL | CONTEXT_INTEGER;
+    DWORD words = 0;
+    bool got = false;
+    if (SuspendThread(th) != (DWORD)-1)
+    {
+        got = GetThreadContext(th, &c) != 0;
+        if (got)
+        {
+            MEMORY_BASIC_INFORMATION mbi;
+            if (VirtualQuery((void*)c.Esp, &mbi, sizeof(mbi)) && mbi.State == MEM_COMMIT)
+            {
+                DWORD avail = ((DWORD)mbi.BaseAddress + mbi.RegionSize - c.Esp) / 4;
+                words = avail < 2048 ? avail : 2048;
+                memcpy(stackCopy, (void*)c.Esp, words * 4);
+            }
+        }
+        ResumeThread(th);
+    }
+    CloseHandle(th);
+    if (!got)
+        return;
+    char what[96];
+    wnsprintfA(what, sizeof(what), "HANG: the game's window hasn't answered for %lu s; its thread is at", (now - stallSince) / 1000);
+    if (words)
+        CrashDescribe(what, 0, c.Eip, 0, &c, stackCopy); // the copied stack: same values, read after the thread runs again
+    if (stallSamples == 2)
+        CrashDump(nullptr, "hang");
+}
+
+static void InstallGameCrashWatch()
+{
+    static bool done = false;
+    if (done)
+        return;
+    done = true;
+    wnsprintfA(g_crashLogPath, sizeof(g_crashLogPath), "%sbotassist_crash.log", g_dir);
+    HMODULE dbg = LoadLibraryA("dbghelp.dll");
+    g_miniDump = dbg ? (MiniDumpWriteDumpFn)GetProcAddress(dbg, "MiniDumpWriteDump") : nullptr;
+    AddVectoredExceptionHandler(0, GameExceptionWatch); // after the game's own vectored handlers
+    g_prevFilter = SetUnhandledExceptionFilter(GameCrashFilter);
+    SYSTEMTIME t;
+    GetLocalTime(&t);
+    char line[160];
+    wnsprintfA(line, sizeof(line), "\r\n[%04d-%02d-%02d %02d:%02d:%02d] ===== game started, crash watch on (botassist %s)\r\n",
+               t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond, __DATE__);
+    CrashWrite(line);
+    Log("crash watch: the game's crashes and hangs go to botassist_crash.log%s", g_miniDump ? " (with dumps)" : "");
+}
+
 static void InstallCrashWatch()
 {
     static bool done = false;

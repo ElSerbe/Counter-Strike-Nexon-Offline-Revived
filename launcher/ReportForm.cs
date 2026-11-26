@@ -62,7 +62,7 @@ namespace CsnzLauncher
             var lines = new System.Collections.Generic.List<string>
             {
                 "Launcher v" + Paths.LauncherVersion.ToString(3) + ", mod " + (Paths.InstalledVersion()?.ToString(3) ?? "not installed"),
-                "Windows " + Environment.OSVersion.Version + (Environment.Is64BitOperatingSystem ? " (64-bit)" : " (32-bit)"),
+                LogBundle.WindowsName(),
             };
             if (GameLocator.IsGame(game))
                 lines.Add("Game: " + (string.IsNullOrEmpty(GameLocator.BuildId(game)) ? "archive.org copy" : "Steam, build " + GameLocator.BuildId(game)));
@@ -120,6 +120,17 @@ namespace CsnzLauncher
             Copy(Path.Combine(Paths.LogDir, "launcher.log"), "launcher.log.txt");
             Copy(Path.Combine(bin, "botassist.log"), "botassist.log.txt");
             Copy(LogBundle.FilePath, "last-session.txt");
+            Copy(LogBundle.CrashLog(game), "botassist_crash.log.txt");
+            // botassist's dumps of the crash or hang: zipped (GitHub doesn't take .dmp files)
+            var dumps = LogBundle.RecentDumps(game);
+            if (dumps.Length > 0)
+                try
+                {
+                    using (var zip = System.IO.Compression.ZipFile.Open(Path.Combine(dir, "crash-dumps.zip"), System.IO.Compression.ZipArchiveMode.Create))
+                        foreach (var d in dumps)
+                            System.IO.Compression.ZipFileExtensions.CreateEntryFromFile(zip, d, Path.GetFileName(d));
+                }
+                catch { }
             return dir;
         }
 

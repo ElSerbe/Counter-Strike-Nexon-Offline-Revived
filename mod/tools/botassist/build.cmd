@@ -5,5 +5,5 @@ for /f "usebackq delims=" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\
 call "%VS%\VC\Auxiliary\Build\vcvars32.bat" >nul || exit /b 1
 cd /d "%~dp0"
 rc /nologo botassist.rc || exit /b 1
-cl /nologo /O2 /EHsc /MT /LD botassist.cpp botassist.res /link /out:botassist.asi user32.lib || exit /b 1
+cl /nologo /O2 /EHsc /MT /LD botassist.cpp botassist.res /link /out:botassist.asi user32.lib shlwapi.lib || exit /b 1
 del botassist.obj botassist.res botassist.exp botassist.lib 2>nul

@@ -17,6 +17,7 @@
 // Build (x86, VS Build Tools): cl /nologo /O2 /EHsc /MT /LD botassist.cpp /link /out:botassist.asi user32.lib
 // Settings: botassist.ini next to it (see LoadSettings), log: botassist.log. Notes: README.md.
 #include <windows.h>
+#include <shlwapi.h>
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -2831,6 +2832,21 @@ static bool GiveRoomPrimary(void* bot, int item)
 
 // CSNZ's drop command is "cl_drop" (it throws the weapon in hand), thrown behind the bot: the drop goes where the
 // player faces, and thrown ahead the bot and the ones it fights walked onto it, picked it up and threw it again
+// The Zombie Hero Classic copies of weapons (item names ending in "zhc", e.g. janus3zhc) are drawn with the
+// original's model: a bot holding models/p_janus3.mdl holds the room's janus3zhc. Taken as a wrong weapon, it was
+// bought again up to 6 times each life (one weapon thrown on the ground each time) in 24-bot rooms (logs 2026-11-25).
+static bool SameWeaponModel(const std::string& held, const std::string& want)
+{
+    auto base = [](const std::string& m) {
+        std::string s = m;
+        size_t dot = s.rfind(".mdl");
+        if (dot != std::string::npos && dot >= 3 && !_strnicmp(s.c_str() + dot - 3, "zhc", 3))
+            s.erase(dot - 3, 3);
+        return s;
+    };
+    return !_stricmp(base(held).c_str(), base(want).c_str());
+}
+
 static void DropBehind(void* bot)
 {
     float* va = (float*)(Vars(bot) + EV_VANGLE);
@@ -3139,7 +3155,7 @@ static void UpdateBuying(void* bot, BotState& st)
         auto want = cfg.weaponModel.find(st.loadoutPrimary);
         auto cat = cfg.weaponCategory.find(held);
         bool primaryInHand = cat != cfg.weaponCategory.end() && cat->second >= 2 && cat->second <= 5;
-        bool ok = want == cfg.weaponModel.end() || held == want->second;
+        bool ok = want == cfg.weaponModel.end() || held == want->second || SameWeaponModel(held, want->second);
         if (!ok && primaryInHand && st.loadoutBuys < 6)
         {
             Log("bot %d '%s' holds %s instead of the room's %s: buying it again", st.slot, rb->name.c_str(), held.c_str(),
@@ -3276,7 +3292,7 @@ static void UpdateBuying(void* bot, BotState& st)
         // nothing changed (the item isn't sold here, no money...): try another weapon a few times. In the other modes
         // the room's primary must be in hand (holding another one, e.g. the spawn's, is a failure too)
         auto want = cfg.weaponModel.find(st.boughtPrimary);
-        bool wrong = want != cfg.weaponModel.end() && _stricmp(held.c_str(), want->second.c_str());
+        bool wrong = want != cfg.weaponModel.end() && !SameWeaponModel(held, want->second);
         bool failed = (held == st.modelBeforeBuy && (want == cfg.weaponModel.end() || wrong)) || (!scenario && wrong);
         static int reports = 0;
         if (reports++ < 40)
@@ -7949,8 +7965,10 @@ static DWORD WINAPI Watcher(LPVOID)
     HMODULE clientFixed = NULL;
     DWORD uiSince = 0;
     bool displayDone = false;
+    InstallGameCrashWatch(); // crash_watch.inl: the game's crashes and hangs, for problem reports
     for (;;)
     {
+        CrashWatchTick();
         if (!displayDone && GetModuleHandleA("GameUI.dll"))
         {
             if (!uiSince)

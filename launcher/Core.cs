@@ -958,20 +958,46 @@ namespace CsnzLauncher
                 sb.AppendLine("(" + skipped + " repetitive lines left out)");
         }
 
+        // Windows' real name and build: Environment.OSVersion says 6.2.9200 on Windows 8 to 11 (the launcher has no
+        // manifest declaring them), which every problem report showed
+        public static string WindowsName()
+        {
+            string windows = Environment.OSVersion.Version.ToString();
+            try
+            {
+                using (var k = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion"))
+                {
+                    var name = k?.GetValue("ProductName") as string;
+                    int.TryParse(k?.GetValue("CurrentBuild") as string, out int build);
+                    // Windows 11 still says "Windows 10" in ProductName: its builds start at 22000
+                    if (name != null && build >= 22000)
+                        name = name.Replace("Windows 10", "Windows 11");
+                    windows = $"{name} {k?.GetValue("DisplayVersion")} (build {k?.GetValue("CurrentBuild")})";
+                }
+            }
+            catch { }
+            return windows + (Environment.Is64BitOperatingSystem ? " 64-bit" : "");
+        }
+
+        // botassist's notes on the game's crashes and hangs (Bin\botassist_crash.log) and its dumps (Bin\crash-*.dmp)
+        public static string CrashLog(string game) => Path.Combine(game ?? "", "Bin", "botassist_crash.log");
+        public static string[] RecentDumps(string game)
+        {
+            try
+            {
+                return Directory.GetFiles(Path.Combine(game ?? "", "Bin"), "crash-*.dmp")
+                    .Where(f => File.GetLastWriteTime(f) > DateTime.Now.AddDays(-2)).ToArray();
+            }
+            catch { return new string[0]; }
+        }
+
         // writes mod\logs\last-session.txt and returns its text: the launcher, the Steam bridge, the server and the game
         public static string Build(Settings settings)
         {
             var sb = new StringBuilder();
             sb.AppendLine("Counter-Strike Nexon: Revived - logs of the last session, " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
-            string windows = Environment.OSVersion.Version.ToString();
-            try
-            {
-                using (var k = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion"))
-                    windows = $"{k?.GetValue("ProductName")} {k?.GetValue("DisplayVersion")} (build {k?.GetValue("CurrentBuild")})";
-            }
-            catch { }
             sb.AppendLine("launcher v" + Paths.LauncherVersion.ToString(3) + ", mod " + (Paths.InstalledVersion()?.ToString(3) ?? "not installed") +
-                ", " + windows + (Environment.Is64BitOperatingSystem ? " 64-bit" : ""));
+                ", " + WindowsName());
             var game = settings.GamePath;
             bool hasGame = GameLocator.IsGame(game);
             sb.AppendLine("game: " + (hasGame ? game + ", Steam build " + GameLocator.BuildId(game) : "not found"));
@@ -991,6 +1017,9 @@ namespace CsnzLauncher
                     l => l.Contains("Socket::SSL_connect()>>") || (l.Contains("<<Socket::SSL_connect() /") && !l.Contains("success")));
                 Section(sb, "Bots (botassist.log)", Path.Combine(bin, "botassist.log"), 150);
                 Section(sb, "Offline hook", Path.Combine(bin, "offline_hook.log"), 200);
+                var crashes = CrashLog(game);
+                if (File.Exists(crashes) && File.GetLastWriteTime(crashes) > DateTime.Now.AddDays(-2))
+                    Section(sb, "Game crashes and hangs (botassist_crash.log)", crashes, 400, "===== game started");
                 var fatal = Path.Combine(bin, "FatalError.log");
                 if (File.Exists(fatal) && File.GetLastWriteTime(fatal) > DateTime.Now.AddDays(-1))
                     Section(sb, "Game crash (FatalError.log)", fatal, 400);

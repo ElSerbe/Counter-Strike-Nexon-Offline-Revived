@@ -36,4 +36,4 @@ body:
     attributes:
       label: Logs
       description: Drag the files from the folder the launcher opened (mod\logs\report-...) into this box.
-      placeholder: Drop game-Error.log.txt, server.log.txt, steambridge.log.txt, launcher.log.txt... here
+      placeholder: Drop game-Error.log.txt, server.log.txt, steambridge.log.txt, launcher.log.txt, botassist_crash.log.txt, crash-dumps.zip... here
