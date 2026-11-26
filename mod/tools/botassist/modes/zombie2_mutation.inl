@@ -30,9 +30,11 @@ static std::map<void*, ZB2Dead> g_zb2Dead;
 static void ZB2Watch()
 {
     static float next = 0;
-    // (Zombie War's rules derive from this mode's; Zombie Hero's versions end in its commands)
+    // (Zombie War's rules derive from this mode's; Zombie Hero's versions end in its commands. Zombie Classic, mode 8,
+    // too: its zombie bots stayed down for good and, never really dead, kept the round going until its time ran out,
+    // even with every zombie killed by a headshot; reports 2026-11-24. The game's death think decides as for a player.)
     if (!g_mpDelta || !g_pGlobals || !*g_pGlobals || g_edictToVars < 0 ||
-        (GameMode() != MODE_ZB2 && GameMode() != MODE_ZWAR && !HeroMode(GameMode())))
+        (GameMode() != MODE_ZB2 && GameMode() != MODE_ZWAR && GameMode() != 8 && !HeroMode(GameMode())))
     {
         g_zb2Dead.clear();
         return;

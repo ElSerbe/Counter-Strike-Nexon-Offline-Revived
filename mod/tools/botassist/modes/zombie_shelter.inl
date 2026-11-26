@@ -3575,6 +3575,13 @@ static void ShMenuKey(void* player, int key)
     m.page = SHM_NONE;
     if (key == 10)
         key = 0;
+    // a dead player's blueprints went where the spectator camera looked (16 in a row in a report): the blueprint page
+    // does nothing until they're back
+    if (page == SHM_PRINTS && !Alive(player))
+    {
+        ShPrint(player, "Blueprints: when you're alive again");
+        return;
+    }
     switch (page)
     {
     case SHM_ORDERS:
@@ -3868,6 +3875,31 @@ static std::map<void*, ShDead> g_shDead;
 static void ShelterRespawnBots(float now)
 {
     std::set<void*> seen;
+    // A player who died with the build menu open (the buy menu, player +0xe10 14: building or upgrading the shelter) never
+    // came back either: their own death think runs, but that menu blocks the respawn as it did the bots'. It's closed
+    // 3 s after the death (reports 2026-11-23/25: "I died while upgrading the shelter and couldn't respawn"; meanwhile
+    // that menu kept placing blueprints for the dead player's camera).
+    static std::map<void*, float> playerDied;
+    ForEntitiesNear(V3{ 0, 0, 0 }, 1e6f, [&](void* e) {
+        unsigned char* v = Vars(e);
+        int flags = F<int>(v, EV_FLAGS);
+        if (!(flags & FL_CLIENT) || (flags & FL_FAKECLIENT))
+            return;
+        if (F<int>(v, EV_DEADFLAG) == 0)
+        {
+            playerDied.erase(e);
+            return;
+        }
+        float& died = playerDied[e];
+        if (died == 0)
+            died = now;
+        unsigned char* p = (unsigned char*)PrivateOf(e);
+        if (p && Readable(p + 0xe10, 4) && now - died >= 3.0f && *(int*)(p + 0xe10) == 14)
+        {
+            *(int*)(p + 0xe10) = 0;
+            Log("Shelter: player '%s' died with the build menu open: closed, so they can respawn", ShBotName(e).c_str());
+        }
+    });
     ForEntitiesNear(V3{ 0, 0, 0 }, 1e6f, [&](void* e) {
         unsigned char* v = Vars(e);
         if ((F<int>(v, EV_FLAGS) & (FL_CLIENT | FL_FAKECLIENT)) != (FL_CLIENT | FL_FAKECLIENT) || F<int>(v, EV_DEADFLAG) == 0)
