@@ -10948,10 +10948,10 @@ index c7d2bdb..75d0ee9 100644
 +extern CVoxelManager g_VoxelManager;
 diff --git a/src/manager/warbondmanager.cpp b/src/manager/warbondmanager.cpp
 new file mode 100644
-index 0000000..70c7506
+index 0000000..6008b85
 --- /dev/null
 +++ b/src/manager/warbondmanager.cpp
-@@ -0,0 +1,1227 @@
+@@ -0,0 +1,1230 @@
 +#include "channelmanager.h"
 +#include "guestprofile.h"
 +#include "transfer.h"
@@ -11037,6 +11037,7 @@ index 0000000..70c7506
 +		m_Medals.perMatch = medals.value("PerMatch", 2);
 +		m_Medals.perWin = medals.value("PerWin", 2);
 +		m_Medals.killsPerMedal = max(1, medals.value("KillsPerMedal", 6));
++		m_Medals.matchMultiplier = max(0.0f, medals.value("MatchMultiplier", 1.0f));
 +		m_Medals.maxKillMedals = medals.value("MaxKillMedals", 0);
 +		m_Medals.levelUpPerLevel = medals.value("LevelUpPerLevel", 3);
 +		m_Medals.cheatPenalty = min(100, max(0, medals.value("CheatPenalty", 60)));
@@ -12090,13 +12091,15 @@ index 0000000..70c7506
 +	int killMedals = kills / m_Medals.killsPerMedal;
 +	if (m_Medals.maxKillMedals > 0)
 +		killMedals = min(killMedals, m_Medals.maxKillMedals);
-+	int full = m_Medals.perMatch + (won ? m_Medals.perWin : 0) + killMedals;
++	int base = m_Medals.perMatch + (won ? m_Medals.perWin : 0) + killMedals;
++	// MatchMultiplier (2.5 since 1.1.46, the user's decision), won or lost; rounded to the nearest medal
++	int full = (int)(base * m_Medals.matchMultiplier + 0.5f);
 +	int medals = PenalizedMedals(user, full);
 +
 +	if (m_Medals.logKills)
-+		Logger().Info("WarbondManager: user %d match result: mode %d, kills %d, headshots %d, won %d, first %d -> %d medals (%d match + %d win + %d kills%s)\n",
++		Logger().Info("WarbondManager: user %d match result: mode %d, kills %d, headshots %d, won %d, first %d -> %d medals ((%d match + %d win + %d kills) x %.2f%s)\n",
 +			user->GetID(), gameMode, kills, headshots, won, topPlayer, medals, m_Medals.perMatch, won ? m_Medals.perWin : 0, killMedals,
-+			medals < full ? va(", sv_cheats: -%d%% of %d", m_Medals.cheatPenalty, full) : "");
++			m_Medals.matchMultiplier, medals < full ? va(", sv_cheats: -%d%% of %d", m_Medals.cheatPenalty, full) : "");
 +
 +	AdvanceOrders(user, gameMode, { { "Matches", 1 }, { "Wins", won ? 1 : 0 }, { "Kills", kills }, { "BestKills", kills },
 +		{ "TopPlayer", topPlayer ? 1 : 0 }, { "Headshots", headshots } });
@@ -12181,10 +12184,10 @@ index 0000000..70c7506
 +}
 diff --git a/src/manager/warbondmanager.h b/src/manager/warbondmanager.h
 new file mode 100644
-index 0000000..861c197
+index 0000000..aa113ef
 --- /dev/null
 +++ b/src/manager/warbondmanager.h
-@@ -0,0 +1,133 @@
+@@ -0,0 +1,134 @@
 +#pragma once
 +
 +#include <string>
@@ -12247,6 +12250,7 @@ index 0000000..861c197
 +	int perMatch = 2;
 +	int perWin = 2;
 +	int killsPerMedal = 6;
++	float matchMultiplier = 1.0f; // a finished match's medals (match + win + kills) times this
 +	int maxKillMedals = 0; // 0: no limit
 +	int levelUpPerLevel = 3; // medals for reaching level N: N x this
 +	int headshotKillType = -1; // victimKillType value meaning a headshot (-1: unknown yet, see the telemetry log)
