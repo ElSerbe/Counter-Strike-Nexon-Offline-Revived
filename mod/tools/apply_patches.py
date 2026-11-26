@@ -641,6 +641,48 @@ PATCHES += [
 ]
 
 
+# The buy menu's record of a weapon that isn't in this client's buy menu table (2026-11-26, the user's crash on entering a
+# match, from botassist_crash.log + its dump): hw.dll's IGBuyMenuMgr finds a weapon's record with Find(InGameID)
+# (0x2542650, -1 when it has none) and every caller checks for -1, but four: the item checks of vfunc 0x54 (0x2543634,
+# called by mp.dll 0x113f5c9d for each of the player's items when the match begins) and its helpers for categories 6
+# and 0xb (0x254a376, 0x254a564, 0x254a689). They read Record(-1) (0x2541e90: the table + index * 0x30, 48 bytes before it)
+# and the game closed (hw.dll+0x841eb7) for a player owning such a weapon (here Balrog-XI WC, InGameID 358). Each call
+# to Record there goes through a cave now: with -1 it takes its function's own "not allowed" exit (the one taken
+# right after Record when the weapon isn't allowed in the mode), otherwise it goes on to Record.
+_BUYREC = 0x2541E90
+_BUYREC_CAVES = 0x1D45530      # in the same int3 padding, after _ROOMFLAG_CAVE (256 free bytes there)
+_BUYREC_SITES = [              # (the call to Record, the function's "not allowed" exit)
+    (0x254363C, 0x25434F7),    # vfunc 0x54: pop edi/esi, xor al,al, pop ebx, ret 8
+    (0x254A37E, 0x254A39A),    # category 6 helper: pop edi/esi, mov eax,4, pop ebx, ret 0xc
+    (0x254A56C, 0x254A586),    # category 0xb helper: the same
+    (0x254A691, 0x254A6AB),    # vfunc 0x58 helper: pop esi, pop ebp, ret 8 (al = 0)
+]
+for _i, (_site, _fail) in enumerate(_BUYREC_SITES):
+    _cave = _BUYREC_CAVES + 24 * _i
+    PATCHES += [
+        (
+            "hw.dll",
+            _cave,
+            b"\xcc" * 22,
+            bytes.fromhex(
+                "837c2404ff"    # cmp dword [esp+4],-1   the index Find gave
+                "7405"          # je none
+                "e9") + _rel32(_cave + 12, _BUYREC) + bytes.fromhex(  # jmp Record (its return goes back to the caller)
+                "83c408"        # none: add esp,8        (the return address and the index, as Record's ret 4 would)
+                "33c0"          # xor eax,eax
+                "e9") + _rel32(_cave + 22, _fail),  # the caller's "not allowed" exit
+            "Buy menu: a weapon without a buy menu record is 'not allowed' instead of read at index -1 (code cave)",
+        ),
+        (
+            "hw.dll",
+            _site,
+            b"\xe8" + _rel32(_site + 5, _BUYREC),
+            b"\xe8" + _rel32(_site + 5, _cave),
+            "Buy menu: Record(Find(id)) without a check goes through the -1 check",
+        ),
+    ]
+
+
 # what older releases wrote at a place whose patch changed since: replaced by the current bytes, not an abort
 PREVIOUS = {
     ("hw.dll", 0x2754F80): [bytes.fromhex("52ff7104c7410c7f00000166c7410a753290")],  # 1.0.x: port always 30002
