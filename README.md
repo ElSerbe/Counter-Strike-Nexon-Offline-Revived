@@ -187,6 +187,10 @@ The logs help a lot. For a problem that's hard to catch:
 - The local server is based on [JusicP/CSNZ_Server](https://github.com/JusicP/CSNZ_Server) by Jusic, Hardee,
   NekoMeow, Smilex_Gamer and xRiseless.
 
+### Thanks
+
+- **KittehKun**: the idea for the Zombie Classic fix (zombie bots coming back, rounds that end; v1.1.46).
+
 ## Making a release
 
 1. Build what Git doesn't keep: `botassist.asi` (`mod/tools/botassist/README.md`), `CSNZ_Server.exe`
