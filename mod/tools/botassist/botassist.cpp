@@ -6329,7 +6329,20 @@ static void ApplyRoomCharacter(void* bot, BotState& bs)
 // The game's own AI (every PvP mode) aims and reacts by the bot's BotProfile (CBot::m_profile, player +0x3700;
 // profiles are shared by every bot with the same name). A room AI player with a skill gets its own copy:
 //   +0x08 skill 0..1 (aim error: 1 = none), +0x64 reaction time (BotProfile.db value - 0.1), +0x68 attack delay.
-// Skill 0..7 -> skill 0.2..1, reaction 0.4..0 s, attack delay 0.7..0 s: Expert aims and reacts like CZ's best.
+// Skill 0..7 -> the game's own templates in testbotprofile.db (Easy, Fair, Normal, Tough, Hard, VeryHard, Expert,
+// Elite). It was a straight line from skill 0.2 / attack delay 0.7 s to skill 1 / reaction 0 / delay 0: Very Easy aimed
+// better than the game's Easy and the top level better than its Elite ("one-shots on Very Easy", reports 2026-11-26).
+static const float ROOM_SKILL[8][3] = {
+    // skill, reaction (file value - 0.1), attack delay
+    { 0.00f, 0.40f, 1.50f }, // Easy
+    { 0.25f, 0.30f, 1.00f }, // Fair
+    { 0.50f, 0.30f, 0.70f }, // Normal
+    { 0.60f, 0.20f, 0.35f }, // Tough
+    { 0.75f, 0.15f, 0.00f }, // Hard
+    { 0.80f, 0.15f, 0.00f }, // VeryHard
+    { 0.90f, 0.10f, 0.00f }, // Expert
+    { 1.00f, 0.10f, 0.00f }, // Elite
+};
 static const int PLAYER_BOT_PROFILE = 0x3700;
 static const int PROFILE_COPY = 0x200;
 static bool SetRoomProfile(unsigned char* player, BotState& bs, int skill, float* was)
@@ -6350,10 +6363,10 @@ static bool SetRoomProfile(unsigned char* player, BotState& bs, int skill, float
         was[0] = *(float*)(bs.ownProfile + 8);
         was[1] = *(float*)(bs.ownProfile + 0x64);
         was[2] = *(float*)(bs.ownProfile + 0x68);
-        float d = (float)(skill > 7 ? 7 : skill);
-        *(float*)(bs.ownProfile + 8) = 0.2f + d * (0.8f / 7.0f);
-        *(float*)(bs.ownProfile + 0x64) = 0.4f - d * (0.4f / 7.0f);
-        *(float*)(bs.ownProfile + 0x68) = (7.0f - d) * 0.1f;
+        const float* t = ROOM_SKILL[skill < 0 ? 0 : skill > 7 ? 7 : skill];
+        *(float*)(bs.ownProfile + 8) = t[0];
+        *(float*)(bs.ownProfile + 0x64) = t[1];
+        *(float*)(bs.ownProfile + 0x68) = t[2];
         *slot = bs.ownProfile;
         return true;
     }
