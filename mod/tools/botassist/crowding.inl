@@ -6,6 +6,9 @@
 //    take turns by distance to it (within LADDER_TIE: by key), so two arriving together don't both go. One at the foot
 //    that doesn't get on loses its turn (LadderTurnLost); a bot gives up waiting after LadderWaitLimit (longer the more
 //    are ahead of it).
+//  - holdout places: a bot takes the place none of its group stands on (the fewest, the lowest first), so a bot that
+//    joins doesn't walk onto one that's taken when an earlier one was infected; the places are points inside the
+//    spot's areas (GridPoints) that SpreadPoints keeps apart (HOLD_PLACE_GAP).
 //  - in each other's way (WayDecision): someone standing still is gone around like a wall; of two moving bots, the one
 //    with the lower key keeps going and the other steps aside; a moving person always gets the way.
 //  - blocked links: a link between two areas that stuck bots ran into a wall on, LINK_BLOCK_HITS times, is one every
@@ -81,6 +84,40 @@ static float LadderWaitLimit(int ahead)
     return t < LADDER_WAIT_CAP ? t : LADDER_WAIT_CAP;
 }
 
+// the place (0 .. places-1) the fewest of taken stand on, the lowest of those
+static int LeastUsedPlace(const std::vector<int>& taken, int places)
+{
+    if (places <= 0)
+        return 0;
+    std::vector<int> used(places, 0);
+    for (int t : taken)
+        if (t >= 0 && t < places)
+            used[t]++;
+    int best = 0;
+    for (int i = 1; i < places; i++)
+        if (used[i] < used[best])
+            best = i;
+    return best;
+}
+
+// in order: the points at least gap from every point kept before them (their indices)
+static std::vector<int> SpreadPoints(const std::vector<std::pair<float, float>>& pts, float gap)
+{
+    std::vector<int> kept;
+    for (int i = 0; i < (int)pts.size(); i++)
+    {
+        bool apart = true;
+        for (int k : kept)
+        {
+            float dx = pts[i].first - pts[k].first, dy = pts[i].second - pts[k].second;
+            apart = apart && dx * dx + dy * dy >= gap * gap;
+        }
+        if (apart)
+            kept.push_back(i);
+    }
+    return kept;
+}
+
 // what this bot does about the player in its way. Someone standing still (a bot holding its place, a person not moving)
 // isn't going to step aside: it's in the way like a wall, so this bot goes around (keeping going into it was a
 // deadlock: de_dust, a bot pushed into one holding its holdout place 36 times in a row). Of two moving bots the one with
@@ -97,6 +134,27 @@ static int WayDecision(bool otherIsBot, bool otherMoving, long long myKey, long 
     if (!otherMoving)
         return WAY_GO_AROUND;
     return !otherIsBot || otherKey < myKey ? WAY_STEP_ASIDE : WAY_KEEP_GOING;
+}
+
+// points to stand on in a nav area's rectangle (lo, hi): step apart, at least inset from its edges; along a side too
+// narrow for both insets, its middle. Holdout places come from these, not the areas' middles: de_dust's big areas left
+// a spot 1 or 2 places for 5 bots.
+static std::vector<std::pair<float, float>> GridPoints(float loX, float loY, float hiX, float hiY, float step, float inset)
+{
+    auto line = [&](float lo, float hi) {
+        std::vector<float> v;
+        if (hi - lo < 2 * inset || step <= 0)
+            v.push_back((lo + hi) * 0.5f);
+        else
+            for (float x = lo + inset; x <= hi - inset + 0.01f; x += step)
+                v.push_back(x);
+        return v;
+    };
+    std::vector<std::pair<float, float>> out;
+    for (float y : line(loY, hiY))
+        for (float x : line(loX, hiX))
+            out.push_back({ x, y });
+    return out;
 }
 
 // a link between two nav areas that a bot couldn't walk (a wall or door the mesh doesn't know about): from LINK_BLOCK_HITS
