@@ -1072,6 +1072,46 @@ PATCHES += [
 ]
 
 
+# The Exit Game window's EXP bar (GameUI 0x10278870): the "EXP x / y (z%)" label ([edi+0x160]) sits over a bar the window
+# fills with RGB 196,181,80 (0x102792d3), and the label's white text was hard to read on that yellow. Right after the
+# text is set (SetText, vfunc 0x280), the label gets CSO's forced text color, near-black RGB 20,20,20: the flag at
+# label+0x84 and the packed r,g,b,a at +0x85 ("EnableForceTextColor" / "ForceTextColor" in .res files), which the
+# label's paint reads every time (e.g. 0x10715a20: DrawSetTextColor(+0x85) when +0x84 is set), so the theme can't
+# put the white back (a plain SetFgColor didn't hold). GameUI has no gap over 20 bytes, so the stub is split: the
+# site (6 bytes) calls the first gap, which jumps to the second.
+_EXPLABEL_SITE = 0x102794A2    # mov ecx,[edi+0x160]; then push 1; call 0x106f8d10 (the label)
+_EXPLABEL_CAVE_A = 0x10251C4C  # 20 int3 bytes after a ret 4
+_EXPLABEL_CAVE_B = 0x10251AEC  # 20 int3 bytes after a ret 4
+_EXPLABEL_COLOR = 0xFF141414   # a,b,g,r: RGB 20,20,20, opaque
+PATCHES += [
+    (
+        "GameUI.dll",
+        _EXPLABEL_SITE,
+        bytes.fromhex("8b8f60010000"),                                  # mov ecx,[edi+0x160]
+        b"\xe8" + _rel32(_EXPLABEL_SITE + 5, _EXPLABEL_CAVE_A) + b"\x90",
+        "Exit Game EXP bar: the label's text turns dark after its text is set",
+    ),
+    (
+        "GameUI.dll",
+        _EXPLABEL_CAVE_A,
+        b"\xcc" * 18,
+        bytes.fromhex(
+            "8b8f60010000"      # mov ecx,[edi+0x160]       the label (what the site's instruction did)
+            "c6818400000001")   # mov byte [ecx+0x84],1     forced text color on
+        + b"\xe9" + _rel32(_EXPLABEL_CAVE_A + 18, _EXPLABEL_CAVE_B),  # jmp to the second gap
+        "Exit Game EXP bar stub, part 1: the label's forced text color on",
+    ),
+    (
+        "GameUI.dll",
+        _EXPLABEL_CAVE_B,
+        b"\xcc" * 11,
+        bytes.fromhex("c78185000000") + _EXPLABEL_COLOR.to_bytes(4, "little")  # mov dword [ecx+0x85],color
+        + b"\xc3",          # ret
+        "Exit Game EXP bar stub, part 2: the forced color, then back",
+    ),
+]
+
+
 # The field of view (launcher's More > Field of view, default_fov) only made the mouse slower (reports 2026-11-24/25,
 # as in Counter-Strike 1.6): the server sends the player's fov, 90 when not zoomed, and client.dll's CHud::Think
 # (0x2a70cb0) sets gHUD.m_iFOV (+0x80) to it and the sensitivity to sens * fov / default_fov whenever they differ;
