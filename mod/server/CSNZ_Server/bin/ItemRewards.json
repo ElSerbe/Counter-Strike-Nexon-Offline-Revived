@@ -1,5 +1,68 @@
 {
 	"Version": 1,
+	// Offline build (2026-11-27, the new gift codes): boxes the game has without contents. Item.csv's rewardID is the item id.
+	// Snowflake Transcendence Class Box: one of the 24 Transcendence-grade characters, permanent
+	"2942": {
+		"Title": "Snowflake Transcendence Class Box",
+		"Description": "You obtained the following character:",
+		"RandomItems": [
+			{
+				"100": {
+						"943": { "Count": 1, "Duration": 0 },
+						"944": { "Count": 1, "Duration": 0 },
+						"1055": { "Count": 1, "Duration": 0 },
+						"1056": { "Count": 1, "Duration": 0 },
+						"8084": { "Count": 1, "Duration": 0 },
+						"8085": { "Count": 1, "Duration": 0 },
+						"8107": { "Count": 1, "Duration": 0 },
+						"8134": { "Count": 1, "Duration": 0 },
+						"8135": { "Count": 1, "Duration": 0 },
+						"8167": { "Count": 1, "Duration": 0 },
+						"8195": { "Count": 1, "Duration": 0 },
+						"8196": { "Count": 1, "Duration": 0 },
+						"8223": { "Count": 1, "Duration": 0 },
+						"8224": { "Count": 1, "Duration": 0 },
+						"8251": { "Count": 1, "Duration": 0 },
+						"8252": { "Count": 1, "Duration": 0 },
+						"8287": { "Count": 1, "Duration": 0 },
+						"8288": { "Count": 1, "Duration": 0 },
+						"8335": { "Count": 1, "Duration": 0 },
+						"8336": { "Count": 1, "Duration": 0 },
+						"8352": { "Count": 1, "Duration": 0 },
+						"8353": { "Count": 1, "Duration": 0 },
+						"8418": { "Count": 1, "Duration": 0 },
+						"8419": { "Count": 1, "Duration": 0 }
+				}
+			}
+		]
+	},
+	// Jackpot Point Box: Point Coupons (Lv. 1 100 points, Lv. 2 up to 8000, Lv. 3 up to 15000); chances tried in order
+	"2632": {
+		"Title": "Jackpot Point Box",
+		"Description": "You obtained the following item:",
+		"RandomItems": [
+			{
+				"5": { "1032": { "Count": 1, "Duration": 0 } },
+				"15": { "1031": { "Count": 1, "Duration": 0 } },
+				"35": { "1030": { "Count": 10, "Duration": 0 } },
+				"100": { "1030": { "Count": 3, "Duration": 0 } }
+			}
+		]
+	},
+	// Epic Edition Weapon Selection Box: the player picks one of the 5 Epic-grade weapons, permanent
+	// (8171 Gungnir, 8248 Dread Nova, 8314 Heaven Splitter, 8381 Void Avenger, 8425 Dark Star)
+	"2618": {
+		"Title": "Epic Edition Weapon Selection Box",
+		"Description": "You obtained the following weapon:",
+		"Select": true,
+		"Items": {
+			"8171": { "Count": 1, "Duration": 0 },
+			"8248": { "Count": 1, "Duration": 0 },
+			"8314": { "Count": 1, "Duration": 0 },
+			"8381": { "Count": 1, "Duration": 0 },
+			"8425": { "Count": 1, "Duration": 0 }
+		}
+	},
 	"1001": {
 		"Title": "LEVEL1_GIFTBOX_TITLE",
 		"Description": "LEVEL1_GIFTBOX_MSG",

@@ -1,0 +1,28 @@
+{
+	// Offline build: boxes the game gives no Use button (manager/supplyboxes.cpp). Read at login, after each match and
+	// after a gift code.
+	// "Daily": while the box is in the inventory and not expired, its items once a day ("Items", or one pick of "Random"
+	// by "Weight"). "Open": every one of these items in the inventory is opened by the server, one pick each.
+	// Items: ItemID, Count, Days (0 = permanent), Name (for the chat line).
+	"Daily": {
+		"2770": { "Name": "Rare Decoder Supply Box", "Items": [ { "ItemID": 8310, "Count": 1, "Name": "Rare Decoder" } ] },
+		"8697": { "Name": "Transcendence Decoder Supply Box", "Items": [ { "ItemID": 8292, "Count": 1, "Name": "Transcendence Decoder" } ] },
+		"9267": { "Name": "Transcendence Decoder Supply Box", "Items": [ { "ItemID": 8292, "Count": 1, "Name": "Transcendence Decoder" } ] },
+		"9234": { "Name": "Class Decoder Supply Box", "Items": [ { "ItemID": 8311, "Count": 1, "Name": "Class Decoder" } ] },
+		"2822": { "Name": "Epic Decoder Ticket", "Items": [ { "ItemID": 2198, "Count": 1, "Name": "Epic Decoder" } ] },
+		"2008": { "Name": "Time Bomb Safe", "Random": [
+			{ "Weight": 40, "Items": [ { "ItemID": 173, "Count": 3, "Name": "Advanced Decoder" } ] },
+			{ "Weight": 30, "Items": [ { "ItemID": 1030, "Count": 3, "Name": "100 Point Coupon" } ] },
+			{ "Weight": 20, "Items": [ { "ItemID": 8310, "Count": 1, "Name": "Rare Decoder" } ] },
+			{ "Weight": 10, "Items": [ { "ItemID": 8292, "Count": 1, "Name": "Transcendence Decoder" } ] }
+		] }
+	},
+	"Open": {
+		"2985": { "Name": "Red Envelope", "Random": [
+			{ "Weight": 50, "Items": [ { "ItemID": 1030, "Count": 3, "Name": "100 Point Coupon" } ] },
+			{ "Weight": 25, "Items": [ { "ItemID": 173, "Count": 2, "Name": "Advanced Decoder" } ] },
+			{ "Weight": 15, "Items": [ { "ItemID": 1031, "Count": 1, "Name": "Point Coupon Lv. 2" } ] },
+			{ "Weight": 10, "Items": [ { "ItemID": 8292, "Count": 1, "Name": "Transcendence Decoder" } ] }
+		] }
+	}
+}

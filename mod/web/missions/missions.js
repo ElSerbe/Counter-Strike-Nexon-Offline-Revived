@@ -173,8 +173,9 @@
     viewer.show(m.character, m.weapon, m.pose, m.costume).then(ok => { if (!ok) { shownKey = ""; stage.classList.add("no-model"); } });
   }
 
+  // bought by holding the button BUY_HOLD_MS (the shop's hold; a Buy and a Confirm click until v1.1.50)
   const buyButton = it => it.owned ? '<span class="owned-tag">Owned</span>'
-    : `<button type="button" class="btn${confirmBuy === it.itemID ? " confirm" : ""}" data-buy="${it.itemID}"${data.badges < it.price ? " disabled" : ""}>${confirmBuy === it.itemID ? "Confirm" : "Buy"}</button>`;
+    : `<button type="button" class="btn buyhold" data-buy="${it.itemID}" title="Hold to buy"${data.badges < it.price ? " disabled" : ""}><span class="label">Buy</span></button>`;
 
   function renderMarket() {
     if (!data.market.some(it => it.itemID === marketPick))
@@ -213,7 +214,7 @@
       : holdsFull ? `You can hold ${rift.rules.maxHolds} items at most` : `Keep it one more day for ${it.holdCost} tickets`;
     return `<span class="actions">
       <button type="button" class="btn hold${riftConfirm === hold ? " confirm" : ""}" data-rhold="${it.itemID}" title="${esc(holdTitle)}"${canHold ? "" : " disabled"}>${riftConfirm === hold ? "Confirm" : it.held ? "+1 day" : "Hold"}</button>
-      <button type="button" class="btn${riftConfirm === buy ? " confirm" : ""}" data-rbuy="${it.itemID}"${rift.tickets < it.price ? " disabled" : ""}>${riftConfirm === buy ? "Confirm" : "Buy"}</button></span>`;
+      <button type="button" class="btn buyhold" data-rbuy="${it.itemID}" title="Hold to buy"${rift.tickets < it.price ? " disabled" : ""}><span class="label">Buy</span></button></span>`;
   }
 
   const heldText = it => (it.daysLeft > 0 ? `Held · ${it.daysLeft} more day${it.daysLeft === 1 ? "" : "s"}` : "Held · last day");
@@ -321,6 +322,44 @@
     const b = e.target.closest("[data-tab]");
     if (b && data) { tab = b.dataset.tab; confirmBuy = riftConfirm = null; render(); b.scrollIntoView({ block: "nearest", inline: "nearest" }); }
   });
+  // Black Market and Rift Exchange: hold Buy for BUY_HOLD_MS (the bar fills), let go earlier and nothing happens
+  const BUY_HOLD_MS = 260;
+  let buyHold = null; // { button, frame }
+  function cancelBuyHold() {
+    if (!buyHold) return;
+    cancelAnimationFrame(buyHold.frame);
+    buyHold.button.classList.remove("charging");
+    buyHold.button.style.removeProperty("--hold");
+    buyHold = null;
+  }
+  function startBuyHold(button) {
+    if (buyHold || button.disabled) return;
+    const start = performance.now();
+    buyHold = { button };
+    button.classList.add("charging");
+    button.addEventListener("mouseleave", cancelBuyHold, { once: true });
+    const step = now => {
+      if (!buyHold || buyHold.button !== button) return;
+      const t = Math.min(1, (now - start) / BUY_HOLD_MS);
+      button.style.setProperty("--hold", t.toFixed(3));
+      if (t < 1) { buyHold.frame = requestAnimationFrame(step); return; }
+      cancelBuyHold();
+      if (button.dataset.buy) act({ action: "buy", itemID: +button.dataset.buy }, "Bought. It's in your inventory.");
+      else act({ rift: true, action: "buy", itemID: +button.dataset.rbuy }, "Bought. It's in your inventory.");
+    };
+    buyHold.frame = requestAnimationFrame(step);
+  }
+  view.addEventListener("mousedown", e => {
+    const b = e.button === 0 && e.target.closest("[data-buy], [data-rbuy]");
+    if (b) { e.preventDefault(); startBuyHold(b); }
+  });
+  document.addEventListener("mouseup", cancelBuyHold);
+  view.addEventListener("keydown", e => {
+    const b = (e.key === " " || e.key === "Enter") && !e.repeat && e.target.closest("[data-buy], [data-rbuy]");
+    if (b) { e.preventDefault(); startBuyHold(b); }
+  });
+  view.addEventListener("keyup", e => { if (e.key === " " || e.key === "Enter") cancelBuyHold(); });
+
   view.addEventListener("click", e => {
     const t = e.target;
     const accept = t.closest("[data-accept]"), drop = t.closest("[data-drop]"), claim = t.closest("[data-claim]");
@@ -330,21 +369,11 @@
     if (claim) return act({ action: "claim", id: +claim.dataset.claim }, "Reward claimed.");
     if (evClaim) return act({ action: "claimEvent", index: +evClaim.dataset.event }, "Reward claimed.");
     if (bonus) return act({ action: "claimBonus" }, "Event bonus claimed.");
-    if (buy) {
-      const id = +buy.dataset.buy;
-      if (confirmBuy !== id) {
-        confirmBuy = id;
-        renderMarket();
-        clearTimeout(act.confirmTimer);
-        act.confirmTimer = setTimeout(() => { confirmBuy = null; if (tab === "market") renderMarket(); }, 3000);
-        return;
-      }
-      confirmBuy = null;
-      return act({ action: "buy", itemID: id }, "Bought. It's in your inventory.");
-    }
-    const rbuy = t.closest("[data-rbuy]"), rhold = t.closest("[data-rhold]");
-    if (rbuy || rhold) {
-      const id = +(rbuy ? rbuy.dataset.rbuy : rhold.dataset.rhold), key = (rbuy ? "buy:" : "hold:") + id;
+    if (buy || t.closest("[data-rbuy]"))
+      return; // (bought by holding: see buyHold)
+    const rhold = t.closest("[data-rhold]");
+    if (rhold) {
+      const id = +rhold.dataset.rhold, key = "hold:" + id;
       if (riftConfirm !== key) {
         riftConfirm = key;
         renderRift();
@@ -353,8 +382,7 @@
         return;
       }
       riftConfirm = null;
-      return rbuy ? act({ rift: true, action: "buy", itemID: id }, "Bought. It's in your inventory.")
-        : act({ rift: true, action: "hold", itemID: id }, "Held for one more day.");
+      return act({ rift: true, action: "hold", itemID: id }, "Held for one more day.");
     }
     const rpick = t.closest("[data-rpick]");
     if (rpick) {
@@ -446,5 +474,5 @@
   }
 
   load();
-  setInterval(() => { if (!busy && confirmBuy === null && riftConfirm === null) load(); }, 20000); // progress changes after matches
+  setInterval(() => { if (!busy && !buyHold && confirmBuy === null && riftConfirm === null) load(); }, 20000); // progress changes after matches
 })();

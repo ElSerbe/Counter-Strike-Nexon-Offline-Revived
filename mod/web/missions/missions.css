@@ -26,6 +26,11 @@
 .btn.ghost { background: none; color: var(--muted); border: 1px solid var(--line-strong); font-weight: 600; }
 .btn.ghost:hover { color: var(--danger); border-color: var(--danger); }
 .btn.confirm { background: var(--danger); color: #fff; }
+/* hold to buy (Black Market, Rift Exchange): a bar fills while the button is held */
+.btn.buyhold { position: relative; overflow: hidden; }
+.btn.buyhold .label { position: relative; }
+.btn.buyhold::before { content: ""; position: absolute; inset: 0 auto 0 0; width: calc(var(--hold, 0) * 100%); background: rgba(255,255,255,.5); }
+.btn.buyhold.charging { box-shadow: 0 0 calc(var(--hold, 0) * 14px) var(--accent); }
 .section-title { margin: 0 0 10px; font-size: 13px; letter-spacing: 2px; text-transform: uppercase; color: var(--accent); display: flex; justify-content: space-between; align-items: baseline; }
 .section-title small { color: var(--muted); font-weight: 400; letter-spacing: 1px; }
 

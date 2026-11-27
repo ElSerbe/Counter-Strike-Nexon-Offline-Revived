@@ -403,7 +403,8 @@
   }
 
   // ---------- hold to unlock: charge sound + glow, unlocks when the bar fills ----------
-  const HOLD_MS = 1300;
+  // 260 ms since v1.1.50 (1300 before: the user wanted it 80% shorter, "practically instant" while still a hold)
+  const HOLD_MS = 260;
   const sounds = { charge: new Audio("sounds/charge.wav"), unlock: new Audio("sounds/item.wav"), pass: new Audio("sounds/pass.wav") };
   // a quarter of what they were until v1.1.41 (the user: "extremely loud", 75% lower)
   const VOLUME = 0.25;

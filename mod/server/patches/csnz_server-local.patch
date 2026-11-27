@@ -1,8 +1,8 @@
 diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
-index b5e72be..bcf4893 100644
+index b5e72be..c3b4df3 100644
 --- a/src/CMakeLists.txt
 +++ b/src/CMakeLists.txt
-@@ -38,6 +38,17 @@ endif()
+@@ -38,6 +38,18 @@ endif()
  target_sources(PROJECTNAME PRIVATE "main.cpp")
  target_sources(PROJECTNAME PRIVATE "serverinstance.cpp")
  target_sources(PROJECTNAME PRIVATE "serverconfig.cpp")
@@ -14,13 +14,14 @@ index b5e72be..bcf4893 100644
 +target_sources(PROJECTNAME PRIVATE "manager/missionmanager.cpp")
 +target_sources(PROJECTNAME PRIVATE "manager/loginsupplies.cpp")
 +target_sources(PROJECTNAME PRIVATE "manager/redeemcodes.cpp")
++target_sources(PROJECTNAME PRIVATE "manager/supplyboxes.cpp")
 +target_sources(PROJECTNAME PRIVATE "manager/moderewards.cpp")
 +target_sources(PROJECTNAME PRIVATE "manager/familymanager.cpp")
 +target_sources(PROJECTNAME PRIVATE "net/webserver.cpp")
  target_sources(PROJECTNAME PRIVATE "command.cpp")
  target_sources(PROJECTNAME PRIVATE "common/buffer.cpp")
  target_sources(PROJECTNAME PRIVATE "common/buildnum.cpp")
-@@ -56,6 +67,8 @@ target_sources(PROJECTNAME PRIVATE "command.cpp")
+@@ -56,6 +68,8 @@ target_sources(PROJECTNAME PRIVATE "command.cpp")
  
  target_sources(PROJECTNAME PRIVATE "manager/manager.cpp")
  target_sources(PROJECTNAME PRIVATE "manager/usermanager.cpp")
@@ -29,7 +30,7 @@ index b5e72be..bcf4893 100644
  if (SERVER_DB_PROXY)
  	target_sources(PROJECTNAME PRIVATE "manager/userdatabase.cpp")
  endif()
-@@ -74,6 +87,8 @@ target_sources(PROJECTNAME PRIVATE "manager/minigamemanager.cpp")
+@@ -74,6 +88,8 @@ target_sources(PROJECTNAME PRIVATE "manager/minigamemanager.cpp")
  target_sources(PROJECTNAME PRIVATE "manager/clanmanager.cpp")
  target_sources(PROJECTNAME PRIVATE "manager/rankmanager.cpp")
  target_sources(PROJECTNAME PRIVATE "manager/voxelmanager.cpp")
@@ -38,7 +39,7 @@ index b5e72be..bcf4893 100644
  target_sources(PROJECTNAME PRIVATE "manager/classmodmanager.cpp")
  
  target_sources(PROJECTNAME PRIVATE "packet/packethelper_fulluserinfo.cpp")
-@@ -148,6 +163,8 @@ if (MSVC)
+@@ -148,6 +164,8 @@ if (MSVC)
  else()
  	# don't treat some warnings as errors
  	target_compile_options(PROJECTNAME PRIVATE -Wno-error=sign-compare -Wno-error=unused-variable -Wno-error=delete-non-virtual-dtor -Wno-error=unused-parameter -Wno-error=conversion-null -Wno-error=register -Wno-error=unused-value -Wno-error=reorder -Wno-error=attributes)
@@ -6514,10 +6515,10 @@ index 223166a..9b3a5a0 100644
  	user->UpdateTitles(slot, titleID);
 diff --git a/src/manager/redeemcodes.cpp b/src/manager/redeemcodes.cpp
 new file mode 100644
-index 0000000..3587249
+index 0000000..4cb8eec
 --- /dev/null
 +++ b/src/manager/redeemcodes.cpp
-@@ -0,0 +1,127 @@
+@@ -0,0 +1,150 @@
 +// Offline build: gift codes (the user, 2026-11-21: "Stop Killing Games" and "Welcome", one use each).
 +//
 +// Data/RedeemCodes.json lists the codes, their items and medals (at most 500); the file is read at each use, so a code can be added
@@ -6530,6 +6531,7 @@ index 0000000..3587249
 +#include <wolfssl/wolfcrypt/sha256.h>
 +
 +#include "redeemcodes.h"
++#include "supplyboxes.h"
 +#include "itemmanager.h"
 +#include "userdatabase.h"
 +#include "serverconfig.h"
@@ -6538,6 +6540,8 @@ index 0000000..3587249
 +
 +#include <fstream>
 +#include <cctype>
++#include <map>
++#include <random>
 +
 +using namespace std;
 +using json = nlohmann::json;
@@ -6611,6 +6615,24 @@ index 0000000..3587249
 +			return fail(409, "You already used this code.");
 +
 +	json items = entry->value("Items", json::array());
++	// "RandomDecoders": N decoders drawn at random for each account from the ones this server opens (ItemBox.json's)
++	int randomDecoders = min(max(entry->value("RandomDecoders", 0), 0), 200);
++	map<int, int> drawn;
++	if (randomDecoders)
++	{
++		ifstream boxes("ItemBox.json");
++		json box = json::parse(boxes, nullptr, false, true);
++		vector<int> pool;
++		if (box.is_object())
++			for (auto& b : box.items())
++				if (atoi(b.key().c_str()) > 0)
++					pool.push_back(atoi(b.key().c_str()));
++		static mt19937 rng(random_device{}());
++		for (int k = 0; k < randomDecoders && !pool.empty(); k++)
++			drawn[pool[uniform_int_distribution<size_t>(0, pool.size() - 1)(rng)]]++;
++		for (auto& d : drawn)
++			items.push_back({ { "ItemID", d.first }, { "Count", d.second } });
++	}
 +	int used = g_UserDatabase.GetInventoryItemsCount(user->GetID());
 +	if (used >= 0 && used + (int)items.size() > g_pServerConfig->inventorySlotMax)
 +		return fail(409, "Your inventory doesn't have room for this code's " + to_string(items.size()) +
@@ -6640,6 +6662,8 @@ index 0000000..3587249
 +		user->UpdatePoints(medals);
 +	Logger().Info("RedeemCode: user %d used code %s: %d items added, %d failed, %d medals\n", user->GetID(), name.c_str(), added,
 +		failed, medals);
++	// a supply box from the code gives its first day at once
++	SupplyBoxes::Check(user);
 +	string message = entry->value("Message", "Code redeemed: the items are in your inventory.");
 +	if (failed)
 +		message += " (" + to_string(failed) + " of them couldn't be added.)";
@@ -8774,6 +8798,191 @@ index 0000000..62948ed
 +	}).detach();
 +}
 +static CCommand studiofetch("studiofetch", "Fetch a Studio map from the other PCs (Steam bridge)", "studiofetch <code>", StudioFetch);
+diff --git a/src/manager/supplyboxes.cpp b/src/manager/supplyboxes.cpp
+new file mode 100644
+index 0000000..01b9bc2
+--- /dev/null
++++ b/src/manager/supplyboxes.cpp
+@@ -0,0 +1,161 @@
++// Offline build: boxes the game gives no Use button (the user, 2026-11-27: the new gift codes' supply boxes, Time Bomb
++// Safe and Red Envelopes had to work). Data/SupplyBoxes.json, read at each check:
++//   "Daily": { "<box item id>": { "Name": .., "Items": [{ "ItemID", "Count", "Days" }] | "Random": [{ "Weight", "Items" }] } }
++//     A PeriodicItem box (decoder supply boxes, Time Bomb Safe) in the inventory and not expired gives its items once a
++//     day: counter "Supply:<id>" (mode -1) keeps the last local day it gave them.
++//   "Open": { "<item id>": { "Name": .., "Random": [...] } }
++//     An item the game can't use (Red Envelope, an EventItem): every one in the inventory is opened, one reward each.
++// Checked at login, after each match and after a gift code; what was given is said in the lobby chat.
++#include "supplyboxes.h"
++#include "missionmanager.h"
++#include "userdatabase.h"
++#include "itemmanager.h"
++#include "packetmanager.h"
++#include "serverinstance.h"
++#include "interface/iuser.h"
++#include "main.h"
++#include "common/utils.h"
++
++#include <fstream>
++#include <random>
++#include <ctime>
++
++using namespace std;
++using json = nlohmann::json;
++
++// the local calendar day (as CMissionManager::Today: the supply comes at midnight)
++static int Today()
++{
++	time_t now = time(NULL);
++	tm local = *localtime(&now);
++	local.tm_hour = local.tm_min = local.tm_sec = 0;
++	return (int)((mktime(&local) + 43200) / 86400);
++}
++
++static string Plural(int n, const string& name)
++{
++	return n == 1 ? name : to_string(n) + "x " + name;
++}
++
++// the items of an entry: "Items", or one pick of "Random" by weight
++static json PickItems(const json& entry, mt19937& rng)
++{
++	if (entry.contains("Items"))
++		return entry["Items"];
++	json choices = entry.value("Random", json::array());
++	int total = 0;
++	for (auto& c : choices)
++		total += max(0, c.value("Weight", 1));
++	if (total <= 0)
++		return json::array();
++	int roll = uniform_int_distribution<int>(1, total)(rng);
++	for (auto& c : choices)
++	{
++		roll -= max(0, c.value("Weight", 1));
++		if (roll <= 0)
++			return c.value("Items", json::array());
++	}
++	return json::array();
++}
++
++// adds them; returns what was added, for the chat line
++static vector<string> Give(IUser* user, const json& items, const string& from)
++{
++	vector<string> given;
++	for (auto& i : items)
++	{
++		int itemID = i.value("ItemID", 0), count = max(1, i.value("Count", 1)), days = max(0, i.value("Days", 0));
++		if (itemID <= 0)
++			continue;
++		int result = g_ItemManager.AddItem(user->GetID(), user, itemID, count, days);
++		if (result == ITEM_ADD_SUCCESS)
++			given.push_back(Plural(count, i.value("Name", "item " + to_string(itemID))));
++		else
++			Logger().Warn("SupplyBoxes: user %d, %s: item %d x%d not added (%d)\n", user->GetID(), from.c_str(), itemID, count, result);
++	}
++	return given;
++}
++
++static string JoinList(const vector<string>& parts)
++{
++	string s;
++	for (size_t i = 0; i < parts.size(); i++)
++		s += (i ? ", " : "") + parts[i];
++	return s;
++}
++
++void SupplyBoxes::Check(IUser* user)
++{
++	if (!user)
++		return;
++	ifstream f("Data/SupplyBoxes.json");
++	json cfg = json::parse(f, nullptr, false, true);
++	if (cfg.is_discarded() || !cfg.is_object())
++		return;
++	vector<CUserInventoryItem> inventory;
++	if (g_UserDatabase.GetInventoryItems(user->GetID(), inventory) <= 0)
++		return;
++	static mt19937 rng(random_device{}());
++	int now = (int)g_pServerInstance->GetCurrentTime(), today = Today();
++	vector<string> lines;
++
++	json daily = cfg.value("Daily", json::object());
++	if (daily.is_object() && !daily.empty())
++	{
++		vector<UserCounter_s> counters;
++		g_UserDatabase.GetCounters(user->GetID(), counters);
++		for (auto& d : daily.items())
++		{
++			int boxID = atoi(d.key().c_str());
++			bool owned = false;
++			for (auto& item : inventory)
++				if (item.m_nItemID == boxID && (item.m_nExpiryDate == 0 || item.m_nExpiryDate > now))
++					owned = true;
++			if (!owned)
++				continue;
++			string counter = "Supply:" + d.key();
++			long long last = -1;
++			for (auto& c : counters)
++				if (c.mode == -1 && c.name == counter)
++					last = c.value;
++			if (last >= today)
++				continue;
++			g_UserDatabase.SetCounter(user->GetID(), { -1, counter, today });
++			string name = d.value().value("Name", "Supply box " + d.key());
++			vector<string> given = Give(user, PickItems(d.value(), rng), name);
++			if (!given.empty())
++				lines.push_back(name + ": " + JoinList(given));
++		}
++	}
++
++	json open = cfg.value("Open", json::object());
++	if (open.is_object())
++		for (auto& o : open.items())
++		{
++			int itemID = atoi(o.key().c_str());
++			string name = o.value().value("Name", "Item " + o.key());
++			for (auto& item : inventory)
++			{
++				if (item.m_nItemID != itemID || item.m_nCount <= 0)
++					continue;
++				int n = item.m_nCount;
++				CUserInventoryItem copy = item;
++				g_ItemManager.RemoveItem(user->GetID(), user, copy);
++				vector<string> all;
++				for (int k = 0; k < n; k++)
++				{
++					vector<string> given = Give(user, PickItems(o.value(), rng), name);
++					all.insert(all.end(), given.begin(), given.end());
++				}
++				Logger().Info("SupplyBoxes: user %d opened %d %s\n", user->GetID(), n, name.c_str());
++				if (!all.empty())
++					lines.push_back(Plural(n, name) + " opened: " + JoinList(all));
++			}
++		}
++
++	for (auto& line : lines)
++	{
++		Logger().Info("SupplyBoxes: user %d: %s\n", user->GetID(), line.c_str());
++		g_PacketManager.SendUMsgNoticeMessageInChat(user->GetExtendedSocket(), line);
++	}
++}
+diff --git a/src/manager/supplyboxes.h b/src/manager/supplyboxes.h
+new file mode 100644
+index 0000000..d204c47
+--- /dev/null
++++ b/src/manager/supplyboxes.h
+@@ -0,0 +1,12 @@
++#pragma once
++
++class IUser;
++
++// Offline build: boxes the game gives no Use button (manager/supplyboxes.cpp, Data/SupplyBoxes.json).
++//  - "Daily": decoder supply boxes and the Time Bomb Safe (PeriodicItem): while one is in the inventory and not expired,
++//    it gives its items once a day (at login, after a match, after redeeming a code).
++//  - "Open": the Red Envelope (an EventItem the game can't use): opened by the server, one reward per envelope.
++namespace SupplyBoxes
++{
++	void Check(IUser* user);
++}
 diff --git a/src/manager/transfer.cpp b/src/manager/transfer.cpp
 new file mode 100644
 index 0000000..015bc7e
@@ -10050,10 +10259,11 @@ index 0e1d7d2..b204040 100644
  
  	// clan related
 diff --git a/src/manager/usermanager.cpp b/src/manager/usermanager.cpp
-index b426874..f785587 100644
+index b426874..d2c9eb9 100644
 --- a/src/manager/usermanager.cpp
 +++ b/src/manager/usermanager.cpp
-@@ -1,3 +1,8 @@
+@@ -1,3 +1,9 @@
++#include "supplyboxes.h"
 +#include "zsriftmanager.h"
 +#include "guestprofile.h"
 +#include "transfer.h"
@@ -10062,7 +10272,7 @@ index b426874..f785587 100644
  #include "usermanager.h"
  #include "channelmanager.h"
  #include "userdatabase.h"
-@@ -16,6 +21,8 @@
+@@ -16,6 +22,8 @@
  #include "csvtable.h"
  #include "serverinstance.h"
  #include "serverconfig.h"
@@ -10071,7 +10281,7 @@ index b426874..f785587 100644
  
  using namespace std;
  
-@@ -157,6 +164,11 @@ bool CUserManager::OnLoginPacket(CReceivePacket* msg, IExtendedSocket* socket)
+@@ -157,6 +165,11 @@ bool CUserManager::OnLoginPacket(CReceivePacket* msg, IExtendedSocket* socket)
  
  	socket->SetHWID(hwid);
  
@@ -10083,7 +10293,7 @@ index b426874..f785587 100644
  	if (g_UserDatabase.IsHWIDBanned(hwid))
  	{
  		Logger().Info("Client (%s) disconnected from the server due to banned HWID\n", socket->GetIP().c_str());
-@@ -171,6 +183,254 @@ bool CUserManager::OnLoginPacket(CReceivePacket* msg, IExtendedSocket* socket)
+@@ -171,6 +184,254 @@ bool CUserManager::OnLoginPacket(CReceivePacket* msg, IExtendedSocket* socket)
  	return true;
  }
  
@@ -10338,7 +10548,7 @@ index b426874..f785587 100644
  bool CUserManager::OnUdpPacket(CReceivePacket* msg, IExtendedSocket* socket)
  {
  	LOG_PACKET;
-@@ -316,7 +576,7 @@ bool CUserManager::OnVersionPacket(CReceivePacket* msg, IExtendedSocket* socket)
+@@ -316,7 +577,7 @@ bool CUserManager::OnVersionPacket(CReceivePacket* msg, IExtendedSocket* socket)
  		GuestData_s& data = socket->GetGuestData();
  		if (!data.isGuest)
  			g_PacketManager.SendVersion(socket, 0);
@@ -10347,7 +10557,7 @@ index b426874..f785587 100644
  			SendGuestUserPacket(socket);
  
  		data.isGuest = true;
-@@ -623,11 +883,267 @@ vector<CUserInventoryItem>& CUserManager::GetDefaultInventoryItems()
+@@ -623,11 +884,267 @@ vector<CUserInventoryItem>& CUserManager::GetDefaultInventoryItems()
  	return m_DefaultItems;
  }
  
@@ -10616,7 +10826,7 @@ index b426874..f785587 100644
  }
  
  void CUserManager::SendLoginPacket(IUser* user, const CUserCharacter& character)
-@@ -650,16 +1166,26 @@ void CUserManager::SendLoginPacket(IUser* user, const CUserCharacter& character)
+@@ -650,16 +1167,26 @@ void CUserManager::SendLoginPacket(IUser* user, const CUserCharacter& character)
  
  	SendMetadata(socket);
  
@@ -10650,7 +10860,7 @@ index b426874..f785587 100644
  
  	if (g_pServerConfig->activeMiniGamesFlag & kEventFlag_WeaponRelease)
  		g_MiniGameManager.SendWeaponReleaseUpdate(user);
-@@ -673,19 +1199,23 @@ void CUserManager::SendLoginPacket(IUser* user, const CUserCharacter& character)
+@@ -673,19 +1200,24 @@ void CUserManager::SendLoginPacket(IUser* user, const CUserCharacter& character)
  	g_PacketManager.SendShopPopularProducts(socket, g_ShopManager.GetPopularProducts());
  
  	// CN: 欢迎来到CSN服务器! 我们的服务器是非商业性的, 不要相信任何人说的售卖CSOL私服的信息.\n官方Discord: https://discord.gg/EvUAY6D \n
@@ -10668,6 +10878,7 @@ index b426874..f785587 100644
 -		g_PacketManager.SendUMsgNoticeMsgBoxToUuid(socket, g_pServerConfig->welcomeMessage);
 +		// offline build: the day's login reward (Data/DailyLogin.json), shown after the welcome box
 +		g_MissionManager.OnLogin(user); // Login Supplies: the calendar, and a chat line when today's is ready
++		SupplyBoxes::Check(user);       // decoder supply boxes' daily decoders, Red Envelopes (supplyboxes.h)
 +	}
  
  	g_ChannelManager.JoinChannel(user, g_ChannelManager.channelServers[0]->GetID(), g_ChannelManager.channelServers[0]->GetChannels()[0]->GetID(), false);
@@ -10683,7 +10894,7 @@ index b426874..f785587 100644
  
  	g_PacketManager.SendLeaguePacket(socket);
  
-@@ -749,7 +1279,15 @@ void CUserManager::SendMetadata(IExtendedSocket* socket)
+@@ -749,7 +1281,15 @@ void CUserManager::SendMetadata(IExtendedSocket* socket)
  	if (flag & kMetadataFlag_PPSystem)
  		g_PacketManager.SendMetadataPPSystem(socket);
  	if (flag & kMetadataFlag_Item)
@@ -10699,7 +10910,7 @@ index b426874..f785587 100644
  	if (flag & kMetadataFlag_VoxelList)
  		g_PacketManager.SendMetadataVoxelList(socket);
  	if (flag & kMetadataFlag_VoxelItem)
-@@ -877,8 +1415,10 @@ bool CUserManager::OnCharacterPacket(CReceivePacket* msg, IExtendedSocket* socke
+@@ -877,8 +1417,10 @@ bool CUserManager::OnCharacterPacket(CReceivePacket* msg, IExtendedSocket* socke
  	g_ItemManager.OnUserLogin(user);
  	g_ClanManager.OnUserLogin(user);
  	g_QuestManager.OnUserLogin(user);
@@ -10710,7 +10921,7 @@ index b426874..f785587 100644
  
  	return true;
  }
-@@ -951,7 +1491,7 @@ bool CUserManager::OnUpdateInfoPacket(CReceivePacket* msg, IExtendedSocket* sock
+@@ -951,7 +1493,7 @@ bool CUserManager::OnUpdateInfoPacket(CReceivePacket* msg, IExtendedSocket* sock
  	case UpdateInfoPacketType::RequestUpdateTutorial:
  	{
  		int tutorial = msg->ReadUInt8();
@@ -10719,7 +10930,7 @@ index b426874..f785587 100644
  
  		break;
  	}
-@@ -989,6 +1529,16 @@ void CUserManager::OnSecondTick(time_t curTime)
+@@ -989,6 +1531,16 @@ void CUserManager::OnSecondTick(time_t curTime)
  {
  	for (auto u : m_Users)
  		u->OnTick();
@@ -10736,7 +10947,7 @@ index b426874..f785587 100644
  }
  
  void CUserManager::SendNoticeMessageToAll(const string& msg)
-@@ -1049,6 +1599,7 @@ int CUserManager::LoginUser(IExtendedSocket* socket, const string& userName, con
+@@ -1049,6 +1601,7 @@ int CUserManager::LoginUser(IExtendedSocket* socket, const string& userName, con
  	}
  
  	Logger().Info(OBFUSCATE("User logged in (IP: %s, UID: %d, Username: %s)\n"), newUser->GetNetworkConfig().m_szExternalIpAddress.c_str(), userID, userName.c_str());
@@ -10744,7 +10955,7 @@ index b426874..f785587 100644
  
  	// Update last login time, last IP and last HWID
  	CUserData data = newUser->GetUser(UDATA_FLAG_FIRSTLOGONTIME);
-@@ -1080,8 +1631,10 @@ int CUserManager::LoginUser(IExtendedSocket* socket, const string& userName, con
+@@ -1080,8 +1633,10 @@ int CUserManager::LoginUser(IExtendedSocket* socket, const string& userName, con
  		g_ItemManager.OnUserLogin(newUser);
  		g_ClanManager.OnUserLogin(newUser);
  		g_QuestManager.OnUserLogin(newUser);
@@ -10755,7 +10966,7 @@ index b426874..f785587 100644
  	}
  
  	return LOGIN_OK;
-@@ -1197,6 +1750,9 @@ void CUserManager::RemoveUserBySocket(IExtendedSocket* socket)
+@@ -1197,6 +1752,9 @@ void CUserManager::RemoveUserBySocket(IExtendedSocket* socket)
  
  bool CUserManager::RemoveUserInternal(IUser* user)
  {
@@ -10765,7 +10976,7 @@ index b426874..f785587 100644
  	m_Users.erase(remove(begin(m_Users), end(m_Users), user), end(m_Users));
  
  	CleanUpUser(user);
-@@ -1285,7 +1841,7 @@ bool CUserManager::OnUserSurveyPacket(CReceivePacket* msg, IExtendedSocket* sock
+@@ -1285,7 +1843,7 @@ bool CUserManager::OnUserSurveyPacket(CReceivePacket* msg, IExtendedSocket* sock
  
  	IUser* user = GetUserBySocket(socket);
  	if (user == NULL)
@@ -10975,10 +11186,11 @@ index c7d2bdb..75d0ee9 100644
 +extern CVoxelManager g_VoxelManager;
 diff --git a/src/manager/warbondmanager.cpp b/src/manager/warbondmanager.cpp
 new file mode 100644
-index 0000000..f6dd6bb
+index 0000000..c5e25d8
 --- /dev/null
 +++ b/src/manager/warbondmanager.cpp
-@@ -0,0 +1,1236 @@
+@@ -0,0 +1,1238 @@
++#include "supplyboxes.h"
 +#include "channelmanager.h"
 +#include "guestprofile.h"
 +#include "transfer.h"
@@ -12139,6 +12351,7 @@ index 0000000..f6dd6bb
 +	g_BingoManager.OnMatchResult(user, kills, won);
 +	g_ZSRiftManager.OnMatchResult(user, gameMode, kills, won);
 +	g_MissionManager.OnMatchEnd(user); // a session that went past midnight: Login Supplies get the new day
++	SupplyBoxes::Check(user);          // (and the supply boxes theirs)
 +	return medals;
 +}
 +

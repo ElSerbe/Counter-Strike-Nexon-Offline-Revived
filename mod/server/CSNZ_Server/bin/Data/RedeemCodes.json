@@ -1,7 +1,8 @@
 {
 	// Offline build: gift codes (manager/redeemcodes.cpp). Each account can use each code once: in the shop page's
 	// "Redeem a code" box or with /redeem <code> in the lobby chat. A code is typed in any case, with or without spaces
-	// or dashes ("Stop Killing Games" = "STOPKILLINGGAMES"). Items: ItemID, Count, Days (0 = permanent); Medals: at most 500.
+	// or dashes ("Stop Killing Games" = "STOPKILLINGGAMES"). Items: ItemID, Count, Days (0 = permanent); Medals: at most 500;
+	// RandomDecoders: that many decoders drawn at random for each account (from ItemBox.json's).
 	"Codes": {
 		// 5 of every decoder that opens in this server (ItemBox.json: Item.csv's 44 LotteryKeyItem decoders)
 		"STOPKILLINGGAMES": {
@@ -56,6 +57,42 @@
 				{ "ItemID": 180, "Count": 1, "Days": 10 }   // Zombie Mode Double UP
 			]
 		},
+		// (2026-11-27) "No pay to win": for everyone
+		"NOP2W": {
+			"Message": "No Pay to Win! A Transcendence class box, a decoder supply box, weapons, coupons, point boxes and 40 random decoders added.",
+			"RandomDecoders": 40,
+			"Items": [
+				{ "ItemID": 2942, "Count": 1 },                 // Snowflake Transcendence Class Box (ItemRewards.json: a random Transcendence character)
+				{ "ItemID": 2770, "Count": 1, "Days": 15 },     // Rare Decoder Supply Box, 15 days: a Rare Decoder a day (SupplyBoxes.json)
+				{ "ItemID": 9084, "Count": 10 },                // Weapon Paint Decoder
+				{ "ItemID": 1030, "Count": 5 },                 // Point Coupon Lv. 1 (100 points)
+				{ "ItemID": 5227, "Count": 1 },                 // Maverick Points Voucher
+				{ "ItemID": 2632, "Count": 1 },                 // Jackpot Point Box (ItemRewards.json: Point Coupons)
+				{ "ItemID": 434, "Count": 1 },                  // StG44 Gold Edition
+				{ "ItemID": 8203, "Count": 1 },                 // Elegant Mosin-Nagant
+				{ "ItemID": 517, "Count": 1 },                  // BALROG-I
+				{ "ItemID": 816, "Count": 1 }                   // VULCANUS-9
+			]
+		},
+		// (2026-11-27) thanks for 5000 downloads
+		"5000DOWNLOADS": {
+			"Message": "Thank you for 5000 downloads! Characters, weapons, costumes, decoder supply boxes, coupons and 40 random decoders added.",
+			"RandomDecoders": 40,
+			"Items": [
+				{ "ItemID": 374, "Count": 1 },                  // Tiger Tattoo
+				{ "ItemID": 652, "Count": 1 },                  // Corps 1 Armband
+				{ "ItemID": 8809, "Count": 1 },                 // CSO Pendant
+				{ "ItemID": 8697, "Count": 1, "Days": 30 },     // Transcendence Decoder Supply Box, 30 days: a Transcendence Decoder a day
+				{ "ItemID": 2822, "Count": 1, "Days": 15 },     // Epic Decoder Ticket, 15 days: an Epic Decoder a day
+				{ "ItemID": 744, "Count": 3 },                  // Paint Reset Blueprint
+				{ "ItemID": 392, "Count": 1 },                  // Fernando
+				{ "ItemID": 150, "Count": 1 },                  // Criss
+				{ "ItemID": 1031, "Count": 2 },                 // Point Coupon Lv. 2
+				{ "ItemID": 8229, "Count": 1 },                 // PP-19 Bizon Splash
+				{ "ItemID": 711, "Count": 1 },                  // JANUS-3
+				{ "ItemID": 320, "Count": 1 }                   // Infinity Black
+			]
+		},
 		// for Patreon supporters: secret codes, only their SHA-256 here (the codes are given on Patreon)
 		"PATREON1": {
 			"Hash": "f9695da9a3f0d6c1eb88370a9804e0313f844bbc7a1bbde75b196256ed57d80a", // the code is secret (given on Patreon)
@@ -79,6 +116,46 @@
 				{ "ItemID": 8292, "Count": 5 },             // Transcendence Decoder
 				{ "ItemID": 1030, "Count": 10 },            // Point Coupon Lv. 1 (100 points)
 				{ "ItemID": 2179, "Count": 40 }             // Bingo Ticket
+			]
+		},
+		"PATREON3": {
+			"Hash": "77fd7e362227a5a1908e13bca150f2816696003b6a7caf4670ced2a2cc3a97c0", // the code is secret (given on Patreon)
+			"Message": "Thank you for your support! Luna, five weapons, Transcendence Decoders, supply boxes, costumes and 20 random decoders added.",
+			"RandomDecoders": 20,
+			"Items": [
+				{ "ItemID": 9395, "Count": 1 },                 // Luna the Witch of Night (buffclass25s3ct)
+				{ "ItemID": 1032, "Count": 1 },                 // Point Coupon Lv. 3
+				{ "ItemID": 8292, "Count": 15 },                // Transcendence Decoder
+				{ "ItemID": 9234, "Count": 1, "Days": 7 },      // Class Decoder Supply Box, 7 days: a Class Decoder a day
+				{ "ItemID": 9267, "Count": 1, "Days": 7 },      // Transcendence Decoder Supply Box, 7 days: a Transcendence Decoder a day
+				{ "ItemID": 877, "Count": 1 },                  // Desert Eagle Crimson Hunter
+				{ "ItemID": 784, "Count": 1 },                  // THANATOS-5
+				{ "ItemID": 587, "Count": 1 },                  // JANUS-5
+				{ "ItemID": 482, "Count": 1 },                  // BALROG-V
+				{ "ItemID": 172, "Count": 1 },                  // Desert Eagle 50C Gold Edition
+				{ "ItemID": 2985, "Count": 3 },                 // Red Envelope (opened by the server: SupplyBoxes.json)
+				{ "ItemID": 2008, "Count": 1, "Days": 7 },      // Time Bomb Safe, 7 days: a reward a day (SupplyBoxes.json)
+				{ "ItemID": 3625, "Count": 10 },                // Explosive Ammo (Zombie Scenario add-on)
+				{ "ItemID": 8074, "Count": 1 },                 // Succubus Light Zombie (Costume)
+				{ "ItemID": 8714, "Count": 1 },                 // Pathfinder's Rizuka helmet (y22s3headcos)
+				{ "ItemID": 8759, "Count": 1 }                  // Wild Sheriff's Badge (y22competitioncos_kr_back)
+			]
+		},
+		"PATREON4": {
+			"Hash": "82593e29b4250ba882bcdd81a8654cf06775a3174bd83f51bda843d6b86af35c", // the code is secret (given on Patreon)
+			"Message": "Thank you for your support! Headliner Ling Ling, Gladius, weapons, costumes, coupons, Epic weapon boxes and 20 random decoders added.",
+			"RandomDecoders": 20,
+			"Items": [
+				{ "ItemID": 476, "Count": 1 },                  // Angel Wings
+				{ "ItemID": 9222, "Count": 1 },                 // Cat Broadcasting Camera (buffclass25s1tr_pet)
+				{ "ItemID": 589, "Count": 1 },                  // Drill Gun
+				{ "ItemID": 8199, "Count": 1 },                 // Elegant Hunting Dagger
+				{ "ItemID": 8148, "Count": 1 },                 // Trinity Grenade
+				{ "ItemID": 9220, "Count": 1 },                 // Headliner Ling Ling (buffclass25s1tr)
+				{ "ItemID": 8988, "Count": 1 },                 // Gladius (buffclass24s1tr)
+				{ "ItemID": 1030, "Count": 20 },                // Point Coupon Lv. 1 (100 points): the 2 x 1000 points
+				{ "ItemID": 2632, "Count": 1 },                 // Jackpot Point Box
+				{ "ItemID": 2618, "Count": 3 }                  // Epic Edition Weapon Selection Box (ItemRewards.json: pick an Epic weapon)
 			]
 		}
 	}
