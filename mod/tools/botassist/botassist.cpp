@@ -6182,6 +6182,7 @@ static void CommandFile()
 
 #include "modes/zombie_humans.inl"
 #include "match_teams.inl" // each player's side for the server's rounds won
+#include "tutorial.inl"    // Tutorial 1 and 2 finished: the tutorial window's bits
 #include "modes/zombie_holdout.inl"
 
 #include "modes/zombie2_mutation.inl"
@@ -6304,6 +6305,7 @@ static void HookedStartFrame()
         SfFrame();
         CrowdReport();
         MatchTeamsFrame();
+        TutorialFrame();
         if (CoopMode())
         {
             UpdateBarricades(); // zombies against barricades, bots or not

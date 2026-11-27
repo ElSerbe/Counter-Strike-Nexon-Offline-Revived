@@ -5011,10 +5011,10 @@ index 0000000..1a0e4c5
 +bool IsZombieModeOffline(int mode);
 diff --git a/src/manager/missionmanager.cpp b/src/manager/missionmanager.cpp
 new file mode 100644
-index 0000000..7832e39
+index 0000000..4327b77
 --- /dev/null
 +++ b/src/manager/missionmanager.cpp
-@@ -0,0 +1,528 @@
+@@ -0,0 +1,529 @@
 +#include "missionmanager.h"
 +#include "medalmanager.h"
 +#include "warbondmanager.h"
@@ -5470,6 +5470,7 @@ index 0000000..7832e39
 +				g_PacketManager.SendUMsgNoticeMessageInChat(user->GetExtendedSocket(), "Bonus: a " + decoder + " (Inventory > Decoder)");
 +			g_MedalManager.AddCounter(user, "RequestsDone", 1);
 +			g_MedalManager.CheckMedals(user);
++			OnTutorialUpdate(user, 1 << 3); // the tutorial window's "Mission Chain": a mission request done
 +		}
 +	}
 +	else if (action == "claimEvent" || action == "claimBonus")
@@ -11209,10 +11210,10 @@ index c7d2bdb..75d0ee9 100644
 +extern CVoxelManager g_VoxelManager;
 diff --git a/src/manager/warbondmanager.cpp b/src/manager/warbondmanager.cpp
 new file mode 100644
-index 0000000..d727b55
+index 0000000..0847326
 --- /dev/null
 +++ b/src/manager/warbondmanager.cpp
-@@ -0,0 +1,1255 @@
+@@ -0,0 +1,1268 @@
 +#include "supplyboxes.h"
 +#include "channelmanager.h"
 +#include "guestprofile.h"
@@ -11504,6 +11505,19 @@ index 0000000..d727b55
 +				va("sv_cheats is on: this match's medals will be cut by %d%%.", m_Medals.cheatPenalty));
 +		}
 +		result = { { "ok", true }, { "match", match != NULL }, { "penalty", m_Medals.cheatPenalty } };
++	}
++	else if (req.method == "POST" && req.path == "/api/tutorial")
++	{
++		// botassist.asi: the player finished a tutorial map ({"bit":1} Tutorial 1, tuto_0; {"bit":2} Tutorial 2, tuto_0a):
++		// the game itself only asks for the window's bits (RequestUpdateTutorial carries nothing), so they never got set
++		json body = json::parse(req.body, nullptr, false);
++		int bit = body.is_object() ? body.value("bit", -1) : -1;
++		if (bit >= 0 && bit <= 2)
++		{
++			Logger().Info("WarbondManager: user %d finished tutorial bit %d\n", user->GetID(), bit);
++			g_MissionManager.OnTutorialUpdate(user, 1 << bit);
++		}
++		result = { { "ok", bit >= 0 && bit <= 2 } };
 +	}
 +	else if (req.method == "POST" && req.path == "/api/matchteams")
 +	{
@@ -13803,7 +13817,7 @@ index 4c688f4..c1e0b2a 100644
 +	bool m_bWouldBlock; // last read hit WOLFSSL_ERROR_WANT_READ/WRITE (non-blocking SSL, retry on next poll)
  };
 diff --git a/src/room/gamematch.cpp b/src/room/gamematch.cpp
-index 65418d8..6d91f68 100644
+index 65418d8..5a83610 100644
 --- a/src/room/gamematch.cpp
 +++ b/src/room/gamematch.cpp
 @@ -1,4 +1,6 @@
@@ -13813,7 +13827,7 @@ index 65418d8..6d91f68 100644
  #include "serverconfig.h"
  #include "manager/questmanager.h"
  #include "manager/packetmanager.h"
-@@ -6,9 +8,16 @@
+@@ -6,9 +8,17 @@
  #include "manager/itemmanager.h"
  #include "manager/hostmanager.h"
  #include "manager/userdatabase.h"
@@ -13822,6 +13836,7 @@ index 65418d8..6d91f68 100644
 +#include "manager/moderewards.h"
 +#include "manager/familymanager.h"
 +#include "manager/guestprofile.h"
++#include "manager/missionmanager.h"
  
  #include "user/userinventoryitem.h"
  
@@ -13830,7 +13845,7 @@ index 65418d8..6d91f68 100644
  using namespace std;
  
  CGameMatchUserStat::CGameMatchUserStat()
-@@ -19,6 +28,7 @@ CGameMatchUserStat::CGameMatchUserStat()
+@@ -19,6 +29,7 @@ CGameMatchUserStat::CGameMatchUserStat()
  	m_nDeaths = 0;
  	m_nPointsEarned = 0;
  	m_nBonusPointsEarned = 0;
@@ -13838,7 +13853,7 @@ index 65418d8..6d91f68 100644
  	m_nExpEarned = 0;
  	m_nBonusExpEarned = 0;
  	m_nItemBonusPoints = 0;
-@@ -209,6 +219,7 @@ void CGameMatch::Connect(IUser* user)
+@@ -209,6 +220,7 @@ void CGameMatch::Connect(IUser* user)
  	{
  		CGameMatchUserStat* userStat = new CGameMatchUserStat();
  		userStat->m_pUser = user;
@@ -13846,7 +13861,7 @@ index 65418d8..6d91f68 100644
  
  		m_UserStats.push_back(userStat);
  	}
-@@ -220,6 +231,18 @@ void CGameMatch::Disconnect(IUser* user)
+@@ -220,6 +232,18 @@ void CGameMatch::Disconnect(IUser* user)
  	if (stat)
  	{
  		g_QuestManager.OnGameMatchLeave(user, stat->m_TempQuestProgress, stat->m_TempQuestEventProgress);
@@ -13865,7 +13880,7 @@ index 65418d8..6d91f68 100644
  
  		delete stat;
  		m_UserStats.erase(remove(begin(m_UserStats), end(m_UserStats), stat), end(m_UserStats));
-@@ -271,6 +294,8 @@ void CGameMatch::OnUpdateKillCounter(IUser* user, int kills)
+@@ -271,6 +295,8 @@ void CGameMatch::OnUpdateKillCounter(IUser* user, int kills)
  	if (stat)
  	{
  		stat->UpdateKillsCount(kills);
@@ -13874,7 +13889,7 @@ index 65418d8..6d91f68 100644
  	}
  }
  
-@@ -292,7 +317,15 @@ void CGameMatch::OnKillEvent(IUser* user, GameMatch_KillEvent& killEvent)
+@@ -292,7 +318,15 @@ void CGameMatch::OnKillEvent(IUser* user, GameMatch_KillEvent& killEvent)
  
  	// don't count player suicide
  	if (killEvent.killerUserID != killEvent.victimUserID)
@@ -13890,7 +13905,7 @@ index 65418d8..6d91f68 100644
  
  	g_QuestManager.OnKillEvent(stat, this, killEvent);
  
-@@ -320,20 +353,84 @@ void CGameMatch::OnKillEvent(IUser* user, GameMatch_KillEvent& killEvent)
+@@ -320,20 +354,84 @@ void CGameMatch::OnKillEvent(IUser* user, GameMatch_KillEvent& killEvent)
  	{
  		character.killsToGetGachaponItem = 100;
  
@@ -13982,7 +13997,7 @@ index 65418d8..6d91f68 100644
  	m_nCtWinCount = ctWinCount;
  	m_nTerWinCount = tWinCount;
  
-@@ -356,6 +453,7 @@ void CGameMatch::OnBombExplode(IUser* user)
+@@ -356,6 +454,7 @@ void CGameMatch::OnBombExplode(IUser* user)
  	if (!stat)
  		return;
  
@@ -13990,7 +14005,7 @@ index 65418d8..6d91f68 100644
  	g_QuestManager.OnBombExplode(stat, this);
  }
  
-@@ -365,6 +463,7 @@ void CGameMatch::OnBombDefuse(IUser* user)
+@@ -365,6 +464,7 @@ void CGameMatch::OnBombDefuse(IUser* user)
  	if (!stat)
  		return;
  
@@ -13998,7 +14013,7 @@ index 65418d8..6d91f68 100644
  	g_QuestManager.OnBombDefuse(stat, this);
  }
  
-@@ -374,6 +473,7 @@ void CGameMatch::OnHostageEscape(IUser* user)
+@@ -374,6 +474,7 @@ void CGameMatch::OnHostageEscape(IUser* user)
  	if (!stat)
  		return;
  
@@ -14006,7 +14021,7 @@ index 65418d8..6d91f68 100644
  	g_QuestManager.OnHostageEscape(stat, this);
  }
  
-@@ -383,6 +483,7 @@ void CGameMatch::OnMonsterKill(IUser* user, int monsterType)
+@@ -383,6 +484,7 @@ void CGameMatch::OnMonsterKill(IUser* user, int monsterType)
  	if (!stat)
  		return;	
  
@@ -14014,7 +14029,7 @@ index 65418d8..6d91f68 100644
  	g_QuestManager.OnMonsterKill(stat, this, monsterType);
  }
  
-@@ -391,6 +492,7 @@ void CGameMatch::OnDropBoxPickup(IUser* user, int rewardID)
+@@ -391,6 +493,7 @@ void CGameMatch::OnDropBoxPickup(IUser* user, int rewardID)
  	CGameMatchUserStat* stat = GetGameUserStat(user);
  	if (!stat)
  		return;
@@ -14022,7 +14037,7 @@ index 65418d8..6d91f68 100644
  
  #ifndef PUBLIC_RELEASE
  	if (m_nGameMode != 15 && m_nGameMode != 17 && m_nGameMode != 26 && m_nGameMode != 28)
-@@ -430,8 +532,51 @@ void CGameMatch::OnKiteKill(IUser* user)
+@@ -430,9 +533,59 @@ void CGameMatch::OnKiteKill(IUser* user)
  
  void CGameMatch::OnGameMatchEnd()
  {
@@ -14033,6 +14048,13 @@ index 65418d8..6d91f68 100644
 +
  	CalculateGameResult();
  	ApplyGameResult();
+ 
++	// offline build: the Zombie Scenario tutorial (zs_zombieux, map 144) won: the tutorial window's "Zombie
++	// Experience" (bit 0) for everyone who played it
++	if (m_nMapID == 144 && m_nCtWinCount > 0)
++		for (auto stat : m_UserStats)
++			if (stat->m_pUser)
++				g_MissionManager.OnTutorialUpdate(stat->m_pUser, 1 << 0);
 +	g_MedalManager.OnMatchEnd(this); // statistics and medals
 +
 +	// offline build: the items of the mode (Data/ModeRewards.json); m_UserStats is sorted by CalculateFirstPlace
@@ -14071,10 +14093,11 @@ index 65418d8..6d91f68 100644
 +			g_PacketManager.SendUMsgNoticeMessageInChat(stat->m_pUser->GetExtendedSocket(),
 +				va("sv_cheats was on in this match: its medals were cut by %d%%.", g_WarbondManager.CheatPenalty()));
 +		}
- 
++
  	Logger().Info("CGameMatch::OnGameMatchEnd: gamemode: %d, CT rounds win count: %d, T rounds win count: %d\n", m_nGameMode, m_nCtWinCount, m_nTerWinCount);
  }
-@@ -532,7 +677,6 @@ void CGameMatch::CalculateGameResult()
+ 
+@@ -532,7 +685,6 @@ void CGameMatch::CalculateGameResult()
  	CalculateFirstPlace();
  
  	int expCoef = GetExpCoefficient();
@@ -14082,7 +14105,7 @@ index 65418d8..6d91f68 100644
  
  	for (auto stat : m_UserStats)
  	{
-@@ -541,8 +685,22 @@ void CGameMatch::CalculateGameResult()
+@@ -541,8 +693,22 @@ void CGameMatch::CalculateGameResult()
  		// calc exp
  		stat->m_nExpEarned = stat->m_nKills > 0 ? expCoef * stat->m_nKills : expCoef;
  
@@ -14107,7 +14130,7 @@ index 65418d8..6d91f68 100644
  
  		// calc bonus exp/points
  		auto bonusPercentageClass = find_if(g_pServerConfig->gameMatch.bonusPercentageClasses.begin(), g_pServerConfig->gameMatch.bonusPercentageClasses.end(),
-@@ -601,6 +759,10 @@ void CGameMatch::CalculateGameResult()
+@@ -601,6 +767,10 @@ void CGameMatch::CalculateGameResult()
  			}
  		}
  
@@ -14118,7 +14141,7 @@ index 65418d8..6d91f68 100644
  		if (stat->m_nExpEarned > 9999)
  		{
  			stat->m_nExpEarned = 9999;
-@@ -623,6 +785,9 @@ void CGameMatch::ApplyGameResult()
+@@ -623,6 +793,9 @@ void CGameMatch::ApplyGameResult()
  
  		int totalPoints = stat->m_nPointsEarned + stat->m_nBonusPointsEarned;
  		user->UpdatePoints(totalPoints);
