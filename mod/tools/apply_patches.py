@@ -604,6 +604,66 @@ PATCHES += [
 ]
 
 
+# Scenario loading screen (CSO_LoadingDialog_Scen.res): its board (the paper on the wall) is a 1024x768 picture the dialog
+# stretches to the screen with image->SetSize(screen w, screen h) (vtable +0x18; 0x10569663 does it with the screen size the
+# map info function 0x105694d0 keeps at [ebp-0x978] / [ebp-0x974]). After reading the map's rewards that function swaps the
+# board for "scen/lodaingbg_no_reward" (no rewards, 0x10569bd6) or reloads "scen/loadingbg" (0x10569c52) and never sizes the
+# new picture, so on a wide screen it stayed 1024x768 in the top-left corner while the text and the episode picture stretched.
+# Each swap now calls a stub that stores the picture as before and repeats that SetSize. No 26-byte gap exists, so each
+# site gets its own 20-byte gap (the store, ecx saved, the height pushed) and both jump to a shared tail (the width, the call,
+# ecx back: the reward path still needs it). Only ebp-relative and relative operands: GameUI.dll is loaded at another base.
+_SCEN_SITE_NO_REWARD = 0x10569BD6  # mov [esi+0x1c4],eax after GetImage("scen/lodaingbg_no_reward")
+_SCEN_SITE_REWARD = 0x10569C52     # mov [edi+0x1c4],eax after GetImage("scen/loadingbg")
+_SCEN_CAVE_NO_REWARD = 0x10548DDC  # 20 int3 bytes after a ret
+_SCEN_CAVE_REWARD = 0x1059BD7C     # 20 int3 bytes after a ret 4
+_SCEN_TAIL = 0x105F998C            # 20 int3 bytes after a ret 8 (13 used)
+_SCEN_PUSH_TALL = bytes.fromhex("ffb58cf6ffff")  # push [ebp-0x974]  (screen height)
+_SCEN_PUSH_WIDE = bytes.fromhex("ffb588f6ffff")  # push [ebp-0x978]  (screen width)
+PATCHES += [
+    (
+        "GameUI.dll",
+        _SCEN_SITE_NO_REWARD,
+        bytes.fromhex("8986c4010000"),                                       # mov [esi+0x1c4],eax
+        b"\xe8" + _rel32(_SCEN_SITE_NO_REWARD + 5, _SCEN_CAVE_NO_REWARD) + b"\x90",
+        "Scenario loading screen: the board without rewards is sized to the screen",
+    ),
+    (
+        "GameUI.dll",
+        _SCEN_SITE_REWARD,
+        bytes.fromhex("8987c4010000"),                                       # mov [edi+0x1c4],eax
+        b"\xe8" + _rel32(_SCEN_SITE_REWARD + 5, _SCEN_CAVE_REWARD) + b"\x90",
+        "Scenario loading screen: the board with rewards is sized to the screen",
+    ),
+    (
+        "GameUI.dll",
+        _SCEN_CAVE_NO_REWARD,
+        b"\xcc" * 20,
+        bytes.fromhex("8986c4010000")                                        # mov [esi+0x1c4],eax (the store it replaced)
+        + bytes.fromhex("518bc8") + _SCEN_PUSH_TALL                          # push ecx; mov ecx,eax; push height
+        + b"\xe9" + _rel32(_SCEN_CAVE_NO_REWARD + 20, _SCEN_TAIL),           # jmp tail
+        "Scenario loading screen stub (no rewards): store the board, then size it",
+    ),
+    (
+        "GameUI.dll",
+        _SCEN_CAVE_REWARD,
+        b"\xcc" * 20,
+        bytes.fromhex("8987c4010000")                                        # mov [edi+0x1c4],eax (the store it replaced)
+        + bytes.fromhex("518bc8") + _SCEN_PUSH_TALL                          # push ecx; mov ecx,eax; push height
+        + b"\xe9" + _rel32(_SCEN_CAVE_REWARD + 20, _SCEN_TAIL),              # jmp tail
+        "Scenario loading screen stub (rewards): store the board, then size it",
+    ),
+    (
+        "GameUI.dll",
+        _SCEN_TAIL,
+        b"\xcc" * 13,
+        _SCEN_PUSH_WIDE                                                      # push width
+        + bytes.fromhex("8b01ff5018")                                        # mov eax,[ecx]; call [eax+0x18] (SetSize)
+        + bytes.fromhex("59c3"),                                             # pop ecx; ret
+        "Scenario loading screen stub: board->SetSize(screen width, screen height)",
+    ),
+]
+
+
 # Room lists from servers older than v1.1.43: they write a byte for the room entry's high flag 1<<6, which this game never
 # reads (its parser hw 0x25ff470 reads the high bits 0-3, 5, 7-20), so every room after the first was read one byte off and a
 # map number taken for the map playlist's length overran the room: the game closed (hw.dll+0x2b3aa7) on joining or leaving
