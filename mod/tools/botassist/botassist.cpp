@@ -962,18 +962,62 @@ static void UpdateHurtZones()
     g_hurtNext = now + 5.0f;
     std::vector<HurtZone> zones;
     float minDmg = 1e9f, maxDmg = 0;
+    int lasers = 0, movers = 0;
+    // Besides trigger_hurt: beams that hurt (env_laser, env_beam between two points: the scenario maps' laser grids,
+    // zs_contact 250 a touch, zs_defense 2500) while drawn, as small boxes along the beam; and moving or turning brushes
+    // that hurt hard (crushers, saws: func_door 9999 in zs_behind...) where they are now. Bots walked into them (reports
+    // 2026-11-27: "they keep walking on the lasers", "they go in saws"). A CBeam keeps its start in origin and its end in
+    // angles (two point ends); EF_NODRAW: off.
+    static const int EV_EFFECTS = 0x128, EV_AVELOCITY = 0x5c, EF_NODRAW = 128;
     ForEntitiesNear(V3{ 0, 0, 0 }, 1e6f, [&](void* e) {
-        if (strcmp(ClassName(e), "trigger_hurt"))
-            return;
+        const char* cls = ClassName(e);
         unsigned char* v = Vars(e);
         float dmg = F<float>(v, EV_DMG);
-        if (!F<int>(v, EV_SOLID) || dmg <= 0)
+        if (dmg <= 0)
             return;
-        zones.push_back({ Vec((float*)(v + EV_ABSMIN)), Vec((float*)(v + EV_ABSMAX)) });
+        if (!strcmp(cls, "trigger_hurt"))
+        {
+            if (!F<int>(v, EV_SOLID))
+                return;
+            zones.push_back({ Vec((float*)(v + EV_ABSMIN)), Vec((float*)(v + EV_ABSMAX)) });
+        }
+        else if (!strcmp(cls, "env_laser") || !strcmp(cls, "env_beam"))
+        {
+            if ((F<int>(v, EV_EFFECTS) & EF_NODRAW) || dmg < 20.0f)
+                return;
+            V3 a = Vec((float*)(v + EV_ORIGIN)), b = Vec((float*)(v + EV_ANGLES));
+            float len = Len(b - a);
+            if (len < 16.0f || len > 4096.0f)
+                return;
+            int steps = (int)(len / 24.0f) + 1;
+            for (int k = 0; k <= steps; k++)
+            {
+                V3 p = a + (b - a) * ((float)k / steps);
+                zones.push_back({ p - V3{ 20, 20, 0 }, p + V3{ 20, 20, 0 } });
+            }
+            lasers++;
+        }
+        else if (dmg >= 100.0f && F<int>(v, EV_SOLID) &&
+                 (!strncmp(cls, "func_door", 9) || !strcmp(cls, "func_rotating") || !strcmp(cls, "func_pendulum") ||
+                  !strcmp(cls, "func_train") || !strcmp(cls, "func_tracktrain")))
+        {
+            // only while it moves or turns: a crusher at rest is a wall, a door that crushes when blocked is a door
+            float sp = Len(Vec((float*)(v + EV_VELOCITY))) + Len(Vec((float*)(v + EV_AVELOCITY)));
+            if (sp < 1.0f)
+                return;
+            zones.push_back({ Vec((float*)(v + EV_ABSMIN)) - V3{ 24, 24, 0 }, Vec((float*)(v + EV_ABSMAX)) + V3{ 24, 24, 0 } });
+            movers++;
+        }
+        else
+            return;
         minDmg = min(minDmg, dmg);
         maxDmg = max(maxDmg, dmg);
     });
-    bool changed = zones.size() != g_hurtZones.size() || newLevel || g_navHurt.size() != g_nav.areas.size();
+    // (moving ones change place: the areas are worked out again whenever any zone did)
+    bool same = zones.size() == g_hurtZones.size();
+    for (size_t i = 0; same && i < zones.size(); i++)
+        same = Len(zones[i].lo - g_hurtZones[i].lo) < 1.0f && Len(zones[i].hi - g_hurtZones[i].hi) < 1.0f;
+    bool changed = !same || newLevel || g_navHurt.size() != g_nav.areas.size();
     g_hurtZones.swap(zones);
     if (!changed)
         return;
@@ -985,9 +1029,13 @@ static void UpdateHurtZones()
         if (InHurtZone(a.center, 0.0f))
             g_navHurt[i] = 1, inside++;
     }
-    Log("hurt zones (%s): %d trigger_hurt (damage %.0f..%.0f), %d of %d nav areas left out of paths",
-        g_nav.map.c_str(), (int)g_hurtZones.size(), g_hurtZones.empty() ? 0.0f : minDmg, maxDmg, inside,
-        (int)g_nav.areas.size());
+    static int reports = 0, reportLevel = -1;
+    if (reportLevel != g_nav.level)
+        reportLevel = g_nav.level, reports = 0;
+    if (reports++ < 20)
+        Log("hurt zones (%s): %d boxes (%d beams, %d moving brushes; damage %.0f..%.0f), %d of %d nav areas left out of paths",
+            g_nav.map.c_str(), (int)g_hurtZones.size(), lasers, movers, g_hurtZones.empty() ? 0.0f : minDmg, maxDmg, inside,
+            (int)g_nav.areas.size());
 }
 
 static bool NavAreaHurts(int i) { return i >= 0 && i < (int)g_navHurt.size() && g_navHurt[i]; }
@@ -1741,7 +1789,7 @@ static void ScanMonsters(void* bot, BotState& st, V3 eye)
     // stay on the current target until it dies or stays out of sight; switch only for an extreme threat:
     // a visible monster about to hit the bot while the current one is clearly farther away
     void* cur = st.target;
-    if (cur && IsLivingMonster(cur) && best) // a monster in sight always beats an objective
+    if (cur && IsLivingMonster(cur) && best)
     {
         float curDist = Len(Center(cur) - eye);
         bool extreme = best && best != cur && bestDist < cfg.extremeThreat && curDist > bestDist * 1.8f;
@@ -1750,8 +1798,14 @@ static void ScanMonsters(void* bot, BotState& st, V3 eye)
     }
     else if (cur && IsLivingMonster(cur))
         best = cur;
-    // no monster to shoot: objectives the players have to break, closest visible one
-    if (!best && cfg.objectiveRange > 0)
+    // objectives the players have to break (zbsbreak: the doors, gates and machines that open the way), the closest
+    // visible one: when no monster is within OBJECTIVE_MONSTER_NEAR (it waited for no monster at all, which in Zombie
+    // Scenario is almost never, so the way stayed shut; reports 2026-11-27). A monster that close comes first.
+    static const float OBJECTIVE_MONSTER_NEAR = 600.0f;
+    float monsterDist = best && IsLivingMonster(best) ? Len(Center(best) - eye) : 1e30f;
+    if (nearestDist < monsterDist)
+        monsterDist = nearestDist; // (one not in sight but this close is a threat too)
+    if (monsterDist >= OBJECTIVE_MONSTER_NEAR && cfg.objectiveRange > 0)
     {
         float objDist = 1e30f;
         void* obj = nullptr;
@@ -1773,7 +1827,8 @@ static void ScanMonsters(void* bot, BotState& st, V3 eye)
                     break;
                 }
         }
-        best = obj;
+        if (obj)
+            best = obj;
     }
     best = HsMissileFirst(bot, eye, best);
     best = ShelterTarget(bot, eye, best); // Zombie Shelter Team Match: the other team
