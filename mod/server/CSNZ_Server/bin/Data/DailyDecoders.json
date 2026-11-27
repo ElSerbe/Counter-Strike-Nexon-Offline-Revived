@@ -5,10 +5,11 @@
 	// (Item 165 "Decoder" and 2198 had no ItemBoxName in Item.csv: the game closed showing what came out of 165; both have
 	// one now, tools/gen_decoders.py give_models)
 	// Contents: ItemBox.json (tools/gen_decoders.py). Names show in the chat message.
+	// (v1.1.47: 35 % for all three, was 4 / 6 / 4.)
 	"Version": 1,
-	"OrderChance": 4,
-	"WeeklyChance": 6,
-	"RequestChance": 4,
+	"OrderChance": 35,
+	"WeeklyChance": 35,
+	"RequestChance": 35,
 	"Decoders": [
 		{ "Item": 165, "Weight": 25, "Name": "Decoder" },
 		{ "Item": 533, "Weight": 20, "Name": "Code B Decoder" },

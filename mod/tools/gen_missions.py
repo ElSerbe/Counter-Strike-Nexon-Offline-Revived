@@ -22,6 +22,7 @@ from gen_medals import (ORIGINAL, TDM, DM, ZOMBIE, ZOMBIE_CLASSIC, ZOMBIE_ALL, Z
                         SOCCER, PROP_HUNT, describe)
 
 COSTUME_MIN_PRICE = 300  # Black Badges: cosmetics are the Black Market's expensive goods
+REWARD_MULT = 2  # every request and event prize (badges and medals) x2 (v1.1.47)
 DATA = os.path.join(MOD, "server", "CSNZ_Server", "bin", "Data")
 OUT_JSON = os.path.join(DATA, "Missions.json")
 NPC_DIR = os.path.join(MOD, "web", "missions", "npc")
@@ -146,20 +147,20 @@ def main():
         requests.append({"ID": num, "Title": title, "Npc": npc_names[npc], "Portrait": npc.lower(),
                          "Story": strings.get(key + "_desc", "").strip(),
                          "Text": "; ".join(describe(r, {}) for r in reqs), "Conditions": [requirement(r) for r in reqs],
-                         "Badges": badges, "Medals": medals})
+                         "Badges": badges * REWARD_MULT, "Medals": medals * REWARD_MULT})
     for num, (mode, reqs, badges, medals) in SPECIAL.items():
         npc = NPCS[(num + 3) % len(NPCS)]
         requests.append({"ID": 100 + num, "Title": f"Special Operation: {mode}", "Npc": npc_names[npc],
                          "Portrait": npc.lower(), "Story": "A special operation from Command. Get it done and report back.",
                          "Text": "; ".join(describe(r, {}) for r in reqs), "Conditions": [requirement(r) for r in reqs],
-                         "Badges": badges, "Medals": medals})
+                         "Badges": badges * REWARD_MULT, "Medals": medals * REWARD_MULT})
 
     events = []
     for i, (name, desc, missions, bonus_badges, bonus_medals) in enumerate(EVENTS):
-        events.append({"ID": i + 1, "Name": name, "Description": desc, "BonusBadges": bonus_badges,
-                       "BonusMedals": bonus_medals,
+        events.append({"ID": i + 1, "Name": name, "Description": desc, "BonusBadges": bonus_badges * REWARD_MULT,
+                       "BonusMedals": bonus_medals * REWARD_MULT,
                        "Missions": [{"Text": "; ".join(describe(r, {}) for r in reqs),
-                                     "Conditions": [requirement(r) for r in reqs], "Badges": b, "Medals": m}
+                                     "Conditions": [requirement(r) for r in reqs], "Badges": b * REWARD_MULT, "Medals": m * REWARD_MULT}
                                     for reqs, b, m in missions]})
 
     # Black Market: the game's black badge shop (weapons 30, costumes at least COSTUME_MIN_PRICE); names from
