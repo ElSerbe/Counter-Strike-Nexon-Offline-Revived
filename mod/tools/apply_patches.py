@@ -1112,6 +1112,36 @@ PATCHES += [
 ]
 
 
+# Buying the Minigun (item_991) in Zombie Disaster Zone closed the game (issue #34): mp.dll 0x11257d50, the check
+# behind "#Vxl_Theme_CannotUse" run when an item is used, asks the data manager ([0x121d3d78]() -> vfunc 0x68) for a
+# record and reads its word +4 without a null check (mp.dll+0x1257db4, address 4). A missing record now leaves the
+# function the way its own refusal does (0x11257e43: pop the saved registers, return), without the message. The 6
+# bytes that keep the record (mov esi,eax; mov [esp+0x28],esi) jump to a 19-byte stub in 20 int3 bytes after a ret 4.
+_ITEMREC_SITE = 0x11257DAB
+_ITEMREC_CAVE = 0x1065017C
+_ITEMREC_EXIT = 0x11257E43     # pop edi; pop esi; pop ebx; cookie check; ret
+_ITEMREC_BACK = 0x11257DB1     # mov edx,[ecx+0x54] (the record's use)
+PATCHES += [
+    (
+        "mp.dll",
+        _ITEMREC_SITE,
+        bytes.fromhex("8bf089742428"),                                   # mov esi,eax; mov [esp+0x28],esi
+        b"\xe9" + _rel32(_ITEMREC_SITE + 5, _ITEMREC_CAVE) + b"\x90",
+        "Item use check: a missing item record doesn't close the game (Minigun in Zombie Disaster Zone)",
+    ),
+    (
+        "mp.dll",
+        _ITEMREC_CAVE,
+        b"\xcc" * 19,
+        bytes.fromhex("8bf089742428"                                     # mov esi,eax; mov [esp+0x28],esi
+                      "85f6")                                            # test esi,esi
+        + b"\x0f\x84" + _rel32(_ITEMREC_CAVE + 14, _ITEMREC_EXIT)        # jz exit
+        + b"\xe9" + _rel32(_ITEMREC_CAVE + 19, _ITEMREC_BACK),           # jmp back
+        "Item use check stub: no record, leave the function",
+    ),
+]
+
+
 # The field of view (launcher's More > Field of view, default_fov) only made the mouse slower (reports 2026-11-24/25,
 # as in Counter-Strike 1.6): the server sends the player's fov, 90 when not zoomed, and client.dll's CHud::Think
 # (0x2a70cb0) sets gHUD.m_iFOV (+0x80) to it and the sensitivity to sens * fov / default_fov whenever they differ;
