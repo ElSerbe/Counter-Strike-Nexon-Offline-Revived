@@ -2940,12 +2940,26 @@ static bool CallDropSlot(void* player, int slot)
     }
 }
 
-static void FreeSlot(void* bot, int slot)
+// a drop that faulted inside mp.dll (0xC0000005) leaves the game's own state half-updated: from then on, for the rest
+// of the match, the game's drop isn't called again and bots only get the room's weapons into empty slots (Zombie Hero
+// Classic, 2026-11-26: 44 failed drops in one second from 25 bots re-buying, then the game crashed)
+static int g_dropFailLevel = -1;
+
+// true when the slot is free; false when it holds something that wasn't dropped: the drop faulted, or drops are off
+// after a fault this match
+static bool FreeSlot(void* bot, int slot)
 {
     std::string had = SlotClass(bot, slot);
     void* pl = PrivateOf(bot);
     if (had.empty() || !pl)
-        return;
+        return true;
+    if (g_dropFailLevel == g_nav.level)
+    {
+        static int reports = 0;
+        if (reports++ < 30)
+            Log("bot '%s' keeps its %s: drops are off after a fault", String(F<int>(Vars(bot), EV_NETNAME)), had.c_str());
+        return false;
+    }
     std::vector<void*> before;
     V3 me = Origin(bot);
     ForEntitiesNear(me, 300.0f, [&](void* e) {
@@ -2979,6 +2993,43 @@ static void FreeSlot(void* bot, int slot)
     if (!left.empty() || reports++ < 30)
         Log("bot '%s' throws away its %s to buy the room's weapon%s", String(F<int>(Vars(bot), EV_NETNAME)), had.c_str(),
             !ok ? " - the drop FAILED" : left.empty() ? "" : (" - still carries " + left).c_str());
+    if (!ok && g_dropFailLevel != g_nav.level)
+    {
+        g_dropFailLevel = g_nav.level;
+        Log("a weapon drop faulted in the game: room loadouts are no longer bought over the bots' weapons this match");
+    }
+    return ok;
+}
+
+// What SameWeaponModel (above) doesn't cover: weapons with no model of their own beyond the "zhc" copies.
+// scar556limited is drawn with p_scar.mdl and buffm4a1zhc with p_buffm4.mdl, so neither the models nor the models
+// without "zhc" match, and those bots dropped and bought the room's weapon again every check, though they had it.
+// These count as the room's primary too: that weapon in slot 1 (weapon_<res>), or a held model whose name starts the
+// room's one (3 characters at least). When slot 1 holds the base weapon itself, though, it isn't the room's variant: a
+// plain M4A1 (weapon_m4a1, p_m4a1.mdl) isn't the room's M4A1 Dragon (p_m4a1dragon.mdl). Case doesn't matter.
+static bool RoomPrimaryMatches(std::string held, std::string want, std::string slot1Class)
+{
+    for (std::string* s : { &held, &want, &slot1Class })
+        for (auto& ch : *s)
+            ch = (char)tolower((unsigned char)ch);
+    static const size_t pre = 9, post = 4; // "models/p_" ... ".mdl"
+    if (want.size() <= pre + post || held.size() <= pre + post || want.compare(0, pre, "models/p_") ||
+        held.compare(0, pre, "models/p_"))
+        return false;
+    std::string wantRes = want.substr(pre, want.size() - pre - post);
+    std::string heldRes = held.substr(pre, held.size() - pre - post);
+    if (slot1Class == "weapon_" + wantRes)
+        return true;
+    if (slot1Class == "weapon_" + heldRes)
+        return false;
+    return heldRes.size() >= 3 && wantRes.size() > heldRes.size() && !wantRes.compare(0, heldRes.size(), heldRes);
+}
+
+// the room's primary is what the bot holds: the same model or its "zhc" copy (SameWeaponModel), or one of the cases
+// RoomPrimaryMatches adds
+static bool HoldsRoomPrimary(void* bot, const std::string& held, const std::string& want)
+{
+    return SameWeaponModel(held, want) || RoomPrimaryMatches(held, want, SlotClass(bot, 1));
 }
 
 // a moment after spawning (after the bot's own CS purchases), buy a random weapon from the whole game
@@ -3155,8 +3206,8 @@ static void UpdateBuying(void* bot, BotState& st)
         auto want = cfg.weaponModel.find(st.loadoutPrimary);
         auto cat = cfg.weaponCategory.find(held);
         bool primaryInHand = cat != cfg.weaponCategory.end() && cat->second >= 2 && cat->second <= 5;
-        bool ok = want == cfg.weaponModel.end() || held == want->second || SameWeaponModel(held, want->second);
-        if (!ok && primaryInHand && st.loadoutBuys < 6)
+        bool ok = want == cfg.weaponModel.end() || HoldsRoomPrimary(bot, held, want->second);
+        if (!ok && primaryInHand && st.loadoutBuys < 6 && g_dropFailLevel != g_nav.level)
         {
             Log("bot %d '%s' holds %s instead of the room's %s: buying it again", st.slot, rb->name.c_str(), held.c_str(),
                 want->second.c_str());
@@ -3209,14 +3260,29 @@ static void UpdateBuying(void* bot, BotState& st)
             if (pl && GameMode() == 30 && *(int*)(pl + 0xca8) < 16000)
                 *(int*)(pl + 0xca8) = 16000;
             ZsrBotMoney(bot);
-            if (st.loadoutPrimary > 0)
-                FreeSlot(bot, 1);
-            if (st.loadoutSecondary > 0)
-                FreeSlot(bot, 2);
+            // a slot whose weapon couldn't be dropped (the drop faulted, or drops are off after a fault) keeps it: the
+            // room's weapon for that slot isn't bought, the others are. After slot 1's drop faults, FreeSlot(2) returns
+            // before calling the game again
+            bool buyPrimary = st.loadoutPrimary > 0 && FreeSlot(bot, 1);
+            bool buySecondary = st.loadoutSecondary > 0 && FreeSlot(bot, 2);
+            bool refused = (st.loadoutPrimary > 0 && !buyPrimary) || (st.loadoutSecondary > 0 && !buySecondary);
+            if (refused)
+            {
+                st.loadoutBuys = 99; // no more checks or rebuys for this bot this life
+                st.nextLoadoutCheck = 0;
+            }
+            if (!buyPrimary)
+                st.checkBuyAt = 0;
+            if (refused && !buyPrimary && !buySecondary && st.loadoutMelee <= 0)
+            {
+                if (pl)
+                    pl[0x18b4] = wasInternal;
+                return;
+            }
             FakeCommand(bot, "client_buy_open");
-            if (st.loadoutPrimary > 0)
+            if (buyPrimary)
                 BuyAs(bot, st.loadoutPrimary);
-            if (st.loadoutSecondary > 0)
+            if (buySecondary)
                 BuyAs(bot, st.loadoutSecondary);
             if (st.loadoutMelee > 0)
                 BuyAs(bot, st.loadoutMelee);
@@ -3241,7 +3307,8 @@ static void UpdateBuying(void* bot, BotState& st)
             if (hand)
                 FakeCommand(bot, hand);
             st.nextStrip = now + 0.5f;
-            Log("bot %d buys the room's weapons: %d %d %d", st.slot, st.loadoutPrimary, st.loadoutSecondary, st.loadoutMelee);
+            Log("bot %d buys the room's weapons: %d %d %d", st.slot, buyPrimary ? st.loadoutPrimary : 0,
+                buySecondary ? st.loadoutSecondary : 0, st.loadoutMelee);
             return;
         }
         int roomPrimary = rb && st.buyTries == 0 ? pick(rb->primary, rb->allowPrimary) : 0;
@@ -3292,7 +3359,7 @@ static void UpdateBuying(void* bot, BotState& st)
         // nothing changed (the item isn't sold here, no money...): try another weapon a few times. In the other modes
         // the room's primary must be in hand (holding another one, e.g. the spawn's, is a failure too)
         auto want = cfg.weaponModel.find(st.boughtPrimary);
-        bool wrong = want != cfg.weaponModel.end() && !SameWeaponModel(held, want->second);
+        bool wrong = want != cfg.weaponModel.end() && !HoldsRoomPrimary(bot, held, want->second);
         bool failed = (held == st.modelBeforeBuy && (want == cfg.weaponModel.end() || wrong)) || (!scenario && wrong);
         static int reports = 0;
         if (reports++ < 40)
@@ -3300,7 +3367,7 @@ static void UpdateBuying(void* bot, BotState& st)
                 failed ? " (no change: trying another)" : "");
         if (failed && !scenario && GameMode() == 30 && st.boughtPrimary > 0 && GiveRoomPrimary(bot, st.boughtPrimary))
             st.nextLoadoutCheck = now + 1.0f;
-        else if (failed && !scenario && st.loadoutBuys < 4)
+        else if (failed && !scenario && st.loadoutBuys < 4 && g_dropFailLevel != g_nav.level)
             st.buyAt = now + 0.4f; // the same loadout again
         else if (failed && scenario && st.buyTries < 4)
             st.buyAt = now + 0.3f;
