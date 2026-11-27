@@ -6181,6 +6181,7 @@ static void CommandFile()
 
 #include "modes/zombie_humans.inl"
 #include "match_teams.inl" // each player's side for the server's rounds won
+#include "weaponbox_list.inl" // the game's list of weapons on the ground emptied at each map (issues #35, #37)
 #include "tutorial.inl"    // Tutorial 1 and 2 finished: the tutorial window's bits
 #include "modes/zombie_holdout.inl"
 
@@ -6279,6 +6280,7 @@ static void HookedStartFrame()
     double perfStart = PerfNow();
     __try
     {
+        WeaponBoxListFrame(); // first: before anything this frame hands out weapons
         ConsoleFrame();
         CommandFile();
         ZSRiftWatch();
