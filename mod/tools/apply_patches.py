@@ -798,6 +798,73 @@ PATCHES += [
 ]
 
 
+# The field of view (launcher's More > Field of view, default_fov) only made the mouse slower (reports 2026-11-24/25,
+# as in Counter-Strike 1.6): the server sends the player's fov, 90 when not zoomed, and client.dll's CHud::Think
+# (0x2a70cb0) sets gHUD.m_iFOV (+0x80) to it and the sensitivity to sens * fov / default_fov whenever they differ;
+# CHud::UpdateClientData then gives the engine cdata->fov = m_iFOV (0x2a92115). m_iFOV stays 90 (about 25 places
+# compare it with 90 for scopes and the crosshair); the engine gets default_fov instead of 90 (at least 90, like
+# Think's own fallback), and an unzoomed 90 keeps the normal sensitivity. Zoomed fovs are unchanged. With default_fov
+# 90 nothing changes. Three 20-byte int3 gaps, relative jumps only (no relocations).
+_FOV_GIVE = 0x2A92115      # movd xmm0,[ebx+0x80] / cvtdq2ps / movss [edi+0x28],xmm0: cdata->fov = m_iFOV
+_FOV_CAVE_A = 0x2A4F66C    # eax = m_iFOV, or the next cave for 90
+_FOV_CAVE_B = 0x2971CDC    # eax = max(default_fov, 90)
+_FOV_SENS = 0x2A70E7A      # Think: mov eax,[ebx+0xc280c] (default_fov) before "fov == default_fov: sensitivity 0"
+_FOV_SENS_ZERO = 0x2A70E95  # xorps xmm0,xmm0 / jmp: the sensitivity is the normal one
+_FOV_CAVE_C = 0x28EE6EC
+PATCHES += [
+    (
+        "client.dll",
+        _FOV_CAVE_A,
+        b"\xcc" * 17,
+        bytes.fromhex("8b8380000000"      # mov eax,[ebx+0x80]       m_iFOV
+                      "83f85a"            # cmp eax,90
+                      "7505")             # jne ret
+        + b"\xe9" + _rel32(_FOV_CAVE_A + 16, _FOV_CAVE_B)  # jmp cave B (it returns)
+        + b"\xc3",                        # ret
+        "Field of view: the engine's fov is m_iFOV, or default_fov when it's 90 (code cave)",
+    ),
+    (
+        "client.dll",
+        _FOV_CAVE_B,
+        b"\xcc" * 20,
+        bytes.fromhex("8b830c280c00"      # mov eax,[ebx+0xc280c]    default_fov cvar
+                      "f30f2c400c"        # cvttss2si eax,[eax+0xc]
+                      "83f85a"            # cmp eax,90
+                      "7d03"              # jge ret
+                      "6a5a58"            # push 90 / pop eax
+                      "c3"),              # ret
+        "Field of view: default_fov, at least 90 (code cave)",
+    ),
+    (
+        "client.dll",
+        _FOV_GIVE,
+        bytes.fromhex("660f6e8380000000" "0f5bc0" "f30f114728"),
+        b"\xe8" + _rel32(_FOV_GIVE + 5, _FOV_CAVE_A)       # call cave A: eax = the fov
+        + bytes.fromhex("f30f2ac0"        # cvtsi2ss xmm0,eax
+                        "f30f114728"      # movss [edi+0x28],xmm0   cdata->fov
+                        "9090"),
+        "Field of view: the engine draws with default_fov when the server says 90",
+    ),
+    (
+        "client.dll",
+        _FOV_CAVE_C,
+        b"\xcc" * 20,
+        bytes.fromhex("83f95a")           # cmp ecx,90               m_iFOV unzoomed
+        + b"\x0f\x84" + _rel32(_FOV_CAVE_C + 9, _FOV_SENS_ZERO)
+        + bytes.fromhex("8b830c280c00")   # mov eax,[ebx+0xc280c]    (the replaced instruction)
+        + b"\xe9" + _rel32(_FOV_CAVE_C + 20, _FOV_SENS + 6),
+        "Field of view: an unzoomed 90 keeps the normal mouse sensitivity (code cave)",
+    ),
+    (
+        "client.dll",
+        _FOV_SENS,
+        bytes.fromhex("8b830c280c00"),
+        b"\xe9" + _rel32(_FOV_SENS + 5, _FOV_CAVE_C) + b"\x90",
+        "Field of view: Think's sensitivity goes through the cave",
+    ),
+]
+
+
 # what older releases wrote at a place whose patch changed since: replaced by the current bytes, not an abort
 PREVIOUS = {
     ("hw.dll", 0x2754F80): [bytes.fromhex("52ff7104c7410c7f00000166c7410a753290")],  # 1.0.x: port always 30002
