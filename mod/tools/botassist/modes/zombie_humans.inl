@@ -74,6 +74,45 @@ static const std::vector<ZfPlayer>& ZfPlayers()
     return g_zfPlayers;
 }
 
+// botassist.log, every 10 s in a zombie mode: how bunched up the human bots are, when they are (2 pairs closer than
+// 64 u, or 4 within 128 u of one), and where the biggest group is, with the holdout spot it is at. The player saw
+// bots bunch up most in the zombie modes; this says in which ones, on which maps and where. (Frame hook.)
+static int HoldoutSpotOf(void* bot); // modes/zombie_holdout.inl: -1 none
+static void CrowdReport()
+{
+    static float next = 0;
+    static int reports = 0, level = -1;
+    float now = Now();
+    if (level != g_nav.level)
+        level = g_nav.level, reports = 0, next = 0;
+    if (now < next && next - now <= 10.0f)
+        return;
+    next = now + 10.0f;
+    int mode = GameMode();
+    if (!ZombieMode(mode) || reports >= 300)
+        return;
+    std::vector<CrowdPt> pts;
+    std::vector<void*> who;
+    for (const ZfPlayer& pl : ZfPlayers())
+        if (!pl.zombie && (F<int>(Vars(pl.e), EV_FLAGS) & FL_FAKECLIENT))
+        {
+            pts.push_back({ pl.at.x, pl.at.y, pl.at.z });
+            who.push_back(pl.e);
+        }
+    CrowdCount c = CountCrowd(pts, 64.0f, 128.0f);
+    if (c.biggestAt < 0 || (c.pairs < 2 && c.biggest < 4))
+        return;
+    reports++;
+    void* e = who[c.biggestAt];
+    int spot = HoldoutSpotOf(e);
+    char where[32] = "no spot";
+    if (spot >= 0)
+        snprintf(where, sizeof(where), "holdout spot %d", spot);
+    Log("crowd: mode %d, %d human bots, %d pairs within 64 u, biggest group %d within 128 u around '%s' at (%.0f %.0f %.0f) (%s)",
+        mode, (int)pts.size(), c.pairs, c.biggest, String(F<int>(Vars(e), EV_NETNAME)), pts[c.biggestAt].x,
+        pts[c.biggestAt].y, pts[c.biggestAt].z, where);
+}
+
 static bool ZfSees(void* bot, V3 eye, void* target)
 {
     float now = Now();

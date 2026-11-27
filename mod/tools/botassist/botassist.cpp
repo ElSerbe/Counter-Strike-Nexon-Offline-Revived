@@ -1896,6 +1896,13 @@ static void StepAside(void* bot, BotState& st, V3 pos, V3 wp, float now)
     st.navBackUntil = now + NAV_ASIDE_TIME;
 }
 
+// botassist.log's perf lines, for comparing builds: stuck reports in the last 30 s by what was in the way (the
+// "stuck:" lines stop at 300 a map, these don't), and how many of them were bots the game held still
+static int g_stuckCounts[4]; // a player, something, nothing; held still (of those)
+// the same for ladders (the "takes a ladder" lines stop at 60 a map, the waits at 80): climbs started, waits for a
+// turn, waits given up (LadderQueueWait)
+static int g_ladderCounts[4]; // (and turns lost: LadderTurnLost)
+
 static void NavProgress(void* bot, BotState& st, V3 pos, V3 goal, float now)
 {
     // waiting for its turn at a ladder (LadderQueueWait; NavTraverse keeps it waiting), or held where it is by the game
@@ -1976,6 +1983,9 @@ static void NavProgress(void* bot, BotState& st, V3 pos, V3 goal, float now)
         if (got < 0.99f && tr.pHit && ahead >= 0 && here >= 0 && ahead != here)
             NavBlockNote(here, ahead, tr.pHit, now);
     }
+    g_stuckCounts[blocker ? 0 : got >= 0.99f || !tr.pHit ? 2 : 1]++;
+    if (HeldStill(bot))
+        g_stuckCounts[3]++; // (never: a held bot returns above; counted for the same line as build A)
     if (ahead >= 0 && ahead != here)
     {
         for (size_t i = st.navAvoid.size(); i-- > 0;)
@@ -5993,11 +6003,20 @@ static void PerfReport()
                 parts += b;
             }
             Log("perf: bot move hook by part (ms/s): %s", parts.c_str());
+            Log("perf: stuck reports %d (a player in the way %d, something %d, nothing %d; %d of them held still)",
+                g_stuckCounts[0] + g_stuckCounts[1] + g_stuckCounts[2], g_stuckCounts[0], g_stuckCounts[1], g_stuckCounts[2],
+                g_stuckCounts[3]);
+            Log("perf: ladders: %d climbs, %d waits for a turn, %d gave up waiting, %d turns lost", g_ladderCounts[0],
+                g_ladderCounts[1], g_ladderCounts[2], g_ladderCounts[3]);
         }
     }
     for (double& d : g_perfPart)
         d = 0;
     g_perfMoves = g_perfPaths = g_perfAreaAt = 0;
+    for (int& c : g_stuckCounts)
+        c = 0;
+    for (int& c : g_ladderCounts)
+        c = 0;
     g_perfMoveSec = g_perfPathSec = g_perfFrameSec = 0;
     since = now;
     next = now + 30.0;
@@ -6032,6 +6051,7 @@ static void HookedStartFrame()
         KnifeFixFrame();
         GrenadeFixFrame();
         SfFrame();
+        CrowdReport();
         if (CoopMode())
         {
             UpdateBarricades(); // zombies against barricades, bots or not
@@ -6618,6 +6638,7 @@ static bool LadderQueueWait(void* bot, BotState& st, V3 pos, V3 feet, const floa
     else if (!me->lostLogged)
     {
         me->lostLogged = true;
+        g_ladderCounts[3]++;
         static int lostReports = 0, lostLevel = -1;
         if (lostLevel != g_nav.level)
             lostLevel = g_nav.level, lostReports = 0;
@@ -6634,6 +6655,7 @@ static bool LadderQueueWait(void* bot, BotState& st, V3 pos, V3 feet, const floa
     if (st.ladderWaitSince < 0)
     {
         st.ladderWaitSince = now;
+        g_ladderCounts[1]++;
         int on = 0;
         for (const LadderOther& o : others)
             on += o.on;
@@ -6653,6 +6675,7 @@ static bool LadderQueueWait(void* bot, BotState& st, V3 pos, V3 feet, const floa
                     st.navAvoid.erase(st.navAvoid.begin());
                 st.navAvoid.push_back({ area, now + NAV_AVOID_TIME });
             }
+        g_ladderCounts[2]++;
         float waited = now - st.ladderWaitSince;
         st.ladderSkip = ladder;
         st.ladderSkipUntil = now + NAV_AVOID_TIME;
@@ -6660,8 +6683,28 @@ static bool LadderQueueWait(void* bot, BotState& st, V3 pos, V3 feet, const floa
         st.ladderWaitUntil = 0;
         st.nextRepath = 0;
         if (reports++ < 80)
-            Log("bot %d gave up waiting for ladder %d after %.0f s: another way, or this ladder without waiting", st.slot, ladder,
-                waited);
+        {
+            // who it waited for: the ones ahead of it in line (distance, waiting or not) and how many were on it
+            std::string ahead;
+            int on = 0;
+            for (const LadderOther& o : others)
+                on += o.on;
+            for (const LadderApproach& a : g_ladderQueue)
+            {
+                if (a.bot == bot || a.ladder != ladder || now - a.at > 0.3f)
+                    continue;
+                bool lost = LadderTurnLost(a.waiting, a.dist, a.bestAt, now);
+                if (lost || !(a.dist + LADDER_TIE < gap || (fabsf(a.dist - gap) <= LADDER_TIE && a.key < key)))
+                    continue;
+                BotState* o = FindBotState(a.bot);
+                char b[64];
+                snprintf(b, sizeof(b), "%sbot %d %.0f u%s", ahead.empty() ? "" : ", ", o ? o->slot : -1, a.dist,
+                         a.waiting ? " waiting" : "");
+                ahead += b;
+            }
+            Log("bot %d gave up waiting for ladder %d after %.0f s: another way, or this ladder without waiting (ahead: %s; %d on "
+                "it)", st.slot, ladder, waited, ahead.empty() ? "nobody" : ahead.c_str(), on);
+        }
         return false;
     }
     st.ladderWaitUntil = now + 0.3f;
@@ -6799,6 +6842,8 @@ static void NavTraverse(void* bot, BotState& st, float* aim, float& fwd, float& 
         static int reports = 0, reportLevel = -1;
         if (reportLevel != g_nav.level)
             reportLevel = g_nav.level, reports = 0;
+        if (!st.climbing)
+            g_ladderCounts[0]++;
         if (!st.climbing && reports++ < 60)
             Log("bot %d takes a ladder %s at (%.0f %.0f %.0f) to (%.0f %.0f %.0f)", st.slot, up ? "up" : "down", pos.x, pos.y, pos.z,
                 wp.x, wp.y, wp.z);
