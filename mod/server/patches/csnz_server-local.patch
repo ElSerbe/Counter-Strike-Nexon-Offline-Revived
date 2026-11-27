@@ -1312,7 +1312,7 @@ index 0000000..5c99d8e
 +
 +extern CBingoManager g_BingoManager;
 diff --git a/src/manager/channelmanager.cpp b/src/manager/channelmanager.cpp
-index 35561e8..4571005 100644
+index 35561e8..1a72f96 100644
 --- a/src/manager/channelmanager.cpp
 +++ b/src/manager/channelmanager.cpp
 @@ -1,4 +1,9 @@
@@ -1342,7 +1342,7 @@ index 35561e8..4571005 100644
  {
  }
  
-@@ -83,6 +89,200 @@ bool CChannelManager::OnChannelListPacket(IExtendedSocket* socket)
+@@ -83,6 +89,201 @@ bool CChannelManager::OnChannelListPacket(IExtendedSocket* socket)
  	return true;
  }
  
@@ -1410,9 +1410,10 @@ index 35561e8..4571005 100644
 +		return false;
 +	if (IRoom* stale = user->GetCurrentRoom())
 +	{
-+		// a second request right after the one that put the player in a room: that room stays
++		// a second request for the same mode right after the one that put the player in a room: that room stays.
++		// Another mode is a new choice (issue #55: a player who backed out of a mode and picked another got nothing).
 +		auto at = g_QuickStartAt.find(user->GetID());
-+		if (at != g_QuickStartAt.end() && time(NULL) - at->second <= 5)
++		if (at != g_QuickStartAt.end() && time(NULL) - at->second <= 5 && stale->GetSettings()->gameModeId == mode)
 +		{
 +			Logger().Info("Quick Start: '%s' asked again right away, still in room %d: left as it is\n", user->GetLogName(), stale->GetID());
 +			return true;
@@ -1543,7 +1544,7 @@ index 35561e8..4571005 100644
  bool CChannelManager::OnRoomRequest(CReceivePacket* msg, IExtendedSocket* socket)
  {
  	LOG_PACKET;
-@@ -121,7 +321,20 @@ bool CChannelManager::OnRoomRequest(CReceivePacket* msg, IExtendedSocket* socket
+@@ -121,7 +322,20 @@ bool CChannelManager::OnRoomRequest(CReceivePacket* msg, IExtendedSocket* socket
  		g_PacketManager.SendRoomListFull(socket, channelServers[0]->GetChannels()[0]->GetRooms());
  		break;
  	case 27:
@@ -1564,7 +1565,7 @@ index 35561e8..4571005 100644
  	case InRoomType::SetZBAddonsRequest:
  		return OnRoomSetZBAddonRequest(msg, user);
  	case InRoomType::KickRequest:
-@@ -379,7 +592,12 @@ bool CChannelManager::OnCommandHandler(IExtendedSocket* socket, IUser* user, con
+@@ -379,7 +593,12 @@ bool CChannelManager::OnCommandHandler(IExtendedSocket* socket, IUser* user, con
  
  	if (!user)
  	{
@@ -1578,7 +1579,7 @@ index 35561e8..4571005 100644
  		{
  			if (args.size() == 3)
  			{
-@@ -443,6 +661,58 @@ bool CChannelManager::OnCommandHandler(IExtendedSocket* socket, IUser* user, con
+@@ -443,6 +662,58 @@ bool CChannelManager::OnCommandHandler(IExtendedSocket* socket, IUser* user, con
  	}
  	else
  	{
@@ -1637,7 +1638,7 @@ index 35561e8..4571005 100644
  		CUserCharacterExtended characterExtended = user->GetCharacterExtended(EXT_UFLAG_GAMEMASTER);
  		if (characterExtended.gameMaster)
  		{
-@@ -1246,6 +1516,9 @@ bool CChannelManager::OnNewRoomRequest(CReceivePacket* msg, IUser* user)
+@@ -1246,6 +1517,9 @@ bool CChannelManager::OnNewRoomRequest(CReceivePacket* msg, IUser* user)
  	// hide user from channel users list
  	channel->UserLeft(user, true);
  
@@ -1647,7 +1648,7 @@ index 35561e8..4571005 100644
  	Logger().Info("User '%s' created a new room (RID: %d, name: '%s')\n", user->GetLogName(), newRoom->GetID(), roomSettings->roomName.c_str());
  
  	if (roomSettings->familyBattle)
-@@ -1270,9 +1543,94 @@ bool CChannelManager::OnNewRoomRequest(CReceivePacket* msg, IUser* user)
+@@ -1270,9 +1544,94 @@ bool CChannelManager::OnNewRoomRequest(CReceivePacket* msg, IUser* user)
  
  bool CChannelManager::OnJoinRoomRequest(CReceivePacket* msg, IUser* user)
  {
@@ -1744,7 +1745,7 @@ index 35561e8..4571005 100644
  
  	CChannel* channel = user->GetCurrentChannel();
  	if (channel == NULL)
-@@ -1294,6 +1652,42 @@ bool CChannelManager::OnJoinRoomRequest(CReceivePacket* msg, IUser* user)
+@@ -1294,6 +1653,42 @@ bool CChannelManager::OnJoinRoomRequest(CReceivePacket* msg, IUser* user)
  		return false;
  	}
  
@@ -1787,7 +1788,7 @@ index 35561e8..4571005 100644
  	if (room->HasFreeSlots() == false)
  	{
  		g_PacketManager.SendUMsgNoticeMsgBoxToUuid(user->GetExtendedSocket(), OBFUSCATE("ROOM_JOIN_FAILED_FULL"));
-@@ -1396,6 +1790,9 @@ bool CChannelManager::OnJoinRoomRequest(CReceivePacket* msg, IUser* user)
+@@ -1396,6 +1791,9 @@ bool CChannelManager::OnJoinRoomRequest(CReceivePacket* msg, IUser* user)
  
  	channel->SendUpdateRoomList(room);
  
@@ -1797,7 +1798,7 @@ index 35561e8..4571005 100644
  	Logger().Info("User '%s' joined a room (RID: %d)\n", user->GetLogName(), room->GetID());
  
  	return true;
-@@ -1450,6 +1847,22 @@ bool CChannelManager::OnSetTeamRequest(CReceivePacket* msg, IUser* user)
+@@ -1450,6 +1848,22 @@ bool CChannelManager::OnSetTeamRequest(CReceivePacket* msg, IUser* user)
  	return true;
  }
  
@@ -1820,7 +1821,7 @@ index 35561e8..4571005 100644
  bool CChannelManager::OnLeaveRoomRequest(IUser* user)
  {
  	IRoom* currentRoom = user->GetCurrentRoom();
-@@ -1501,6 +1914,10 @@ bool CChannelManager::OnLeaveRoomRequest(IUser* user)
+@@ -1501,6 +1915,10 @@ bool CChannelManager::OnLeaveRoomRequest(IUser* user)
  		}
  
  		currentRoom->RemoveUser(user);
@@ -1831,7 +1832,7 @@ index 35561e8..4571005 100644
  	}
  
  	currentChannel->SendFullUpdateRoomList(user);
-@@ -1705,13 +2122,43 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
+@@ -1705,13 +2123,43 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
  		return false;
  	}
  
@@ -1875,7 +1876,7 @@ index 35561e8..4571005 100644
  	if (newSettings.familyBattle)
  	{
  		CUserCharacter character = user->GetCharacter(UFLAG_LOW_CLAN);
-@@ -1787,6 +2234,7 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
+@@ -1787,6 +2235,7 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
  		}
  	}
  
@@ -1883,7 +1884,7 @@ index 35561e8..4571005 100644
  	currentRoom->UpdateSettings(newSettings);
  
  	// inform every user in the room of the changes
-@@ -1795,6 +2243,10 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
+@@ -1795,6 +2244,10 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
  		currentRoom->SendUpdateRoomSettings(u, roomSettings, newSettings.lowFlag, newSettings.lowMidFlag, newSettings.highMidFlag, newSettings.highFlag);
  	}
  
@@ -1894,7 +1895,7 @@ index 35561e8..4571005 100644
  	currentChannel->SendUpdateRoomList(currentRoom);
  
  	Logger().Info("Host '%s' updated room settings (RID: %d)\n", user->GetLogName(), currentRoom->GetID());
-@@ -1921,7 +2373,12 @@ bool CChannelManager::OnRoomKickRequest(CReceivePacket* msg, IUser* user)
+@@ -1921,7 +2374,12 @@ bool CChannelManager::OnRoomKickRequest(CReceivePacket* msg, IUser* user)
  		return false;
  	}
  
@@ -1908,7 +1909,7 @@ index 35561e8..4571005 100644
  	if (destUser == NULL)
  	{
  		Logger().Warn("User '%s' tried to kick a user from a room, although destUser == NULL (RID: %d)\n", user->GetLogName(), currentRoom->GetID());
-@@ -2089,7 +2546,7 @@ bool CChannelManager::OnVoxelRoomListRequest(CReceivePacket* msg, IUser* user)
+@@ -2089,7 +2547,7 @@ bool CChannelManager::OnVoxelRoomListRequest(CReceivePacket* msg, IUser* user)
  {
  	string voxel_id = msg->ReadString();
  
