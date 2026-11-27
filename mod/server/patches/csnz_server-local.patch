@@ -1311,7 +1311,7 @@ index 0000000..5c99d8e
 +
 +extern CBingoManager g_BingoManager;
 diff --git a/src/manager/channelmanager.cpp b/src/manager/channelmanager.cpp
-index 35561e8..a1c9340 100644
+index 35561e8..f1514a0 100644
 --- a/src/manager/channelmanager.cpp
 +++ b/src/manager/channelmanager.cpp
 @@ -1,4 +1,9 @@
@@ -1341,7 +1341,7 @@ index 35561e8..a1c9340 100644
  {
  }
  
-@@ -83,6 +89,175 @@ bool CChannelManager::OnChannelListPacket(IExtendedSocket* socket)
+@@ -83,6 +89,200 @@ bool CChannelManager::OnChannelListPacket(IExtendedSocket* socket)
  	return true;
  }
  
@@ -1354,6 +1354,7 @@ index 35561e8..a1c9340 100644
 +// map with AI players, its match started a moment later. [3] uses the player's last Quick Start mode (Team
 +// Deathmatch the first time).
 +static std::map<int, int> g_QuickStartMode; // user ID -> its last Quick Start mode
++static std::map<int, time_t> g_QuickStartAt; // user ID -> when Quick Start last put it in a room
 +struct PendingQuickStart
 +{
 +	int userID;
@@ -1384,18 +1385,20 @@ index 35561e8..a1c9340 100644
 +	int type = msg->ReadUInt8();
 +	Logger().Info("Quick Start request from '%s': type %d (%s)\n", user->GetLogName(), type, hex.c_str());
 +
-+	int mode;
++	// (since v1.1.48 the button sends [0][the mode the lobby shows][0] too, apply_patches.py _QS_BEGIN; no mode
++	// chosen yet = the last one)
++	int mode = -1;
 +	if (type == 0)
 +		mode = (signed char)msg->ReadUInt8();
-+	else if (type == 3)
++	else if (type != 3)
++		return true; // the custom start settings: the client keeps them
++	if (mode <= 0)
 +	{
 +		auto it = g_QuickStartMode.find(user->GetID());
 +		mode = it != g_QuickStartMode.end() ? it->second : 2;
 +	}
-+	else
-+		return true; // the custom start settings: the client keeps them
 +
-+	return QuickStart(user, mode < 0 ? 2 : mode);
++	return QuickStart(user, mode);
 +}
 +
 +bool CChannelManager::QuickStart(IUser* user, int mode)
@@ -1404,10 +1407,24 @@ index 35561e8..a1c9340 100644
 +	CChannel* channel = user->GetCurrentChannel();
 +	if (channel == NULL)
 +		return false;
-+	if (user->GetCurrentRoom())
++	if (IRoom* stale = user->GetCurrentRoom())
 +	{
-+		g_PacketManager.SendUMsgNoticeMsgBoxToUuid(socket, "Quick Start can't be used in a room.");
-+		return false;
++		// a second request right after the one that put the player in a room: that room stays
++		auto at = g_QuickStartAt.find(user->GetID());
++		if (at != g_QuickStartAt.end() && time(NULL) - at->second <= 5)
++		{
++			Logger().Info("Quick Start: '%s' asked again right away, still in room %d: left as it is\n", user->GetLogName(), stale->GetID());
++			return true;
++		}
++		// The button is only in the lobby: this server still had the player in a room their game had left (a player
++		// who left the room they made couldn't Quick Start again: "Quick Start can't be used in a room."). Taken out of
++		// it first.
++		Logger().Warn("Quick Start: '%s' was still in room %d here, which their game had left: taken out of it\n",
++			user->GetLogName(), stale->GetID());
++		if (user->IsPlaying())
++			stale->SendPlayerLeaveIngame(user);
++		stale->RemoveUser(user);
++		channel->UserJoin(user, true);
 +	}
 +
 +	CRoomSettings probe;
@@ -1431,7 +1448,14 @@ index 35561e8..a1c9340 100644
 +		if (s->gameModeId != mode || r->HasPassword() || !r->HasFreeSlots() || s->familyBattle)
 +			continue;
 +		Logger().Info("Quick Start: '%s' joins room %d (mode %d)\n", user->GetLogName(), r->GetID(), mode);
-+		return JoinRoom(user, r->GetID(), "");
++		if (JoinRoom(user, r->GetID(), ""))
++		{
++			g_QuickStartAt[user->GetID()] = time(NULL);
++			return true;
++		}
++		// refused (kicked, banned...): a room of their own instead
++		Logger().Info("Quick Start: '%s' couldn't join room %d: a new room instead\n", user->GetLogName(), r->GetID());
++		break;
 +	}
 +
 +	// a new one on a random map of the mode
@@ -1486,6 +1510,7 @@ index 35561e8..a1c9340 100644
 +	}
 +
 +	g_PendingQuickStarts.push_back({ user->GetID(), room->GetID(), time(NULL) + QUICKSTART_START_DELAY });
++	g_QuickStartAt[user->GetID()] = time(NULL);
 +	Logger().Info("Quick Start: '%s' got a new room %d, mode %d, map %d, %d AI players; the match starts in %d s\n",
 +		user->GetLogName(), room->GetID(), mode, mapId, bots, QUICKSTART_START_DELAY);
 +	return true;
@@ -1517,7 +1542,7 @@ index 35561e8..a1c9340 100644
  bool CChannelManager::OnRoomRequest(CReceivePacket* msg, IExtendedSocket* socket)
  {
  	LOG_PACKET;
-@@ -121,7 +296,20 @@ bool CChannelManager::OnRoomRequest(CReceivePacket* msg, IExtendedSocket* socket
+@@ -121,7 +321,20 @@ bool CChannelManager::OnRoomRequest(CReceivePacket* msg, IExtendedSocket* socket
  		g_PacketManager.SendRoomListFull(socket, channelServers[0]->GetChannels()[0]->GetRooms());
  		break;
  	case 27:
@@ -1538,7 +1563,7 @@ index 35561e8..a1c9340 100644
  	case InRoomType::SetZBAddonsRequest:
  		return OnRoomSetZBAddonRequest(msg, user);
  	case InRoomType::KickRequest:
-@@ -379,7 +567,12 @@ bool CChannelManager::OnCommandHandler(IExtendedSocket* socket, IUser* user, con
+@@ -379,7 +592,12 @@ bool CChannelManager::OnCommandHandler(IExtendedSocket* socket, IUser* user, con
  
  	if (!user)
  	{
@@ -1552,7 +1577,7 @@ index 35561e8..a1c9340 100644
  		{
  			if (args.size() == 3)
  			{
-@@ -443,6 +636,58 @@ bool CChannelManager::OnCommandHandler(IExtendedSocket* socket, IUser* user, con
+@@ -443,6 +661,58 @@ bool CChannelManager::OnCommandHandler(IExtendedSocket* socket, IUser* user, con
  	}
  	else
  	{
@@ -1611,7 +1636,7 @@ index 35561e8..a1c9340 100644
  		CUserCharacterExtended characterExtended = user->GetCharacterExtended(EXT_UFLAG_GAMEMASTER);
  		if (characterExtended.gameMaster)
  		{
-@@ -1246,6 +1491,9 @@ bool CChannelManager::OnNewRoomRequest(CReceivePacket* msg, IUser* user)
+@@ -1246,6 +1516,9 @@ bool CChannelManager::OnNewRoomRequest(CReceivePacket* msg, IUser* user)
  	// hide user from channel users list
  	channel->UserLeft(user, true);
  
@@ -1621,7 +1646,7 @@ index 35561e8..a1c9340 100644
  	Logger().Info("User '%s' created a new room (RID: %d, name: '%s')\n", user->GetLogName(), newRoom->GetID(), roomSettings->roomName.c_str());
  
  	if (roomSettings->familyBattle)
-@@ -1270,9 +1518,94 @@ bool CChannelManager::OnNewRoomRequest(CReceivePacket* msg, IUser* user)
+@@ -1270,9 +1543,94 @@ bool CChannelManager::OnNewRoomRequest(CReceivePacket* msg, IUser* user)
  
  bool CChannelManager::OnJoinRoomRequest(CReceivePacket* msg, IUser* user)
  {
@@ -1718,7 +1743,7 @@ index 35561e8..a1c9340 100644
  
  	CChannel* channel = user->GetCurrentChannel();
  	if (channel == NULL)
-@@ -1294,6 +1627,37 @@ bool CChannelManager::OnJoinRoomRequest(CReceivePacket* msg, IUser* user)
+@@ -1294,6 +1652,37 @@ bool CChannelManager::OnJoinRoomRequest(CReceivePacket* msg, IUser* user)
  		return false;
  	}
  
@@ -1756,7 +1781,7 @@ index 35561e8..a1c9340 100644
  	if (room->HasFreeSlots() == false)
  	{
  		g_PacketManager.SendUMsgNoticeMsgBoxToUuid(user->GetExtendedSocket(), OBFUSCATE("ROOM_JOIN_FAILED_FULL"));
-@@ -1396,6 +1760,9 @@ bool CChannelManager::OnJoinRoomRequest(CReceivePacket* msg, IUser* user)
+@@ -1396,6 +1785,9 @@ bool CChannelManager::OnJoinRoomRequest(CReceivePacket* msg, IUser* user)
  
  	channel->SendUpdateRoomList(room);
  
@@ -1766,7 +1791,7 @@ index 35561e8..a1c9340 100644
  	Logger().Info("User '%s' joined a room (RID: %d)\n", user->GetLogName(), room->GetID());
  
  	return true;
-@@ -1450,6 +1817,22 @@ bool CChannelManager::OnSetTeamRequest(CReceivePacket* msg, IUser* user)
+@@ -1450,6 +1842,22 @@ bool CChannelManager::OnSetTeamRequest(CReceivePacket* msg, IUser* user)
  	return true;
  }
  
@@ -1789,7 +1814,7 @@ index 35561e8..a1c9340 100644
  bool CChannelManager::OnLeaveRoomRequest(IUser* user)
  {
  	IRoom* currentRoom = user->GetCurrentRoom();
-@@ -1501,6 +1884,10 @@ bool CChannelManager::OnLeaveRoomRequest(IUser* user)
+@@ -1501,6 +1909,10 @@ bool CChannelManager::OnLeaveRoomRequest(IUser* user)
  		}
  
  		currentRoom->RemoveUser(user);
@@ -1800,7 +1825,7 @@ index 35561e8..a1c9340 100644
  	}
  
  	currentChannel->SendFullUpdateRoomList(user);
-@@ -1705,13 +2092,43 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
+@@ -1705,13 +2117,43 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
  		return false;
  	}
  
@@ -1844,7 +1869,7 @@ index 35561e8..a1c9340 100644
  	if (newSettings.familyBattle)
  	{
  		CUserCharacter character = user->GetCharacter(UFLAG_LOW_CLAN);
-@@ -1787,6 +2204,7 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
+@@ -1787,6 +2229,7 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
  		}
  	}
  
@@ -1852,7 +1877,7 @@ index 35561e8..a1c9340 100644
  	currentRoom->UpdateSettings(newSettings);
  
  	// inform every user in the room of the changes
-@@ -1795,6 +2213,10 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
+@@ -1795,6 +2238,10 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
  		currentRoom->SendUpdateRoomSettings(u, roomSettings, newSettings.lowFlag, newSettings.lowMidFlag, newSettings.highMidFlag, newSettings.highFlag);
  	}
  
@@ -1863,7 +1888,7 @@ index 35561e8..a1c9340 100644
  	currentChannel->SendUpdateRoomList(currentRoom);
  
  	Logger().Info("Host '%s' updated room settings (RID: %d)\n", user->GetLogName(), currentRoom->GetID());
-@@ -1921,7 +2343,12 @@ bool CChannelManager::OnRoomKickRequest(CReceivePacket* msg, IUser* user)
+@@ -1921,7 +2368,12 @@ bool CChannelManager::OnRoomKickRequest(CReceivePacket* msg, IUser* user)
  		return false;
  	}
  
@@ -1877,7 +1902,7 @@ index 35561e8..a1c9340 100644
  	if (destUser == NULL)
  	{
  		Logger().Warn("User '%s' tried to kick a user from a room, although destUser == NULL (RID: %d)\n", user->GetLogName(), currentRoom->GetID());
-@@ -2089,7 +2516,7 @@ bool CChannelManager::OnVoxelRoomListRequest(CReceivePacket* msg, IUser* user)
+@@ -2089,7 +2541,7 @@ bool CChannelManager::OnVoxelRoomListRequest(CReceivePacket* msg, IUser* user)
  {
  	string voxel_id = msg->ReadString();
  

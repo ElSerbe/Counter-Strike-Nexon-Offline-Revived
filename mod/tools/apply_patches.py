@@ -683,6 +683,63 @@ for _i, (_site, _fail) in enumerate(_BUYREC_SITES):
     ]
 
 
+# Zombie weapons in the normal modes. A buy menu record keeps the modes its weapon is sold in at +0x28/+0x2c (7-bit mode
+# ids packed into 64 bits; all ones = every mode); 0x25410B0(lo, hi, mode) checks the room's mode against them (mode 0,
+# Original, always passes). The zombie modes' weapons list zombie modes only, so the normal modes refused them. Its
+# "no" now goes through a cave: still "no" unless the room's mode is a normal one (the bit table below).
+_MODECHECK_NO = 0x25410F2       # xor al,al; pop esi; pop ebp; ret   (esi = the room's mode)
+_MODECHECK_CAVE = 0x1D455A0     # in the same int3 padding, after _BUYREC_CAVES
+_MODECHECK_TABLE = 0x1D455C0    # 128 bits: the modes that take every weapon
+_NORMAL_MODES = [1, 2, 3, 4, 5, 6, 7, 19, 23, 42]  # DM, TDM, Bot, Bot DM, Bot TDM, Official (+TieBreak), Item TDM, Light, Season Original
+_mode_bits = bytearray(16)
+for _m in _NORMAL_MODES:
+    _mode_bits[_m // 8] |= 1 << (_m % 8)
+PATCHES += [
+    (
+        "hw.dll",
+        _MODECHECK_CAVE,
+        b"\xcc" * 48,
+        bytes.fromhex(
+            "83fe7f"        # cmp esi,0x7f
+            "7709"          # ja no
+            "0fa335") + _MODECHECK_TABLE.to_bytes(4, "little") + bytes.fromhex(  # bt [table],esi
+            "7205"          # jc yes
+            "32c05e5dc3"    # no:  xor al,al; pop esi; pop ebp; ret
+            "b0015e5dc3"    # yes: mov al,1; pop esi; pop ebp; ret
+            ) + b"\xcc" * 8 + bytes(_mode_bits),
+        "Buy menu: every weapon (the zombie modes' too) is sold in the normal modes (code cave + mode table)",
+    ),
+    (
+        "hw.dll",
+        _MODECHECK_NO,
+        bytes.fromhex("32c05e5dc3"),
+        b"\xe9" + _rel32(_MODECHECK_NO + 5, _MODECHECK_CAVE),
+        "Buy menu: a weapon not listed for the room's mode goes through the normal-mode check",
+    ),
+]
+
+
+# Quick Start: the button ("QuickStartBegin", manager vfunc 0xa4) sent only [3], so the server started the mode IT
+# remembered (the player's last Quick Start, Team Deathmatch at first), not the one the lobby shows next to the button.
+# vfunc 0xa4 now goes to vfunc 0xa0 (0x25F17C0), which sends [0][mode shown][option] (mode = manager+0x34): the return
+# address moves under a pushed option 0, which vfunc 0xa0's "ret 4" takes back off.
+_QS_BEGIN = 0x25F18D0
+_QS_SEND = 0x25F17C0
+PATCHES += [
+    (
+        "hw.dll",
+        _QS_BEGIN,
+        bytes.fromhex("558bec6aff682d50af"),
+        bytes.fromhex(
+            "58"            # pop eax         the caller's return address
+            "6a00"          # push 0          option
+            "50"            # push eax
+            "e9") + _rel32(_QS_BEGIN + 9, _QS_SEND),  # jmp vfunc 0xa0 (ecx = the same manager)
+        "Quick Start button sends the mode the lobby shows ([0][mode][0]) instead of [3]",
+    ),
+]
+
+
 # what older releases wrote at a place whose patch changed since: replaced by the current bytes, not an abort
 PREVIOUS = {
     ("hw.dll", 0x2754F80): [bytes.fromhex("52ff7104c7410c7f00000166c7410a753290")],  # 1.0.x: port always 30002
