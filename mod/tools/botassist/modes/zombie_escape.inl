@@ -92,7 +92,14 @@ struct ZeBot
     float yaw = 0;
     bool yawSet = false;
     int passSide = 1;
+    // what it sees, kept ZE_SIGHT_KEEP: humans asked "a zombie in sight?" up to 3 times a move and zombies looked for
+    // their prey every move, a sight line for each player in range each time (up to 200 ms a second with a full room,
+    // frame drops on slower PCs; reports 2026-11-27)
+    float sightAt = -100, preyAt = -100;
+    bool sight = false;
+    void* prey = nullptr;
 };
+static const float ZE_SIGHT_KEEP = 0.25f;
 static std::map<void*, ZeBot> g_zeBots;
 static std::map<void*, int> g_zeZone; // every player's highest route box in this life
 static struct
@@ -567,12 +574,28 @@ static bool ZeZombieClose(void* bot, V3 eye, float range)
 // a nearby visible zombie (for a human): the stock AI has it, botassist leaves the aim alone
 static bool ZeZombieInSight(void* bot, V3 eye)
 {
-    bool seen = false;
+    ZeBot& z = g_zeBots[bot];
+    float now = Now();
+    if (now >= z.sightAt && now - z.sightAt < ZE_SIGHT_KEEP)
+        return z.sight;
+    // nearest first: the closest are the likeliest to be in sight
+    static std::vector<std::pair<float, void*>> cands;
+    cands.clear();
     ForEntitiesNear(eye, ZE_ZOMBIE_SEEN, [&](void* e) {
-        if (seen || e == bot || !(F<int>(Vars(e), EV_FLAGS) & FL_CLIENT) || !Alive(e) || !ZeIsZombie(e))
+        if (e == bot || !(F<int>(Vars(e), EV_FLAGS) & FL_CLIENT) || !Alive(e) || !ZeIsZombie(e))
             return;
-        seen = CanSee(bot, eye, e);
+        cands.push_back({ Len(Origin(e) - eye), e });
     });
+    std::sort(cands.begin(), cands.end(), [](const std::pair<float, void*>& a, const std::pair<float, void*>& b) { return a.first < b.first; });
+    bool seen = false;
+    for (auto& n : cands)
+        if (CanSee(bot, eye, n.second))
+        {
+            seen = true;
+            break;
+        }
+    z.sightAt = now;
+    z.sight = seen;
     return seen;
 }
 
@@ -692,18 +715,31 @@ static bool ZeMove(void* bot, BotState& st, float& viewYaw, float& viewPitch, bo
     if (zombie)
     {
         // a human seen or heard: on it; else where the humans are furthest along
-        void* prey = nullptr;
-        float nearest = 1e9f;
-        ForEntitiesNear(me, ZE_ZOMBIE_SEEN, [&](void* e) {
-            if (e == bot || !(F<int>(Vars(e), EV_FLAGS) & FL_CLIENT) || !Alive(e) || ZeIsZombie(e))
-                return;
-            float d = Len(Origin(e) - me);
-            if (d < nearest && (d < ZE_HEAR || CanSee(bot, eye, e)))
-            {
-                nearest = d;
-                prey = e;
-            }
-        });
+        // (the nearest heard or seen, looked for every ZE_SIGHT_KEEP; nearest first, so the first that qualifies)
+        void* prey = z.prey;
+        bool fresh = now >= z.preyAt && now - z.preyAt < ZE_SIGHT_KEEP;
+        if (prey && (!Alive(prey) || ZeIsZombie(prey)))
+            prey = nullptr, fresh = false; // (caught or dead: another one now)
+        if (!fresh)
+        {
+            static std::vector<std::pair<float, void*>> cands;
+            cands.clear();
+            ForEntitiesNear(me, ZE_ZOMBIE_SEEN, [&](void* e) {
+                if (e == bot || !(F<int>(Vars(e), EV_FLAGS) & FL_CLIENT) || !Alive(e) || ZeIsZombie(e))
+                    return;
+                cands.push_back({ Len(Origin(e) - me), e });
+            });
+            std::sort(cands.begin(), cands.end(), [](const std::pair<float, void*>& a, const std::pair<float, void*>& b) { return a.first < b.first; });
+            prey = nullptr;
+            for (auto& n : cands)
+                if (n.first < ZE_HEAR || CanSee(bot, eye, n.second))
+                {
+                    prey = n.second;
+                    break;
+                }
+            z.prey = prey;
+            z.preyAt = now;
+        }
         if (prey)
             goal = Origin(prey), arrive = 16.0f;
         else if (g_ze.leader)

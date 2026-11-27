@@ -1709,6 +1709,12 @@ static void ScanMonsters(void* bot, BotState& st, V3 eye)
     void* best = nullptr;
     void* nearest = nullptr;
     float bestDist = 1e30f, nearestDist = 1e30f;
+    // the nearest one in sight: sight is checked nearest first and stops at the first seen. It was checked for each
+    // monster nearer than the best so far, in the engine's order: with dozens of monsters, every bot ~7 times a second
+    // (cfg.rescan), that was most of botassist's time in Zombie Scenario (up to 300 ms a second, frame drops on slower
+    // PCs; reports 2026-11-27). Same pick as before.
+    static std::vector<std::pair<float, void*>> found;
+    found.clear();
     ForEntitiesNear(eye, HsScanRadius(), [&](void* e) {
         if (e == bot || !IsLivingMonster(e) || IsIgnored(ClassName(e)))
             return;
@@ -1722,12 +1728,16 @@ static void ScanMonsters(void* bot, BotState& st, V3 eye)
             nearestDist = d;
             nearest = e;
         }
-        if (d < bestDist && CanSee(bot, eye, e))
-        {
-            bestDist = d;
-            best = e;
-        }
+        found.push_back({ d, e });
     });
+    std::sort(found.begin(), found.end(), [](const std::pair<float, void*>& a, const std::pair<float, void*>& b) { return a.first < b.first; });
+    for (auto& f : found)
+        if (CanSee(bot, eye, f.second))
+        {
+            bestDist = f.first;
+            best = f.second;
+            break;
+        }
     // stay on the current target until it dies or stays out of sight; switch only for an extreme threat:
     // a visible monster about to hit the bot while the current one is clearly farther away
     void* cur = st.target;
@@ -1748,16 +1758,21 @@ static void ScanMonsters(void* bot, BotState& st, V3 eye)
         if (cur && IsObjective(cur) && CanSee(bot, eye, cur))
             obj = cur;
         else
+        {
+            found.clear(); // (nearest first, as above)
             ForEntitiesNear(eye, cfg.objectiveRange, [&](void* e) {
-                if (!IsObjective(e))
-                    return;
-                float d = Len(Center(e) - eye);
-                if (d < objDist && CanSee(bot, eye, e))
-                {
-                    objDist = d;
-                    obj = e;
-                }
+                if (IsObjective(e))
+                    found.push_back({ Len(Center(e) - eye), e });
             });
+            std::sort(found.begin(), found.end(), [](const std::pair<float, void*>& a, const std::pair<float, void*>& b) { return a.first < b.first; });
+            for (auto& f : found)
+                if (CanSee(bot, eye, f.second))
+                {
+                    objDist = f.first;
+                    obj = f.second;
+                    break;
+                }
+        }
         best = obj;
     }
     best = HsMissileFirst(bot, eye, best);
