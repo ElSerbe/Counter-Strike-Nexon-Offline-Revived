@@ -6126,6 +6126,7 @@ static void CommandFile()
 #include "modes/zombie4_darkness.inl"
 
 #include "modes/zombie_humans.inl"
+#include "match_teams.inl" // each player's side for the server's rounds won
 #include "modes/zombie_holdout.inl"
 
 #include "modes/zombie2_mutation.inl"
@@ -6247,6 +6248,7 @@ static void HookedStartFrame()
         GrenadeFixFrame();
         SfFrame();
         CrowdReport();
+        MatchTeamsFrame();
         if (CoopMode())
         {
             UpdateBarricades(); // zombies against barricades, bots or not

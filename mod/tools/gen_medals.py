@@ -51,7 +51,7 @@ BOT_ZOMBIE = [24]
 GROUP_NAMES = {  # how a mode list reads in the condition text
     tuple(ORIGINAL): "Original modes", tuple(TDM): "Team Deathmatch modes", tuple(DM): "Deathmatch modes",
     tuple(ZOMBIE): "Zombie modes", tuple(ZOMBIE_CLASSIC): "Zombie Classic, Zombie Mutant or Zombie Hero",
-    tuple(ZOMBIE_ALL): "any zombie mode", tuple(ZS): "Zombie Scenario", tuple(SCENARIO): "scenario modes",
+    tuple(ZOMBIE_ALL): "any zombie mode", tuple(ZOMBIE_ALL + [28, 52]): "any zombie mode", tuple(ZS): "Zombie Scenario", tuple(SCENARIO): "scenario modes",
     tuple(HUMAN_SCENARIO): "Human Scenario", tuple(SOCCER): "Soccer", tuple(ESCAPE): "Zombie Escape",
     tuple(ZOMBIE_Z): "Zombie Z", tuple(EVOLUTION): "Zombie Evolution", tuple(PROP_HUNT): "Prop Hunt",
     tuple(STUDIO): "Studio modes", tuple(SUPER_SOLDIER): "Super Soldier", tuple(BOT_MODES): "AI modes",
@@ -88,7 +88,7 @@ def modes_text(modes):
 
 # statistics the server keeps (CMedalManager), and how a condition on them reads
 COUNTERS = {
-    "Matches": "Play {n} matches", "Wins": "Win {n} matches", "Kills": "Score {n} kills", "Deaths": "Die {n} times",
+    "Matches": "Play {n} matches", "Wins": "Win {n} matches", "RoundWins": "Win {n} rounds", "Kills": "Score {n} kills", "Deaths": "Die {n} times",
     "Headshots": "Score {n} headshots", "MeleeKills": "Score {n} melee kills", "GrenadeKills": "Score {n} grenade kills",
     "PistolKills": "Score {n} pistol kills", "ShotgunKills": "Score {n} shotgun kills", "SmgKills": "Score {n} SMG kills",
     "RifleKills": "Score {n} rifle kills", "MgKills": "Score {n} machine gun kills", "BotKills": "Defeat {n} AI soldiers",

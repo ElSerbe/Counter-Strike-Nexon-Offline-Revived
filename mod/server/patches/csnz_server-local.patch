@@ -377,7 +377,7 @@ index e2e0a48..1cf6e1b 100644
  	virtual IUser* AddUser(IExtendedSocket* socket, int userID, const std::string& userName) = 0;
 diff --git a/src/interface/iwarbondmanager.h b/src/interface/iwarbondmanager.h
 new file mode 100644
-index 0000000..5405ded
+index 0000000..ac1fbdd
 --- /dev/null
 +++ b/src/interface/iwarbondmanager.h
 @@ -0,0 +1,24 @@
@@ -398,7 +398,7 @@ index 0000000..5405ded
 +public:
 +	// medals for a finished match (also advances the player's orders and challenges); returns the medals earned by
 +	// the match itself
-+	virtual int OnMatchResult(IUser* user, int gameMode, int kills, int headshots, bool won, bool topPlayer) = 0;
++	virtual int OnMatchResult(IUser* user, int gameMode, int kills, int headshots, bool won, bool topPlayer, int roundWins = 0) = 0;
 +	// headshots among a match's kills, by kill type (victimKillType of the host's kill events), see Telemetry in
 +	// Data/Warbonds.json
 +	virtual int CountHeadshots(const std::map<int, int>& killTypes) = 0;
@@ -1999,10 +1999,10 @@ index e4e7c83..30aa227 100644
 \ No newline at end of file
 diff --git a/src/manager/familymanager.cpp b/src/manager/familymanager.cpp
 new file mode 100644
-index 0000000..63ba902
+index 0000000..15ca4cf
 --- /dev/null
 +++ b/src/manager/familymanager.cpp
-@@ -0,0 +1,898 @@
+@@ -0,0 +1,903 @@
 +// Offline build: Family EXP, level, points and the game's Family Achievements (see familymanager.h).
 +#include "familymanager.h"
 +#include "itemmanager.h"
@@ -2498,6 +2498,7 @@ index 0000000..63ba902
 +		int team = 0;
 +		bool won = false;
 +		long long kills = 0;
++		long long roundWins = 0; // rounds won in the zombie PvP modes (CGameMatch::OnUpdateWinCounter)
 +		map<string, long long> counters; // "Family.<kind>": kills by weapon kind
 +	};
 +
@@ -2526,15 +2527,17 @@ index 0000000..63ba902
 +
 +		// the weekly missions: every member's match counts
 +		{
-+			long long wins = 0, kills = 0, best = 0;
++			long long wins = 0, kills = 0, best = 0, roundWins = 0;
 +			for (auto& m : members)
 +			{
 +				wins += m.won;
++				roundWins += m.roundWins;
 +				kills += m.kills;
 +				best = max(best, m.kills);
 +			}
 +			AdvanceWeekly(clanID, c, "Matches", mode, (long long)members.size());
 +			AdvanceWeekly(clanID, c, "Wins", mode, wins);
++			AdvanceWeekly(clanID, c, "RoundWins", mode, roundWins);
 +			AdvanceWeekly(clanID, c, "Kills", mode, kills);
 +			AdvanceWeekly(clanID, c, "BestKills", mode, best, true);
 +			AdvanceWeekly(clanID, c, "FamilyExp", mode, exp);
@@ -2616,6 +2619,7 @@ index 0000000..63ba902
 +		m.team = p.team;
 +		m.won = p.won;
 +		m.kills = p.stat->m_nKills;
++		m.roundWins = p.stat->m_nRoundWins;
 +		for (auto& kv : p.stat->m_Counters)
 +			if (kv.first.rfind("Family.", 0) == 0)
 +				m.counters[kv.first] = kv.second;
@@ -2653,7 +2657,7 @@ index 0000000..63ba902
 +			real += p.stat && p.stat->m_pUser ? 1 : 0;
 +		Member m = MemberOf(player);
 +		return { { "mode", match->m_nGameMode }, { "map", match->m_nMapID }, { "difficulty", difficulty }, { "real", real },
-+			{ "team", m.team }, { "won", m.won }, { "kills", m.kills }, { "counters", m.counters } };
++			{ "team", m.team }, { "won", m.won }, { "kills", m.kills }, { "roundWins", m.roundWins }, { "counters", m.counters } };
 +	}
 +
 +	void OnRemoteMatch(int userID, int clanID, const json& record)
@@ -2670,6 +2674,7 @@ index 0000000..63ba902
 +			m.team = record.value("team", 0);
 +			m.won = record.value("won", false);
 +			m.kills = max(0LL, min(record.value("kills", 0LL), 1000LL));
++			m.roundWins = max(0LL, min(record.value("roundWins", 0LL), 100LL));
 +			json counters = record.value("counters", json::object());
 +			for (auto& [name, v] : counters.items())
 +				if (name.rfind("Family.", 0) == 0 && v.is_number_integer())
@@ -11204,10 +11209,10 @@ index c7d2bdb..75d0ee9 100644
 +extern CVoxelManager g_VoxelManager;
 diff --git a/src/manager/warbondmanager.cpp b/src/manager/warbondmanager.cpp
 new file mode 100644
-index 0000000..0ccf814
+index 0000000..d727b55
 --- /dev/null
 +++ b/src/manager/warbondmanager.cpp
-@@ -0,0 +1,1238 @@
+@@ -0,0 +1,1255 @@
 +#include "supplyboxes.h"
 +#include "channelmanager.h"
 +#include "guestprofile.h"
@@ -11499,6 +11504,23 @@ index 0000000..0ccf814
 +				va("sv_cheats is on: this match's medals will be cut by %d%%.", m_Medals.cheatPenalty));
 +		}
 +		result = { { "ok", true }, { "match", match != NULL }, { "penalty", m_Medals.cheatPenalty } };
++	}
++	else if (req.method == "POST" && req.path == "/api/matchteams")
++	{
++		// botassist.asi (the host's game): each player's side now, {"teams":{"<name>":1|2}}, sent when it changes. A round
++		// won counts for the players on the winning side (CGameMatch::OnUpdateWinCounter)
++		CRoom* room = static_cast<CRoom*>(user->GetCurrentRoom());
++		CGameMatch* match = room ? room->GetGameMatch() : NULL;
++		json body = json::parse(req.body, nullptr, false);
++		if (match && body.is_object() && body.contains("teams") && body["teams"].is_object())
++		{
++			match->m_Teams.clear();
++			for (auto& t : body["teams"].items())
++				if (t.value().is_number_integer())
++					match->m_Teams[t.key()] = t.value().get<int>();
++			match->m_tTeamsAt = time(NULL);
++		}
++		result = { { "ok", match != NULL } };
 +	}
 +	else if (req.method == "POST" && req.path == "/api/steam")
 +	{
@@ -12349,7 +12371,7 @@ index 0000000..0ccf814
 +	return it != killTypes.end() ? it->second : 0;
 +}
 +
-+int CWarbondManager::OnMatchResult(IUser* user, int gameMode, int kills, int headshots, bool won, bool topPlayer)
++int CWarbondManager::OnMatchResult(IUser* user, int gameMode, int kills, int headshots, bool won, bool topPlayer, int roundWins)
 +{
 +	int killMedals = kills / m_Medals.killsPerMedal;
 +	if (m_Medals.maxKillMedals > 0)
@@ -12365,7 +12387,7 @@ index 0000000..0ccf814
 +			m_Medals.matchMultiplier, medals < full ? va(", sv_cheats: -%d%% of %d", m_Medals.cheatPenalty, full) : "");
 +
 +	AdvanceOrders(user, gameMode, { { "Matches", 1 }, { "Wins", won ? 1 : 0 }, { "Kills", kills }, { "BestKills", kills },
-+		{ "TopPlayer", topPlayer ? 1 : 0 }, { "Headshots", headshots } });
++		{ "TopPlayer", topPlayer ? 1 : 0 }, { "Headshots", headshots }, { "RoundWins", roundWins } });
 +	g_BingoManager.OnMatchResult(user, kills, won);
 +	g_ZSRiftManager.OnMatchResult(user, gameMode, kills, won);
 +	g_MissionManager.OnMatchEnd(user); // a session that went past midnight: Login Supplies get the new day
@@ -12448,7 +12470,7 @@ index 0000000..0ccf814
 +}
 diff --git a/src/manager/warbondmanager.h b/src/manager/warbondmanager.h
 new file mode 100644
-index 0000000..8604516
+index 0000000..ff1738b
 --- /dev/null
 +++ b/src/manager/warbondmanager.h
 @@ -0,0 +1,135 @@
@@ -12530,7 +12552,7 @@ index 0000000..8604516
 +	virtual bool Init();
 +	virtual void Shutdown();
 +
-+	virtual int OnMatchResult(IUser* user, int gameMode, int kills, int headshots, bool won, bool topPlayer);
++	virtual int OnMatchResult(IUser* user, int gameMode, int kills, int headshots, bool won, bool topPlayer, int roundWins = 0);
 +	virtual int CountHeadshots(const std::map<int, int>& killTypes);
 +	// the orders' progress from a match's events (Matches, Wins, Kills, Headshots...); also for a player leaving early
 +	void AdvanceOrders(IUser* user, int gameMode, const std::map<std::string, int>& events);
@@ -13781,7 +13803,7 @@ index 4c688f4..c1e0b2a 100644
 +	bool m_bWouldBlock; // last read hit WOLFSSL_ERROR_WANT_READ/WRITE (non-blocking SSL, retry on next poll)
  };
 diff --git a/src/room/gamematch.cpp b/src/room/gamematch.cpp
-index 65418d8..05a83a1 100644
+index 65418d8..6d91f68 100644
 --- a/src/room/gamematch.cpp
 +++ b/src/room/gamematch.cpp
 @@ -1,4 +1,6 @@
@@ -13824,7 +13846,7 @@ index 65418d8..05a83a1 100644
  
  		m_UserStats.push_back(userStat);
  	}
-@@ -220,6 +231,17 @@ void CGameMatch::Disconnect(IUser* user)
+@@ -220,6 +231,18 @@ void CGameMatch::Disconnect(IUser* user)
  	if (stat)
  	{
  		g_QuestManager.OnGameMatchLeave(user, stat->m_TempQuestProgress, stat->m_TempQuestEventProgress);
@@ -13832,17 +13854,18 @@ index 65418d8..05a83a1 100644
 +		// and their orders get those kills too (not the match or a win): they counted only at the end of the match, so a
 +		// player who left before it (a guest going home from another PC's room, say) got nothing for them (the user,
 +		// 2026-11-27: "none of my missions moved")
-+		if (user && (stat->m_nKills > 0 || !stat->m_KillTypes.empty()))
++		if (user && (stat->m_nKills > 0 || !stat->m_KillTypes.empty() || stat->m_nRoundWins > 0))
 +		{
 +			int headshots = g_WarbondManager.CountHeadshots(stat->m_KillTypes);
 +			Logger().Info("CGameMatch: user %d left before the end: orders get %d kills, %d headshots\n", user->GetID(),
 +				stat->m_nKills, headshots);
-+			g_WarbondManager.AdvanceOrders(user, m_nGameMode, { { "Kills", stat->m_nKills }, { "Headshots", headshots } });
++			g_WarbondManager.AdvanceOrders(user, m_nGameMode, { { "Kills", stat->m_nKills }, { "Headshots", headshots },
++				{ "RoundWins", stat->m_nRoundWins } });
 +		}
  
  		delete stat;
  		m_UserStats.erase(remove(begin(m_UserStats), end(m_UserStats), stat), end(m_UserStats));
-@@ -271,6 +293,8 @@ void CGameMatch::OnUpdateKillCounter(IUser* user, int kills)
+@@ -271,6 +294,8 @@ void CGameMatch::OnUpdateKillCounter(IUser* user, int kills)
  	if (stat)
  	{
  		stat->UpdateKillsCount(kills);
@@ -13851,7 +13874,7 @@ index 65418d8..05a83a1 100644
  	}
  }
  
-@@ -292,7 +316,15 @@ void CGameMatch::OnKillEvent(IUser* user, GameMatch_KillEvent& killEvent)
+@@ -292,7 +317,15 @@ void CGameMatch::OnKillEvent(IUser* user, GameMatch_KillEvent& killEvent)
  
  	// don't count player suicide
  	if (killEvent.killerUserID != killEvent.victimUserID)
@@ -13867,7 +13890,7 @@ index 65418d8..05a83a1 100644
  
  	g_QuestManager.OnKillEvent(stat, this, killEvent);
  
-@@ -320,13 +352,30 @@ void CGameMatch::OnKillEvent(IUser* user, GameMatch_KillEvent& killEvent)
+@@ -320,20 +353,84 @@ void CGameMatch::OnKillEvent(IUser* user, GameMatch_KillEvent& killEvent)
  	{
  		character.killsToGetGachaponItem = 100;
  
@@ -13905,7 +13928,61 @@ index 65418d8..05a83a1 100644
  	}
  
  	g_UserDatabase.UpdateCharacterExtended(user->GetID(), character);
-@@ -356,6 +405,7 @@ void CGameMatch::OnBombExplode(IUser* user)
+ }
+ 
++// zombie modes played in rounds by two sides that change with infections (not the co-op ones: Zombie Scenario,
++// Human Scenario, Zombie Shelter, Disaster Zone...)
++bool RoundZombieMode(int mode)
++{
++	static const int modes[] = { 8, 9, 14, 20, 24, 29, 30, 32, 35, 36, 37, 43, 44, 45, 51, 54, 56, 57, 58 };
++	for (int m : modes)
++		if (m == mode)
++			return true;
++	return false;
++}
++
++// offline build: did this player win the match? Their room team's rounds against the other's, or in the zombie PvP
++// modes (sides change with infections) more rounds won than lost on whichever side they were
++bool CGameMatch::PlayerWon(CGameMatchUserStat* stat)
++{
++	if (!stat || !stat->m_pUser)
++		return false;
++	if (RoundZombieMode(m_nGameMode) && stat->m_nRoundWins + stat->m_nRoundLosses > 0)
++		return stat->m_nRoundWins > stat->m_nRoundLosses;
++	RoomTeamNum team = m_pParentRoom->GetUserTeam(stat->m_pUser);
++	return (team == RoomTeamNum::Terrorist && m_nTerWinCount > m_nCtWinCount) ||
++		(team == RoomTeamNum::CounterTerrorist && m_nCtWinCount > m_nTerWinCount);
++}
++
+ void CGameMatch::OnUpdateWinCounter(int ctWinCount, int tWinCount)
+ {
++	// offline build: a round won. In the zombie PvP modes each player's side at that moment (botassist's last report)
++	// wins or loses it: their orders and missions count rounds won (the user, 2026-11-27: "win a zombie match" made no
++	// sense, a match is many rounds won by either side)
++	int winner = ctWinCount > m_nCtWinCount ? 2 : tWinCount > m_nTerWinCount ? 1 : 0;
++	if (winner && RoundZombieMode(m_nGameMode) && !m_Teams.empty() && time(NULL) - m_tTeamsAt < 600)
++	{
++		string won, lost;
++		for (auto stat : m_UserStats)
++		{
++			if (!stat->m_pUser)
++				continue;
++			auto it = m_Teams.find(stat->m_pUser->GetCharacter(UFLAG_LOW_GAMENAME).gameName);
++			if (it == m_Teams.end() || (it->second != 1 && it->second != 2))
++				continue;
++			bool w = it->second == winner;
++			(w ? stat->m_nRoundWins : stat->m_nRoundLosses)++;
++			if (w)
++				stat->m_Counters["RoundWins"]++;
++			(w ? won : lost) += va(" %d", stat->m_pUser->GetID());
++		}
++		Logger().Info("CGameMatch: round won by %s (mode %d): won by users%s, lost by users%s\n", winner == 2 ? "CT" : "T",
++			m_nGameMode, won.empty() ? " -" : won.c_str(), lost.empty() ? " -" : lost.c_str());
++	}
+ 	m_nCtWinCount = ctWinCount;
+ 	m_nTerWinCount = tWinCount;
+ 
+@@ -356,6 +453,7 @@ void CGameMatch::OnBombExplode(IUser* user)
  	if (!stat)
  		return;
  
@@ -13913,7 +13990,7 @@ index 65418d8..05a83a1 100644
  	g_QuestManager.OnBombExplode(stat, this);
  }
  
-@@ -365,6 +415,7 @@ void CGameMatch::OnBombDefuse(IUser* user)
+@@ -365,6 +463,7 @@ void CGameMatch::OnBombDefuse(IUser* user)
  	if (!stat)
  		return;
  
@@ -13921,7 +13998,7 @@ index 65418d8..05a83a1 100644
  	g_QuestManager.OnBombDefuse(stat, this);
  }
  
-@@ -374,6 +425,7 @@ void CGameMatch::OnHostageEscape(IUser* user)
+@@ -374,6 +473,7 @@ void CGameMatch::OnHostageEscape(IUser* user)
  	if (!stat)
  		return;
  
@@ -13929,7 +14006,7 @@ index 65418d8..05a83a1 100644
  	g_QuestManager.OnHostageEscape(stat, this);
  }
  
-@@ -383,6 +435,7 @@ void CGameMatch::OnMonsterKill(IUser* user, int monsterType)
+@@ -383,6 +483,7 @@ void CGameMatch::OnMonsterKill(IUser* user, int monsterType)
  	if (!stat)
  		return;	
  
@@ -13937,7 +14014,7 @@ index 65418d8..05a83a1 100644
  	g_QuestManager.OnMonsterKill(stat, this, monsterType);
  }
  
-@@ -391,6 +444,7 @@ void CGameMatch::OnDropBoxPickup(IUser* user, int rewardID)
+@@ -391,6 +492,7 @@ void CGameMatch::OnDropBoxPickup(IUser* user, int rewardID)
  	CGameMatchUserStat* stat = GetGameUserStat(user);
  	if (!stat)
  		return;
@@ -13945,7 +14022,7 @@ index 65418d8..05a83a1 100644
  
  #ifndef PUBLIC_RELEASE
  	if (m_nGameMode != 15 && m_nGameMode != 17 && m_nGameMode != 26 && m_nGameMode != 28)
-@@ -430,8 +484,55 @@ void CGameMatch::OnKiteKill(IUser* user)
+@@ -430,8 +532,51 @@ void CGameMatch::OnKiteKill(IUser* user)
  
  void CGameMatch::OnGameMatchEnd()
  {
@@ -13965,9 +14042,7 @@ index 65418d8..05a83a1 100644
 +		{
 +			place++;
 +			IUser* user = stat->m_pUser;
-+			RoomTeamNum team = m_pParentRoom->GetUserTeam(user);
-+			bool won = (team == RoomTeamNum::Terrorist && m_nTerWinCount > m_nCtWinCount) ||
-+				(team == RoomTeamNum::CounterTerrorist && m_nCtWinCount > m_nTerWinCount);
++			bool won = PlayerWon(stat);
 +			ModeRewards::OnMatchEnd(user, m_nGameMode, m_nMapID, m_pParentRoom->GetSettings()->zsDifficulty, won, place, stat->m_nKills);
 +		}
 +	}
@@ -13980,9 +14055,7 @@ index 65418d8..05a83a1 100644
 +			if (!stat->m_pUser)
 +				continue;
 +			RoomTeamNum team = m_pParentRoom->GetUserTeam(stat->m_pUser);
-+			bool won = (team == RoomTeamNum::Terrorist && m_nTerWinCount > m_nCtWinCount) ||
-+				(team == RoomTeamNum::CounterTerrorist && m_nCtWinCount > m_nTerWinCount);
-+			players.push_back({ stat, (int)team, won });
++			players.push_back({ stat, (int)team, PlayerWon(stat) });
 +		}
 +		Family::OnMatchEnd(this, m_pParentRoom->GetSettings()->zsDifficulty, players);
 +		// players from other PCs: their part goes home with their profile, for their family there
@@ -14001,7 +14074,7 @@ index 65418d8..05a83a1 100644
  
  	Logger().Info("CGameMatch::OnGameMatchEnd: gamemode: %d, CT rounds win count: %d, T rounds win count: %d\n", m_nGameMode, m_nCtWinCount, m_nTerWinCount);
  }
-@@ -532,7 +633,6 @@ void CGameMatch::CalculateGameResult()
+@@ -532,7 +677,6 @@ void CGameMatch::CalculateGameResult()
  	CalculateFirstPlace();
  
  	int expCoef = GetExpCoefficient();
@@ -14009,16 +14082,14 @@ index 65418d8..05a83a1 100644
  
  	for (auto stat : m_UserStats)
  	{
-@@ -541,8 +641,23 @@ void CGameMatch::CalculateGameResult()
+@@ -541,8 +685,22 @@ void CGameMatch::CalculateGameResult()
  		// calc exp
  		stat->m_nExpEarned = stat->m_nKills > 0 ? expCoef * stat->m_nKills : expCoef;
  
 -		// calc points
 -		stat->m_nPointsEarned = stat->m_nKills > 0 ? pointsCoef * stat->m_nKills : pointsCoef;
 +		// offline build: points are medals now (see CWarbondManager::OnMatchResult, which also advances orders)
-+		RoomTeamNum team = m_pParentRoom->GetUserTeam(user);
-+		bool won = (team == RoomTeamNum::Terrorist && m_nTerWinCount > m_nCtWinCount) ||
-+			(team == RoomTeamNum::CounterTerrorist && m_nCtWinCount > m_nTerWinCount);
++		bool won = PlayerWon(stat); // (the zombie PvP modes: more rounds won than lost)
 +		// m_UserStats is sorted by CalculateFirstPlace
 +		bool topPlayer = m_UserStats.size() > 1 && stat == m_UserStats.front();
 +		stat->m_nHeadshots = g_WarbondManager.CountHeadshots(stat->m_KillTypes);
@@ -14029,13 +14100,14 @@ index 65418d8..05a83a1 100644
 +				types += va("%d:%d ", kt.first, kt.second);
 +			Logger().Info("KillTypes: user %d -> %s\n", user->GetID(), types.c_str());
 +		}
-+		stat->m_nPointsEarned = g_WarbondManager.OnMatchResult(user, m_nGameMode, stat->m_nKills, stat->m_nHeadshots, won, topPlayer);
++		stat->m_nPointsEarned = g_WarbondManager.OnMatchResult(user, m_nGameMode, stat->m_nKills, stat->m_nHeadshots, won, topPlayer,
++			stat->m_nRoundWins);
 +		stat->m_Counters["Wins"] += won;
 +		stat->m_Counters["TopPlayer"] += topPlayer;
  
  		// calc bonus exp/points
  		auto bonusPercentageClass = find_if(g_pServerConfig->gameMatch.bonusPercentageClasses.begin(), g_pServerConfig->gameMatch.bonusPercentageClasses.end(),
-@@ -601,6 +716,10 @@ void CGameMatch::CalculateGameResult()
+@@ -601,6 +759,10 @@ void CGameMatch::CalculateGameResult()
  			}
  		}
  
@@ -14046,7 +14118,7 @@ index 65418d8..05a83a1 100644
  		if (stat->m_nExpEarned > 9999)
  		{
  			stat->m_nExpEarned = 9999;
-@@ -623,6 +742,9 @@ void CGameMatch::ApplyGameResult()
+@@ -623,6 +785,9 @@ void CGameMatch::ApplyGameResult()
  
  		int totalPoints = stat->m_nPointsEarned + stat->m_nBonusPointsEarned;
  		user->UpdatePoints(totalPoints);
@@ -14057,10 +14129,10 @@ index 65418d8..05a83a1 100644
  		if (m_nGameMode == 0 || m_nGameMode == 1 || m_nGameMode == 2 || m_nGameMode == 6 || m_nGameMode == 22)
  			user->UpdateStat(0, 0, stat->m_nKills, stat->m_nDeaths);
 diff --git a/src/room/gamematch.h b/src/room/gamematch.h
-index 68a4dc7..5c924cb 100644
+index 68a4dc7..65874a9 100644
 --- a/src/room/gamematch.h
 +++ b/src/room/gamematch.h
-@@ -57,6 +57,14 @@ public:
+@@ -57,6 +57,17 @@ public:
  
  	// zbs
  	int m_nRank;
@@ -14072,13 +14144,27 @@ index 68a4dc7..5c924cb 100644
 +	std::map<std::string, long long> m_Counters;
 +	time_t m_tJoined = 0;
 +	bool m_bStatsSaved = false;
++	// offline build: rounds this player's side won and lost (zombie PvP modes: the sides change every round, so a
++	// "won match" by the room team meant little; CGameMatch::OnUpdateWinCounter)
++	int m_nRoundWins = 0, m_nRoundLosses = 0;
  };
  
  class CGameMatch
-@@ -102,6 +110,8 @@ public:
+@@ -67,6 +78,7 @@ public:
+ 
+ 	void Connect(IUser* user);
+ 	void Disconnect(IUser* user);
++	bool PlayerWon(CGameMatchUserStat* stat); // offline build: see gamematch.cpp
+ 	CGameMatchUserStat* GetGameUserStat(IUser* user);
+ 
+ 	// ingame events
+@@ -102,6 +114,11 @@ public:
  
  	int m_nGameMode;
  	int m_nMapID;
++	// offline build: each player's side in the game now, by name (botassist.asi, POST /api/matchteams: 1 T, 2 CT)
++	std::map<std::string, int> m_Teams;
++	time_t m_tTeamsAt = 0;
 +	bool m_bCheats = false; // offline build: sv_cheats was on (botassist.asi tells the web API): medals are cut
 +	bool m_bZSRiftCleared = false; // offline build: Zombie Disaster Zone's last round cleared, Rift Tickets paid
  	int m_nCtWinCount;

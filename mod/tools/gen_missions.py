@@ -42,7 +42,7 @@ DAILY = {
     4: ([c("Bombs", 3, ORIGINAL)], 5, 15), 5: ([c("Hostages", 5, ORIGINAL)], 5, 15), 6: ([c("Wins", 2, ORIGINAL)], 4, 15),
     7: ([c("GrenadeKills", 1, ORIGINAL + TDM + DM)], 3, 10),
     8: ([c("MeleeKills", 1, ORIGINAL + TDM + DM), c("PistolKills", 1, ORIGINAL + TDM + DM)], 4, 10),
-    9: ([c("Kills", 25, TDM + DM)], 3, 10), 10: ([c("Wins", 2, [14])], 5, 15), 11: ([c("ZombieKills", 20, [14])], 4, 15),
+    9: ([c("Kills", 25, TDM + DM)], 3, 10), 10: ([c("RoundWins", 6, [14])], 5, 15), 11: ([c("ZombieKills", 20, [14])], 4, 15),
     12: ([c("MeleeKills", 3, ZOMBIE_CLASSIC)], 5, 15), 13: ([c("Headshots", 5, [9, 14])], 4, 10),
     14: ([c("ZombieKills", 30, [9, 14])], 4, 15),
     15: ([c("ZombieKills", 10, ZOMBIE_CLASSIC), c("Infections", 10, ZOMBIE_CLASSIC)], 6, 20),
@@ -73,8 +73,10 @@ EVENTS = [
       ([c("TopPlayer", 3)], 15, 40)], 25, 100),
     ("Outbreak Week", "The infection is spreading across every zone. Hold the line, or join the horde.",
      [([c("ZombieKills", 100, ZOMBIE_ALL)], 10, 30), ([c("Infections", 50, ZOMBIE_ALL)], 10, 30),
-      # Zombie Shelter counts as a zombie mode for winning and playing (its zombies are monsters: no ZombieKills)
-      ([c("Wins", 5, ZOMBIE_ALL + SHELTER)], 15, 40), ([c("Matches", 10, ZOMBIE_ALL + SHELTER)], 10, 30)], 25, 100),
+      # rounds won in the zombie PvP modes (a match there is many rounds won by either side; the server counts each
+      # player's side per round, CGameMatch::OnUpdateWinCounter). Zombie Shelter counts for playing (its zombies are
+      # monsters: no ZombieKills; co-op, no rounds)
+      ([c("RoundWins", 15, ZOMBIE_ALL)], 15, 40), ([c("Matches", 10, ZOMBIE_ALL + SHELTER)], 10, 30)], 25, 100),
     ("Scenario Siege", "The labs are overrun. Clear the scenarios and bring the survivors home.",
      [([c("MonsterKills", 1000, SCENARIO)], 10, 30), ([c("Wins", 3, SCENARIO)], 15, 40),
       ([c("MonsterKills", 3000, SCENARIO)], 15, 40), ([c("DropBoxes", 10)], 10, 30)], 25, 100),

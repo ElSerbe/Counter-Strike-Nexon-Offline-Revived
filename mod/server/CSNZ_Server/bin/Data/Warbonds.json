@@ -14,6 +14,8 @@
 
 	// Period: Daily, Weekly or Challenge (permanent, the challenge book; "Group" is its section).
 	// Type: Matches, Wins, Kills, TopPlayer (finish 1st), Unlocks (battle pass items), LevelUps add up;
+	// RoundWins: rounds won in the zombie PvP modes (the side a player was on when the round was won; their "Wins" are
+	// the matches where they won more rounds than they lost);
 	// BestKills (kills in one match), Level (level reached), TotalUnlocks count the best value.
 	// Optional "GameModes": [ids] limits an order to those modes. Reward in medals.
 	// (Every order's Reward and Tickets were doubled in v1.1.47.)
@@ -26,7 +28,7 @@
 		{"ID": 6, "Period": "Daily", "Text": "Get 100 kills", "Type": "Kills", "Target": 100, "Reward": 50},
 		{"ID": 7, "Period": "Daily", "Text": "Get 20 kills in a single match", "Type": "BestKills", "Target": 20, "Reward": 20, "Tickets": 2},
 		{"ID": 8, "Period": "Daily", "Text": "Play a Deathmatch match", "Type": "Matches", "Target": 1, "Reward": 20, "GameModes": [1, 2, 4, 5, 19, 22]},
-		{"ID": 9, "Period": "Daily", "Text": "Win a Zombie match", "Type": "Wins", "Target": 1, "Reward": 30, "GameModes": [8, 9, 14, 15, 20, 24, 28, 29, 30, 32, 35, 37, 43, 44, 45, 54, 56, 58]},
+		{"ID": 9, "Period": "Daily", "Text": "Win 3 Zombie rounds", "Type": "RoundWins", "Target": 3, "Reward": 30, "GameModes": [8, 9, 14, 20, 24, 29, 30, 32, 35, 37, 43, 44, 45, 54, 56, 58]},
 		{"ID": 10, "Period": "Daily", "Text": "Play 2 Zombie matches", "Type": "Matches", "Target": 2, "Reward": 10, "Tickets": 2, "GameModes": [8, 9, 14, 15, 20, 24, 28, 29, 30, 32, 35, 37, 43, 44, 45, 54, 56, 58]},
 		{"ID": 11, "Period": "Daily", "Text": "Win a Classic match", "Type": "Wins", "Target": 1, "Reward": 30, "GameModes": [0, 3, 6, 42]},
 		{"ID": 12, "Period": "Daily", "Text": "Get 40 kills in Deathmatch modes", "Type": "Kills", "Target": 40, "Reward": 30, "GameModes": [1, 2, 4, 5, 19, 22]},
@@ -41,7 +43,7 @@
 		{"ID": 109, "Period": "Weekly", "Text": "Get 50 kills in a single match", "Type": "BestKills", "Target": 50, "Reward": 160},
 		{"ID": 110, "Period": "Weekly", "Text": "Get 40 kills in a single match", "Type": "BestKills", "Target": 40, "Reward": 120},
 		{"ID": 111, "Period": "Weekly", "Text": "Get 800 kills in Deathmatch modes", "Type": "Kills", "Target": 800, "Reward": 240, "GameModes": [1, 2, 4, 5, 19, 22]},
-		{"ID": 112, "Period": "Weekly", "Text": "Win 5 Zombie matches", "Type": "Wins", "Target": 5, "Reward": 100, "GameModes": [8, 9, 14, 15, 20, 24, 28, 29, 30, 32, 35, 37, 43, 44, 45, 54, 56, 58]},
+		{"ID": 112, "Period": "Weekly", "Text": "Win 15 Zombie rounds", "Type": "RoundWins", "Target": 15, "Reward": 100, "GameModes": [8, 9, 14, 20, 24, 29, 30, 32, 35, 37, 43, 44, 45, 54, 56, 58]},
 		{"ID": 113, "Period": "Weekly", "Text": "Play 10 Zombie matches", "Type": "Matches", "Target": 10, "Reward": 60, "Tickets": 4, "GameModes": [8, 9, 14, 15, 20, 24, 28, 29, 30, 32, 35, 37, 43, 44, 45, 54, 56, 58]},
 		{"ID": 114, "Period": "Weekly", "Text": "Get 200 kills in Zombie modes", "Type": "Kills", "Target": 200, "Reward": 120, "GameModes": [8, 9, 14, 15, 20, 24, 28, 29, 30, 32, 35, 37, 43, 44, 45, 54, 56, 58]},
 		{"ID": 115, "Period": "Weekly", "Text": "Win 5 Classic matches", "Type": "Wins", "Target": 5, "Reward": 100, "GameModes": [0, 3, 6, 42]},
@@ -86,9 +88,9 @@
 		{"ID": 1029, "Period": "Challenge", "Group": "Career", "Text": "Reach level 50", "Type": "Level", "Target": 50, "Reward": 500},
 		{"ID": 1030, "Period": "Challenge", "Group": "Career", "Text": "Reach level 60", "Type": "Level", "Target": 60, "Reward": 800},
 		{"ID": 1031, "Period": "Challenge", "Group": "Career", "Text": "Reach level 72", "Type": "Level", "Target": 72, "Reward": 1200},
-		{"ID": 1032, "Period": "Challenge", "Group": "Zombie", "Text": "Win 10 Zombie matches", "Type": "Wins", "Target": 10, "Reward": 80, "GameModes": [8, 9, 14, 15, 20, 24, 28, 29, 30, 32, 35, 37, 43, 44, 45, 54, 56, 58]},
-		{"ID": 1033, "Period": "Challenge", "Group": "Zombie", "Text": "Win 50 Zombie matches", "Type": "Wins", "Target": 50, "Reward": 200, "GameModes": [8, 9, 14, 15, 20, 24, 28, 29, 30, 32, 35, 37, 43, 44, 45, 54, 56, 58]},
-		{"ID": 1034, "Period": "Challenge", "Group": "Zombie", "Text": "Win 100 Zombie matches", "Type": "Wins", "Target": 100, "Reward": 400, "GameModes": [8, 9, 14, 15, 20, 24, 28, 29, 30, 32, 35, 37, 43, 44, 45, 54, 56, 58]},
+		{"ID": 1032, "Period": "Challenge", "Group": "Zombie", "Text": "Win 30 Zombie rounds", "Type": "RoundWins", "Target": 30, "Reward": 80, "GameModes": [8, 9, 14, 20, 24, 29, 30, 32, 35, 37, 43, 44, 45, 54, 56, 58]},
+		{"ID": 1033, "Period": "Challenge", "Group": "Zombie", "Text": "Win 150 Zombie rounds", "Type": "RoundWins", "Target": 150, "Reward": 200, "GameModes": [8, 9, 14, 20, 24, 29, 30, 32, 35, 37, 43, 44, 45, 54, 56, 58]},
+		{"ID": 1034, "Period": "Challenge", "Group": "Zombie", "Text": "Win 300 Zombie rounds", "Type": "RoundWins", "Target": 300, "Reward": 400, "GameModes": [8, 9, 14, 20, 24, 29, 30, 32, 35, 37, 43, 44, 45, 54, 56, 58]},
 		{"ID": 1035, "Period": "Challenge", "Group": "Zombie", "Text": "Get 500 kills in Zombie modes", "Type": "Kills", "Target": 500, "Reward": 120, "GameModes": [8, 9, 14, 15, 20, 24, 28, 29, 30, 32, 35, 37, 43, 44, 45, 54, 56, 58]},
 		{"ID": 1036, "Period": "Challenge", "Group": "Zombie", "Text": "Get 2,500 kills in Zombie modes", "Type": "Kills", "Target": 2500, "Reward": 400, "GameModes": [8, 9, 14, 15, 20, 24, 28, 29, 30, 32, 35, 37, 43, 44, 45, 54, 56, 58]},
 		{"ID": 1037, "Period": "Challenge", "Group": "Deathmatch", "Text": "Play 250 Deathmatch matches", "Type": "Matches", "Target": 250, "Reward": 300, "GameModes": [1, 2, 4, 5, 19, 22]},

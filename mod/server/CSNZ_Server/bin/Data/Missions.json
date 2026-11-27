@@ -215,11 +215,11 @@
    "Npc": "Evelyn",
    "Portrait": "evelyn",
    "Story": "We at Aegis Institute are investigating the Hero that helped us greatly against the zombies. Because those disgusting zombies have the ability to evolve, we cannot be careless in our research towards enhancing the Hero’s abilities.\n\nSuch research is difficult because we lack information from real battles.\n\nIf you can bring us real combat data on the Hero, it would be vital to our research.\n\n* This mission can only be completed in a room with 4 or more players.\n* Unclaimed prizes will disappear when the mission has been reset.",
-   "Text": "Win 2 matches in Zombie Hero",
+   "Text": "Win 6 rounds in Zombie Hero",
    "Conditions": [
     {
-     "Counter": "Wins",
-     "Target": 2,
+     "Counter": "RoundWins",
+     "Target": 6,
      "Modes": [
       14
      ]
@@ -1137,11 +1137,11 @@
      "Medals": 60
     },
     {
-     "Text": "Win 5 matches in any zombie mode",
+     "Text": "Win 15 rounds in any zombie mode",
      "Conditions": [
       {
-       "Counter": "Wins",
-       "Target": 5,
+       "Counter": "RoundWins",
+       "Target": 15,
        "Modes": [
         8,
         9,
@@ -1159,9 +1159,7 @@
         30,
         32,
         37,
-        43,
-        28,
-        52
+        43
        ]
       }
      ],
