@@ -28,6 +28,15 @@
   const badge = small => '<span class="badge-icon' + (small ? " small" : "") + '"></span>';
   const ticket = small => '<span class="ticket-icon' + (small ? " small" : "") + '"></span>';
   const rewards = (b, m) => '<span class="rewards">' + (b ? `<span class="b">${badge(true)}${b}</span>` : "") + (m ? `<span class="m">${medal(true)}${m}</span>` : "") + "</span>";
+  // the decoders a claimed request or a finished daily/weekly order can also give (/api/missions "decoders"), with odds
+  const decoderBonus = chance => {
+    const d = data && data.decoders;
+    if (!d || !chance || !d.list || !d.list.length) return "";
+    const odds = x => (x.odds < 1 ? x.odds.toFixed(1) : Math.round(x.odds)) + "%";
+    return '<div class="decoder-bonus"><span class="lead">' + Math.round(chance) + "% chance of a bonus decoder</span><span class=\"icons\">" +
+      d.list.map(x => '<img src="../shop/icons/' + x.itemID + '.png" alt="" title="' + esc(x.name) + " (" + odds(x) + ')" onerror="this.remove()">').join("") +
+      "</span></div>";
+  };
   function timeLeft(seconds) {
     const d = Math.floor(seconds / 86400), h = Math.floor(seconds % 86400 / 3600), m = Math.floor(seconds % 3600 / 60);
     return d ? d + "d " + h + "h" : h ? h + "h " + m + "m" : m + "m";
@@ -111,7 +120,8 @@
         <div><div class="from">From ${esc(pick.npc)}</div><h2>${esc(pick.title)}</h2></div>
         ${pick.story ? `<div class="story">${esc(pick.story)}</div>` : ""}
         <div class="goal">${esc(pick.text)}</div>
-        <div>${rewards(pick.badges, pick.medals)}</div>` : '<div class="empty">No requests today.</div>'}</aside>
+        <div>${rewards(pick.badges, pick.medals)}</div>
+        ${decoderBonus(data.decoders && data.decoders.request)}` : '<div class="empty">No requests today.</div>'}</aside>
     </div>`;
   }
 
@@ -270,7 +280,8 @@
     const column = (period, label) => {
       const list = state.orders.filter(o => o.period === period);
       if (!list.length) return "";
-      return "<div><h2>" + label + "<small>Resets in " + timeLeft(list[0].resetsIn) + "</small></h2>" +
+      const chance = data && data.decoders ? (period === "Daily" ? data.decoders.daily : data.decoders.weekly) : 0;
+      return "<div><h2>" + label + "<small>Resets in " + timeLeft(list[0].resetsIn) + "</small></h2>" + decoderBonus(chance) +
         list.map(o => '<div class="order' + (o.completed ? " done" : "") + '">' +
           '<div class="row"><span class="text">' + esc(o.text) + '</span><span class="reward">' + medal(true) + "+" + o.reward + tickets(o) + "</span></div>" +
           '<div class="progress"><span style="width:' + pct(o.progress, o.target) + '%"></span></div>' +
@@ -406,7 +417,10 @@
   function preview(path, body) {
     if (!mock) {
       mock = { badges: 45, medals: 1260, refreshIn: 30000, characterItem: 51,
-        requests: { slots: 3, active: [], offers: [] }, market: [], event: null };
+        requests: { slots: 3, active: [], offers: [] }, market: [], event: null,
+        decoders: { request: 35, daily: 35, weekly: 35, list: [[165, "Decoder", 21.7], [533, "Code B Decoder", 17.4], [8310, "Rare Decoder", 13], [774, "Mileage Decoder", 10.4],
+          [173, "Advanced Decoder", 8.7], [8308, "Unique Decoder", 7], [8311, "Class Decoder", 5.2], [9084, "Paint Decoder", 5.2], [8453, "Event Decoder", 5.2],
+          [396, "Code A Decoder", 3.5], [806, "Supreme Decoder", 1.7], [8292, "Transcendence Decoder", 0.9]].map(([itemID, name, odds]) => ({ itemID, name, odds })) } };
       const npcs = [["DoctorA", "Senior Researcher Soi"], ["Victor", "Victor"], ["Evelyn", "Evelyn"], ["Jacob", "Jacob"], ["Zim", "Zim"]];
       const titles = ["Glorious Victor!", "Necessity", "C4 Plan Support", "Zombie Sweep", "First Steps 3", "Virus Host"];
       const goals = ["Win 3 matches", "Score 5 headshots", "Plant or defuse 3 bombs in Original modes", "Kill 100 monsters in Zombie Scenario", "Play for 1 hours", "Infect 10 humans in Zombie (Original, Mutation, Hero)"];

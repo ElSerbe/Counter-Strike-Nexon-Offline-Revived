@@ -131,6 +131,22 @@ def rift_item_ids():
     return {i["ItemID"] for i in json.load(open(path, encoding="utf-8")).get("Items", [])}
 
 
+def decoder_item_ids():
+    """The decoders: the bonus ones of orders and mission requests (Data/DailyDecoders.json), shown on the Missions page,
+    and every one the server opens (ItemBox.json, next to Data). None is sold in the shop, so they had no icon."""
+    ids = set()
+    for path, key in ((os.path.join(SERVER_DATA, "DailyDecoders.json"), "Decoders"),):
+        if os.path.exists(path):
+            cfg = json.loads(re.sub(r"(?m)^\s*//.*$", "", open(path, encoding="utf-8").read()))
+            ids |= {d["Item"] for d in cfg.get(key, []) if d.get("Item")}
+    box = os.path.join(SERVER_DATA, "..", "ItemBox.json")
+    if os.path.exists(box):
+        # (comments after values too: the server reads it with comments allowed)
+        cfg = json.loads(re.sub(r"//[^\n]*", "", open(box, encoding="utf-8").read()))
+        ids |= {int(k) for k in cfg if k.isdigit()}
+    return ids
+
+
 def warbond_art():
     """{warbond ID: "[archive:]game path"} of the passes' promotional art (Warbonds.json "Art")."""
     text = open(os.path.join(SERVER_DATA, "Warbonds.json"), encoding="utf-8").read()
@@ -564,7 +580,7 @@ def main():
     if "--all" in sys.argv:
         wanted = [i for i, it in items.items() if it["class"] in ("Equipment", "Class")]
     else:
-        wanted = sorted(warbond_item_ids() | market_item_ids() | rift_item_ids() |
+        wanted = sorted(warbond_item_ids() | market_item_ids() | rift_item_ids() | decoder_item_ids() |
                         {i for i, it in items.items() if it["class"] == "Class"})
     available = nar_files()
 

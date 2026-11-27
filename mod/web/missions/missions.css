@@ -168,3 +168,9 @@
 .lday.today .lstate { color: var(--accent); }
 .lday.next .lstate { color: #cfc6b8; }
 .lday .lrew small { font-size: 11px; font-weight: 400; color: var(--muted); margin-left: -2px; overflow: hidden; text-overflow: ellipsis; }
+
+/* the decoders a request or order can also give */
+.decoder-bonus { display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--line); background: var(--panel); padding: 8px 10px; margin-bottom: 10px; }
+.decoder-bonus .lead { font-size: 11px; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; }
+.decoder-bonus .icons { display: flex; flex-wrap: wrap; gap: 4px; }
+.decoder-bonus img { width: 52px; height: 39px; object-fit: contain; background: #0c0f13; border: 1px solid var(--line); }

@@ -1086,6 +1086,14 @@ namespace CsnzLauncher
                         set.Add(int.Parse(m.Groups[1].Value));
                 }
                 catch { }
+            // the bonus decoders of orders and mission requests, shown on the Missions page (v1.1.52)
+            try
+            {
+                foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(
+                             File.ReadAllText(Path.Combine(data, "DailyDecoders.json")), "\"Item\"\\s*:\\s*(\\d+)"))
+                    set.Add(int.Parse(m.Groups[1].Value));
+            }
+            catch { }
             return set;
         }
 
