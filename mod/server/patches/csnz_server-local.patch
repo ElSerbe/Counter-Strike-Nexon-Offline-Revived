@@ -14006,7 +14006,7 @@ index 68a4dc7..5c924cb 100644
  	int m_nTerWinCount;
  	int m_nFirstPlaceUserId;
 diff --git a/src/room/room.cpp b/src/room/room.cpp
-index 616959e..b47e55b 100644
+index 616959e..239bd16 100644
 --- a/src/room/room.cpp
 +++ b/src/room/room.cpp
 @@ -1,4 +1,5 @@
@@ -14428,6 +14428,15 @@ index 616959e..b47e55b 100644
  	if (m_pServer)
  		g_PacketManager.SendHostStop(m_pServer->GetSocket());
  
+@@ -1223,7 +1576,7 @@ void CRoom::ChangeMap(int mapId)
+ 
+ 		if (m_pServer)
+ 			g_PacketManager.SendHostServerJoin(u->GetExtendedSocket(), m_pServer->GetIP(), m_pServer->GetPort(), u->GetID());
+-		else
++		else if (u != m_pHostUser) // the host changes map on its own; telling it to join itself fails
+ 			g_PacketManager.SendHostJoin(u->GetExtendedSocket(), m_pHostUser);
+ 	}
+ }
 diff --git a/src/room/room.h b/src/room/room.h
 index 13a4ee8..dc8e872 100644
 --- a/src/room/room.h
