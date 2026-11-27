@@ -875,6 +875,20 @@ namespace CsnzLauncher
             catch { return false; }
         }
 
+        // Steam's client runs as administrator (its token can't be read from here, or says elevated)
+        static bool SteamElevated()
+        {
+            try
+            {
+                foreach (var s in Process.GetProcessesByName("steam"))
+                    using (s)
+                        if (Elevation.Of(s.Id) != false)
+                            return true;
+            }
+            catch { }
+            return false;
+        }
+
         // online play: the bridge. With Steam open: Spacewar lobbies + P2P tunnels to other players' servers, and the online
         // lobby (Cloudflare) too; without Steam (v1.1.49): the online lobby only. Null when it can't run.
         public static Process StartBridge(string game, Logger log, bool verbose = false)
@@ -890,9 +904,25 @@ namespace CsnzLauncher
             try { File.Delete(Path.Combine(data, "SteamBridge.stop")); } catch { }
             var args = (steamApi != null ? $"--steam-api \"{steamApi}\"" : "--no-steam") +
                 $" --data \"{data}\" --log \"{Path.Combine(Paths.LogDir, "steambridge.log")}\"" + (verbose ? " --verbose" : "");
+            // Steam run as administrator only lets programs that run as administrator in (a player's bridge failed every
+            // time, 2026-11-27, while the game, which runs as administrator, used Steam fine): the bridge asks for it too
+            var psi = new ProcessStartInfo(Paths.BridgeExe, args) { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = Path.GetDirectoryName(Paths.BridgeExe) };
+            if (steamApi != null && SteamElevated() && !Elevation.Self())
+            {
+                log("Steam runs as administrator: the online bridge asks Windows for administrator rights too, or Steam doesn't let it in. " +
+                    "(Opening Steam normally avoids the question.)");
+                psi = new ProcessStartInfo(Paths.BridgeExe, args) { UseShellExecute = true, Verb = "runas", WindowStyle = ProcessWindowStyle.Hidden, WorkingDirectory = Path.GetDirectoryName(Paths.BridgeExe) };
+            }
             try
             {
-                var p = Process.Start(new ProcessStartInfo(Paths.BridgeExe, args) { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = Path.GetDirectoryName(Paths.BridgeExe) });
+                Process p;
+                try { p = Process.Start(psi); }
+                catch (System.ComponentModel.Win32Exception) when (psi.Verb == "runas")
+                {
+                    log("Online play: administrator rights for the bridge were refused, so Steam won't let it in: only the online lobby works this time.");
+                    psi = new ProcessStartInfo(Paths.BridgeExe, args) { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = Path.GetDirectoryName(Paths.BridgeExe) };
+                    p = Process.Start(psi);
+                }
                 Thread.Sleep(3000);
                 if (p.HasExited)
                 {

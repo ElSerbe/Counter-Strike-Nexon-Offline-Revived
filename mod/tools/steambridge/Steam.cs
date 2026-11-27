@@ -147,6 +147,40 @@ namespace SteamBridge
             return Encoding.UTF8.GetString(b);
         }
 
+        // why SteamAPI_Init failed, as far as can be told. A player's bridge failed every time while Steam was open and the
+        // game (which runs as administrator) used it fine (2026-11-27): a Steam running as administrator only lets
+        // programs that run as administrator in, and the bridge doesn't (unless the launcher starts it so, see the launcher's
+        // Runner.StartBridge).
+        static string WhyNoSteam()
+        {
+            try
+            {
+                var steams = System.Diagnostics.Process.GetProcessesByName("steam");
+                if (steams.Length == 0)
+                    return "Steam isn't running.";
+                int user = 0;
+                try
+                {
+                    using (var k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Valve\Steam\ActiveProcess"))
+                        user = k?.GetValue("ActiveUser") is int u ? u : 0;
+                }
+                catch { }
+                bool? admin = Elevation.Of(steams[0].Id);
+                bool meAdmin = Elevation.Self();
+                if (admin == null && !meAdmin)
+                    return "Steam runs as administrator (or as another Windows user), and the bridge doesn't, so Steam doesn't let it in. " +
+                        "Close Steam and open it normally (not as administrator), or online play only uses the online lobby.";
+                if (admin == true && !meAdmin)
+                    return "Steam runs as administrator and the bridge doesn't, so Steam doesn't let it in. " +
+                        "Close Steam and open it normally (not as administrator), or online play only uses the online lobby.";
+                if (user == 0)
+                    return "Steam is open but nobody is logged in to it (or it's still starting).";
+                return "Steam is open and logged in, but didn't let the bridge in (Steam " + (admin == true ? "runs" : "doesn't run") +
+                    " as administrator, the bridge " + (meAdmin ? "does" : "doesn't") + ").";
+            }
+            catch (Exception ex) { return "Steam isn't running, or isn't logged in (" + ex.Message + ")."; }
+        }
+
         // loads the game's steam_api.dll (Bin of the game) and starts Steam for app 480 (steam_appid.txt in the bridge's folder)
         public static Steam Start(string steamApiPath, Action<string> log)
         {
@@ -157,7 +191,7 @@ namespace SteamBridge
             }
             if (!Native.SteamAPI_Init())
             {
-                log("SteamAPI_Init failed: Steam isn't running, or isn't logged in.");
+                log("SteamAPI_Init failed: " + WhyNoSteam());
                 return null;
             }
             var s = new Steam();

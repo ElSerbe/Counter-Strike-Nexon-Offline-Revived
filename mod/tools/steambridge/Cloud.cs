@@ -33,7 +33,9 @@ namespace SteamBridge
 
     class CloudNet
     {
-        public const int Proto = 1;
+        // 2 (v1.1.53): no PING through the relay, two direct-link tries per listed host. The lobby refuses 1: those bridges
+        // used up its free daily messages within hours.
+        public const int Proto = 2;
         const int MaxDirect = 1200;
 
         readonly string url;
@@ -567,8 +569,11 @@ namespace SteamBridge
             }
         }
 
-        // the bridge has business with this PC (a host listed, a player in this PC's room, profile mail): try a direct link
-        public void Want(ulong peer)
+        // the bridge has business with this PC (a host listed, a player in this PC's room, profile mail): try a direct link.
+        // A host that's only listed (listedOnly) gets two tries: every offer and answer is a message the online lobby pays
+        // for, and a PC whose router changes the port never links, so the retries went on all session long with every host
+        // (v1.1.52: the lobby ran out of its free daily messages). A connection or a player in the room keeps trying.
+        public void Want(ulong peer, bool listedOnly = false)
         {
             if (udp == null || !Connected)
                 return;
@@ -581,7 +586,7 @@ namespace SteamBridge
                 if (!links.TryGetValue(peer, out l))
                     links[peer] = l = new Link { Peer = peer };
                 l.WantedUntil = now.AddSeconds(90);
-                if (l.Confirmed || now < l.NextOffer)
+                if (l.Confirmed || now < l.NextOffer || (listedOnly && l.Tries >= 2))
                     return;
                 // tried and failed: again after 1, 2, 4.. minutes (up to 10)
                 l.NextOffer = now.AddSeconds(Math.Min(600, 60 * (1 << Math.Min(l.Tries, 4))));

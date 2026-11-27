@@ -21,7 +21,13 @@
 //   {"t":"sig","from":"<u64>","ip":"<the sender's public IP>","body":{...}} | {"t":"nopeer","id"}
 // The text "ping" is answered "pong" without waking the object (the bridges' keep-alive every 30 s).
 
-const PROTO = 1;
+// 2 since v1.1.53. Bridges on 1 (v1.1.49-1.1.52) PINGed every host through the relay every 5 s, and every one of those
+// messages counts against the Durable Objects free tier (100,000 requests a day, an incoming WebSocket message being
+// 1/20 of one): with a few dozen players the lobby ran out in a couple of hours and answered 500 for the rest of the day
+// (2026-11-27). They're refused with a message to update (their launcher updates by itself within the hour).
+const PROTO = 2;
+// the relay passes no PING (8) or PONG (9): the room list's ping only goes over direct links
+const RELAY_PING = 8, RELAY_PONG = 9;
 const BINDING_DAYS = 30;
 
 export default {
@@ -105,7 +111,7 @@ export class Lobby {
       if (!a.id)
         return;
       const buf = new Uint8Array(msg);
-      if (buf.length < 9)
+      if (buf.length < 9 || buf[8] === RELAY_PING || buf[8] === RELAY_PONG)
         return;
       const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
       const to = view.getBigUint64(0, true).toString();
@@ -132,7 +138,7 @@ export class Lobby {
         return;
       }
       if ((m.proto | 0) !== PROTO) {
-        this.send(ws, { t: "denied", why: "This version of the mod uses another online protocol: update the mod." });
+        this.send(ws, { t: "denied", why: "This version of the mod uses another online protocol: update the mod (the launcher's Update)." });
         ws.close(4001, "protocol");
         return;
       }

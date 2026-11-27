@@ -303,8 +303,13 @@ namespace SteamBridge
                     continue;
                 if (!loopback && h.Cloud)
                 {
-                    cloud.Want(h.SteamID);
+                    cloud.Want(h.SteamID, true);
                     h.Route = cloud.Route(h.SteamID);
+                    // through the online lobby, PING only goes over a direct link (free): through its relay every PING
+                    // and PONG was a message the lobby pays for, every 5 s between every player and every host, and the
+                    // lobby ran out of its free daily messages within hours (v1.1.52)
+                    if (h.Route != "direct")
+                        continue;
                 }
                 else if (!loopback)
                 {
@@ -1147,7 +1152,10 @@ namespace SteamBridge
             switch (type)
             {
                 case Ping:
-                    // answered at once (callers hold Steam.Lock, or run the loopback queue)
+                    // answered at once (callers hold Steam.Lock, or run the loopback queue); not through the online
+                    // lobby's relay (bridges up to v1.1.52 sent it there every 5 s: see Prewarm)
+                    if (!loopback && IsCloud(peer) && cloud.Route(peer) != "direct")
+                        break;
                     msg[0] = Pong;
                     if (loopback)
                         loop.Enqueue(Tuple.Create(peer == LoopHostSide ? MyID : LoopHostSide, msg));
