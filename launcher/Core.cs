@@ -1087,6 +1087,58 @@ namespace CsnzLauncher
         }
     }
 
+    // ------------------------------------------------------------ the Logs menu's "Clean up logs": the mod's logs only grow
+    // (botassist_debug.log reaches tens of MB). Files only: every writer recreates its file in the folders kept.
+    public static class LogCleaner
+    {
+        // the mod's logs and botassist's crash dumps that exist now; the game's own logs (Error.log...) are left alone
+        public static List<string> Files(string game)
+        {
+            var files = new List<string>
+            {
+                Path.Combine(Paths.LogDir, "launcher.log"),
+                Path.Combine(Paths.LogDir, "steambridge.log"),
+                LogBundle.FilePath,
+                Path.Combine(Paths.Mod, "server", "server.log"),
+            };
+            var serverLogs = Path.Combine(Paths.Mod, "server", "CSNZ_Server", "bin", "Logs");
+            try { if (Directory.Exists(serverLogs)) files.AddRange(Directory.GetFiles(serverLogs, "*.log")); } catch { }
+            if (GameLocator.IsGame(game))
+            {
+                var bin = Path.Combine(game, "Bin");
+                files.AddRange(new[] { "botassist.log", "botassist_debug.log", "offline_hook.log" }.Select(f => Path.Combine(bin, f)));
+                files.Add(LogBundle.CrashLog(game));
+                try { files.AddRange(Directory.GetFiles(bin, "crash-*.dmp")); } catch { }
+            }
+            return files.Where(File.Exists).ToList();
+        }
+
+        // deletes them; a file in use is skipped and named in `failed`
+        public static (int deleted, long bytes, List<string> failed) Clean(IEnumerable<string> files)
+        {
+            int deleted = 0;
+            long bytes = 0;
+            var failed = new List<string>();
+            foreach (var f in files)
+            {
+                try
+                {
+                    long size = new FileInfo(f).Length;
+                    File.Delete(f);
+                    deleted++;
+                    bytes += size;
+                }
+                catch (Exception) { failed.Add(Path.GetFileName(f)); }
+            }
+            return (deleted, bytes, failed);
+        }
+
+        public static long Bytes(IEnumerable<string> files) => files.Sum(f => { try { return new FileInfo(f).Length; } catch { return 0L; } });
+
+        public static string Size(long bytes) =>
+            bytes >= 1024 * 1024 ? (bytes / 1048576.0).ToString("0.0") + " MB" : Math.Max(1, (bytes + 1023) / 1024) + " KB";
+    }
+
     // ------------------------------------------------------------ the web pages' pictures and models, exported from the player's game (needs Python)
     public static class Assets
     {

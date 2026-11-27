@@ -134,6 +134,9 @@ namespace CsnzLauncher
             logsMenu.Items.Add("Copy the last session's logs", null, (s, e) => CopyLogs());
             logsMenu.Items.Add("Open the last session's logs", null, (s, e) => OpenLogs());
             logsMenu.Items.Add("Open the logs folder", null, (s, e) => { Directory.CreateDirectory(Paths.LogDir); Process.Start("explorer.exe", "\"" + Paths.LogDir + "\""); });
+            var cleanItem = logsMenu.Items.Add("Clean up logs...", null, (s, e) => CleanLogs());
+            // the game, the server and the bridge keep their logs open
+            logsMenu.Opening += (s, e) => cleanItem.Enabled = Runner.OursRunning().Length == 0;
             logsMenu.Items.Add(new ToolStripSeparator());
             logsMenu.Items.Add("Report a problem on GitHub...", null, (s, e) => ReportProblem());
             logsButton.Click += (s, e) => logsMenu.Show(logsButton, new Point(0, logsButton.Height));
@@ -674,6 +677,29 @@ namespace CsnzLauncher
             {
                 DarkBox.Show(this, "Couldn't open the browser (" + ex.Message + "). The form is at " + GitHub.PageUrl + "/issues/new/choose", Text);
             }
+        }
+
+        // the mod's logs and crash dumps deleted (they only grow); each one is written again from the next Play
+        void CleanLogs()
+        {
+            var files = LogCleaner.Files(settings.GamePath);
+            if (files.Count == 0)
+            {
+                Log("No logs to clean up.");
+                return;
+            }
+            if (DarkBox.Show(this, $"Delete {files.Count} log files and crash dumps ({LogCleaner.Size(LogCleaner.Bytes(files))})?\n\n" +
+                    "The game, the server and the launcher start new ones on the next Play. A problem report sent before " +
+                    "then has no logs to attach.", "Clean up logs?", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+                return;
+            if (Runner.OursRunning().Length > 0)
+            {
+                Log("The logs weren't cleaned up: the game, the server or the Steam bridge started meanwhile.");
+                return;
+            }
+            var (deleted, bytes, failed) = LogCleaner.Clean(files);
+            Log($"Cleaned up logs: {deleted} files, {LogCleaner.Size(bytes)} freed." +
+                (failed.Count > 0 ? " Still in use, kept: " + string.Join(", ", failed) + "." : ""));
         }
 
         void OpenLogs()
@@ -1287,6 +1313,14 @@ namespace CsnzLauncher
                 if (args.Contains("--logs"))
                     try { lines.Add($"logs: {LogBundle.Build(Settings.Load()).Length} characters in {LogBundle.FilePath}"); }
                     catch (Exception ex) { lines.Add("logs: " + ex); }
+                if (args.Contains("--clean-logs"))
+                    try
+                    {
+                        // the Logs menu's "Clean up logs" without its question (on the --game folder when given)
+                        var (deleted, bytes, failed) = LogCleaner.Clean(LogCleaner.Files(gi > 0 ? g : Settings.Load().GamePath));
+                        lines.Add($"clean-logs: deleted {deleted} files, {bytes} bytes, failed: {(failed.Count == 0 ? "none" : string.Join(", ", failed))}");
+                    }
+                    catch (Exception ex) { lines.Add("clean-logs: " + ex); }
                 File.WriteAllLines(Path.Combine(Paths.Root, "launcher-check.txt"), lines);
                 return;
             }
