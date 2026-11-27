@@ -740,6 +740,64 @@ PATCHES += [
 ]
 
 
+# Dropdowns (<select>) in the game's browser window vanished right after opening (and came back only under the mouse).
+# CEF 109 paints off screen into two buffers of the handler (CEFHandler, hw.dll): the page (+0x58, dirty flag +0x74)
+# and the open dropdown list, a popup widget (+0x78: x +0x84, y +0x88, width +0x8c, height +0x90, dirty +0x94).
+# CEFWebCtrl's paint (0x1fcb920) uploads the page as the whole texture (glTexImage2D) when it changed, then the popup
+# over it (glTexSubImage2D) only when the popup changed: any later page repaint (the select's focus border...) covered
+# the list, which Chromium still had open, until hovering an item repainted it. The page upload now also marks the
+# popup dirty, so it goes back on top in the same frame, and OnPopupShow(false) (0x1fd2160) sets the popup's width
+# to 0, so a closed list is no longer put back (a 0-wide glTexSubImage2D draws nothing; the width starts at 0 and
+# OnPopupSize / OnPaint set it again for the next list).
+_WEB_PAINT_PAGE_SKIP = 0x1FCBA2E   # je over the page upload when the page didn't change
+_WEB_PAINT_PAGE_DONE = 0x1FCBAD3   # mov byte [esi+0x74],0 (page uploaded), then a block that never runs (bl is 8 there)
+_WEB_PAINT_POPUP = 0x1FCBAEE       # mov esi,[edi+0x14] / cmp byte [esi+0x94],0: the popup upload
+_WEB_POPUP_HIDE_JE = 0x1FD2187     # OnPopupShow: cmp byte [ebp+0xc],0 / je (hidden) -> release the browser ref
+_WEB_POPUP_HIDE_TO = 0x1FD21C7
+_WEB_POPUP_HIDE_CAVE = 0x1FD21F6   # 10 int3 bytes after OnPopupShow's ret 8
+PATCHES += [
+    (
+        "hw.dll",
+        _WEB_PAINT_PAGE_SKIP,
+        b"\x0f\x84" + _rel32(_WEB_PAINT_PAGE_SKIP + 6, 0x1FCBAD7),
+        # straight to the popup upload ([ebp-4] is already -1, what the skipped "mov [ebp-4],-1" wrote)
+        b"\x0f\x84" + _rel32(_WEB_PAINT_PAGE_SKIP + 6, _WEB_PAINT_POPUP),
+        "Web browser dropdowns: an unchanged page skips to the popup upload",
+    ),
+    (
+        "hw.dll",
+        _WEB_PAINT_PAGE_DONE,
+        bytes.fromhex(
+            "c6467400"          # mov byte [esi+0x74],0      page uploaded
+            "c745fcffffffff"    # mov dword [ebp-4],-1
+            "f6c310"            # test bl,0x10               (never set here)
+            "740b"              # je +0xb
+            "8d8d3cffffff"      # lea ecx,[ebp-0xc4]
+            "e8b21a8c00"),      # call 0x288d5a0
+        bytes.fromhex(
+            "c6467400"          # mov byte [esi+0x74],0      page uploaded
+            "c6869400000001")   # mov byte [esi+0x94],1      the open popup goes back on top
+        + b"\x90" * 16,
+        "Web browser dropdowns: a page upload redraws the open dropdown list over it",
+    ),
+    (
+        "hw.dll",
+        _WEB_POPUP_HIDE_CAVE,
+        b"\xcc" * 10,
+        bytes.fromhex("83616c00")       # and dword [ecx+0x6c],0     popup width 0 (ecx = the render handler)
+        + b"\xe9" + _rel32(_WEB_POPUP_HIDE_CAVE + 9, _WEB_POPUP_HIDE_TO),
+        "Web browser dropdowns: a closed dropdown list has no width (code cave)",
+    ),
+    (
+        "hw.dll",
+        _WEB_POPUP_HIDE_JE,
+        bytes.fromhex("743e"),
+        b"\x74" + (_WEB_POPUP_HIDE_CAVE - (_WEB_POPUP_HIDE_JE + 2)).to_bytes(1, "little"),
+        "Web browser dropdowns: OnPopupShow(false) goes through the cave",
+    ),
+]
+
+
 # what older releases wrote at a place whose patch changed since: replaced by the current bytes, not an abort
 PREVIOUS = {
     ("hw.dll", 0x2754F80): [bytes.fromhex("52ff7104c7410c7f00000166c7410a753290")],  # 1.0.x: port always 30002
