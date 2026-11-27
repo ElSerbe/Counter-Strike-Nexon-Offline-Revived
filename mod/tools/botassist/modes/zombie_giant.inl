@@ -132,8 +132,8 @@ static const int IN_ATTACK2 = 0x800, IN_USE = 0x20, IN_FORWARD = 0x8, IN_BACK = 
 static const int PLAYER_LAST_MOVEMENT = 0xccc;
 // Joining players get maxspeed 1 (ClientPutInServer, like Counter-Strike's freeze) until the game gives them their
 // real speed; in this mode the bots and fake players never got it (speed 0..1 while walking). pev->maxspeed is at
-// +0x240 (entvars maxspeed, CSO layout); engine function 107 is pfnSetClientMaxspeed(edict, speed).
-static const int EV_MAXSPEED = 0x240, ENG_SETCLIENTMAXSPEED = 107;
+// +0x240 (entvars maxspeed, CSO layout: EV_MAXSPEED, botassist.cpp); engine function 107 is pfnSetClientMaxspeed(edict, speed).
+static const int ENG_SETCLIENTMAXSPEED = 107;
 typedef void (*SetClientMaxspeedFn)(void* edict, float speed);
 static SetClientMaxspeedFn g_SetClientMaxspeed;
 static float g_zgYourMaxspeed = 0; // yours: once you can move, the freeze is over // idle kick (mp_autokick, 0x114c6b7b) after the rules' idle time

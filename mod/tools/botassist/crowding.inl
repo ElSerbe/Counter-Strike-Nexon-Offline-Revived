@@ -6,6 +6,10 @@
 //    take turns by distance to it (within LADDER_TIE: by key), so two arriving together don't both go. One at the foot
 //    that doesn't get on loses its turn (LadderTurnLost); a bot gives up waiting after LadderWaitLimit (longer the more
 //    are ahead of it).
+//  - in each other's way (WayDecision): someone standing still is gone around like a wall; of two moving bots, the one
+//    with the lower key keeps going and the other steps aside; a moving person always gets the way.
+//  - blocked links: a link between two areas that stuck bots ran into a wall on, LINK_BLOCK_HITS times, is one every
+//    bot's path goes around (NavBlockCost in botassist.cpp) till it's kept no longer.
 
 // a player near a ladder: on it (dir 1 up, -1 down, 0 not moving; feetZ), or walking up to it (dist from the ladder)
 struct LadderOther
@@ -75,4 +79,67 @@ static float LadderWaitLimit(int ahead)
 {
     float t = LADDER_WAIT_MIN + LADDER_WAIT_EACH * (float)(ahead > 0 ? ahead : 0);
     return t < LADDER_WAIT_CAP ? t : LADDER_WAIT_CAP;
+}
+
+// what this bot does about the player in its way. Someone standing still (a bot holding its place, a person not moving)
+// isn't going to step aside: it's in the way like a wall, so this bot goes around (keeping going into it was a
+// deadlock: de_dust, a bot pushed into one holding its holdout place 36 times in a row). Of two moving bots the one with
+// the lower key keeps going and the other steps aside; a moving person (or a bot botassist doesn't drive) gets the way.
+// otherIsBot: a bot botassist drives
+enum
+{
+    WAY_KEEP_GOING,
+    WAY_STEP_ASIDE,
+    WAY_GO_AROUND
+};
+static int WayDecision(bool otherIsBot, bool otherMoving, long long myKey, long long otherKey)
+{
+    if (!otherMoving)
+        return WAY_GO_AROUND;
+    return !otherIsBot || otherKey < myKey ? WAY_STEP_ASIDE : WAY_KEEP_GOING;
+}
+
+// a link between two nav areas that a bot couldn't walk (a wall or door the mesh doesn't know about): from LINK_BLOCK_HITS
+// stuck reports on, every bot's path goes another way while there is one. ent/cls: what was in the way (only the game side
+// reads them: once that's gone, a broken breakable, the link is open again)
+struct BlockedLink
+{
+    int from, to, hits;
+    float last, until;
+    void* ent;
+    int cls;
+};
+static const int LINK_BLOCK_HITS = 2, LINK_BLOCK_MAX = 64;
+
+// one more stuck report on from -> to: counted, and kept keep s from now. A full list drops the one ending first.
+static void NoteBlockedLink(std::vector<BlockedLink>& links, int from, int to, float now, float keep, void* ent, int cls)
+{
+    for (BlockedLink& l : links)
+        if (l.from == from && l.to == to)
+        {
+            l.hits++;
+            l.last = now;
+            l.until = now + keep;
+            l.ent = ent;
+            l.cls = cls;
+            return;
+        }
+    if ((int)links.size() >= LINK_BLOCK_MAX)
+    {
+        size_t first = 0;
+        for (size_t i = 1; i < links.size(); i++)
+            if (links[i].until < links[first].until)
+                first = i;
+        links.erase(links.begin() + first);
+    }
+    links.push_back({ from, to, 1, now, now + keep, ent, cls });
+}
+
+// from -> to blocked for everyone now (a clock that went back, a new map, doesn't count)
+static bool LinkBlocked(const std::vector<BlockedLink>& links, int from, int to, float now)
+{
+    for (const BlockedLink& l : links)
+        if (l.from == from && l.to == to)
+            return l.hits >= LINK_BLOCK_HITS && now >= l.last && now < l.until;
+    return false;
 }

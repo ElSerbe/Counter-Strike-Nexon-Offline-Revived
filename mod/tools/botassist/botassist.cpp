@@ -817,6 +817,102 @@ static float NavAvoidCost(int area, float now)
 // +0x210) are listed again every 5 s (doors and buttons can turn them on and off); nav areas inside one are left out
 // of every path, a drop between areas costs extra beyond a step and drops above HURT_DROP_MAX are never taken.
 static const int EV_SOLID = 0x11c, EV_DMG = 0x210;
+// pev->maxspeed (entvars, CSO layout). The game holds a player in place with a max speed of 1 (the freeze time, Soccer's
+// kickoff) or FL_FROZEN.
+static const int EV_MAXSPEED = 0x240;
+static bool HeldStill(void* e)
+{
+    unsigned char* v = Vars(e);
+    return F<float>(v, EV_MAXSPEED) <= 1.0f || (F<int>(v, EV_FLAGS) & FL_FROZEN);
+}
+
+// ---- links nobody can walk (crowding.inl's BlockedLink): a wall the mesh doesn't know about
+// The meshes link areas through func_walls, doors, barricades and breakables that came later (zm_chosun: a bot at the
+// foot of func_wall *214 going for a point 93 u up, 17 stuck reports in a row), and each bot learnt it alone, for
+// NAV_AVOID_TIME, at a cost too small to change its way. A stuck report whose body trace hits something marks the link
+// from the bot's area to the one ahead (NavProgress); from LINK_BLOCK_HITS reports on, every bot's path costs
+// NAV_BLOCK_COST more through it: any other way first, the same way as before when there is none. Kept NAV_BLOCK_KEEP
+// after the last report (a door NAV_BLOCK_KEEP_DOOR: they open), and no longer once what was in the way is gone (broken
+// breakables are left not solid, a func_wall_toggle turns off, a freed edict gets another class).
+static const float NAV_BLOCK_COST = 20000.0f, NAV_BLOCK_KEEP = 90.0f, NAV_BLOCK_KEEP_DOOR = 20.0f;
+static std::vector<BlockedLink> g_navBlocked;
+static std::vector<char> g_navBlockFrom; // per nav area: a blocked link starts here
+static int g_navBlockLevel = -1;
+static int g_navBlockReports = 0;
+
+static void NavBlockStart()
+{
+    if (g_navBlockLevel == g_nav.level)
+        return;
+    g_navBlockLevel = g_nav.level;
+    g_navBlocked.clear();
+    g_navBlockFrom.clear();
+    g_navBlockReports = 0;
+}
+
+static bool NavBlockDoor(const char* cls)
+{
+    return cls && (!strncmp(cls, "func_door", 9) || !strcmp(cls, "momentary_door"));
+}
+
+// a stuck report: the body trace from area `from` towards area `to` hit ent
+static void NavBlockNote(int from, int to, void* ent, float now)
+{
+    NavBlockStart();
+    if (from < 0 || to < 0 || from == to || !ent || from >= (int)g_nav.areas.size() || to >= (int)g_nav.areas.size())
+        return;
+    const char* cls = ClassName(ent);
+    float keep = NavBlockDoor(cls) ? NAV_BLOCK_KEEP_DOOR : NAV_BLOCK_KEEP;
+    bool was = LinkBlocked(g_navBlocked, from, to, now);
+    NoteBlockedLink(g_navBlocked, from, to, now, keep, ent, F<int>(Vars(ent), EV_CLASSNAME));
+    if (g_navBlockFrom.size() != g_nav.areas.size())
+        g_navBlockFrom.assign(g_nav.areas.size(), 0);
+    g_navBlockFrom[from] = 1;
+    if (!was && LinkBlocked(g_navBlocked, from, to, now) && g_navBlockReports++ < 100)
+    {
+        V3 at = g_nav.areas[from].center;
+        const char* model = String(F<int>(Vars(ent), 0xc8));
+        Log("blocked: link %d->%d at (%.0f %.0f %.0f): %s %s in the way, every bot goes around for %.0f s", from, to, at.x,
+            at.y, at.z, cls ? cls : "?", model ? model : "", keep);
+    }
+}
+
+// before a path: the ones run out or whose blocker is gone leave the list
+static void NavBlockPrune(float now)
+{
+    NavBlockStart();
+    if (g_navBlocked.empty())
+        return;
+    bool changed = false;
+    for (size_t i = g_navBlocked.size(); i-- > 0;)
+    {
+        BlockedLink& l = g_navBlocked[i];
+        unsigned char* v = l.ent ? Vars(l.ent) : nullptr;
+        bool gone = !v || F<int>(v, EV_CLASSNAME) != l.cls || !F<int>(v, EV_SOLID);
+        if (gone && l.hits >= LINK_BLOCK_HITS && now < l.until && g_navBlockReports++ < 100)
+            Log("blocked: link %d->%d open again (%s gone)", l.from, l.to, String(l.cls));
+        if (gone || now >= l.until || now < l.last)
+        {
+            g_navBlocked.erase(g_navBlocked.begin() + i);
+            changed = true;
+        }
+    }
+    if (changed)
+    {
+        g_navBlockFrom.assign(g_nav.areas.size(), 0);
+        for (const BlockedLink& l : g_navBlocked)
+            if (l.from < (int)g_navBlockFrom.size())
+                g_navBlockFrom[l.from] = 1;
+    }
+}
+
+static float NavBlockCost(int from, int to, float now)
+{
+    if (from < 0 || from >= (int)g_navBlockFrom.size() || !g_navBlockFrom[from])
+        return 0.0f;
+    return LinkBlocked(g_navBlocked, from, to, now) ? NAV_BLOCK_COST : 0.0f;
+}
+
 static const float SAFE_DROP = 64.0f, HURT_DROP_MAX = 400.0f, DROP_COST = 4.0f;
 struct HurtZone
 {
@@ -1227,6 +1323,7 @@ static bool FindPathImpl(V3 from, V3 to, std::vector<V3>& out, bool partial)
     }
     BuildLadders();
     float pathNow = Now();
+    NavBlockPrune(pathNow);
     size_t n = g_nav.areas.size();
     std::vector<float> cost(n, 1e30f);
     std::vector<int> parent(n, -1), parentDir(n, -1);
@@ -1258,7 +1355,8 @@ static bool FindPathImpl(V3 from, V3 to, std::vector<V3>& out, bool partial)
                     continue;
                 float c = cost[cur] + Len(g_nav.areas[nb].center - g_nav.areas[cur].center) + NavWetCost(nb) +
                           (g_navRouteCost && nb < (int)g_navRouteCost->size() ? (*g_navRouteCost)[nb] : 0.0f) +
-                          (drop > SAFE_DROP ? (drop - SAFE_DROP) * DROP_COST : 0.0f) + NavAvoidCost(nb, pathNow) + PoiAreaCost(nb);
+                          (drop > SAFE_DROP ? (drop - SAFE_DROP) * DROP_COST : 0.0f) + NavAvoidCost(nb, pathNow) + PoiAreaCost(nb) +
+                          NavBlockCost(cur, nb, pathNow);
                 if (c < cost[nb])
                 {
                     cost[nb] = c;
@@ -1273,7 +1371,8 @@ static bool FindPathImpl(V3 from, V3 to, std::vector<V3>& out, bool partial)
             const NavRide& r = g_navRides[ri];
             if (r.from != cur || r.to < 0 || closed[r.to] || (NavAreaHurts(r.to) && r.to != goal))
                 continue;
-            float c = cost[cur] + Len(r.off - r.on) * 0.25f + RIDE_COST + NavAvoidCost(r.to, pathNow) + PoiAreaCost(r.to);
+            float c = cost[cur] + Len(r.off - r.on) * 0.25f + RIDE_COST + NavAvoidCost(r.to, pathNow) + PoiAreaCost(r.to) +
+                      NavBlockCost(cur, r.to, pathNow);
             if (c < cost[r.to])
             {
                 cost[r.to] = c;
@@ -1295,7 +1394,8 @@ static bool FindPathImpl(V3 from, V3 to, std::vector<V3>& out, bool partial)
                 int nb = q.area;
                 if (p.area != cur || nb < 0 || nb == cur || closed[nb] || (NavAreaHurts(nb) && nb != goal))
                     continue;
-                float c = cost[cur] + Len(q.pos - p.pos) + 16.0f + NavAvoidCost(nb, pathNow) + PoiAreaCost(nb);
+                float c = cost[cur] + Len(q.pos - p.pos) + 16.0f + NavAvoidCost(nb, pathNow) + PoiAreaCost(nb) +
+                          NavBlockCost(cur, nb, pathNow);
                 if (c < cost[nb])
                 {
                     cost[nb] = c;
@@ -1314,7 +1414,8 @@ static bool FindPathImpl(V3 from, V3 to, std::vector<V3>& out, bool partial)
             int nb = l.bottom == cur ? l.top : l.top == cur ? l.bottom : -1;
             if (nb < 0 || closed[nb] || (NavAreaHurts(nb) && nb != goal))
                 continue;
-            float c = cost[cur] + Len(l.topPoint - l.bottomPoint) * 1.5f + 64.0f + NavAvoidCost(nb, pathNow) + PoiAreaCost(nb);
+            float c = cost[cur] + Len(l.topPoint - l.bottomPoint) * 1.5f + 64.0f + NavAvoidCost(nb, pathNow) + PoiAreaCost(nb) +
+                      NavBlockCost(cur, nb, pathNow);
             if (c < cost[nb])
             {
                 cost[nb] = c;
@@ -1435,6 +1536,7 @@ struct BotState
     float ladderWaitUntil = 0;   // waiting: no repath, not stuck (NextWaypoint, NavProgress)
     int ladderSkip = -1;         // a ladder it gave up waiting for: taken without waiting till ladderSkipUntil
     float ladderSkipUntil = 0;
+    float navHeldLog = -100;     // NavProgress: when it last logged that the game holds this bot still
     int onLink = 0;             // NavTraverse: the drawn link it is taking (its path flag), 0: none
     float steerSide = 1, steerUntil = 0; // keeps going around an obstacle by the same side
     float jumpAt = -100;
@@ -1508,6 +1610,15 @@ struct BotState
 };
 static BotState g_bots[64];
 static Order g_teamOrder = ORDER_FOLLOW;
+
+// another bot's state, if botassist keeps one for it (none is made)
+static BotState* FindBotState(void* edict)
+{
+    for (auto& b : g_bots)
+        if (edict && b.edict == edict)
+            return &b;
+    return nullptr;
+}
 
 // the order two bots in each other's way go in (crowding.inl): the formation slot, then the edict
 static long long CrowdKey(const BotState& st, void* bot)
@@ -1726,14 +1837,87 @@ static bool CoopMode();
 // was going into costs a lot for a while, so the new path takes another way if there is one, and the second time it also walks back
 // to where it came from before trying again.
 static const float NAV_STUCK_TIME = 1.5f, NAV_STUCK_MOVE = 64.0f, NAV_CRUMB_STEP = 96.0f, NAV_BACK_TIME = 1.2f, NAV_BACK_MIN = 80.0f;
+static const float NAV_ASIDE = 64.0f, NAV_ASIDE_TIME = 1.0f;
+
+// a living player in the way to wp: the body checks (BodyFraction) look through people, so a bot pressed against
+// another one read as "nothing in the way of its body" and turned away from an area that was free
+static void* PlayerInTheWay(void* bot, V3 pos, V3 wp)
+{
+    V3 to{ wp.x, wp.y, pos.z };
+    float d = Len2D(to - pos);
+    if (d < 1.0f)
+        return nullptr;
+    V3 dir = (to - pos) * (1.0f / d);
+    void* found = nullptr;
+    if (g_TraceHull)
+    {
+        TraceResult tr;
+        V3 lift{ 0, 0, BODY_LIFT };
+        HullLine(pos + lift, pos + dir * (std::min)(d, NAV_ASIDE) + lift, 0, bot, tr);
+        if (tr.pHit && tr.pHit != bot && (F<int>(Vars(tr.pHit), EV_FLAGS) & FL_CLIENT) && Alive(tr.pHit))
+            found = tr.pHit;
+    }
+    if (!found)
+    {
+        // pressed against each other (the hull starts inside them): the nearest one on the side it's going
+        float best = 48.0f;
+        ForEntitiesNear(pos, 48.0f, [&](void* e) {
+            if (e == bot || !(F<int>(Vars(e), EV_FLAGS) & FL_CLIENT) || !Alive(e))
+                return;
+            V3 o = Origin(e) - pos;
+            float od = Len2D(o);
+            if (od < best && fabsf(o.z) < 72.0f && o.x * dir.x + o.y * dir.y > 0.0f)
+            {
+                best = od;
+                found = e;
+            }
+        });
+    }
+    return found;
+}
+
+// steps out of the way for NAV_ASIDE_TIME: to a free side, else back (NextWaypoint walks to navBackTo meanwhile)
+static void StepAside(void* bot, BotState& st, V3 pos, V3 wp, float now)
+{
+    V3 to{ wp.x, wp.y, pos.z };
+    float d = Len2D(to - pos);
+    V3 dir = d > 1.0f ? (to - pos) * (1.0f / d) : V3{ 1, 0, 0 };
+    V3 perp{ -dir.y, dir.x, 0 };
+    float first = st.unstickSide;
+    V3 aside = pos - dir * NAV_ASIDE;
+    for (float s : { first, -first })
+        if (BodyClear(bot, pos, pos + perp * (s * NAV_ASIDE)))
+        {
+            aside = pos + perp * (s * NAV_ASIDE);
+            st.unstickSide = s;
+            break;
+        }
+    st.navBackTo = aside;
+    st.navBackUntil = now + NAV_ASIDE_TIME;
+}
+
 static void NavProgress(void* bot, BotState& st, V3 pos, V3 goal, float now)
 {
-    if (now < st.ladderWaitUntil)
+    // waiting for its turn at a ladder (LadderQueueWait; NavTraverse keeps it waiting), or held where it is by the game
+    // (Soccer's kickoff: 9 bots counted "stuck" every 1.5 s for 15 s, turned off their way and walked back): not stuck
+    bool held = HeldStill(bot);
+    if (now < st.ladderWaitUntil || held)
     {
-        // waiting for its turn at a ladder (LadderQueueWait): not stuck, and NavTraverse keeps it waiting
         st.navLastCall = now;
         st.navAnchor = pos;
         st.navAnchorAt = now;
+        if (held && st.navStuck)
+            st.navStuck = 0;
+        static int heldReports = 0, heldLevel = -1;
+        if (heldLevel != g_nav.level)
+            heldLevel = g_nav.level, heldReports = 0;
+        if (held && heldReports < 3 && now - st.navHeldLog > 30.0f)
+        {
+            st.navHeldLog = now;
+            heldReports++;
+            Log("stuck check: bot %d held still (max speed %.0f, flags 0x%x): not counted", st.slot,
+                F<float>(Vars(bot), EV_MAXSPEED), F<int>(Vars(bot), EV_FLAGS));
+        }
         return;
     }
     if (!st.navCrumbs.empty() && Len(pos - st.navCrumbs.back()) > 400.0f)
@@ -1763,8 +1947,36 @@ static void NavProgress(void* bot, BotState& st, V3 pos, V3 goal, float now)
     if (st.navStuck >= 12 && CoopMode() && CoopUnstick(bot, st, pos))
         return; // ~20 s stuck in a co-op mode (a Zombie Shelter bot that spawned on a roof): put on the ground nearby
     V3 wp = st.pathIndex < st.path.size() ? st.path[st.pathIndex] : goal;
-    int ahead = AreaAt(wp);
-    if (ahead >= 0 && ahead != AreaAt(pos))
+    // another player in the way (crowding.inl's WayDecision). Moving, it will be out of the way soon: the area ahead is
+    // fine, so no other way and no walking back; of two bots the one with the higher key steps aside and the other keeps
+    // going, for a person (or a bot botassist doesn't drive) it steps aside. Standing still (holding its holdout place,
+    // waiting at a ladder), it won't move: it's gone around like a wall, the area ahead avoided and, the second time,
+    // walking back. Moving: a driven bot that walked its path within 0.5 s and isn't waiting at a ladder, anyone else
+    // going faster than 30 u/s.
+    void* blocker = PlayerInTheWay(bot, pos, wp);
+    int way = WAY_KEEP_GOING;
+    if (blocker)
+    {
+        BotState* o = (F<int>(Vars(blocker), EV_FLAGS) & FL_FAKECLIENT) ? FindBotState(blocker) : nullptr;
+        bool moving = o ? now >= o->navLastCall && now - o->navLastCall < 0.5f && now >= o->ladderWaitUntil
+                        : Len2D(Vec((float*)(Vars(blocker) + EV_VELOCITY))) > 30.0f;
+        way = WayDecision(o != nullptr, moving, CrowdKey(st, bot), o ? CrowdKey(*o, blocker) : 0);
+        if (way == WAY_STEP_ASIDE)
+            StepAside(bot, st, pos, wp, now);
+    }
+    bool aroundIt = !blocker || way == WAY_GO_AROUND; // (a wall, or someone standing there)
+    int ahead = aroundIt ? AreaAt(wp) : -1, here = AreaAt(pos);
+    // what its body runs into on its way (no player in the way): a wall or door the mesh links through marks that link for
+    // every bot (NavBlockNote)
+    TraceResult tr = {};
+    float got = 1.0f;
+    if (!blocker)
+    {
+        got = BodyFraction(bot, pos, V3{ wp.x, wp.y, pos.z }, tr);
+        if (got < 0.99f && tr.pHit && ahead >= 0 && here >= 0 && ahead != here)
+            NavBlockNote(here, ahead, tr.pHit, now);
+    }
+    if (ahead >= 0 && ahead != here)
     {
         for (size_t i = st.navAvoid.size(); i-- > 0;)
             if (now >= st.navAvoid[i].until || st.navAvoid[i].until - now > NAV_AVOID_TIME || st.navAvoid[i].area == ahead)
@@ -1773,7 +1985,7 @@ static void NavProgress(void* bot, BotState& st, V3 pos, V3 goal, float now)
             st.navAvoid.erase(st.navAvoid.begin());
         st.navAvoid.push_back({ ahead, now + NAV_AVOID_TIME });
     }
-    if (st.navStuck >= 2)
+    if (st.navStuck >= 2 && aroundIt)
         for (size_t i = st.navCrumbs.size(); i-- > 0;)
             if (Len2D(st.navCrumbs[i] - pos) >= NAV_BACK_MIN)
             {
@@ -1785,13 +1997,19 @@ static void NavProgress(void* bot, BotState& st, V3 pos, V3 goal, float now)
     static int reports = 0, reportLevel = -1;
     if (reportLevel != g_nav.level)
         reportLevel = g_nav.level, reports = 0;
-    if (reports++ < 300)
+    if (blocker && reports++ < 300)
+        Log("stuck: bot %d at (%.0f %.0f %.0f) going to (%.0f %.0f %.0f) by (%.0f %.0f %.0f), %d in a row: %s '%s' in the way, %s",
+            st.slot, pos.x, pos.y, pos.z, goal.x, goal.y, goal.z, wp.x, wp.y, wp.z, st.navStuck,
+            (F<int>(Vars(blocker), EV_FLAGS) & FL_FAKECLIENT) ? "bot" : "player", String(F<int>(Vars(blocker), EV_NETNAME)),
+            way == WAY_GO_AROUND ? "standing still: goes around" : way == WAY_STEP_ASIDE ? "steps aside"
+                                                                         : "keeps going (the other one steps aside)");
+    else if (reports++ < 300)
     {
-        TraceResult tr;
-        float got = BodyFraction(bot, pos, V3{ wp.x, wp.y, pos.z }, tr);
         const char* model = tr.pHit ? String(F<int>(Vars(tr.pHit), 0xc8)) : nullptr;
-        Log("stuck: bot %d at (%.0f %.0f %.0f) going to (%.0f %.0f %.0f) by (%.0f %.0f %.0f), %d in a row: %s %s", st.slot, pos.x, pos.y, pos.z, goal.x, goal.y, goal.z, wp.x, wp.y, wp.z,
-            st.navStuck, got >= 0.99f || !tr.pHit ? "nothing in the way of its body" : ClassName(tr.pHit), got >= 0.99f || !model ? "" : model);
+        // (max speed: HeldStill reads it; a bot the game holds some other way would show here, not stuck yet reported)
+        Log("stuck: bot %d at (%.0f %.0f %.0f) going to (%.0f %.0f %.0f) by (%.0f %.0f %.0f), %d in a row: %s %s (max speed %.0f)", st.slot, pos.x, pos.y, pos.z, goal.x, goal.y, goal.z, wp.x, wp.y, wp.z,
+            st.navStuck, got >= 0.99f || !tr.pHit ? "nothing in the way of its body" : ClassName(tr.pHit), got >= 0.99f || !model ? "" : model,
+            F<float>(Vars(bot), EV_MAXSPEED));
     }
 }
 
