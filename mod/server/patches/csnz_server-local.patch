@@ -13767,10 +13767,17 @@ index 4c688f4..c1e0b2a 100644
 +	bool m_bWouldBlock; // last read hit WOLFSSL_ERROR_WANT_READ/WRITE (non-blocking SSL, retry on next poll)
  };
 diff --git a/src/room/gamematch.cpp b/src/room/gamematch.cpp
-index 65418d8..ce7c796 100644
+index 65418d8..785a708 100644
 --- a/src/room/gamematch.cpp
 +++ b/src/room/gamematch.cpp
-@@ -6,6 +6,11 @@
+@@ -1,4 +1,6 @@
+ #include "gamematch.h"
++#include <random>
++#include <fstream>
+ #include "serverconfig.h"
+ #include "manager/questmanager.h"
+ #include "manager/packetmanager.h"
+@@ -6,9 +8,16 @@
  #include "manager/itemmanager.h"
  #include "manager/hostmanager.h"
  #include "manager/userdatabase.h"
@@ -13782,7 +13789,12 @@ index 65418d8..ce7c796 100644
  
  #include "user/userinventoryitem.h"
  
-@@ -19,6 +24,7 @@ CGameMatchUserStat::CGameMatchUserStat()
++using json = nlohmann::json;
++
+ using namespace std;
+ 
+ CGameMatchUserStat::CGameMatchUserStat()
+@@ -19,6 +28,7 @@ CGameMatchUserStat::CGameMatchUserStat()
  	m_nDeaths = 0;
  	m_nPointsEarned = 0;
  	m_nBonusPointsEarned = 0;
@@ -13790,7 +13802,7 @@ index 65418d8..ce7c796 100644
  	m_nExpEarned = 0;
  	m_nBonusExpEarned = 0;
  	m_nItemBonusPoints = 0;
-@@ -209,6 +215,7 @@ void CGameMatch::Connect(IUser* user)
+@@ -209,6 +219,7 @@ void CGameMatch::Connect(IUser* user)
  	{
  		CGameMatchUserStat* userStat = new CGameMatchUserStat();
  		userStat->m_pUser = user;
@@ -13798,7 +13810,7 @@ index 65418d8..ce7c796 100644
  
  		m_UserStats.push_back(userStat);
  	}
-@@ -220,6 +227,7 @@ void CGameMatch::Disconnect(IUser* user)
+@@ -220,6 +231,7 @@ void CGameMatch::Disconnect(IUser* user)
  	if (stat)
  	{
  		g_QuestManager.OnGameMatchLeave(user, stat->m_TempQuestProgress, stat->m_TempQuestEventProgress);
@@ -13806,7 +13818,7 @@ index 65418d8..ce7c796 100644
  
  		delete stat;
  		m_UserStats.erase(remove(begin(m_UserStats), end(m_UserStats), stat), end(m_UserStats));
-@@ -271,6 +279,8 @@ void CGameMatch::OnUpdateKillCounter(IUser* user, int kills)
+@@ -271,6 +283,8 @@ void CGameMatch::OnUpdateKillCounter(IUser* user, int kills)
  	if (stat)
  	{
  		stat->UpdateKillsCount(kills);
@@ -13815,7 +13827,7 @@ index 65418d8..ce7c796 100644
  	}
  }
  
-@@ -292,7 +302,15 @@ void CGameMatch::OnKillEvent(IUser* user, GameMatch_KillEvent& killEvent)
+@@ -292,7 +306,15 @@ void CGameMatch::OnKillEvent(IUser* user, GameMatch_KillEvent& killEvent)
  
  	// don't count player suicide
  	if (killEvent.killerUserID != killEvent.victimUserID)
@@ -13831,7 +13843,45 @@ index 65418d8..ce7c796 100644
  
  	g_QuestManager.OnKillEvent(stat, this, killEvent);
  
-@@ -356,6 +374,7 @@ void CGameMatch::OnBombExplode(IUser* user)
+@@ -320,13 +342,30 @@ void CGameMatch::OnKillEvent(IUser* user, GameMatch_KillEvent& killEvent)
+ 	{
+ 		character.killsToGetGachaponItem = 100;
+ 
+-		Randomer rand(1);
+-		int randomIndex = (int)rand();
+-		int randomItemID = randomIndex ? 166 : 5101;
+-
+-		g_PacketManager.SendItemGachapon(user->GetExtendedSocket(), randomIndex);
+-
+-		g_ItemManager.AddItem(user->GetID(), user, randomItemID, 1, 0);
++		// offline build: a random decoder, one of those this server opens (ItemBox.json, as the gift codes'
++		// RandomDecoders). It gave a "decoder box" (166, a PasswordBox nothing opens here) or a 1 Day Durable (the
++		// user, 2026-11-27: "every 100 kills a decoder box that doesn't work")
++		static vector<int> pool;
++		if (pool.empty())
++		{
++			ifstream boxes("ItemBox.json");
++			json box = json::parse(boxes, nullptr, false, true);
++			if (box.is_object())
++				for (auto& b : box.items())
++					if (atoi(b.key().c_str()) > 0)
++						pool.push_back(atoi(b.key().c_str()));
++		}
++		if (!pool.empty())
++		{
++			static mt19937 rng(random_device{}());
++			int decoder = pool[uniform_int_distribution<size_t>(0, pool.size() - 1)(rng)];
++			if (g_ItemManager.AddItem(user->GetID(), user, decoder, 1, 0) == ITEM_ADD_SUCCESS)
++			{
++				string name = g_WarbondManager.ItemName(decoder);
++				g_PacketManager.SendUMsgNoticeMessageInChat(user->GetExtendedSocket(),
++					va("100 kills: %s added to your inventory.", name.empty() ? "a decoder" : name.c_str()));
++			}
++		}
+ 	}
+ 
+ 	g_UserDatabase.UpdateCharacterExtended(user->GetID(), character);
+@@ -356,6 +395,7 @@ void CGameMatch::OnBombExplode(IUser* user)
  	if (!stat)
  		return;
  
@@ -13839,7 +13889,7 @@ index 65418d8..ce7c796 100644
  	g_QuestManager.OnBombExplode(stat, this);
  }
  
-@@ -365,6 +384,7 @@ void CGameMatch::OnBombDefuse(IUser* user)
+@@ -365,6 +405,7 @@ void CGameMatch::OnBombDefuse(IUser* user)
  	if (!stat)
  		return;
  
@@ -13847,7 +13897,7 @@ index 65418d8..ce7c796 100644
  	g_QuestManager.OnBombDefuse(stat, this);
  }
  
-@@ -374,6 +394,7 @@ void CGameMatch::OnHostageEscape(IUser* user)
+@@ -374,6 +415,7 @@ void CGameMatch::OnHostageEscape(IUser* user)
  	if (!stat)
  		return;
  
@@ -13855,7 +13905,7 @@ index 65418d8..ce7c796 100644
  	g_QuestManager.OnHostageEscape(stat, this);
  }
  
-@@ -383,6 +404,7 @@ void CGameMatch::OnMonsterKill(IUser* user, int monsterType)
+@@ -383,6 +425,7 @@ void CGameMatch::OnMonsterKill(IUser* user, int monsterType)
  	if (!stat)
  		return;	
  
@@ -13863,7 +13913,7 @@ index 65418d8..ce7c796 100644
  	g_QuestManager.OnMonsterKill(stat, this, monsterType);
  }
  
-@@ -391,6 +413,7 @@ void CGameMatch::OnDropBoxPickup(IUser* user, int rewardID)
+@@ -391,6 +434,7 @@ void CGameMatch::OnDropBoxPickup(IUser* user, int rewardID)
  	CGameMatchUserStat* stat = GetGameUserStat(user);
  	if (!stat)
  		return;
@@ -13871,7 +13921,7 @@ index 65418d8..ce7c796 100644
  
  #ifndef PUBLIC_RELEASE
  	if (m_nGameMode != 15 && m_nGameMode != 17 && m_nGameMode != 26 && m_nGameMode != 28)
-@@ -430,8 +453,55 @@ void CGameMatch::OnKiteKill(IUser* user)
+@@ -430,8 +474,55 @@ void CGameMatch::OnKiteKill(IUser* user)
  
  void CGameMatch::OnGameMatchEnd()
  {
@@ -13927,7 +13977,7 @@ index 65418d8..ce7c796 100644
  
  	Logger().Info("CGameMatch::OnGameMatchEnd: gamemode: %d, CT rounds win count: %d, T rounds win count: %d\n", m_nGameMode, m_nCtWinCount, m_nTerWinCount);
  }
-@@ -532,7 +602,6 @@ void CGameMatch::CalculateGameResult()
+@@ -532,7 +623,6 @@ void CGameMatch::CalculateGameResult()
  	CalculateFirstPlace();
  
  	int expCoef = GetExpCoefficient();
@@ -13935,7 +13985,7 @@ index 65418d8..ce7c796 100644
  
  	for (auto stat : m_UserStats)
  	{
-@@ -541,8 +610,23 @@ void CGameMatch::CalculateGameResult()
+@@ -541,8 +631,23 @@ void CGameMatch::CalculateGameResult()
  		// calc exp
  		stat->m_nExpEarned = stat->m_nKills > 0 ? expCoef * stat->m_nKills : expCoef;
  
@@ -13961,7 +14011,7 @@ index 65418d8..ce7c796 100644
  
  		// calc bonus exp/points
  		auto bonusPercentageClass = find_if(g_pServerConfig->gameMatch.bonusPercentageClasses.begin(), g_pServerConfig->gameMatch.bonusPercentageClasses.end(),
-@@ -601,6 +685,10 @@ void CGameMatch::CalculateGameResult()
+@@ -601,6 +706,10 @@ void CGameMatch::CalculateGameResult()
  			}
  		}
  
@@ -13972,7 +14022,7 @@ index 65418d8..ce7c796 100644
  		if (stat->m_nExpEarned > 9999)
  		{
  			stat->m_nExpEarned = 9999;
-@@ -623,6 +711,9 @@ void CGameMatch::ApplyGameResult()
+@@ -623,6 +732,9 @@ void CGameMatch::ApplyGameResult()
  
  		int totalPoints = stat->m_nPointsEarned + stat->m_nBonusPointsEarned;
  		user->UpdatePoints(totalPoints);
