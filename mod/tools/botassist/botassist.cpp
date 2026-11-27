@@ -6181,7 +6181,7 @@ static void CommandFile()
 #include "modes/zombie4_darkness.inl"
 
 #include "modes/zombie_humans.inl"
-#include "match_teams.inl" // each player's side for the server's rounds won
+#include "round_end.inl" // the zombie rounds' winner and each player's side, for the server's rounds won
 #include "tutorial.inl"    // Tutorial 1 and 2 finished: the tutorial window's bits
 #include "modes/zombie_holdout.inl"
 
@@ -6304,7 +6304,6 @@ static void HookedStartFrame()
         GrenadeFixFrame();
         SfFrame();
         CrowdReport();
-        MatchTeamsFrame();
         TutorialFrame();
         if (CoopMode())
         {
@@ -6335,6 +6334,7 @@ static void InstallFrameHook(DWORD delta)
         g_StartFrameTramp = (void (*)())DetourCdecl(sf, 6, (void*)HookedStartFrame);
     Log("frame hook: %s", g_StartFrameTramp ? "on" : "NOT hooked (unexpected code)");
     InstallRadioFilter(delta);
+    InstallRoundEndHook(delta);
 }
 
 // ---------------------------------------------------------------- bots' radio: no "Get in position and wait for my go"
