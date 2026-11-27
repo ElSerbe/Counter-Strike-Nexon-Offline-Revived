@@ -858,6 +858,82 @@ PATCHES += [
 ]
 
 
+# Startup splash (CStartupVideo, "resource/background/CSNZloading.tga" while the game loads): the layout painter
+# 0x2268760(window, width, height) was made for the Korean 1024x768 tile layouts. It never scales: each entry is
+# StretchDIBits'ed at its own size, the first row against the right edge (x = width - row width, y = 0). The splash is
+# one 1024x768 picture, so above 1024x768 it sat small in the top-right corner. For a layout of one entry
+# ([ebp-0x58] = 1) the destination is now the picture fitted to the window with its shape kept (fit to the height on a
+# wide screen, to the width on a narrow one) and centered; the memory bitmap starts black, like the picture's own
+# background, and HALFTONE is already the stretch mode. Tile layouts keep their rectangles. The 5 bytes before the
+# pushes of the destination (mov eax,[ebp-0x6c]; push eax; push edi) jump to a stub that pushes all of StretchDIBits'
+# rectangle arguments and the DC, then jumps back to the call. Locals: [ebp-0x64] window width W, [ebp-0x60] height
+# H, edi picture width w, [ebp-0x6c] its height h, [ebp-0x4c] / [ebp-0x5c] the original x / y, esi the memory DC.
+_SPLASH_SITE = 0x2268A16   # mov eax,[ebp-0x6c]; push eax; push edi  (source height, source width)
+_SPLASH_CALL = 0x2268A28   # call [StretchDIBits] (its operand is relocated: untouched)
+_SPLASH_STUB = 0x1D45640   # in the int3 padding of _UDP_CAVE, after _MODECHECK_TABLE (90 bytes)
+_SPLASH_STUB_BYTES = (
+    bytes.fromhex(
+        "8b4594"            # mov eax,[ebp-0x6c]        h
+        "50"                # push eax                  source height
+        "57"                # push edi                  source width
+        "6a00"              # push 0                    source y
+        "6a00"              # push 0                    source x
+        "837da801"          # cmp dword [ebp-0x58],1    one entry: the splash
+        "753d"              # jne original
+        "8b4d9c"            # mov ecx,[ebp-0x64]        W
+        "0fafc8"            # imul ecx,eax              W*h
+        "8b55a0"            # mov edx,[ebp-0x60]        H
+        "0fafd7"            # imul edx,edi              H*w
+        "3bca"              # cmp ecx,edx
+        "7f0a"              # jg fit_height             W*h > H*w: wider than the picture
+        "8bc1"              # mov eax,ecx               fit to the width: dW = W, dH = W*h/w
+        "99"                # cdq
+        "f7ff"              # idiv edi
+        "8b4d9c"            # mov ecx,[ebp-0x64]
+        "eb0b"              # jmp push_fitted
+        "8bc2"              # fit_height: mov eax,edx   dH = H, dW = H*w/h
+        "99"                # cdq
+        "f77d94"            # idiv dword [ebp-0x6c]
+        "8bc8"              # mov ecx,eax
+        "8b45a0"            # mov eax,[ebp-0x60]
+        "50"                # push_fitted: push eax     destination height
+        "51"                # push ecx                  destination width
+        "8b55a0"            # mov edx,[ebp-0x60]
+        "2bd0"              # sub edx,eax
+        "d1fa"              # sar edx,1
+        "52"                # push edx                  y = (H - dH) / 2
+        "8b559c"            # mov edx,[ebp-0x64]
+        "2bd1"              # sub edx,ecx
+        "d1fa"              # sar edx,1
+        "52"                # push edx                  x = (W - dW) / 2
+        "56")               # push esi                  the memory DC
+    + b"\xe9" + _rel32(_SPLASH_STUB + 76, _SPLASH_CALL)  # jmp to the call
+    + bytes.fromhex(
+        "50"                # original: push eax        destination height (h)
+        "57"                # push edi                  destination width (w)
+        "ff75a4"            # push [ebp-0x5c]           y
+        "ff75b4"            # push [ebp-0x4c]           x
+        "56")               # push esi
+    + b"\xe9" + _rel32(_SPLASH_STUB + 90, _SPLASH_CALL)  # jmp to the call
+)
+PATCHES += [
+    (
+        "hw.dll",
+        _SPLASH_SITE,
+        bytes.fromhex("8b45945057"),        # mov eax,[ebp-0x6c]; push eax; push edi
+        b"\xe9" + _rel32(_SPLASH_SITE + 5, _SPLASH_STUB),
+        "Startup splash: StretchDIBits' rectangle comes from the stub",
+    ),
+    (
+        "hw.dll",
+        _SPLASH_STUB,
+        b"\xcc" * len(_SPLASH_STUB_BYTES),
+        _SPLASH_STUB_BYTES,
+        "Startup splash stub: one picture is fitted to the window and centered, tile layouts keep their rectangles",
+    ),
+]
+
+
 # The field of view (launcher's More > Field of view, default_fov) only made the mouse slower (reports 2026-11-24/25,
 # as in Counter-Strike 1.6): the server sends the player's fov, 90 when not zoomed, and client.dll's CHud::Think
 # (0x2a70cb0) sets gHUD.m_iFOV (+0x80) to it and the sensitivity to sens * fov / default_fov whenever they differ;
