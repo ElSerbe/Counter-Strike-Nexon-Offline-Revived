@@ -1,4 +1,6 @@
-# CSNZ Revived online lobby (worker.js). Deploy: npx wrangler login (once), then npx wrangler deploy (from this folder).
+# CSNZ Revived online lobby (worker.js), live at https://csnz-revived-lobby.elserbe.workers.dev (the bridge's DefaultLobby).
+# Deploy from this folder: npx wrangler login (once), then npx wrangler deploy. With an antivirus that scans HTTPS (Avast),
+# set NODE_USE_SYSTEM_CA=1 first, or Node rejects its certificate (UNABLE_TO_VERIFY_LEAF_SIGNATURE).
 name = "csnz-revived-lobby"
 main = "worker.js"
 compatibility_date = "2026-11-01"

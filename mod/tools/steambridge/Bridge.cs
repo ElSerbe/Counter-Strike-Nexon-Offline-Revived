@@ -1874,7 +1874,7 @@ namespace SteamBridge
     static class Program
     {
         // the online lobby (mod/tools/lobby-worker, on Cloudflare Workers)
-        const string DefaultLobby = "wss://csnz-revived-lobby.REPLACE.workers.dev/ws";
+        const string DefaultLobby = "wss://csnz-revived-lobby.elserbe.workers.dev/ws";
 
         static int Main(string[] args)
         {
