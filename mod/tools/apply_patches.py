@@ -865,6 +865,16 @@ PATCHES += [
 ]
 
 
+# "Uncapped frame rate" (fps_max 1000) stayed at about 90 (reports 2026-11-27): Host_FilterTime (0x2419240) has
+# GoldSrc's cap, fps = min(fps_max, 100) while developer is 0, and the Sleep between frames makes 100 about 90. The
+# cap's "developer is 0" branch (jp over minsd 100) always jumps now: fps_max alone sets the rate (101 by default, at
+# least 60 as before).
+PATCHES += [
+    ("hw.dll", 0x241934F, bytes.fromhex("7a13"), bytes.fromhex("eb13"),
+     "Frame rate: fps_max isn't capped at 100 (the developer-only limit)"),
+]
+
+
 # what older releases wrote at a place whose patch changed since: replaced by the current bytes, not an abort
 PREVIOUS = {
     ("hw.dll", 0x2754F80): [bytes.fromhex("52ff7104c7410c7f00000166c7410a753290")],  # 1.0.x: port always 30002
