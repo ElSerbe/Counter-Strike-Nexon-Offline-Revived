@@ -180,8 +180,13 @@ namespace CsnzLauncher
                     throw new Exception(string.IsNullOrEmpty(token)
                         ? "No release found on GitHub (or GitHub can't be reached right now)."
                         : "No release found (or this token can't read the repository).");
-                if (res.StatusCode == HttpStatusCode.Unauthorized)
-                    throw new Exception("GitHub refused the token (expired or wrong). Set a new one in More > GitHub token...");
+                // a token that GitHub refuses (an old GH_TOKEN or GitHub CLI login, issue #14): the repository is public, so
+                // the launcher asks again without one (it used to point at a "More > GitHub token" item that doesn't exist)
+                if (res.StatusCode == HttpStatusCode.Unauthorized && !string.IsNullOrEmpty(token))
+                {
+                    RefusedToken = token;
+                    return await Latest("");
+                }
                 res.EnsureSuccessStatusCode();
                 var json = new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(await res.Content.ReadAsStringAsync());
                 var info = new ReleaseInfo { Tag = json["tag_name"] as string, Notes = json.ContainsKey("body") ? json["body"] as string : "" };
@@ -193,14 +198,25 @@ namespace CsnzLauncher
         }
 
         // a release asset: the API answers with a redirect to a signed download link, which must be fetched without the token
+        // the token GitHub refused this session: not sent again (Latest drops it and asks without one)
+        static string RefusedToken;
+
         public static async Task Download(ReleaseAsset asset, string token, string path, Logger log)
         {
+            if (token == RefusedToken)
+                token = "";
             string url;
             using (var c = Client(token, false))
             {
                 var req = new HttpRequestMessage(HttpMethod.Get, asset.ApiUrl);
                 req.Headers.Accept.ParseAdd("application/octet-stream");
                 var res = await c.SendAsync(req);
+                if (res.StatusCode == HttpStatusCode.Unauthorized && !string.IsNullOrEmpty(token))
+                {
+                    RefusedToken = token;
+                    await Download(asset, "", path, log);
+                    return;
+                }
                 if ((int)res.StatusCode >= 300 && (int)res.StatusCode < 400 && res.Headers.Location != null)
                     url = res.Headers.Location.ToString();
                 else
