@@ -852,35 +852,44 @@ namespace CsnzLauncher
             log("Game started.");
         }
 
-        // online play: the Steam bridge (Spacewar lobbies + P2P tunnels to other players' servers). Null when it can't run.
+        // Steam's client is open (the game can use Valve's steam_api.dll, the bridge can use Steam)
+        public static bool SteamOpen()
+        {
+            try { return Process.GetProcessesByName("steam").Length > 0; }
+            catch { return false; }
+        }
+
+        // online play: the bridge. With Steam open: Spacewar lobbies + P2P tunnels to other players' servers, and the online
+        // lobby (Cloudflare) too; without Steam (v1.1.49): the online lobby only. Null when it can't run.
         public static Process StartBridge(string game, Logger log, bool verbose = false)
         {
             if (!File.Exists(Paths.BridgeExe))
             {
-                log("Online play: the Steam bridge isn't installed.");
+                log("Online play: the bridge isn't installed.");
                 return null;
             }
-            var steamApi = SteamApi.ForBridge(game, log);
-            if (steamApi == null)
-                return null;
+            bool steam = SteamOpen();
+            var steamApi = steam ? SteamApi.ForBridge(game, log) : null;
             var data = Path.Combine(Paths.ServerBin, "Data");
             try { File.Delete(Path.Combine(data, "SteamBridge.stop")); } catch { }
-            var args = $"--steam-api \"{steamApi}\" --data \"{data}\" --log \"{Path.Combine(Paths.LogDir, "steambridge.log")}\"" + (verbose ? " --verbose" : "");
+            var args = (steamApi != null ? $"--steam-api \"{steamApi}\"" : "--no-steam") +
+                $" --data \"{data}\" --log \"{Path.Combine(Paths.LogDir, "steambridge.log")}\"" + (verbose ? " --verbose" : "");
             try
             {
                 var p = Process.Start(new ProcessStartInfo(Paths.BridgeExe, args) { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = Path.GetDirectoryName(Paths.BridgeExe) });
                 Thread.Sleep(3000);
                 if (p.HasExited)
                 {
-                    log("Online play is off this time (Steam isn't running or refused): see mod\\logs\\steambridge.log. Offline play works as always.");
+                    log("Online play is off this time: see mod\\logs\\steambridge.log. Offline play works as always.");
                     return null;
                 }
-                log("Online play: the Steam bridge is running (Spacewar). Other players' rooms show up in Game lobby.");
+                log(steamApi != null ? "Online play: the bridge is running (Steam and the online lobby). Other players' rooms show up in Game lobby." :
+                    "Online play: the bridge is running without Steam (the online lobby). Other players' rooms show up in Game lobby.");
                 return p;
             }
             catch (Exception ex)
             {
-                log("Online play: the Steam bridge didn't start: " + ex.Message);
+                log("Online play: the bridge didn't start: " + ex.Message);
                 return null;
             }
         }
@@ -893,7 +902,7 @@ namespace CsnzLauncher
             try { File.WriteAllText(Path.Combine(Paths.ServerBin, "Data", "SteamBridge.stop"), ""); } catch { }
             if (!p.WaitForExit(8000))
                 try { p.Kill(); } catch { }
-            log("Steam bridge stopped.");
+            log("Online bridge stopped.");
         }
 
         public static void WaitForGame()

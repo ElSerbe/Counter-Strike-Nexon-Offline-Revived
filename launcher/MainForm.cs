@@ -27,7 +27,7 @@ namespace CsnzLauncher
         readonly Toggle detailBox = new Toggle { Text = "Detailed logs: the server and the Steam bridge log every packet (for bug reports)" };
         readonly FlatButton patchButton = new FlatButton { Text = "Patch game" };
         readonly FlatButton browseButton = new FlatButton { Text = "Browse" };
-        readonly Toggle onlineBox = new Toggle { Text = "Online play through Steam: other players' rooms in Game lobby, yours in theirs" };
+        readonly Toggle onlineBox = new Toggle { Text = "Online play: other players' rooms in Game lobby, yours in theirs (with or without Steam)" };
         readonly Label gameState = new Label { AutoSize = true };
         readonly LinkLabel getGame = new LinkLabel { Text = "Not installed? Get it free on Steam", AutoSize = true, Visible = false };
         readonly TextBox logBox = new TextBox { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.None, Font = new Font("Consolas", 9) };
@@ -958,7 +958,11 @@ namespace CsnzLauncher
                 Certificates.Ensure(Log);
                 Patcher.Apply(game, Log);
                 SteamApi.UseEmulatorIfNotSteam(game, Log); // the archive.org copy: starts without the game on the Steam account
-                SteamApi.ForPlayMode(game, online, Log);   // online play off: no Steam needed at all
+                // online play off, or Steam closed: the game plays without Steam (the bridge then uses the online lobby only)
+                bool steamOpen = Runner.SteamOpen();
+                if (online && !steamOpen)
+                    Log("Steam isn't open: the game starts without Steam, and online play goes through the online lobby.");
+                SteamApi.ForPlayMode(game, online && steamOpen, Log);
                 Display.Write(game, settings, Log);        // field of view and frame rate for botassist
                 if (verbose)
                     Log("Game state after patching: " + Patcher.Check(game) + ", Steam build " + GameLocator.BuildId(game) + ", hosts block " + (Hosts.HasBlock() ? "yes" : "no"));

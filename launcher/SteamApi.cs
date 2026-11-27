@@ -203,7 +203,7 @@ namespace CsnzLauncher
                 else if (steamInstall && File.Exists(inGame) && IsEmulator(inGame) && IsValves(Kept))
                 {
                     File.Copy(Kept, inGame, true);
-                    log("Online play is on: the game's steam_api.dll is Valve's again (Steam must be open).");
+                    log("Online play is on: the game's steam_api.dll is Valve's again.");
                 }
             }
             catch (Exception ex)

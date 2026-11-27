@@ -1311,7 +1311,7 @@ index 0000000..5c99d8e
 +
 +extern CBingoManager g_BingoManager;
 diff --git a/src/manager/channelmanager.cpp b/src/manager/channelmanager.cpp
-index 35561e8..f1514a0 100644
+index 35561e8..9b8bbcb 100644
 --- a/src/manager/channelmanager.cpp
 +++ b/src/manager/channelmanager.cpp
 @@ -1,4 +1,9 @@
@@ -1700,7 +1700,7 @@ index 35561e8..f1514a0 100644
 +	string steamID, steamName;
 +	if (!ServerTransfer::LoadSteamIdentity(steamID, steamName))
 +	{
-+		g_PacketManager.SendUMsgNoticeMsgBoxToUuid(socket, "Online play isn't connected to Steam right now.\nStart the game from the launcher with online play on.");
++		g_PacketManager.SendUMsgNoticeMsgBoxToUuid(socket, "Online play isn't running right now.\nStart the game from the launcher with online play on.");
 +		return false;
 +	}
 +	if (user->GetCurrentRoom())
@@ -10975,10 +10975,10 @@ index c7d2bdb..75d0ee9 100644
 +extern CVoxelManager g_VoxelManager;
 diff --git a/src/manager/warbondmanager.cpp b/src/manager/warbondmanager.cpp
 new file mode 100644
-index 0000000..6008b85
+index 0000000..f6dd6bb
 --- /dev/null
 +++ b/src/manager/warbondmanager.cpp
-@@ -0,0 +1,1230 @@
+@@ -0,0 +1,1236 @@
 +#include "channelmanager.h"
 +#include "guestprofile.h"
 +#include "transfer.h"
@@ -11248,6 +11248,12 @@ index 0000000..6008b85
 +				"on your own server: what you earn over there is added to your account after every match. Type /home in the lobby chat to come back." } };
 +		else
 +			result = { { "error", "No logged in character for this computer." } };
++	}
++	else if (req.method == "GET" && req.path == "/api/me")
++	{
++		// for the bridge without Steam: this PC's name in the online lobby is its player's character name
++		CUserCharacter character = user->GetCharacter(UFLAG_LOW_GAMENAME);
++		result = { { "name", character.gameName } };
 +	}
 +	else if (req.method == "POST" && req.path == "/api/cheats")
 +	{

@@ -19,6 +19,12 @@
 //    Data/StudioNet.json; maps the server asks for (GET /studio/net/outbox) are fetched over P2P from the PCs that have them
 //    (STUDIO messages, see the Studio section) and handed to the server (POST /studio/net/result).
 //
+//  - the online lobby (Cloud.cs, mod/tools/lobby-worker): the same rooms, profiles, Studio maps and match traffic for
+//    players without Steam open (and with it: everyone publishes there too, so both kinds of player see each other). A
+//    host found in a Steam lobby goes through Steam when this PC has Steam; otherwise through the online lobby: the
+//    messages above go through its relay, match packets straight to the other PC when a direct UDP link opens.
+//    Without Steam, this PC's id is the random one in Data/CloudIdentity.json.
+//
 // --verbose (the launcher's "Detailed logs"): every tunnel message and match packet in the log ("detail:" lines, the
 // first bytes of each packet), up to 20000 lines, and the UDP totals every 5 s.
 using System;
@@ -39,10 +45,21 @@ namespace SteamBridge
     {
         const string Tag = "csnzor", Protocol = "1";
         const byte Open = 1, Data = 2, Close = 3, Hello = 4, Udp = 5, Mail = 6, Studio = 7, Ping = 8, Pong = 9;
-        const int ServerPort = 30002, FirstTunnelPort = 30003, LastTunnelPort = 30199, FirstVirtualRoom = 40000;
-        const int JoinerUdpBase = 31000, HostUdpBase = 33000, UnreliableMax = 1200;
+        const int FirstVirtualRoom = 40000, UnreliableMax = 1200;
+        // --port-shift N moves this PC's local ports (two bridges on one PC, for tests)
+        public static int ServerPort = 30002, FirstTunnelPort = 30003, LastTunnelPort = 30199, JoinerUdpBase = 31000, HostUdpBase = 33000;
+        public static void ShiftPorts(int n)
+        {
+            ServerPort += n; FirstTunnelPort += n; LastTunnelPort += n; JoinerUdpBase += n; HostUdpBase += n; HomeServerPort += n;
+        }
 
-        readonly Steam steam;
+        readonly Steam steam;  // null without Steam (the online lobby only)
+        readonly CloudNet cloud; // null without the online lobby
+        readonly ulong MyID;   // the Steam ID, or the online lobby id without Steam
+        string MyName;
+        // how each other PC is reached: true = the online lobby, false = Steam (the net its last message came through,
+        // or the one its room listing came from)
+        readonly ConcurrentDictionary<ulong, bool> via = new ConcurrentDictionary<ulong, bool>();
         readonly string dataDir, apiUrl;
         readonly bool loopback;
         readonly Action<string> log;
@@ -75,8 +92,10 @@ namespace SteamBridge
             public DateTime NextPing, LastPong, FirstPing, LastPingSent;
             public bool SilentLogged;
             public double PingMs = -1; // smoothed round trip of PING/PONG, -1 before the first PONG
-            public string Route = ""; // "direct", "relay", "connecting" or "" (GetP2PSessionState)
+            public string Route = ""; // "direct", "relay", "connecting" or "" (GetP2PSessionState, CloudNet.Route)
             public bool LinkLogged;
+            public bool Cloud;        // listed by the online lobby (not a Steam lobby): reached through it
+            public DateTime SteamSeen; // when a Steam lobby last listed them
         }
 
         // a player from another PC on this PC's server: their game, as this PC's game sees it (33000+slot*2+portID)
@@ -177,10 +196,16 @@ namespace SteamBridge
             }
         }
         // how Steam carries the traffic to another PC: straight or through Steam's relay, and what waits to be sent
-        string PeerName(ulong peer) => hosts.Values.FirstOrDefault(h => h.SteamID == peer)?.Name ?? peer.ToString();
+        string PeerName(ulong peer)
+        {
+            try { return hosts.Values.FirstOrDefault(h => h.SteamID == peer)?.Name ?? peer.ToString(); }
+            catch { return peer.ToString(); } // (read from the online lobby's threads while the list changes)
+        }
         string LinkState(ulong peer)
         {
-            if (loopback || !Native.SteamAPI_ISteamNetworking_GetP2PSessionState(steam.Networking, peer, out var s))
+            if (!loopback && IsCloud(peer))
+                return cloud.State(peer, PeerName(peer));
+            if (loopback || steam == null || !Native.SteamAPI_ISteamNetworking_GetP2PSessionState(steam.Networking, peer, out var s))
                 return "Steam connection to " + PeerName(peer) + ": no state";
             string how = s.ConnectionActive != 0 ? (s.UsingRelay != 0 ? "through Steam's relay" : "direct") :
                 s.Connecting != 0 ? "still connecting" : "not connected (error " + s.SessionError + ")";
@@ -203,6 +228,8 @@ namespace SteamBridge
             var now = DateTime.UtcNow;
             foreach (var peer in peers)
             {
+                if (IsCloud(peer))
+                    continue;
                 if (!Native.SteamAPI_ISteamNetworking_GetP2PSessionState(steam.Networking, peer, out var s) || s.ConnectionActive == 0)
                     continue;
                 string route = s.UsingRelay != 0 ? "through Steam's relay" : "direct";
@@ -227,14 +254,14 @@ namespace SteamBridge
         readonly Dictionary<ulong, DateTime> connectFailLogged = new Dictionary<ulong, DateTime>();
         void RegisterCallbacks()
         {
-            if (loopback)
+            if (loopback || steam == null)
                 return;
             try
             {
                 SteamCallback.Register(Steam.CbP2PSessionRequest, 8, p =>
                 {
                     ulong remote = (ulong)System.Runtime.InteropServices.Marshal.ReadInt64(p);
-                    Native.SteamAPI_ISteamNetworking_AcceptP2PSessionWithUser(steam.Networking, remote);
+                    Accept(remote);
                     if (acceptedLogged.Add(remote))
                         Detail("Steam: a P2P session from " + PeerName(remote) + " accepted");
                 }, log);
@@ -274,13 +301,19 @@ namespace SteamBridge
             {
                 if (!loopback && !AnswersPing(h))
                     continue;
-                if (!loopback)
+                if (!loopback && h.Cloud)
                 {
-                    Native.SteamAPI_ISteamNetworking_AcceptP2PSessionWithUser(steam.Networking, h.SteamID);
+                    cloud.Want(h.SteamID);
+                    h.Route = cloud.Route(h.SteamID);
+                }
+                else if (!loopback)
+                {
+                    Accept(h.SteamID);
                     if (Native.SteamAPI_ISteamNetworking_GetP2PSessionState(steam.Networking, h.SteamID, out var s))
                         h.Route = s.ConnectionActive != 0 ? (s.UsingRelay != 0 ? "relay" : "direct") : s.Connecting != 0 ? "connecting" : "";
                 }
-                bool linked = loopback || h.Route == "direct" || h.Route == "relay";
+                // (the online lobby's relay delivers at once: a direct link only matters for the match traffic)
+                bool linked = loopback || h.Route == "direct" || h.Route == "relay" || (h.Cloud && h.Route == "connecting");
                 bool waiting = h.FirstPing != DateTime.MinValue && h.LastPong < h.LastPingSent;
                 if (now < h.NextPing || (!linked && waiting && (now - h.LastPingSent).TotalSeconds < 30))
                     continue;
@@ -292,7 +325,7 @@ namespace SteamBridge
                 msg[0] = Ping;
                 BitConverter.GetBytes(clock.ElapsedTicks).CopyTo(msg, 5);
                 if (loopback)
-                    loop.Enqueue(Tuple.Create(steam.MySteamID, msg));
+                    loop.Enqueue(Tuple.Create(MyID, msg));
                 else
                     SendRaw(h.SteamID, msg);
                 if (!h.SilentLogged && !loopback && h.LastPong == DateTime.MinValue && (now - h.FirstPing).TotalSeconds >= 60 && AnswersPing(h))
@@ -314,7 +347,7 @@ namespace SteamBridge
             if (!h.LinkLogged)
             {
                 h.LinkLogged = true;
-                log("Steam connection to " + h.Name + " ready" + (h.Route != "" ? " (" + (h.Route == "relay" ? "through Steam's relay" : h.Route) + ")" : "") +
+                log((h.Cloud ? "Online" : "Steam") + " connection to " + h.Name + " ready" + (h.Route != "" ? " (" + (h.Route == "relay" ? (h.Cloud ? "through the online lobby's relay" : "through Steam's relay") : h.Route) + ")" : "") +
                     " after " + (now - h.FirstPing).TotalSeconds.ToString("0") + " s, ping " + ms.ToString("0") + " ms");
             }
             h.LastPong = now;
@@ -327,6 +360,8 @@ namespace SteamBridge
         // hosts on v1.1.48 or later answer PING
         static bool AnswersPing(Host h)
         {
+            if (h.Cloud)
+                return true;
             var v = (h.Version ?? "").Split('.');
             if (v.Length < 3 || !int.TryParse(v[0], out int a) || !int.TryParse(v[1], out int b) || !int.TryParse(v[2], out int c))
                 return false;
@@ -349,7 +384,8 @@ namespace SteamBridge
         // /api/transfer/fallback): the game's login with the ticket meant for the other server then logs the player in at
         // home with their return ticket, and a message says what happened. Without this, the game sat in front of a dead
         // connection and had to be restarted.
-        const int FallbackSeconds = 40, HomeServerPort = 30002;
+        const int FallbackSeconds = 40;
+        static int HomeServerPort = 30002;
         void FallBackHome(Conn c)
         {
             c.FallingBack = true;
@@ -384,6 +420,7 @@ namespace SteamBridge
         // this PC's mod version (mod\VERSION, three folders up from the bridge's out folder): published in the lobby ("ver"),
         // so a player joining a room on a different version is told before they try (the server's JoinRemoteRoom)
         static readonly string ModVersion = ReadModVersion();
+        public static string ModVersionText => ModVersion;
         static string ReadModVersion()
         {
             try
@@ -403,9 +440,12 @@ namespace SteamBridge
         readonly ConcurrentQueue<Tuple<ulong, byte[]>> loop = new ConcurrentQueue<Tuple<ulong, byte[]>>();
         const ulong LoopHostSide = 1; // the host side's "peer" in loopback (the joining side's peer is MySteamID)
 
-        public Bridge(Steam steam, string dataDir, string apiUrl, bool loopback, Action<string> log)
+        public Bridge(Steam steam, CloudNet cloud, ulong myID, string myName, string dataDir, string apiUrl, bool loopback, Action<string> log)
         {
             this.steam = steam;
+            this.cloud = cloud;
+            MyID = myID;
+            MyName = myName;
             this.dataDir = dataDir;
             this.apiUrl = apiUrl.TrimEnd('/');
             this.loopback = loopback;
@@ -419,10 +459,19 @@ namespace SteamBridge
         public void Run(Func<bool> keepRunning)
         {
             DateTime nextList = DateTime.MinValue, nextHello = DateTime.MinValue;
-            lock (Steam.Lock)
+            int cloudSeen = -1;
+            if (steam != null)
+                lock (Steam.Lock)
+                {
+                    RegisterCallbacks();
+                    pendingCreate = Native.SteamAPI_ISteamMatchmaking_CreateLobby(steam.Matchmaking, Steam.LobbyPublic, 250);
+                }
+            if (cloud != null)
             {
-                RegisterCallbacks();
-                pendingCreate = Native.SteamAPI_ISteamMatchmaking_CreateLobby(steam.Matchmaking, Steam.LobbyPublic, 250);
+                cloud.MyName = MyName;
+                cloud.NameOf = PeerName;
+                cloud.Start(keepRunning);
+                PublishCloud(); // listed at once (with no rooms until this PC's server answers)
             }
             new Thread(() => ServerLoop(keepRunning)) { IsBackground = true }.Start();
             while (keepRunning())
@@ -430,9 +479,12 @@ namespace SteamBridge
                 var now = DateTime.UtcNow;
                 lock (Steam.Lock)
                 {
-                    Native.SteamAPI_RunCallbacks();
-                    PollCalls();
-                    if (pendingList == 0 && now >= nextList)
+                    if (steam != null)
+                    {
+                        Native.SteamAPI_RunCallbacks();
+                        PollCalls();
+                    }
+                    if (steam != null && pendingList == 0 && now >= nextList)
                     {
                         Native.SteamAPI_ISteamMatchmaking_AddRequestLobbyListStringFilter(steam.Matchmaking, Steam.Utf8Z(Tag), Steam.Utf8Z(Protocol), Steam.ComparisonEqual);
                         Native.SteamAPI_ISteamMatchmaking_AddRequestLobbyListDistanceFilter(steam.Matchmaking, Steam.DistanceWorldwide);
@@ -445,16 +497,39 @@ namespace SteamBridge
                         if (myLobby != 0)
                         {
                             KeepSessions();
-                            CheckStalled();
                             WatchLinks();
                         }
+                        CheckStalled();
+                        if (cloud != null)
+                        {
+                            // the online lobby's hosts: listed again (their Seen), the players this PC has business with
+                            // get a direct link tried
+                            cloudSeen = -1;
+                            WantLinks();
+                        }
+                        ExpireHosts();
                         Prewarm();
                         nextHello = now.AddSeconds(2);
                     }
-                    ReadP2P();
+                    if (cloud != null && cloud.Changed != cloudSeen)
+                    {
+                        cloudSeen = cloud.Changed;
+                        ReadCloudHosts();
+                    }
+                    if (steam != null)
+                        ReadP2P();
+                    if (cloud != null)
+                        while (cloud.Inbox.TryDequeue(out var m))
+                        {
+                            via[m.Item1] = true;
+                            if (m.Item2.Length >= 4 && m.Item2[0] == Udp)
+                                HandleUdp(m.Item1, m.Item2, m.Item2.Length);
+                            else if (m.Item2.Length >= 5)
+                                Handle(m.Item1, m.Item2);
+                        }
                 }
                 ReadLoopback();
-                Thread.Sleep(15);
+                Thread.Sleep(cloud != null ? 5 : 15);
             }
             Shutdown();
         }
@@ -471,10 +546,12 @@ namespace SteamBridge
                     var now = DateTime.UtcNow;
                     if (now >= nextIdentity)
                     {
+                        if (steam == null)
+                            ReadMyName(ApiGet("/api/me", out _));
                         WriteIdentity();
                         nextIdentity = now.AddSeconds(10);
                     }
-                    if (myLobby != 0 && now >= nextPublish)
+                    if ((myLobby != 0 || cloud != null) && now >= nextPublish)
                     {
                         var rooms = ApiGet("/api/rooms", out var error);
                         lock (Steam.Lock)
@@ -495,7 +572,7 @@ namespace SteamBridge
                             PollMail(outbox);
                         nextMail = DateTime.UtcNow.AddMilliseconds(300);
                     }
-                    if (myLobby != 0 && now >= nextStudioPublish)
+                    if ((myLobby != 0 || cloud != null) && now >= nextStudioPublish)
                     {
                         var catalog = ApiGet("/studio/net/catalog", out _);
                         lock (Steam.Lock)
@@ -557,8 +634,8 @@ namespace SteamBridge
                         {
                             myLobby = BitConverter.ToUInt64(r, 8);
                             steam.SetLobbyData(myLobby, Tag, Protocol);
-                            steam.SetLobbyData(myLobby, "owner", steam.MySteamID.ToString());
-                            steam.SetLobbyData(myLobby, "name", steam.MyName);
+                            steam.SetLobbyData(myLobby, "owner", MyID.ToString());
+                            steam.SetLobbyData(myLobby, "name", MyName);
                             steam.SetLobbyData(myLobby, "ver", ModVersion);
                             log("Steam lobby " + myLobby + " is open: this PC's rooms are visible to other players.");
                         }
@@ -621,6 +698,9 @@ namespace SteamBridge
             if (rooms == publishedRooms)
                 return;
             publishedRooms = rooms;
+            PublishCloud();
+            if (myLobby == 0)
+                return;
             // a lobby value holds up to 8 KB: the room list in pieces
             var parts = new List<string>();
             for (int i = 0; i < rooms.Length; i += 7000)
@@ -630,6 +710,42 @@ namespace SteamBridge
             steam.SetLobbyData(myLobby, "parts", parts.Count.ToString());
         }
 
+        // the online lobby: this PC's rooms, Studio catalog and name in one piece (sent when something changed)
+        void PublishCloud()
+        {
+            if (cloud == null)
+                return;
+            var data = new Dictionary<string, string> { { "name", MyName ?? "" }, { "ver", ModVersion } };
+            if (publishedRooms != null)
+                data["rooms"] = publishedRooms;
+            if (publishedStudio != null)
+                data["studio"] = publishedStudio;
+            if (steam != null)
+                data["steam"] = "1"; // also in a Steam lobby: PCs with Steam reach this one through Steam
+            cloud.MyName = MyName;
+            cloud.Publish(data);
+        }
+
+        // without Steam, this PC's name is its player's character name (GET /api/me) once they're logged in
+        void ReadMyName(string text)
+        {
+            if (text == null)
+                return;
+            try
+            {
+                var d = json.Deserialize<Dictionary<string, object>>(text);
+                var name = d.TryGetValue("name", out var n) ? n?.ToString() : null;
+                if (!string.IsNullOrWhiteSpace(name) && name != MyName)
+                {
+                    MyName = name;
+                    log("Online name: " + name);
+                    lock (Steam.Lock)
+                        PublishCloud();
+                }
+            }
+            catch { }
+        }
+
         // the players in this lobby: their P2P sessions are accepted, and a HELLO keeps them open
         void KeepSessions()
         {
@@ -637,14 +753,14 @@ namespace SteamBridge
             for (int i = 0; i < n; i++)
             {
                 ulong m = Native.SteamAPI_ISteamMatchmaking_GetLobbyMemberByIndex(steam.Matchmaking, myLobby, i);
-                if (m == 0 || m == steam.MySteamID)
+                if (m == 0 || m == MyID)
                     continue;
-                Native.SteamAPI_ISteamNetworking_AcceptP2PSessionWithUser(steam.Networking, m);
+                Accept(m);
                 SendRaw(m, new byte[] { Hello, 0, 0, 0, 0 });
             }
-            foreach (var h in hosts.Values.Where(h => h.Joined))
+            foreach (var h in hosts.Values.Where(h => h.Joined && !h.Cloud))
             {
-                Native.SteamAPI_ISteamNetworking_AcceptP2PSessionWithUser(steam.Networking, h.SteamID);
+                Accept(h.SteamID);
                 SendRaw(h.SteamID, new byte[] { Hello, 0, 0, 0, 0 });
             }
         }
@@ -652,85 +768,144 @@ namespace SteamBridge
         // ------------------------------------------------------------ the other players' rooms
         void ReadLobbyList(int count)
         {
-            var now = DateTime.UtcNow;
             Detail("Steam lobby list: " + count + " lobbies (this PC's own included)");
             for (int i = 0; i < count; i++)
             {
                 ulong lobby = Native.SteamAPI_ISteamMatchmaking_GetLobbyByIndex(steam.Matchmaking, i);
                 if (!ulong.TryParse(steam.LobbyData(lobby, "owner"), out ulong owner) || owner == 0)
                     continue;
-                if (owner == steam.MySteamID && !loopback)
+                if (owner == MyID && !loopback)
                     continue;
-                if (!hosts.TryGetValue(owner, out var h))
-                {
-                    int port = FreePort();
-                    if (port == 0)
-                        continue;
-                    h = new Host { SteamID = owner, Port = port };
-                    var host = h;
-                    try
-                    {
-                        h.Listener = new TcpListener(IPAddress.Loopback, port);
-                        h.Listener.Start();
-                    }
-                    catch (Exception ex)
-                    {
-                        log("Port " + port + " is busy: " + ex.Message);
-                        continue;
-                    }
-                    hosts[owner] = h;
-                    string ver = steam.LobbyData(lobby, "ver");
-                    log("Found " + steam.LobbyData(lobby, "name") + "'s lobby" + (ver != "" ? " (v" + ver + ")" : " (before v1.1.44)") +
-                        ": their rooms go through 127.0.0.1:" + port);
-                    int k = port - FirstTunnelPort;
-                    h.Udp = OpenUdp(JoinerUdpBase + k * 2, JoinerUdpBase + k * 2 + 1, (portID, from, data, n) =>
-                    {
-                        // this PC's game -> the host PC's game
-                        int mine = MyPortID(from.Port);
-                        if (mine >= 0)
-                            SendUdp(loopback ? LoopHostSide : host.SteamID, 0, portID, mine, data, n);
-                        else
-                            Dropped("a packet from 127.0.0.1:" + from.Port + " to " + (JoinerUdpBase + k * 2 + portID));
-                    });
-                    new Thread(() => AcceptLoop(host)) { IsBackground = true }.Start();
-                }
-                h.Lobby = lobby;
-                h.Name = steam.LobbyData(lobby, "name");
-                h.Version = steam.LobbyData(lobby, "ver") ?? "";
-                h.Seen = now;
-                h.Rooms.Clear();
                 int.TryParse(steam.LobbyData(lobby, "parts"), out int parts);
                 var text = new StringBuilder();
                 for (int p = 0; p < parts; p++)
                     text.Append(steam.LobbyData(lobby, "rooms" + p));
+                int.TryParse(steam.LobbyData(lobby, "studioparts"), out int sparts);
+                var studio = new StringBuilder();
+                for (int p = 0; p < sparts; p++)
+                    studio.Append(steam.LobbyData(lobby, "studio" + p));
+                var h = SeenHost(owner, false, steam.LobbyData(lobby, "name"), steam.LobbyData(lobby, "ver") ?? "", text.ToString(), studio.ToString());
+                if (h == null)
+                    continue;
+                h.Lobby = lobby;
+                Accept(owner);
+            }
+            ExpireHosts();
+            WriteRemoteRooms();
+            WriteStudioNet();
+        }
+
+        // the online lobby's list (every 2 s, and when it changes). A host this PC also sees in a Steam lobby stays on Steam.
+        void ReadCloudHosts()
+        {
+            var now = DateTime.UtcNow;
+            foreach (var c in cloud.Hosts())
+            {
+                if (c.ID == MyID)
+                    continue;
+                if (steam != null && hosts.TryGetValue(c.ID, out var known) && !known.Cloud && (now - known.SteamSeen).TotalSeconds <= 30)
+                    continue;
+                c.Data.TryGetValue("rooms", out var rooms);
+                c.Data.TryGetValue("studio", out var studio);
+                string name = c.Data.TryGetValue("name", out var n) && !string.IsNullOrEmpty(n) ? n : c.Name;
+                string ver = c.Data.TryGetValue("ver", out var v) && !string.IsNullOrEmpty(v) ? v : c.Version;
+                SeenHost(c.ID, true, name, ver, rooms ?? "", studio ?? "");
+            }
+            ExpireHosts();
+            WriteRemoteRooms();
+            WriteStudioNet();
+        }
+
+        // a host listed (by a Steam lobby or the online lobby): its local port, rooms and Studio maps
+        Host SeenHost(ulong owner, bool viaCloud, string name, string ver, string roomsText, string studioText)
+        {
+            var now = DateTime.UtcNow;
+            if (!hosts.TryGetValue(owner, out var h))
+            {
+                int port = FreePort();
+                if (port == 0)
+                    return null;
+                h = new Host { SteamID = owner, Port = port };
+                var host = h;
                 try
                 {
-                    if (text.Length > 0 && json.Deserialize<Dictionary<string, object>>(text.ToString())["rooms"] is System.Collections.IEnumerable list)
-                        foreach (Dictionary<string, object> r in list)
-                            h.Rooms.Add(r);
+                    h.Listener = new TcpListener(IPAddress.Loopback, port);
+                    h.Listener.Start();
                 }
-                catch (Exception ex) { log("Bad room list from " + h.Name + ": " + ex.Message); }
-                if (h.Rooms.Count != h.LoggedRooms)
+                catch (Exception ex)
                 {
-                    h.LoggedRooms = h.Rooms.Count;
-                    log(h.Name + (h.Rooms.Count == 0 ? " has no room open (or their server doesn't publish them)" :
-                                  " has " + h.Rooms.Count + " room" + (h.Rooms.Count == 1 ? "" : "s") + " open"));
+                    log("Port " + port + " is busy: " + ex.Message);
+                    return null;
                 }
-                ReadStudioCatalog(h, lobby);
-                Native.SteamAPI_ISteamNetworking_AcceptP2PSessionWithUser(steam.Networking, owner);
+                hosts[owner] = h;
+                log("Found " + name + (viaCloud ? " in the online lobby" : "'s Steam lobby") + (ver != "" ? " (v" + ver + ")" : " (before v1.1.44)") +
+                    ": their rooms go through 127.0.0.1:" + port);
+                int k = port - FirstTunnelPort;
+                h.Udp = OpenUdp(JoinerUdpBase + k * 2, JoinerUdpBase + k * 2 + 1, (portID, from, data, n) =>
+                {
+                    // this PC's game -> the host PC's game
+                    int mine = MyPortID(from.Port);
+                    if (mine >= 0)
+                        SendUdp(loopback ? LoopHostSide : host.SteamID, 0, portID, mine, data, n);
+                    else
+                        Dropped("a packet from 127.0.0.1:" + from.Port + " to " + (JoinerUdpBase + k * 2 + portID));
+                });
+                new Thread(() => AcceptLoop(host)) { IsBackground = true }.Start();
             }
-            // hosts gone for 30 s: their port closes
+            else if (h.Cloud != viaCloud)
+                log(h.Name + " is reached through " + (viaCloud ? "the online lobby" : "Steam") + " now.");
+            h.Cloud = viaCloud;
+            via[owner] = viaCloud;
+            if (viaCloud)
+                h.Joined = true; // (no lobby to join: the online lobby passes everything on)
+            else
+                h.SteamSeen = now;
+            h.Name = name;
+            h.Version = ver ?? "";
+            h.Seen = now;
+            h.Rooms.Clear();
+            try
+            {
+                if (roomsText.Length > 0 && json.Deserialize<Dictionary<string, object>>(roomsText)["rooms"] is System.Collections.IEnumerable list)
+                    foreach (Dictionary<string, object> r in list)
+                        h.Rooms.Add(r);
+            }
+            catch (Exception ex) { log("Bad room list from " + h.Name + ": " + ex.Message); }
+            if (h.Rooms.Count != h.LoggedRooms)
+            {
+                h.LoggedRooms = h.Rooms.Count;
+                log(h.Name + (h.Rooms.Count == 0 ? " has no room open (or their server doesn't publish them)" :
+                              " has " + h.Rooms.Count + " room" + (h.Rooms.Count == 1 ? "" : "s") + " open"));
+            }
+            ReadStudioCatalog(h, studioText);
+            return h;
+        }
+
+        // hosts gone for 30 s: their port closes
+        void ExpireHosts()
+        {
+            var now = DateTime.UtcNow;
             foreach (var h in hosts.Values.Where(h => (now - h.Seen).TotalSeconds > 30).ToList())
             {
                 try { h.Listener.Stop(); } catch { }
                 CloseUdp(h.Udp);
-                if (h.Joined && !loopback)
+                if (h.Joined && !h.Cloud && !loopback && steam != null)
                     Native.SteamAPI_ISteamMatchmaking_LeaveLobby(steam.Matchmaking, h.Lobby);
                 hosts.Remove(h.SteamID);
                 log(h.Name + " isn't hosting anymore.");
             }
-            WriteRemoteRooms();
-            WriteStudioNet();
+        }
+
+        // every 2 s: a direct link is tried to the online lobby's PCs this one has business with (the hosts listed get
+        // theirs from Prewarm)
+        void WantLinks()
+        {
+            foreach (var r in remotes.Keys)
+                if (IsCloud(r))
+                    cloud.Want(r);
+            foreach (var c in conns.Values)
+                if (!c.Closed && IsCloud(c.Peer))
+                    cloud.Want(c.Peer);
         }
 
         int FreePort()
@@ -751,7 +926,8 @@ namespace SteamBridge
                     rooms.Add(new Dictionary<string, object> {
                         { "vid", FirstVirtualRoom + (h.Port - FirstTunnelPort) * 100 + rid % 100 },
                         { "rid", rid }, { "port", h.Port }, { "host", h.Name ?? "" }, { "hostID", h.SteamID.ToString() }, { "version", h.Version ?? "" }, { "entry", r["entry"] },
-                        { "ping", h.PingMs < 0 ? -1 : (int)Math.Round(h.PingMs) }, { "route", h.Route }, { "tag", LinkTag(h) } });
+                        { "ping", h.PingMs < 0 ? -1 : (int)Math.Round(h.PingMs) }, { "route", h.Route }, { "tag", LinkTag(h) },
+                        { "via", h.Cloud ? "online" : "steam" } });
                 }
             WriteJson("RemoteRooms.json", new Dictionary<string, object> { { "rooms", rooms } });
         }
@@ -759,7 +935,7 @@ namespace SteamBridge
         void WriteIdentity()
         {
             WriteJson("SteamIdentity.json", new Dictionary<string, object> {
-                { "steamID", steam.MySteamID.ToString() }, { "name", steam.MyName },
+                { "steamID", MyID.ToString() }, { "name", MyName }, { "steam", steam != null }, { "online", cloud != null && cloud.Connected },
                 { "updated", (long)(DateTime.UtcNow - new DateTime(1970, 1, 1)).TotalSeconds } });
         }
 
@@ -793,13 +969,13 @@ namespace SteamBridge
                 conns[Key(peer, id)] = c;
                 lock (Steam.Lock)
                 {
-                    if (!loopback && !h.Joined && h.PendingJoin == 0)
+                    if (!loopback && !h.Cloud && !h.Joined && h.PendingJoin == 0)
                         h.PendingJoin = Native.SteamAPI_ISteamMatchmaking_JoinLobby(steam.Matchmaking, h.Lobby);
                 }
                 // the host accepts the P2P session of its lobby's members: wait for the lobby (up to 10 s)
                 for (int i = 0; i < 200 && !loopback && !h.Joined; i++)
                     Thread.Sleep(50);
-                log("Game connection " + id + " to " + h.Name + "'s server" + (loopback ? " (loopback)" : ""));
+                log("Game connection " + id + " to " + h.Name + "'s server" + (loopback ? " (loopback)" : h.Cloud ? " (online lobby)" : ""));
                 // the game waits for the server's first message: no answer at all counts as stuck too
                 c.SentAt = DateTime.UtcNow;
                 c.AwaitingReply = true;
@@ -858,7 +1034,7 @@ namespace SteamBridge
             if (loopback)
             {
                 // the joining side talks to LoopHostSide; the host side answers the "peer" MySteamID
-                loop.Enqueue(Tuple.Create(peer == LoopHostSide ? steam.MySteamID : LoopHostSide, msg));
+                loop.Enqueue(Tuple.Create(peer == LoopHostSide ? MyID : LoopHostSide, msg));
                 return;
             }
             lock (Steam.Lock)
@@ -867,8 +1043,36 @@ namespace SteamBridge
 
         void SendRaw(ulong peer, byte[] msg)
         {
+            if (IsCloud(peer))
+            {
+                // PING and PONG may go straight to the other PC (the room list's ping of the direct link); the rest is ordered
+                bool reliable = msg[0] != Ping && msg[0] != Pong;
+                if (!cloud.Send(peer, msg, reliable) && reliable)
+                    Detail("online send to " + PeerName(peer) + " failed (the online lobby isn't connected)");
+                return;
+            }
+            if (steam == null)
+                return;
             if (!Native.SteamAPI_ISteamNetworking_SendP2PPacket(steam.Networking, peer, msg, (uint)msg.Length, Steam.SendReliable, 0))
                 log("P2P send to " + peer + " failed");
+        }
+
+        // through the online lobby or through Steam: the net the peer's room listing or last message came through; without
+        // Steam always the online lobby, without the online lobby always Steam
+        bool IsCloud(ulong peer)
+        {
+            if (cloud == null)
+                return false;
+            if (steam == null)
+                return true;
+            return via.TryGetValue(peer, out var c) && c;
+        }
+
+        // Steam: a P2P session with this PC is welcome (nothing to do for the online lobby's PCs)
+        void Accept(ulong peer)
+        {
+            if (steam != null && !loopback && !IsCloud(peer))
+                Native.SteamAPI_ISteamNetworking_AcceptP2PSessionWithUser(steam.Networking, peer);
         }
 
         readonly byte[] p2pBuf = new byte[1 << 20];
@@ -878,6 +1082,7 @@ namespace SteamBridge
             {
                 if (!Native.SteamAPI_ISteamNetworking_ReadP2PPacket(steam.Networking, p2pBuf, (uint)p2pBuf.Length, out usize, out ulong ufrom, 1) || usize < 4)
                     break;
+                via[ufrom] = false;
                 HandleUdp(ufrom, p2pBuf, (int)usize);
             }
             while (Native.SteamAPI_ISteamNetworking_IsP2PPacketAvailable(steam.Networking, out uint size, 0))
@@ -886,6 +1091,8 @@ namespace SteamBridge
                     break;
                 var msg = new byte[size];
                 Buffer.BlockCopy(p2pBuf, 0, msg, 0, (int)size);
+                if (msg[0] != Hello)
+                    via[from] = false;
                 Handle(from, msg);
             }
         }
@@ -912,12 +1119,12 @@ namespace SteamBridge
                     // answered at once (callers hold Steam.Lock, or run the loopback queue)
                     msg[0] = Pong;
                     if (loopback)
-                        loop.Enqueue(Tuple.Create(peer == LoopHostSide ? steam.MySteamID : LoopHostSide, msg));
+                        loop.Enqueue(Tuple.Create(peer == LoopHostSide ? MyID : LoopHostSide, msg));
                     else
                         SendRaw(peer, msg);
                     break;
                 case Pong:
-                    HandlePong(loopback ? steam.MySteamID : peer, msg);
+                    HandlePong(loopback ? MyID : peer, msg);
                     break;
                 case Mail:
                     HandleMail(peer, msg);
@@ -1022,7 +1229,7 @@ namespace SteamBridge
                         // the PCs this server expects profiles from (its players' hosts, its guests): their P2P is welcome
                         if (mailPeers.Add(id))
                             Detail("P2P sessions from " + id + " are accepted (profiles)");
-                        Native.SteamAPI_ISteamNetworking_AcceptP2PSessionWithUser(steam.Networking, id);
+                        Accept(id);
                     }
             if (box.TryGetValue("mail", out var mail) && mail is System.Collections.IEnumerable ml)
                 foreach (Dictionary<string, object> m in ml)
@@ -1046,7 +1253,7 @@ namespace SteamBridge
                 }
                 // a host's server takes P2P only from its lobby's members: join it first
                 var h = hosts.Values.FirstOrDefault(x => x.SteamID == m.To);
-                if (h != null && !h.Joined && !loopback)
+                if (h != null && !h.Joined && !h.Cloud && !loopback)
                 {
                     if (h.PendingJoin == 0)
                         h.PendingJoin = Native.SteamAPI_ISteamMatchmaking_JoinLobby(steam.Matchmaking, h.Lobby);
@@ -1062,9 +1269,9 @@ namespace SteamBridge
                 msg[0] = Mail;
                 BitConverter.GetBytes(1u).CopyTo(msg, 1);
                 payload.CopyTo(msg, 5);
-                Native.SteamAPI_ISteamNetworking_AcceptP2PSessionWithUser(steam.Networking, m.To);
+                Accept(m.To);
                 if (loopback)
-                    loop.Enqueue(Tuple.Create(steam.MySteamID, msg));
+                    loop.Enqueue(Tuple.Create(MyID, msg));
                 else
                     SendRaw(m.To, msg);
                 m.Sent = true;
@@ -1121,7 +1328,7 @@ namespace SteamBridge
                 return;
             int bodyAt = text.IndexOf(",\"body\":", StringComparison.Ordinal);
             string bodyText = bodyAt < 0 ? "null" : text.Substring(bodyAt + 8, text.Length - bodyAt - 9);
-            string post = "{\"from\":\"" + (loopback ? steam.MySteamID : peer) + "\",\"body\":" + bodyText + "}";
+            string post = "{\"from\":\"" + (loopback ? MyID : peer) + "\",\"body\":" + bodyText + "}";
             // to this PC's server on a thread of its own (the P2P loop doesn't wait for it), then the ack
             new Thread(() =>
             {
@@ -1204,6 +1411,9 @@ namespace SteamBridge
             if (catalog == publishedStudio)
                 return;
             publishedStudio = catalog;
+            PublishCloud();
+            if (myLobby == 0)
+                return;
             var parts = new List<string>();
             for (int i = 0; i < catalog.Length; i += 7000)
                 parts.Add(catalog.Substring(i, Math.Min(7000, catalog.Length - i)));
@@ -1218,19 +1428,15 @@ namespace SteamBridge
             catch { }
         }
 
-        void ReadStudioCatalog(Host h, ulong lobby)
+        void ReadStudioCatalog(Host h, string text)
         {
             h.Maps = new List<object>();
             h.Have = new List<object>();
-            int.TryParse(steam.LobbyData(lobby, "studioparts"), out int parts);
-            if (parts <= 0)
+            if (string.IsNullOrEmpty(text))
                 return;
-            var text = new StringBuilder();
-            for (int p = 0; p < parts; p++)
-                text.Append(steam.LobbyData(lobby, "studio" + p));
             try
             {
-                var c = json.Deserialize<Dictionary<string, object>>(text.ToString());
+                var c = json.Deserialize<Dictionary<string, object>>(text);
                 if (c.TryGetValue("maps", out var m) && m is System.Collections.IEnumerable ml)
                     foreach (var x in ml)
                         h.Maps.Add(x);
@@ -1310,7 +1516,7 @@ namespace SteamBridge
                 req.Wave = 1;
             var who = new List<ulong>();
             if (loopback)
-                who.Add(steam.MySteamID);
+                who.Add(MyID);
             else if (req.Wave == 1)
             {
                 who.AddRange(hosts.Values.Where(h => HostHasMap(h, req.Key) || h.Joined).Select(h => h.SteamID));
@@ -1351,11 +1557,11 @@ namespace SteamBridge
                 BitConverter.GetBytes((ushort)parts).CopyTo(msg, 7);
                 Buffer.BlockCopy(data, i * Piece, msg, 9, n);
                 if (loopback)
-                    loop.Enqueue(Tuple.Create(steam.MySteamID, msg));
+                    loop.Enqueue(Tuple.Create(MyID, msg));
                 else
                     lock (Steam.Lock)
                     {
-                        Native.SteamAPI_ISteamNetworking_AcceptP2PSessionWithUser(steam.Networking, peer);
+                        Accept(peer);
                         SendRaw(peer, msg);
                     }
             }
@@ -1511,9 +1717,16 @@ namespace SteamBridge
             Buffer.BlockCopy(data, 0, msg, 4, n);
             if (loopback)
             {
-                udpLoop.Enqueue(Tuple.Create(peer == LoopHostSide ? steam.MySteamID : LoopHostSide, msg));
+                udpLoop.Enqueue(Tuple.Create(peer == LoopHostSide ? MyID : LoopHostSide, msg));
                 return;
             }
+            if (IsCloud(peer))
+            {
+                cloud.Send(peer, msg, msg.Length > UnreliableMax);
+                return;
+            }
+            if (steam == null)
+                return;
             lock (Steam.Lock)
                 Native.SteamAPI_ISteamNetworking_SendP2PPacket(steam.Networking, peer, msg, (uint)msg.Length,
                     msg.Length <= UnreliableMax ? 0 : Steam.SendReliable, 1);
@@ -1533,7 +1746,7 @@ namespace SteamBridge
             if (direction == 1)
             {
                 // the host PC's game -> this PC's game (this PC joined that host)
-                var h = hosts.Values.FirstOrDefault(x => x.SteamID == (loopback ? steam.MySteamID : peer));
+                var h = hosts.Values.FirstOrDefault(x => x.SteamID == (loopback ? MyID : peer));
                 if (h?.Udp == null)
                 {
                     Dropped("a packet from host " + peer + ", whose lobby this PC doesn't know (no 31000+ ports for it)");
@@ -1545,7 +1758,7 @@ namespace SteamBridge
             else
             {
                 // a remote player's game -> this PC's game (the room host)
-                if (!remotes.TryGetValue(loopback ? steam.MySteamID : peer, out var r) || r.Udp == null)
+                if (!remotes.TryGetValue(loopback ? MyID : peer, out var r) || r.Udp == null)
                 {
                     Dropped("a packet from player " + peer + ", who isn't on this PC's server (no 33000+ ports for them)");
                     return;
@@ -1580,7 +1793,8 @@ namespace SteamBridge
                 reportedTo = udpToPeer;
                 reportedFrom = udpFromPeer;
                 reportedDropped = udpDropped;
-                log("UDP: " + udpToPeer + " match packets sent to the other PC, " + udpFromPeer + " received, " + udpDropped + " dropped");
+                log("UDP: " + udpToPeer + " match packets sent to the other PC, " + udpFromPeer + " received, " + udpDropped + " dropped" +
+                    (cloud != null ? " (" + cloud.Totals() + ")" : ""));
             }
             if (text == null)
                 return;
@@ -1613,7 +1827,7 @@ namespace SteamBridge
                         // this PC's game (the room host) -> the remote player's game
                         int mine = MyPortID(from.Port);
                         if (mine >= 0)
-                            SendUdp(loopback ? steam.MySteamID : id, 1, mine, portID, data, n);
+                            SendUdp(loopback ? MyID : id, 1, mine, portID, data, n);
                         else
                             Dropped("a packet from 127.0.0.1:" + from.Port + " to " + (HostUdpBase + slot * 2 + portID));
                     });
@@ -1644,13 +1858,14 @@ namespace SteamBridge
             }
             foreach (var r in remotes.Values)
                 CloseUdp(r.Udp);
-            lock (Steam.Lock)
-            {
-                if (myLobby != 0)
-                    Native.SteamAPI_ISteamMatchmaking_LeaveLobby(steam.Matchmaking, myLobby);
-                foreach (var h in hosts.Values.Where(h => h.Joined))
-                    Native.SteamAPI_ISteamMatchmaking_LeaveLobby(steam.Matchmaking, h.Lobby);
-            }
+            if (steam != null)
+                lock (Steam.Lock)
+                {
+                    if (myLobby != 0)
+                        Native.SteamAPI_ISteamMatchmaking_LeaveLobby(steam.Matchmaking, myLobby);
+                    foreach (var h in hosts.Values.Where(h => h.Joined && !h.Cloud))
+                        Native.SteamAPI_ISteamMatchmaking_LeaveLobby(steam.Matchmaking, h.Lobby);
+                }
             foreach (var f in new[] { "RemoteRooms.json", "SteamIdentity.json", "StudioNet.json" })
                 try { File.Delete(Path.Combine(dataDir, f)); } catch { }
         }
@@ -1658,6 +1873,9 @@ namespace SteamBridge
 
     static class Program
     {
+        // the online lobby (mod/tools/lobby-worker, on Cloudflare Workers)
+        const string DefaultLobby = "wss://csnz-revived-lobby.REPLACE.workers.dev/ws";
+
         static int Main(string[] args)
         {
             string Arg(string name, string def = null)
@@ -1678,30 +1896,58 @@ namespace SteamBridge
 
             var steamApi = Arg("--steam-api");
             var dataDir = Arg("--data");
-            if (steamApi == null || dataDir == null)
+            bool useSteam = steamApi != null && !args.Contains("--no-steam");
+            string lobbyUrl = args.Contains("--no-online") ? null : Arg("--online", DefaultLobby);
+            if (dataDir == null || (!useSteam && lobbyUrl == null))
             {
-                Console.WriteLine("CSNZ-SteamBridge.exe --steam-api <game Bin\\steam_api.dll> --data <server Data folder> [--api http://127.0.0.1:30080] [--log file] [--loopback] [--verbose]");
+                Console.WriteLine("CSNZ-SteamBridge.exe --data <server Data folder> [--steam-api <game Bin\\steam_api.dll>] [--no-steam] " +
+                    "[--online wss://<online lobby>/ws] [--no-online] [--api http://127.0.0.1:30080] [--log file] [--loopback] [--verbose] [--port-shift N]");
                 return 2;
             }
+            if (int.TryParse(Arg("--port-shift"), out int shift) && shift != 0)
+                Bridge.ShiftPorts(shift);
             // Spacewar: Steam's free test app, so every player can use lobbies and P2P
             Directory.SetCurrentDirectory(exeDir);
             File.WriteAllText(Path.Combine(exeDir, "steam_appid.txt"), "480");
 
-            Log("Steam bridge starting" + (args.Contains("--loopback") ? " (loopback test)" : "") + (args.Contains("--verbose") ? " (detailed logs)" : ""));
-            var steam = Steam.Start(steamApi, Log);
-            if (steam == null)
+            Log("Bridge starting" + (args.Contains("--loopback") ? " (loopback test)" : "") + (args.Contains("--verbose") ? " (detailed logs)" : "") +
+                (useSteam ? "" : " (without Steam)") + (lobbyUrl == null ? " (without the online lobby)" : ""));
+            Steam steam = useSteam ? Steam.Start(steamApi, Log) : null;
+            if (steam != null)
+                Log("Steam user " + steam.MyName + " (" + steam.MySteamID + ")");
+            else if (lobbyUrl == null)
             {
                 Log("Online play is off for this session; offline play works as always.");
                 return 1;
             }
-            Log("Steam user " + steam.MyName + " (" + steam.MySteamID + ")");
+            else
+                Log(useSteam ? "Steam isn't there: online play goes through the online lobby only (players without Steam, and the ones with it)." :
+                               "Steam is off: online play goes through the online lobby only.");
+            if (args.Contains("--loopback") && steam == null)
+            {
+                Log("The loopback test needs Steam.");
+                return 1;
+            }
+
+            CloudNet cloud = null;
+            ulong myID = steam?.MySteamID ?? 0;
+            string myName = steam?.MyName;
+            if (lobbyUrl != null)
+            {
+                CloudNet.LoadIdentity(dataDir, myID, out ulong cloudID, out string secret, Log);
+                myID = cloudID;
+                if (myName == null)
+                    myName = "Player " + (myID & 0xFFFF).ToString("X4");
+                cloud = new CloudNet(lobbyUrl, myID, secret, Bridge.ModVersionText, Log, line => { if (args.Contains("--verbose")) Log("detail: " + line); });
+                cloud.NoDirect = args.Contains("--no-direct");
+            }
 
             bool running = true;
             Console.CancelKeyPress += (s, e) => { e.Cancel = true; running = false; };
             // stops by itself when the stop file appears (the launcher's way to end it cleanly)
             var stopFile = Path.Combine(dataDir, "SteamBridge.stop");
             try { File.Delete(stopFile); } catch { }
-            var bridge = new Bridge(steam, dataDir, Arg("--api", "http://127.0.0.1:30080"), args.Contains("--loopback"), Log) { Verbose = args.Contains("--verbose") };
+            var bridge = new Bridge(steam, cloud, myID, myName, dataDir, Arg("--api", "http://127.0.0.1:30080"), args.Contains("--loopback"), Log) { Verbose = args.Contains("--verbose") };
             try
             {
                 bridge.Run(() => running && !File.Exists(stopFile));
@@ -1711,9 +1957,10 @@ namespace SteamBridge
                 Log("Bridge error: " + ex);
             }
             try { File.Delete(stopFile); } catch { }
-            lock (Steam.Lock)
-                Native.SteamAPI_Shutdown();
-            Log("Steam bridge stopped.");
+            if (steam != null)
+                lock (Steam.Lock)
+                    Native.SteamAPI_Shutdown();
+            Log("Bridge stopped.");
             return 0;
         }
     }
