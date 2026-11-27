@@ -132,12 +132,21 @@ Every finished match gives EXP and medals, and advances orders, bingo and Zombie
 
 ### Gift codes
 
-Each account can use each code once: in the shop page (**Redeem code**, top right) or with `/redeem <code>` in the
-lobby chat, in any case and with or without spaces.
+Each account can use each code once: in the game's Coupon window, in the shop page (**Redeem code**, top right) or
+with `/redeem <code>` in the lobby chat, in any case and with or without spaces.
 
 - **Stop Killing Games**: 5 of every decoder in the game.
 - **Welcome**: 3 Point Coupons (100 points each), M1911 A1 (permanent), MP7A1 Unicorn (90 days), MG42 (permanent),
   15 Bingo Tickets and 5 Advanced Decoders.
+- **1000DOWNLOADS**: 10 Transcendence Decoders, AK-47 60R, M2, Brick Piece V2, AKM and M4A1 CSOGS Edition,
+  Natasha, Walter, Spade, Michaela, 3 Point Coupons Lv. 2, a weapon enhancement reward box, 20 Large Medical Kits and
+  Double UP + Zombie Mode Double UP (10 days).
+- **NOP2W**: a Snowflake Transcendence Class Box, a Rare Decoder Supply Box (15 days), Weapon Paint Decoders, Point
+  Coupons, a Maverick Points Voucher, a Jackpot Point Box, StG44 Gold Edition, Elegant Mosin-Nagant, BALROG-I,
+  VULCANUS-9 and 40 random decoders.
+- **5000DOWNLOADS** (thank you!): Tiger Tattoo, Corps 1 Armband, CSO Pendant, a Transcendence Decoder Supply Box
+  (30 days), an Epic Decoder Ticket (15 days), Paint Reset Blueprints, Fernando, Criss, Point Coupons, PP-19 Bizon
+  Splash, JANUS-3, Infinity Black and 40 random decoders.
 
 Advanced Decoders aren't sold in the game's
 shop; the shop page's Supply Depot sells them for 60 medals each.
