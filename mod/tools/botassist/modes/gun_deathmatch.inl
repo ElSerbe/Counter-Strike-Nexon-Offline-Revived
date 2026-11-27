@@ -90,9 +90,9 @@ static void GdmLoadPool()
             if (line[0] == ';' || sscanf(line, "%d %d ; %127s", &id, &tier, res) < 2)
                 continue;
             std::string cls = res[0] ? "weapon_" + GdmLower(res) : "";
-            if (!cls.empty() && g_gdmBroken.count(cls))
+            if (!cls.empty() && (g_gdmBroken.count(cls) || CrashingWeapon(res)))
             {
-                broken++;
+                broken++; // (CrashingWeapon: the game crashes when it's fired, whatever the player's list says)
                 continue;
             }
             g_gdmAll.push_back({ id, tier, cls });
@@ -101,7 +101,7 @@ static void GdmLoadPool()
         }
         fclose(f);
     }
-    Log("GDM: %d weapons in botassist_gdm_weapons.txt (%d left out: botassist_gdm_broken.txt)%s", total, broken,
+    Log("GDM: %d weapons in botassist_gdm_weapons.txt (%d left out: botassist_gdm_broken.txt or crashing)%s", total, broken,
         total ? "" : ": the mode keeps the game's own list");
 }
 

@@ -718,7 +718,6 @@
 9692 11 ; dualswordzhc
 9693 1 ; gunkatazhc
 9709 11 ; divinespearex
-9710 3 ; dualuziw
 9714 5 ; buffm249zhc
 9876 11 ; divinespearexle
 9882 1 ; backfliphg1
