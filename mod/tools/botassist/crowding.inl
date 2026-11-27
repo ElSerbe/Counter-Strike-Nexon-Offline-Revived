@@ -13,6 +13,7 @@
 //    with the lower key keeps going and the other steps aside; a moving person always gets the way.
 //  - blocked links: a link between two areas that stuck bots ran into a wall on, LINK_BLOCK_HITS times, is one every
 //    bot's path goes around (NavBlockCost in botassist.cpp) till it's kept no longer.
+//  - crowds: how many players are bunched up, for botassist.log (CrowdReport, modes/zombie_humans.inl).
 
 // a player near a ladder: on it (dir 1 up, -1 down, 0 not moving; feetZ), or walking up to it (dist from the ladder)
 struct LadderOther
@@ -200,4 +201,38 @@ static bool LinkBlocked(const std::vector<BlockedLink>& links, int from, int to,
         if (l.from == from && l.to == to)
             return l.hits >= LINK_BLOCK_HITS && now >= l.last && now < l.until;
     return false;
+}
+
+// how bunched up some players are (botassist.log's "crowd:" lines): pairs closer than touch, and the most within group
+// of one of them (itself counted; biggestAt its index, the first of the biggest; -1 for none)
+struct CrowdPt
+{
+    float x, y, z;
+};
+struct CrowdCount
+{
+    int pairs, biggest, biggestAt;
+};
+static CrowdCount CountCrowd(const std::vector<CrowdPt>& pts, float touch, float group)
+{
+    CrowdCount c = { 0, 0, -1 };
+    for (size_t i = 0; i < pts.size(); i++)
+    {
+        int around = 1;
+        for (size_t k = 0; k < pts.size(); k++)
+        {
+            if (k == i)
+                continue;
+            float dx = pts[i].x - pts[k].x, dy = pts[i].y - pts[k].y, dz = pts[i].z - pts[k].z;
+            float d2 = dx * dx + dy * dy + dz * dz;
+            around += d2 < group * group;
+            c.pairs += k > i && d2 < touch * touch;
+        }
+        if (around > c.biggest)
+        {
+            c.biggest = around;
+            c.biggestAt = (int)i;
+        }
+    }
+    return c;
 }

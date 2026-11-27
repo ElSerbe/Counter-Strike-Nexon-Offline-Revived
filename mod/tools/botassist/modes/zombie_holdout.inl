@@ -380,6 +380,14 @@ static bool HoldoutAtSpot(void* bot)
     return Len2D(Origin(bot) - g_holdSpots[it->second.spot].at) < HOLD_RADIUS;
 }
 
+// the spot this bot holds and is at (CrowdReport), -1 none: walking there, walking the map alone, another mode
+static int HoldoutSpotOf(void* bot)
+{
+    if (!HoldoutMode() || g_holdLevel != g_nav.level || !HoldoutAtSpot(bot))
+        return -1;
+    return g_holdBots.find(bot)->second.spot;
+}
+
 static float HoldoutFleeRange(void* bot, float normal)
 {
     return HoldoutAtSpot(bot) ? HOLD_FLEE : normal;
