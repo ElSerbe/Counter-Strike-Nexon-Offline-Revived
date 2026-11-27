@@ -5605,6 +5605,7 @@ static void HookBotManager(DWORD delta)
 // g_consoleBotAdd is set while they run. The list is checked every 2 s (game commands come and go with mp.dll).
 static const DWORD HW_CMD_LIST = 0x31aa068 - 0x1d00000, HW_CON_PRINTF = 0x23e0d70 - 0x1d00000;
 static const DWORD MP_BOT_COMMAND = 0x11317980, MP_CLIENTKILL = 0x113efaf0;
+static const DWORD MP_SV_CHEATS_COPY = 0x1220f318; // the game rules' sv_cheats, read when a player's HUD starts (0x11414c5e)
 static const int ENG_PENTITYOFENTINDEX = 77, ENG_ADDSERVERCOMMAND = 146, GV_MAXCLIENTS = 0x90, EV_MOVETYPE = 0x118;
 static const int FL_GODMODE = 0x40, FL_NOTARGET = 0x80, MOVETYPE_WALK = 3, MOVETYPE_FLY = 5, MOVETYPE_NOCLIP = 8;
 static const float DAMAGE_NO = 0.0f, DAMAGE_AIM = 2.0f;
@@ -6035,6 +6036,19 @@ static void ConsoleFrame()
             g_CVarSetString("sv_cheats", "0");
             Log("console: new match, sv_cheats 0 (it was on; command line: %.200s)", GetCommandLineA());
         }
+        // mp.dll keeps its own copy, taken when the game rules were made (0x11539743), before this frame: with it still
+        // on, joining players were told the match used sv_cheats ("using sv_cheats" just for adding bots, report
+        // 2026-11-25). It follows the cvar now.
+        __try
+        {
+            float* cached = (float*)(MP_SV_CHEATS_COPY + g_mpDelta);
+            if (*cached != 0.0f && g_CVarGetFloat && g_CVarGetFloat("sv_cheats") == 0.0f)
+            {
+                *cached = 0.0f;
+                Log("console: mp.dll's copy of sv_cheats set to 0 too");
+            }
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER) {}
         if (g_cheats.god || g_cheats.noclip || g_cheats.notarget || g_cheats.fly)
             Log("console: new map, cheats off");
         g_cheats.god = g_cheats.noclip = g_cheats.notarget = g_cheats.fly = false;
