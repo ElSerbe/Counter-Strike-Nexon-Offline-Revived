@@ -594,6 +594,7 @@ namespace CsnzLauncher
         {
             // a Steam install gets Valve's steam_api.dll back (online play off had put the emulator's there)
             SteamApi.ForPlayMode(game, true, log);
+            Display.DpiAwareOff(game, log);
             var bin = Path.Combine(game, "Bin");
             var list = PatchList.Load();
             var states = Survey(bin, list);

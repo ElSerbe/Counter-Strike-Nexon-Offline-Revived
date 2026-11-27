@@ -964,6 +964,7 @@ namespace CsnzLauncher
                     Log("Steam isn't open: the game starts without Steam, and online play goes through the online lobby.");
                 SteamApi.ForPlayMode(game, online && steamOpen, Log);
                 Display.Write(game, settings, Log);        // field of view and frame rate for botassist
+                Display.DpiAware(game, Log);               // Windows display scaling over 100% doesn't zoom the game in
                 if (verbose)
                     Log("Game state after patching: " + Patcher.Check(game) + ", Steam build " + GameLocator.BuildId(game) + ", hosts block " + (Hosts.HasBlock() ? "yes" : "no"));
                 if (Runner.Listening(Runner.ServerPort))
