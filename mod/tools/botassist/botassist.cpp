@@ -2404,6 +2404,60 @@ static std::string HttpGet(const wchar_t* path)
 }
 
 static void WbSetMatch(int on); // weapon_balance.inl: the room's weapon balance for this match
+
+// The room's arms restriction (CSO_WeaponRestrictType_<n>, /api/matchbots "weaponLimit"): the weapons botassist buys
+// for bots keep to it. They ignored it (a Pistol Match with rifles, reports 2026-11-23): the game's buy menu keeps
+// players to it, botassist's buy commands didn't. 0 none, 1 no AWP, 2 Classic, 3 Sniper Match, 4 Pistol Match, 5 Knife
+// Match, 6 no flash bang, 7 AWP Match, 8 Grenade Match, 9 New Classic, 10 no AWP + no flash, 11 Classic (no flash),
+// 12 New Classic (no flash), 13 Shotgun Battle. New Classic isn't known (left open); pistols and melee stay in the
+// Sniper, AWP and Shotgun matches.
+static volatile LONG g_roomWeaponLimit = 0;
+static bool SniperRes(const std::string& res)
+{
+    static const char* const kSnipers[] = { "awp", "svd", "m95", "m24", "m40", "m82", "as50", "sl8", "sg550", "g3sg1", "scout",
+                                            "xm2010", "trg42", "l115", "wa2000", "dragunov", "vsk94", "sv98", "bendita",
+                                            "railcannon", "crossbow", "bow" };
+    for (const char* s : kSnipers)
+        if (!res.compare(0, strlen(s), s))
+            return true;
+    return false;
+}
+static bool RoomAllowsWeapon(int id)
+{
+    int limit = (int)g_roomWeaponLimit;
+    if (id <= 0 || limit <= 0 || limit == 6 || limit == 9 || limit == 12)
+        return true;
+    auto m = cfg.weaponModel.find(id);
+    if (m == cfg.weaponModel.end() || m->second.size() <= 13)
+        return limit == 1 || limit == 10; // (not in the list: only the AWP bans can let it through)
+    std::string res = m->second.substr(9, m->second.size() - 13); // models/p_<res>.mdl, lower case
+    auto c = cfg.weaponCategory.find(m->second);
+    int cat = c != cfg.weaponCategory.end() ? c->second : 0;
+    bool awp = !res.compare(0, 3, "awp");
+    switch (limit)
+    {
+    case 1:
+    case 10: return !awp;
+    case 2:
+    case 11: return cat == 11 || id <= 24; // Counter-Strike's own weapons (Item.csv 1-24)
+    case 3: return cat == 1 || cat == 11 || (cat == 4 && SniperRes(res));
+    case 4: return cat == 1 || cat == 11;
+    case 5:
+    case 8: return cat == 11;
+    case 7: return cat == 1 || cat == 11 || awp;
+    case 13: return cat == 1 || cat == 2 || cat == 11;
+    }
+    return true;
+}
+// a random one of the list that the room allows, 0 none
+static int AllowedFrom(const std::vector<int>& list)
+{
+    std::vector<int> ok;
+    for (int x : list)
+        if (RoomAllowsWeapon(x))
+            ok.push_back(x);
+    return ok.empty() ? 0 : ok[rand() % ok.size()];
+}
 #include "room_options.inl"
 
 static DWORD WINAPI FetchMatchBots(LPVOID)
@@ -2457,6 +2511,9 @@ static DWORD WINAPI FetchMatchBots(LPVOID)
     g_matchKnown = json.find("\"bots\":[") != std::string::npos;
     LeaveCriticalSection(&g_matchLock);
     WbSetMatch(JsonInt(json, "weaponBalance", 0));
+    InterlockedExchange(&g_roomWeaponLimit, JsonInt(json, "weaponLimit", 0));
+    if (g_roomWeaponLimit)
+        Log("room arms restriction %d: bots buy only weapons it allows", (int)g_roomWeaponLimit);
     SetRoomOptions(json);
     InterlockedExchange(&g_matchFetch, 2);
     Log("room AI players for this match: %d%s", (int)bots.size(), json.empty() ? " (server not reachable)" : "");
@@ -3414,7 +3471,10 @@ static void UpdateBuying(void* bot, BotState& st)
     // (gen_weapons.py CRASHING: Dual Uzi W crashes the game when fired in a zombie mode) count as not chosen, also in
     // rooms saved before. Every gun of the room's AI player editor is in the list; melee isn't checked (the editor
     // offers some the list leaves out: bare hands, crowbar...). Without the list, nothing is refused.
-    auto gunListed = [&](int id) { return id <= 0 || cfg.weaponModel.empty() || cfg.weaponModel.count(id) != 0; };
+    // (and the room's arms restriction allows it: RoomAllowsWeapon)
+    auto gunListed = [&](int id) {
+        return id <= 0 || ((cfg.weaponModel.empty() || cfg.weaponModel.count(id) != 0) && RoomAllowsWeapon(id));
+    };
     // a slot: the room's weapon, -1 for "None", else a random one from the bot's filter, else 0
     auto pick = [&](int fixed, const std::vector<int>& allow, bool gun) {
         if (fixed != 0 && (!gun || gunListed(fixed)))
@@ -3434,7 +3494,7 @@ static void UpdateBuying(void* bot, BotState& st)
     // the same, falling back on any weapon of the slot (BuyAnyWeapon)
     auto pickAny = [&](int fixed, const std::vector<int>& allow, const std::vector<int>& any, bool gun) {
         int id = pick(fixed, allow, gun);
-        return id != 0 || !cfg.buyAnyWeapon || any.empty() ? id : any[rand() % any.size()];
+        return id != 0 || !cfg.buyAnyWeapon || any.empty() ? id : AllowedFrom(any);
     };
     // "None": the bot drops its weapon of that slot (the game gives a pistol, some modes a primary, and bots pick
     // up what others drop). CSNZ's drop command is "cl_drop" (mp.dll 0x113ee0f4: game rules vfunc 0x11c), it throws
@@ -3627,7 +3687,7 @@ static void UpdateBuying(void* bot, BotState& st)
         }
         if (rb && st.buyTries == 0)
             st.nonePrimary = roomPrimary < 0;
-        st.boughtPrimary = roomPrimary > 0 ? roomPrimary : roomPrimary < 0 ? 0 : cfg.primaries[rand() % cfg.primaries.size()];
+        st.boughtPrimary = roomPrimary > 0 ? roomPrimary : roomPrimary < 0 ? 0 : AllowedFrom(cfg.primaries);
         const char* model = String(F<int>(Vars(bot), EV_WEAPONMODEL));
         st.modelBeforeBuy = model ? model : "";
         st.buyTries++;
@@ -3639,8 +3699,10 @@ static void UpdateBuying(void* bot, BotState& st)
         int roomSecondary = rb ? (st.buyTries > 1 && st.noneSecondary ? -1 : pick(rb->secondary, rb->allowSecondary, true)) : 0;
         if (rb && st.buyTries == 1)
             st.noneSecondary = roomSecondary < 0;
-        if (roomSecondary >= 0 && (roomSecondary > 0 || !cfg.pistols.empty()))
-            BuyAs(bot, roomSecondary > 0 ? roomSecondary : cfg.pistols[rand() % cfg.pistols.size()]);
+        if (roomSecondary == 0)
+            roomSecondary = AllowedFrom(cfg.pistols);
+        if (roomSecondary > 0)
+            BuyAs(bot, roomSecondary);
         int roomMelee = rb ? pickAny(rb->melee, rb->allowMelee, cfg.melees, false) : 0;
         if (roomMelee > 0)
             BuyAs(bot, roomMelee);

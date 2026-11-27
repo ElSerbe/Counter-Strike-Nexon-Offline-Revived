@@ -11191,7 +11191,7 @@ index c7d2bdb..75d0ee9 100644
 +extern CVoxelManager g_VoxelManager;
 diff --git a/src/manager/warbondmanager.cpp b/src/manager/warbondmanager.cpp
 new file mode 100644
-index 0000000..c5e25d8
+index 0000000..0ccf814
 --- /dev/null
 +++ b/src/manager/warbondmanager.cpp
 @@ -0,0 +1,1238 @@
@@ -11411,7 +11411,7 @@ index 0000000..c5e25d8
 +			bots.push_back(bot);
 +		}
 +		result = { { "mode", g_LastMatchMode }, { "hostTeam", g_LastMatchHostTeam }, { "bots", bots },
-+			{ "weaponBalance", g_LastMatchWeaponBalance ? 1 : 0 } };
++			{ "weaponBalance", g_LastMatchWeaponBalance ? 1 : 0 }, { "weaponLimit", g_LastMatchWeaponLimit } };
 +		// the room's options for its bots (Extra Settings page), as numbers: botassist reads them with JsonInt
 +		json opts = RoomOptionsPage::MatchJson();
 +		for (auto& kv : opts.items())
@@ -14011,7 +14011,7 @@ index 68a4dc7..5c924cb 100644
  	int m_nTerWinCount;
  	int m_nFirstPlaceUserId;
 diff --git a/src/room/room.cpp b/src/room/room.cpp
-index 616959e..239bd16 100644
+index 616959e..5b9860f 100644
 --- a/src/room/room.cpp
 +++ b/src/room/room.cpp
 @@ -1,4 +1,5 @@
@@ -14043,7 +14043,7 @@ index 616959e..239bd16 100644
  }
  
  int CRoom::GetFreeSlots()
-@@ -239,6 +241,339 @@ void CRoom::SetStatus(RoomStatus newStatus)
+@@ -239,6 +241,341 @@ void CRoom::SetStatus(RoomStatus newStatus)
  void CRoom::SendJoinNewRoom(IUser* user)
  {
  	g_PacketManager.SendRoomCreateAndJoin(user->GetExtendedSocket(), this);
@@ -14075,6 +14075,7 @@ index 616959e..239bd16 100644
 +int g_LastMatchHostTeam = 2;
 +int g_LastMatchHostID = 0;
 +bool g_LastMatchWeaponBalance = false;
++int g_LastMatchWeaponLimit = 0;
 +RoomOptions g_LastMatchOptions;
 +
 +// a new AI player's skill (BOT_SKILL_ROOM_DEFAULT: the room's choice for new bots; BOT_SKILL_RANDOM: a draw)
@@ -14289,6 +14290,7 @@ index 616959e..239bd16 100644
 +	g_LastMatchHostTeam = hostTeam;
 +	g_LastMatchHostID = m_pHostUser ? m_pHostUser->GetID() : 0;
 +	g_LastMatchWeaponBalance = m_bWeaponBalance && WeaponBalanceMode(m_pSettings->gameModeId);
++	g_LastMatchWeaponLimit = m_pSettings->weaponLimit;
 +	g_LastMatchOptions = m_Options;
 +	if (m_Bots.empty())
 +		return;
@@ -14383,7 +14385,7 @@ index 616959e..239bd16 100644
  }
  
  void CRoom::UpdateSettings(CRoomSettings& newSettings)
-@@ -564,6 +899,13 @@ void CRoom::UpdateSettings(CRoomSettings& newSettings)
+@@ -564,6 +901,13 @@ void CRoom::UpdateSettings(CRoomSettings& newSettings)
  	if (newSettings.highFlag & ROOM_HIGH_UNK77) {
  		m_pSettings->unk77 = newSettings.unk77;
  	}
@@ -14397,7 +14399,7 @@ index 616959e..239bd16 100644
  }
  
  void CRoom::OnUserMessage(CReceivePacket* msg, IUser* user)
-@@ -575,6 +917,9 @@ void CRoom::OnUserMessage(CReceivePacket* msg, IUser* user)
+@@ -575,6 +919,9 @@ void CRoom::OnUserMessage(CReceivePacket* msg, IUser* user)
  
  	Logger().Info("User '%s' write to room chat: '%s'\n", senderName.c_str(), message.c_str());
  
@@ -14407,7 +14409,7 @@ index 616959e..239bd16 100644
  	CUserCharacterExtended characterExtended = user->GetCharacterExtended(EXT_UFLAG_GAMEMASTER);
  	if (characterExtended.gameMaster && m_pHostUser == user)
  	{
-@@ -1052,6 +1397,8 @@ void CRoom::HostStartGame()
+@@ -1052,6 +1399,8 @@ void CRoom::HostStartGame()
  		return;
  	}
  
@@ -14416,7 +14418,7 @@ index 616959e..239bd16 100644
  	SendStartMatch(m_pHostUser);
  
  	OnGameStart();
-@@ -1092,10 +1439,16 @@ void CRoom::UserGameJoin(IUser* user)
+@@ -1092,10 +1441,16 @@ void CRoom::UserGameJoin(IUser* user)
  void CRoom::EndGame(bool forcedEnd)
  {
  	m_pGameMatch->OnGameMatchEnd();
@@ -14433,7 +14435,7 @@ index 616959e..239bd16 100644
  	if (m_pServer)
  		g_PacketManager.SendHostStop(m_pServer->GetSocket());
  
-@@ -1223,7 +1576,7 @@ void CRoom::ChangeMap(int mapId)
+@@ -1223,7 +1578,7 @@ void CRoom::ChangeMap(int mapId)
  
  		if (m_pServer)
  			g_PacketManager.SendHostServerJoin(u->GetExtendedSocket(), m_pServer->GetIP(), m_pServer->GetPort(), u->GetID());
@@ -14443,10 +14445,10 @@ index 616959e..239bd16 100644
  	}
  }
 diff --git a/src/room/room.h b/src/room/room.h
-index 13a4ee8..dc8e872 100644
+index 13a4ee8..5340be2 100644
 --- a/src/room/room.h
 +++ b/src/room/room.h
-@@ -25,6 +25,55 @@ public:
+@@ -25,6 +25,56 @@ public:
  	bool m_bIsIngame;
  };
  
@@ -14493,6 +14495,7 @@ index 13a4ee8..dc8e872 100644
 +extern int g_LastMatchHostTeam;
 +extern int g_LastMatchHostID;
 +extern bool g_LastMatchWeaponBalance; // the room's weapon balance was on, in a mode it applies to
++extern int g_LastMatchWeaponLimit; // the room's arms restriction (CSO_WeaponRestrictType_<n>), for botassist's buying
 +extern RoomOptions g_LastMatchOptions;
 +
 +// offline build: weapon balance (botassist.asi evens out weapon damage against zombies by weapon type): the zombie
@@ -14502,7 +14505,7 @@ index 13a4ee8..dc8e872 100644
  class CRoom : public IRoom
  {
  public:
-@@ -103,11 +152,37 @@ public:
+@@ -103,11 +153,37 @@ public:
  
  	bool IsUserInFamilyBattleUsers(int userId);
  
