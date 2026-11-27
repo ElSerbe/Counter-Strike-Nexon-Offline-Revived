@@ -5006,10 +5006,10 @@ index 0000000..1a0e4c5
 +bool IsZombieModeOffline(int mode);
 diff --git a/src/manager/missionmanager.cpp b/src/manager/missionmanager.cpp
 new file mode 100644
-index 0000000..b827ff2
+index 0000000..7832e39
 --- /dev/null
 +++ b/src/manager/missionmanager.cpp
-@@ -0,0 +1,515 @@
+@@ -0,0 +1,528 @@
 +#include "missionmanager.h"
 +#include "medalmanager.h"
 +#include "warbondmanager.h"
@@ -5370,9 +5370,22 @@ index 0000000..b827ff2
 +		stock.push_back({ { "itemID", item->itemID }, { "name", item->name }, { "kind", item->kind }, { "price", item->price },
 +			{ "owned", owned.count(item->itemID) > 0 } });
 +
++	// the decoders a claimed request or a finished daily/weekly order can also give (Data/DailyDecoders.json), with their
++	// odds, for the page's icons (they weren't shown anywhere: the user, 2026-11-27)
++	json decoderList = json::array();
++	int totalWeight = 0;
++	for (auto& d : m_DailyDecoders)
++		totalWeight += max(0, d.weight);
++	for (auto& d : m_DailyDecoders)
++		if (d.itemID > 0 && d.weight > 0)
++			decoderList.push_back({ { "itemID", d.itemID }, { "name", d.name },
++				{ "odds", totalWeight ? (double)d.weight * 100.0 / totalWeight : 0.0 } });
++	json decoders = { { "request", m_RequestDecoderChance }, { "daily", m_DailyDecoderChance }, { "weekly", m_WeeklyDecoderChance },
++		{ "list", decoderList } };
++
 +	return { { "badges", badges }, { "medals", ch.points }, { "refreshIn", SecondsToMidnight() },
 +		{ "requests", { { "slots", m_RequestSlots }, { "active", active }, { "offers", offers } } },
-+		{ "event", event }, { "market", stock }, { "login", LoginJson(user) } };
++		{ "event", event }, { "market", stock }, { "login", LoginJson(user) }, { "decoders", decoders } };
 +}
 +
 +json CMissionManager::Api(IUser* user, const string& method, const string& body, int& status)
@@ -12435,10 +12448,10 @@ index 0000000..0ccf814
 +}
 diff --git a/src/manager/warbondmanager.h b/src/manager/warbondmanager.h
 new file mode 100644
-index 0000000..aa113ef
+index 0000000..8604516
 --- /dev/null
 +++ b/src/manager/warbondmanager.h
-@@ -0,0 +1,134 @@
+@@ -0,0 +1,135 @@
 +#pragma once
 +
 +#include <string>
@@ -12519,6 +12532,8 @@ index 0000000..aa113ef
 +
 +	virtual int OnMatchResult(IUser* user, int gameMode, int kills, int headshots, bool won, bool topPlayer);
 +	virtual int CountHeadshots(const std::map<int, int>& killTypes);
++	// the orders' progress from a match's events (Matches, Wins, Kills, Headshots...); also for a player leaving early
++	void AdvanceOrders(IUser* user, int gameMode, const std::map<std::string, int>& events);
 +	bool LogKills() const { return m_Medals.logKills; }
 +	virtual void OnLevelUp(IUser* user, int oldLevel, int newLevel);
 +	// sv_cheats was on in the match whose result is being applied to this player: its medals are cut
@@ -12553,7 +12568,6 @@ index 0000000..aa113ef
 +	nlohmann::json m_BotPresets;      // userID -> [{id, name, primary: [...], secondary: [...], melee: [...]}]
 +	bool m_BotPresetsLoaded = false;
 +	int CurrentPeriodStart(const std::string& period);
-+	void AdvanceOrders(IUser* user, int gameMode, const std::map<std::string, int>& events);
 +	int CountItemUnlocks(IUser* user);
 +	int PenalizedMedals(IUser* user, int medals) const;
 +	// the pass as it is today: a rotating pass gets today's stock, any other comes back as it is
@@ -13767,7 +13781,7 @@ index 4c688f4..c1e0b2a 100644
 +	bool m_bWouldBlock; // last read hit WOLFSSL_ERROR_WANT_READ/WRITE (non-blocking SSL, retry on next poll)
  };
 diff --git a/src/room/gamematch.cpp b/src/room/gamematch.cpp
-index 65418d8..785a708 100644
+index 65418d8..05a83a1 100644
 --- a/src/room/gamematch.cpp
 +++ b/src/room/gamematch.cpp
 @@ -1,4 +1,6 @@
@@ -13810,15 +13824,25 @@ index 65418d8..785a708 100644
  
  		m_UserStats.push_back(userStat);
  	}
-@@ -220,6 +231,7 @@ void CGameMatch::Disconnect(IUser* user)
+@@ -220,6 +231,17 @@ void CGameMatch::Disconnect(IUser* user)
  	if (stat)
  	{
  		g_QuestManager.OnGameMatchLeave(user, stat->m_TempQuestProgress, stat->m_TempQuestEventProgress);
 +		g_MedalManager.OnMatchLeave(stat, this); // a player leaving before the end keeps their kills and time
++		// and their orders get those kills too (not the match or a win): they counted only at the end of the match, so a
++		// player who left before it (a guest going home from another PC's room, say) got nothing for them (the user,
++		// 2026-11-27: "none of my missions moved")
++		if (user && (stat->m_nKills > 0 || !stat->m_KillTypes.empty()))
++		{
++			int headshots = g_WarbondManager.CountHeadshots(stat->m_KillTypes);
++			Logger().Info("CGameMatch: user %d left before the end: orders get %d kills, %d headshots\n", user->GetID(),
++				stat->m_nKills, headshots);
++			g_WarbondManager.AdvanceOrders(user, m_nGameMode, { { "Kills", stat->m_nKills }, { "Headshots", headshots } });
++		}
  
  		delete stat;
  		m_UserStats.erase(remove(begin(m_UserStats), end(m_UserStats), stat), end(m_UserStats));
-@@ -271,6 +283,8 @@ void CGameMatch::OnUpdateKillCounter(IUser* user, int kills)
+@@ -271,6 +293,8 @@ void CGameMatch::OnUpdateKillCounter(IUser* user, int kills)
  	if (stat)
  	{
  		stat->UpdateKillsCount(kills);
@@ -13827,7 +13851,7 @@ index 65418d8..785a708 100644
  	}
  }
  
-@@ -292,7 +306,15 @@ void CGameMatch::OnKillEvent(IUser* user, GameMatch_KillEvent& killEvent)
+@@ -292,7 +316,15 @@ void CGameMatch::OnKillEvent(IUser* user, GameMatch_KillEvent& killEvent)
  
  	// don't count player suicide
  	if (killEvent.killerUserID != killEvent.victimUserID)
@@ -13843,7 +13867,7 @@ index 65418d8..785a708 100644
  
  	g_QuestManager.OnKillEvent(stat, this, killEvent);
  
-@@ -320,13 +342,30 @@ void CGameMatch::OnKillEvent(IUser* user, GameMatch_KillEvent& killEvent)
+@@ -320,13 +352,30 @@ void CGameMatch::OnKillEvent(IUser* user, GameMatch_KillEvent& killEvent)
  	{
  		character.killsToGetGachaponItem = 100;
  
@@ -13881,7 +13905,7 @@ index 65418d8..785a708 100644
  	}
  
  	g_UserDatabase.UpdateCharacterExtended(user->GetID(), character);
-@@ -356,6 +395,7 @@ void CGameMatch::OnBombExplode(IUser* user)
+@@ -356,6 +405,7 @@ void CGameMatch::OnBombExplode(IUser* user)
  	if (!stat)
  		return;
  
@@ -13889,7 +13913,7 @@ index 65418d8..785a708 100644
  	g_QuestManager.OnBombExplode(stat, this);
  }
  
-@@ -365,6 +405,7 @@ void CGameMatch::OnBombDefuse(IUser* user)
+@@ -365,6 +415,7 @@ void CGameMatch::OnBombDefuse(IUser* user)
  	if (!stat)
  		return;
  
@@ -13897,7 +13921,7 @@ index 65418d8..785a708 100644
  	g_QuestManager.OnBombDefuse(stat, this);
  }
  
-@@ -374,6 +415,7 @@ void CGameMatch::OnHostageEscape(IUser* user)
+@@ -374,6 +425,7 @@ void CGameMatch::OnHostageEscape(IUser* user)
  	if (!stat)
  		return;
  
@@ -13905,7 +13929,7 @@ index 65418d8..785a708 100644
  	g_QuestManager.OnHostageEscape(stat, this);
  }
  
-@@ -383,6 +425,7 @@ void CGameMatch::OnMonsterKill(IUser* user, int monsterType)
+@@ -383,6 +435,7 @@ void CGameMatch::OnMonsterKill(IUser* user, int monsterType)
  	if (!stat)
  		return;	
  
@@ -13913,7 +13937,7 @@ index 65418d8..785a708 100644
  	g_QuestManager.OnMonsterKill(stat, this, monsterType);
  }
  
-@@ -391,6 +434,7 @@ void CGameMatch::OnDropBoxPickup(IUser* user, int rewardID)
+@@ -391,6 +444,7 @@ void CGameMatch::OnDropBoxPickup(IUser* user, int rewardID)
  	CGameMatchUserStat* stat = GetGameUserStat(user);
  	if (!stat)
  		return;
@@ -13921,7 +13945,7 @@ index 65418d8..785a708 100644
  
  #ifndef PUBLIC_RELEASE
  	if (m_nGameMode != 15 && m_nGameMode != 17 && m_nGameMode != 26 && m_nGameMode != 28)
-@@ -430,8 +474,55 @@ void CGameMatch::OnKiteKill(IUser* user)
+@@ -430,8 +484,55 @@ void CGameMatch::OnKiteKill(IUser* user)
  
  void CGameMatch::OnGameMatchEnd()
  {
@@ -13977,7 +14001,7 @@ index 65418d8..785a708 100644
  
  	Logger().Info("CGameMatch::OnGameMatchEnd: gamemode: %d, CT rounds win count: %d, T rounds win count: %d\n", m_nGameMode, m_nCtWinCount, m_nTerWinCount);
  }
-@@ -532,7 +623,6 @@ void CGameMatch::CalculateGameResult()
+@@ -532,7 +633,6 @@ void CGameMatch::CalculateGameResult()
  	CalculateFirstPlace();
  
  	int expCoef = GetExpCoefficient();
@@ -13985,7 +14009,7 @@ index 65418d8..785a708 100644
  
  	for (auto stat : m_UserStats)
  	{
-@@ -541,8 +631,23 @@ void CGameMatch::CalculateGameResult()
+@@ -541,8 +641,23 @@ void CGameMatch::CalculateGameResult()
  		// calc exp
  		stat->m_nExpEarned = stat->m_nKills > 0 ? expCoef * stat->m_nKills : expCoef;
  
@@ -14011,7 +14035,7 @@ index 65418d8..785a708 100644
  
  		// calc bonus exp/points
  		auto bonusPercentageClass = find_if(g_pServerConfig->gameMatch.bonusPercentageClasses.begin(), g_pServerConfig->gameMatch.bonusPercentageClasses.end(),
-@@ -601,6 +706,10 @@ void CGameMatch::CalculateGameResult()
+@@ -601,6 +716,10 @@ void CGameMatch::CalculateGameResult()
  			}
  		}
  
@@ -14022,7 +14046,7 @@ index 65418d8..785a708 100644
  		if (stat->m_nExpEarned > 9999)
  		{
  			stat->m_nExpEarned = 9999;
-@@ -623,6 +732,9 @@ void CGameMatch::ApplyGameResult()
+@@ -623,6 +742,9 @@ void CGameMatch::ApplyGameResult()
  
  		int totalPoints = stat->m_nPointsEarned + stat->m_nBonusPointsEarned;
  		user->UpdatePoints(totalPoints);
