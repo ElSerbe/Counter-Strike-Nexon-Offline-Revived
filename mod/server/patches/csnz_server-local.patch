@@ -8751,10 +8751,10 @@ index 0000000..62948ed
 +static CCommand studiofetch("studiofetch", "Fetch a Studio map from the other PCs (Steam bridge)", "studiofetch <code>", StudioFetch);
 diff --git a/src/manager/transfer.cpp b/src/manager/transfer.cpp
 new file mode 100644
-index 0000000..3de3486
+index 0000000..015bc7e
 --- /dev/null
 +++ b/src/manager/transfer.cpp
-@@ -0,0 +1,408 @@
+@@ -0,0 +1,409 @@
 +#include "transfer.h"
 +#include "main.h"
 +#include "net/sendpacket.h"
@@ -8835,6 +8835,7 @@ index 0000000..3de3486
 +			room.host = r.value("host", string());
 +		room.hostID = r.value("hostID", string());
 +		room.version = r.value("version", string());
++		room.tag = r.value("tag", string());
 +			room.entry = FromHex(r.value("entry", string()));
 +			// the client's patch only lets ports 30002-30199 through; an entry starts with a byte and the u32 room id
 +			if (room.vid < REMOTE_ROOM_FIRST_ID || room.vid > 65000 || room.port < 30003 || room.port > 30199 || room.entry.size() < 16)
@@ -8950,7 +8951,7 @@ index 0000000..3de3486
 +	string summary;
 +	for (int i = 0; i < count && i < (int)rooms.size(); i++)
 +	{
-+		vector<unsigned char> entry = WithHostName(WithoutUnreadField(rooms[i].entry), rooms[i].host);
++		vector<unsigned char> entry = WithHostName(WithoutUnreadField(rooms[i].entry), rooms[i].host.empty() ? "" : rooms[i].host + rooms[i].tag);
 +		entry[1] = rooms[i].vid & 0xff;
 +		entry[2] = (rooms[i].vid >> 8) & 0xff;
 +		entry[3] = 0;
@@ -9165,10 +9166,10 @@ index 0000000..3de3486
 +}
 diff --git a/src/manager/transfer.h b/src/manager/transfer.h
 new file mode 100644
-index 0000000..b0eb988
+index 0000000..30902d7
 --- /dev/null
 +++ b/src/manager/transfer.h
-@@ -0,0 +1,68 @@
+@@ -0,0 +1,69 @@
 +#pragma once
 +
 +// offline build: online play through Steam (the Steam bridge, mod/tools/steambridge).
@@ -9195,6 +9196,7 @@ index 0000000..b0eb988
 +	std::string host;                 // the host's Steam name
 +	std::string hostID;               // the host's Steam ID (bridges from 1.1.8 on)
 +	std::string version;              // the host's mod version (bridges from 1.1.44 on; "" before)
++	std::string tag;                  // after the host's name in the list: " (85 ms)", " (connecting...)" (bridges from 1.1.48 on)
 +	std::vector<unsigned char> entry; // the room list entry, as that server writes it
 +};
 +

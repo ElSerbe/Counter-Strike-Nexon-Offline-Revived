@@ -4,7 +4,8 @@
 //  - joining: the other lobbies' rooms go to Data/RemoteRooms.json with a local port per host (30003+); a connection
 //    to that port is tunnelled to the host over Steam P2P (the client's server transfer opens it).
 // P2P messages (reliable, channel 0): [type u8][connection u32][data]. OPEN asks the host to connect to its server,
-// DATA carries the bytes, CLOSE ends the connection, HELLO keeps the P2P session open.
+// DATA carries the bytes, CLOSE ends the connection, HELLO keeps the P2P session open, PING [8][seq u32][ticks i64] is
+// answered with PONG [9][the same 12 bytes] (the room list's ping, and a Steam connection made before anyone joins).
 //  - matches: the room host's game is the match server and the players' games talk to it over UDP. The server gives each
 //    game addresses on its own PC's bridge (ServerTransfer::NetworkFor): on a joining PC the host PC's game is
 //    127.0.0.1:31000+k*2+portID (k = the tunnel), on the host PC a remote player is 127.0.0.1:33000+slot*2+portID.
@@ -37,7 +38,7 @@ namespace SteamBridge
     class Bridge
     {
         const string Tag = "csnzor", Protocol = "1";
-        const byte Open = 1, Data = 2, Close = 3, Hello = 4, Udp = 5, Mail = 6, Studio = 7;
+        const byte Open = 1, Data = 2, Close = 3, Hello = 4, Udp = 5, Mail = 6, Studio = 7, Ping = 8, Pong = 9;
         const int ServerPort = 30002, FirstTunnelPort = 30003, LastTunnelPort = 30199, FirstVirtualRoom = 40000;
         const int JoinerUdpBase = 31000, HostUdpBase = 33000, UnreliableMax = 1200;
 
@@ -70,6 +71,12 @@ namespace SteamBridge
             public List<object> Maps = new List<object>(); // the Studio maps this player publishes
             public List<object> Have = new List<object>(); // the share codes of the maps their PC fetched (it can pass them on)
             public UdpClient[] Udp; // the host PC's game, as this PC's game sees it (31000+k*2+portID)
+            // the Steam connection to the host, made as soon as their lobby is listed (Prewarm)
+            public DateTime NextPing, LastPong, FirstPing, LastPingSent;
+            public bool SilentLogged;
+            public double PingMs = -1; // smoothed round trip of PING/PONG, -1 before the first PONG
+            public string Route = ""; // "direct", "relay", "connecting" or "" (GetP2PSessionState)
+            public bool LinkLogged;
         }
 
         // a player from another PC on this PC's server: their game, as this PC's game sees it (33000+slot*2+portID)
@@ -121,7 +128,8 @@ namespace SteamBridge
                 sb.Append("..");
             return sb.ToString();
         }
-        static string TypeName(byte type) => type == Open ? "OPEN" : type == Data ? "DATA" : type == Close ? "CLOSE" : type == Hello ? "HELLO" : "type " + type;
+        static string TypeName(byte type) => type == Open ? "OPEN" : type == Data ? "DATA" : type == Close ? "CLOSE" : type == Hello ? "HELLO" :
+            type == Ping ? "PING" : type == Pong ? "PONG" : "type " + type;
         readonly Dictionary<ulong, Host> hosts = new Dictionary<ulong, Host>();
 
         // a tunnelled TCP connection: on the joining side it was accepted from the game, on the host side it goes to the server
@@ -211,6 +219,131 @@ namespace SteamBridge
             }
         }
 
+        // Every P2P session another PC asks for is accepted at once (P2PSessionRequest_t), as Steam's docs say to. Until
+        // v1.1.48 a host accepted only its lobby's members, every 2 s: in the reports a joining PC's profile mail sat 90 s
+        // in "still connecting" (Gordon, KD4hri, Hialzys), while the same two PCs connected at once the other way round.
+        // Accepting anyone opens nothing new: the lobby is public, anyone could join it to be accepted.
+        readonly HashSet<ulong> acceptedLogged = new HashSet<ulong>();
+        readonly Dictionary<ulong, DateTime> connectFailLogged = new Dictionary<ulong, DateTime>();
+        void RegisterCallbacks()
+        {
+            if (loopback)
+                return;
+            try
+            {
+                SteamCallback.Register(Steam.CbP2PSessionRequest, 8, p =>
+                {
+                    ulong remote = (ulong)System.Runtime.InteropServices.Marshal.ReadInt64(p);
+                    Native.SteamAPI_ISteamNetworking_AcceptP2PSessionWithUser(steam.Networking, remote);
+                    if (acceptedLogged.Add(remote))
+                        Detail("Steam: a P2P session from " + PeerName(remote) + " accepted");
+                }, log);
+                SteamCallback.Register(Steam.CbP2PSessionConnectFail, 16, p =>
+                {
+                    ulong remote = (ulong)System.Runtime.InteropServices.Marshal.ReadInt64(p);
+                    int error = System.Runtime.InteropServices.Marshal.ReadByte(p, 8);
+                    var now = DateTime.UtcNow;
+                    if (connectFailLogged.TryGetValue(remote, out var at) && (now - at).TotalSeconds < 60)
+                        return;
+                    connectFailLogged[remote] = now;
+                    // a PC this one has business with: a host that answers PING, an open connection, profile mail
+                    var host = hosts.Values.FirstOrDefault(x => x.SteamID == remote);
+                    bool matters = (host != null && AnswersPing(host)) || conns.Values.Any(c => c.Peer == remote && !c.Closed) ||
+                                   outMail.Any(m => m.To == remote);
+                    string why = error == 1 ? "their bridge isn't running" : error == 2 ? "no rights to the app" :
+                        error == 3 ? "they aren't logged in to Steam" : error == 4 ? "timed out (no answer through either PC's network)" : "error " + error;
+                    string line = "Steam couldn't connect to " + PeerName(remote) + ": " + why + ". It tries again with the next message.";
+                    if (matters)
+                        log(line);
+                    else
+                        Detail(line);
+                }, log);
+            }
+            catch (Exception ex) { log("Steam callbacks couldn't be registered (" + ex.Message + "): P2P sessions are accepted the old way."); }
+        }
+
+        // Every host listed gets a PING every 5 s: Steam makes the connection to their PC before anyone joins (until
+        // v1.1.48 it began with the join, and the profile mail had to wait for it), and the PONG gives the room list's
+        // ping. While the connection isn't made yet, one PING waits at a time (reliable messages queue up). Hosts before
+        // v1.1.48 are left alone: they take P2P only from their lobby's members, so a PING ends in a timeout on both sides.
+        static readonly System.Diagnostics.Stopwatch clock = System.Diagnostics.Stopwatch.StartNew();
+        void Prewarm()
+        {
+            var now = DateTime.UtcNow;
+            foreach (var h in hosts.Values)
+            {
+                if (!loopback && !AnswersPing(h))
+                    continue;
+                if (!loopback)
+                {
+                    Native.SteamAPI_ISteamNetworking_AcceptP2PSessionWithUser(steam.Networking, h.SteamID);
+                    if (Native.SteamAPI_ISteamNetworking_GetP2PSessionState(steam.Networking, h.SteamID, out var s))
+                        h.Route = s.ConnectionActive != 0 ? (s.UsingRelay != 0 ? "relay" : "direct") : s.Connecting != 0 ? "connecting" : "";
+                }
+                bool linked = loopback || h.Route == "direct" || h.Route == "relay";
+                bool waiting = h.FirstPing != DateTime.MinValue && h.LastPong < h.LastPingSent;
+                if (now < h.NextPing || (!linked && waiting && (now - h.LastPingSent).TotalSeconds < 30))
+                    continue;
+                h.NextPing = now.AddSeconds(5);
+                h.LastPingSent = now;
+                if (h.FirstPing == DateTime.MinValue)
+                    h.FirstPing = now;
+                var msg = new byte[13];
+                msg[0] = Ping;
+                BitConverter.GetBytes(clock.ElapsedTicks).CopyTo(msg, 5);
+                if (loopback)
+                    loop.Enqueue(Tuple.Create(steam.MySteamID, msg));
+                else
+                    SendRaw(h.SteamID, msg);
+                if (!h.SilentLogged && !loopback && h.LastPong == DateTime.MinValue && (now - h.FirstPing).TotalSeconds >= 60 && AnswersPing(h))
+                {
+                    h.SilentLogged = true;
+                    log("No answer from " + h.Name + "'s PC in 60 s. " + LinkState(h.SteamID) + ".");
+                }
+            }
+        }
+
+        void HandlePong(ulong hostID, byte[] msg)
+        {
+            if (msg.Length < 13 || !hosts.TryGetValue(hostID, out var h))
+                return;
+            double ms = (clock.ElapsedTicks - BitConverter.ToInt64(msg, 5)) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+            if (ms < 0)
+                return;
+            var now = DateTime.UtcNow;
+            if (!h.LinkLogged)
+            {
+                h.LinkLogged = true;
+                log("Steam connection to " + h.Name + " ready" + (h.Route != "" ? " (" + (h.Route == "relay" ? "through Steam's relay" : h.Route) + ")" : "") +
+                    " after " + (now - h.FirstPing).TotalSeconds.ToString("0") + " s, ping " + ms.ToString("0") + " ms");
+            }
+            h.LastPong = now;
+            // the first PONG after a slow connection carries the connection's time, not the ping
+            if (ms > 3000 && h.PingMs < 0)
+                return;
+            h.PingMs = h.PingMs < 0 ? ms : h.PingMs * 0.7 + ms * 0.3;
+        }
+
+        // hosts on v1.1.48 or later answer PING
+        static bool AnswersPing(Host h)
+        {
+            var v = (h.Version ?? "").Split('.');
+            if (v.Length < 3 || !int.TryParse(v[0], out int a) || !int.TryParse(v[1], out int b) || !int.TryParse(v[2], out int c))
+                return false;
+            return a > 1 || (a == 1 && (b > 1 || (b == 1 && c >= 48)));
+        }
+
+        // after the host's name in the room list: " (85 ms)", or " (connecting...)" while Steam is still making the
+        // connection to a host that answers PING; nothing for older hosts
+        static string LinkTag(Host h)
+        {
+            if (h.PingMs >= 0 && (DateTime.UtcNow - h.LastPong).TotalSeconds < 30)
+                return " (" + Math.Round(h.PingMs) + " ms)";
+            if (AnswersPing(h) && h.FirstPing != DateTime.MinValue && (DateTime.UtcNow - h.FirstPing).TotalSeconds >= 3)
+                return " (connecting...)";
+            return "";
+        }
+
         // The other player's server sent nothing at all for 40 s (not even its greeting): the game hasn't sent anything yet
         // either, so it can still be given this PC's own server instead. The server is told first (POST
         // /api/transfer/fallback): the game's login with the ticket meant for the other server then logs the player in at
@@ -287,7 +420,10 @@ namespace SteamBridge
         {
             DateTime nextList = DateTime.MinValue, nextHello = DateTime.MinValue;
             lock (Steam.Lock)
+            {
+                RegisterCallbacks();
                 pendingCreate = Native.SteamAPI_ISteamMatchmaking_CreateLobby(steam.Matchmaking, Steam.LobbyPublic, 250);
+            }
             new Thread(() => ServerLoop(keepRunning)) { IsBackground = true }.Start();
             while (keepRunning())
             {
@@ -304,11 +440,15 @@ namespace SteamBridge
                         pendingList = Native.SteamAPI_ISteamMatchmaking_RequestLobbyList(steam.Matchmaking);
                         nextList = now.AddSeconds(5);
                     }
-                    if (myLobby != 0 && now >= nextHello)
+                    if (now >= nextHello)
                     {
-                        KeepSessions();
-                        CheckStalled();
-                        WatchLinks();
+                        if (myLobby != 0)
+                        {
+                            KeepSessions();
+                            CheckStalled();
+                            WatchLinks();
+                        }
+                        Prewarm();
                         nextHello = now.AddSeconds(2);
                     }
                     ReadP2P();
@@ -539,7 +679,9 @@ namespace SteamBridge
                         continue;
                     }
                     hosts[owner] = h;
-                    log("Found " + steam.LobbyData(lobby, "name") + "'s lobby: their rooms go through 127.0.0.1:" + port);
+                    string ver = steam.LobbyData(lobby, "ver");
+                    log("Found " + steam.LobbyData(lobby, "name") + "'s lobby" + (ver != "" ? " (v" + ver + ")" : " (before v1.1.44)") +
+                        ": their rooms go through 127.0.0.1:" + port);
                     int k = port - FirstTunnelPort;
                     h.Udp = OpenUdp(JoinerUdpBase + k * 2, JoinerUdpBase + k * 2 + 1, (portID, from, data, n) =>
                     {
@@ -608,7 +750,8 @@ namespace SteamBridge
                     int rid = Convert.ToInt32(r["id"]);
                     rooms.Add(new Dictionary<string, object> {
                         { "vid", FirstVirtualRoom + (h.Port - FirstTunnelPort) * 100 + rid % 100 },
-                        { "rid", rid }, { "port", h.Port }, { "host", h.Name ?? "" }, { "hostID", h.SteamID.ToString() }, { "version", h.Version ?? "" }, { "entry", r["entry"] } });
+                        { "rid", rid }, { "port", h.Port }, { "host", h.Name ?? "" }, { "hostID", h.SteamID.ToString() }, { "version", h.Version ?? "" }, { "entry", r["entry"] },
+                        { "ping", h.PingMs < 0 ? -1 : (int)Math.Round(h.PingMs) }, { "route", h.Route }, { "tag", LinkTag(h) } });
                 }
             WriteJson("RemoteRooms.json", new Dictionary<string, object> { { "rooms", rooms } });
         }
@@ -765,6 +908,17 @@ namespace SteamBridge
                 Detail("tunnel in from " + peer + ": " + TypeName(type) + " connection " + id + (msg.Length > 5 ? ", " + (msg.Length - 5) + " bytes" : ""));
             switch (type)
             {
+                case Ping:
+                    // answered at once (callers hold Steam.Lock, or run the loopback queue)
+                    msg[0] = Pong;
+                    if (loopback)
+                        loop.Enqueue(Tuple.Create(peer == LoopHostSide ? steam.MySteamID : LoopHostSide, msg));
+                    else
+                        SendRaw(peer, msg);
+                    break;
+                case Pong:
+                    HandlePong(loopback ? steam.MySteamID : peer, msg);
+                    break;
                 case Mail:
                     HandleMail(peer, msg);
                     break;

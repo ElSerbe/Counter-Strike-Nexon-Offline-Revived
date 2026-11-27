@@ -63,6 +63,47 @@ namespace SteamBridge
         public static extern bool SteamAPI_ISteamNetworking_CloseP2PSessionWithUser(IntPtr self, ulong remote);
         [DllImport(Dll, CallingConvention = C)] [return: MarshalAs(UnmanagedType.I1)]
         public static extern bool SteamAPI_ISteamNetworking_GetP2PSessionState(IntPtr self, ulong remote, out P2PSessionState state);
+
+        [DllImport(Dll, CallingConvention = C)] public static extern void SteamAPI_RegisterCallback(IntPtr callback, int id);
+        [DllImport(Dll, CallingConvention = C)] public static extern void SteamAPI_UnregisterCallback(IntPtr callback);
+    }
+
+    // A Steam callback (the SDK's CCallbackBase, a C++ object): SteamAPI_RunCallbacks calls its Run with the callback's
+    // struct. Layout on x86: vtable pointer, flags byte (offset 4), callback id (offset 8). MSVC puts the two Run overloads
+    // in the vtable in reverse order: [Run(param, ioFailure, call), Run(param), GetCallbackSizeBytes]. The delegates and
+    // the memory live as long as the process (a bridge registers a few, once).
+    class SteamCallback
+    {
+        [UnmanagedFunctionPointer(CallingConvention.ThisCall)] delegate void RunDel(IntPtr self, IntPtr param);
+        [UnmanagedFunctionPointer(CallingConvention.ThisCall)]
+        delegate void RunResultDel(IntPtr self, IntPtr param, [MarshalAs(UnmanagedType.I1)] bool ioFailure, ulong call);
+        [UnmanagedFunctionPointer(CallingConvention.ThisCall)] delegate int SizeDel(IntPtr self);
+
+        static readonly System.Collections.Generic.List<object> keep = new System.Collections.Generic.List<object>();
+
+        public static void Register(int id, int size, Action<IntPtr> run, Action<string> log)
+        {
+            RunDel r = (self, param) =>
+            {
+                try { run(param); }
+                catch (Exception ex) { log("Steam callback " + id + ": " + ex.Message); }
+            };
+            RunResultDel rr = (self, param, ioFailure, call) => r(self, param);
+            SizeDel s = self => size;
+            keep.Add(r);
+            keep.Add(rr);
+            keep.Add(s);
+            var vtable = Marshal.AllocHGlobal(IntPtr.Size * 3);
+            Marshal.WriteIntPtr(vtable, 0, Marshal.GetFunctionPointerForDelegate(rr));
+            Marshal.WriteIntPtr(vtable, IntPtr.Size, Marshal.GetFunctionPointerForDelegate(r));
+            Marshal.WriteIntPtr(vtable, IntPtr.Size * 2, Marshal.GetFunctionPointerForDelegate(s));
+            var obj = Marshal.AllocHGlobal(16);
+            for (int i = 0; i < 16; i += 4)
+                Marshal.WriteInt32(obj, i, 0);
+            Marshal.WriteIntPtr(obj, 0, vtable);
+            Marshal.WriteInt32(obj, 8, id);
+            Native.SteamAPI_RegisterCallback(obj, id);
+        }
     }
 
     // the SDK's P2PSessionState_t: how a P2P session with another PC goes
@@ -89,6 +130,8 @@ namespace SteamBridge
 
         public const int LobbyPublic = 2, SendReliable = 2, ComparisonEqual = 0, DistanceWorldwide = 3;
         public const int CbLobbyEnter = 504, CbLobbyMatchList = 510, CbLobbyCreated = 513;
+        // P2PSessionRequest_t { CSteamID remote } and P2PSessionConnectFail_t { CSteamID remote; uint8 error } (pack 8)
+        public const int CbP2PSessionRequest = 1202, CbP2PSessionConnectFail = 1203;
 
         public static byte[] Utf8Z(string s) => Encoding.UTF8.GetBytes((s ?? "") + "\0");
 
