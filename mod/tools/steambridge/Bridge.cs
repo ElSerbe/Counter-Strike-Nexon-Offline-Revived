@@ -96,6 +96,8 @@ namespace SteamBridge
             public bool LinkLogged;
             public bool Cloud;        // listed by the online lobby (not a Steam lobby): reached through it
             public DateTime SteamSeen; // when a Steam lobby last listed them
+            public DateTime SteamPong; // the last PONG that came through Steam
+            public bool SteamFailed;   // Steam never connected to their PC: the online lobby carries them (SteamOrCloud)
         }
 
         // a player from another PC on this PC's server: their game, as this PC's game sees it (33000+slot*2+portID)
@@ -196,11 +198,9 @@ namespace SteamBridge
             }
         }
         // how Steam carries the traffic to another PC: straight or through Steam's relay, and what waits to be sent
-        string PeerName(ulong peer)
-        {
-            try { return hosts.Values.FirstOrDefault(h => h.SteamID == peer)?.Name ?? peer.ToString(); }
-            catch { return peer.ToString(); } // (read from the online lobby's threads while the list changes)
-        }
+        // (read from every thread: the hosts' names are kept apart from the host list, which only the main loop changes)
+        readonly ConcurrentDictionary<ulong, string> names = new ConcurrentDictionary<ulong, string>();
+        string PeerName(ulong peer) => names.TryGetValue(peer, out var n) && !string.IsNullOrEmpty(n) ? n : peer.ToString();
         string LinkState(ulong peer)
         {
             if (!loopback && IsCloud(peer))
@@ -313,6 +313,8 @@ namespace SteamBridge
                         h.Route = s.ConnectionActive != 0 ? (s.UsingRelay != 0 ? "relay" : "direct") : s.Connecting != 0 ? "connecting" : "";
                 }
                 // (the online lobby's relay delivers at once: a direct link only matters for the match traffic)
+                if (!loopback && !h.Cloud && SteamOrCloud(h, now))
+                    continue;
                 bool linked = loopback || h.Route == "direct" || h.Route == "relay" || (h.Cloud && h.Route == "connecting");
                 bool waiting = h.FirstPing != DateTime.MinValue && h.LastPong < h.LastPingSent;
                 if (now < h.NextPing || (!linked && waiting && (now - h.LastPingSent).TotalSeconds < 30))
@@ -336,6 +338,27 @@ namespace SteamBridge
             }
         }
 
+        // A host listed both by Steam and by the online lobby goes through Steam, unless Steam doesn't get a PONG from their PC
+        // in 20 s: then the online lobby carries them for the rest of the session. (v1.1.49: a player's Steam never reached
+        // a host's PC, timed out both ways, and every join failed with the profile unanswered, while the same host was in
+        // the online lobby.) True when it switched.
+        bool SteamOrCloud(Host h, DateTime now)
+        {
+            if (cloud == null || h.SteamFailed || h.FirstPing == DateTime.MinValue || h.SteamPong != DateTime.MinValue ||
+                (now - h.FirstPing).TotalSeconds < 20 || !cloud.Hosts().Any(c => c.ID == h.SteamID))
+                return false;
+            h.SteamFailed = true;
+            h.Cloud = true;
+            h.Joined = true;
+            via[h.SteamID] = true;
+            h.FirstPing = h.LastPong = h.LastPingSent = h.NextPing = DateTime.MinValue;
+            h.PingMs = -1;
+            h.LinkLogged = h.SilentLogged = false;
+            h.Route = "";
+            log("Steam got no answer from " + h.Name + "'s PC in 20 s: they're reached through the online lobby now.");
+            return true;
+        }
+
         void HandlePong(ulong hostID, byte[] msg)
         {
             if (msg.Length < 13 || !hosts.TryGetValue(hostID, out var h))
@@ -351,6 +374,8 @@ namespace SteamBridge
                     " after " + (now - h.FirstPing).TotalSeconds.ToString("0") + " s, ping " + ms.ToString("0") + " ms");
             }
             h.LastPong = now;
+            if (!h.Cloud)
+                h.SteamPong = now;
             // the first PONG after a slow connection carries the connection's time, not the ping
             if (ms > 3000 && h.PingMs < 0)
                 return;
@@ -776,6 +801,11 @@ namespace SteamBridge
                     continue;
                 if (owner == MyID && !loopback)
                     continue;
+                if (hosts.TryGetValue(owner, out var failed) && failed.SteamFailed && failed.Cloud)
+                {
+                    failed.SteamSeen = DateTime.UtcNow;
+                    continue; // (the online lobby lists them: SteamOrCloud)
+                }
                 int.TryParse(steam.LobbyData(lobby, "parts"), out int parts);
                 var text = new StringBuilder();
                 for (int p = 0; p < parts; p++)
@@ -803,7 +833,7 @@ namespace SteamBridge
             {
                 if (c.ID == MyID)
                     continue;
-                if (steam != null && hosts.TryGetValue(c.ID, out var known) && !known.Cloud && (now - known.SteamSeen).TotalSeconds <= 30)
+                if (steam != null && hosts.TryGetValue(c.ID, out var known) && !known.Cloud && !known.SteamFailed && (now - known.SteamSeen).TotalSeconds <= 30)
                     continue;
                 c.Data.TryGetValue("rooms", out var rooms);
                 c.Data.TryGetValue("studio", out var studio);
@@ -861,6 +891,7 @@ namespace SteamBridge
             else
                 h.SteamSeen = now;
             h.Name = name;
+            names[owner] = name;
             h.Version = ver ?? "";
             h.Seen = now;
             h.Rooms.Clear();

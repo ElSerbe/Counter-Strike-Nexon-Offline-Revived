@@ -448,6 +448,7 @@ namespace SteamBridge
                 udpPort = ((IPEndPoint)udp.LocalEndPoint).Port;
                 udpOpened = DateTime.UtcNow;
                 new Thread(UdpReceiveLoop) { IsBackground = true, Name = "cloud-udp" }.Start();
+                new Thread(AddressLoop) { IsBackground = true, Name = "cloud-addresses" }.Start();
                 detail("Direct links: UDP port " + udpPort);
             }
             catch (Exception ex)
@@ -662,6 +663,9 @@ namespace SteamBridge
             return new IPEndPoint(Norm(a), port);
         }
 
+        // this PC's addresses for a direct link: the public one (STUN) and the network cards' (cached: listing the network
+        // cards took 1-2 s on a player's PC, and done for each of 40 hosts it froze the bridge for a minute in v1.1.49)
+        volatile List<string> localAddresses = new List<string>();
         List<string> MyCandidates()
         {
             var list = new List<string>();
@@ -669,6 +673,30 @@ namespace SteamBridge
                 return list;
             if (stunMapped != null)
                 list.Add(Show(stunMapped));
+            foreach (var a in localAddresses)
+                if (!list.Contains(a))
+                    list.Add(a);
+            return list.Take(12).ToList();
+        }
+
+        void AddressLoop()
+        {
+            while (keepRunning())
+            {
+                var watch = System.Diagnostics.Stopwatch.StartNew();
+                localAddresses = LocalAddresses();
+                if (watch.Elapsed.TotalSeconds >= 3)
+                    detail("Direct links: listing this PC's network cards took " + watch.Elapsed.TotalSeconds.ToString("0.0") + " s");
+                for (int i = 0; i < 600 && keepRunning(); i++)
+                    Thread.Sleep(100);
+            }
+        }
+
+        List<string> LocalAddresses()
+        {
+            var list = new List<string>();
+            if (udp == null)
+                return list;
             try
             {
                 foreach (var ni in NetworkInterface.GetAllNetworkInterfaces())
