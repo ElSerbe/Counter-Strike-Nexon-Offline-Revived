@@ -3997,6 +3997,8 @@ static void FixCoopTeam(void* bot, BotState& st)
     // refused at the source instead (HookedAddBot)
 }
 
+#include "safe_kick.inl" // a bot is hidden from monsters a second before it's kicked (issue #53)
+
 static void RemoveWrongTeamBot(void* bot, BotState& st)
 {
     float now = Now();
@@ -4015,9 +4017,7 @@ static void RemoveWrongTeamBot(void* bot, BotState& st)
     // "kill" refused (some modes): kick as a last resort, at most every 10 s
     if (st.killTries > 5 && name && *name && !strchr(name, '"') && now >= g_nextKick)
     {
-        char cmd[96];
-        snprintf(cmd, sizeof(cmd), "kick \"%s\"\n", name);
-        g_ServerCommand(cmd);
+        KickSoon(bot, name);
         g_nextKick = now + 10.0f;
         Log("kicked bot '%s' (kill didn't work)", name);
     }
@@ -4133,7 +4133,7 @@ static void KickForJoiners()
                 InterlockedExchange(&g_kickFetching, 0);
         }
     }
-    std::vector<std::string> kick;
+    std::vector<std::pair<void*, std::string>> kick;
     EnterCriticalSection(&g_matchLock);
     for (auto& n : g_kickNames)
         for (auto& m : g_matchBots)
@@ -4141,19 +4141,18 @@ static void KickForJoiners()
             {
                 m.gone = true;
                 const char* net = m.edict ? String(F<int>(Vars(m.edict), EV_NETNAME)) : nullptr;
-                kick.push_back(net && *net ? net : m.name);
+                kick.push_back({ net && *net ? m.edict : nullptr, net && *net ? net : m.name });
                 break;
             }
     g_kickNames.clear();
     LeaveCriticalSection(&g_matchLock);
     for (auto& k : kick)
     {
-        if (k.empty() || strchr(k.c_str(), '"'))
+        if (k.second.empty() || strchr(k.second.c_str(), '"'))
             continue;
-        char cmd[96];
-        snprintf(cmd, sizeof(cmd), "kick \"%s\"\n", k.c_str());
-        g_ServerCommand(cmd);
-        Log("a person takes AI player '%s''s place in this match: kicked", k.c_str());
+        // hidden from monsters first, kicked a second later (safe_kick.inl: issue #53)
+        KickSoon(k.first, k.second.c_str());
+        Log("a person takes AI player '%s''s place in this match: kicked in a second", k.second.c_str());
     }
 }
 
@@ -6306,6 +6305,7 @@ static void HookedStartFrame()
         CrowdReport();
         MatchTeamsFrame();
         TutorialFrame();
+        PendingKicksFrame();
         if (CoopMode())
         {
             UpdateBarricades(); // zombies against barricades, bots or not
