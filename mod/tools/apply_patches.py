@@ -798,6 +798,144 @@ PATCHES += [
 ]
 
 
+# Level EXP bar (the Exit Game window, the lobby's level bar...): the client reads the level's EXP from hw.dll's level
+# table object ([0x3f2531c], vtable 0x2bf128c), built from resource/LevelTable.cso: CSN:Z's per-level EXP (800 for
+# level 1 ... 50,000 a level from 28 on, the EXP starting again at 0 each level). The server levels by the older
+# cumulative table (CUser::CheckForLvlUp, the game's resource/level.csv: level = 1 + thresholds reached, its EXP never
+# goes back to 0), so the bar showed the server's total over the client's per-level EXP: "EXP 114047 / 47500 (100%)"
+# at level 27. The table's "EXP for the next level" (vfunc 0x70, thiscall(level) -> int64) and "percent" (vfunc 0x74,
+# thiscall(level, int64 exp) -> float in st0) now use the server's thresholds: the total the server wants for the next
+# level, and the progress through this level, "EXP 114047 / 116341 (79%)". Both functions jump to a cave in the
+# int3 padding after _MODECHECK_TABLE (0x1D455C0), past the 0x100 bytes from 0x1D45600 left to other patches. The
+# cave reaches its table relative to itself (call $+5 / pop): hw.dll is loaded at another base. Levels over 249 use
+# the last threshold; the EXP's high dword is ignored (the server keeps the EXP under 30,069,814).
+_LEVEL_NEED = 0x25188B0     # vfunc 0x70: push ebp; mov ebp,esp; push esi; mov esi,ecx ...
+_LEVEL_PERCENT = 0x2518910  # vfunc 0x74: the same prologue
+_LEVEL_CAVE = 0x1D45700     # 1152 bytes: need (45), percent at +48 (108), the thresholds at +156 (249 x 4)
+# CUser::CheckForLvlUp's thresholds (the same as the game's resource/level.csv): level L needs [L-1] for L+1
+_LEVEL_THRESHOLDS = [
+    100, 250, 572, 1179, 2000, 3000, 4200, 6073, 8692, 11491, 14488, 17692, 21112, 24775, 28762, 33109, 37852, 43018,
+    48652, 54790, 61477, 68767, 76714, 85381, 94822, 105118, 116341, 128572, 141901, 156562, 172690, 190438, 209959,
+    231433, 255049, 281032, 309607, 341044, 375622, 413656, 455497, 501523, 552148, 607840, 669094, 736477, 810601,
+    892132, 981817, 1080475, 1188997, 1308373, 1439683, 1584124, 1743010, 1917790, 2110039, 2321521, 2554144,
+    2812363, 3101560, 3428359, 3800905, 4229341, 4726321, 5307784, 5993917, 7297567, 8861947, 10754845, 13073832,
+    13738611, 14612239, 15573229, 16620708, 17877683, 20391634, 22930724, 25495205, 28085330, 30701357, 33343545,
+    36012154, 38707449, 41429697, 44179168, 46956133, 49760868, 52593650, 55454761, 58344482, 61263100, 64210905,
+    67188188, 70195243, 73232369, 76299867, 79398039, 82527193, 85687639, 88879689, 92103659, 95359870, 98648642,
+    101970302, 105325179, 108713604, 112135914, 115592447, 119083545, 122609554, 126170823, 129767705, 133400556,
+    137069735, 140775606, 144518536, 148298895, 152117057, 155973401, 159868309, 163802166, 167775361, 171788288,
+    175841345, 179934932, 184069455, 188245323, 192462950, 196722753, 201025155, 205370580, 209759459, 214192227,
+    218669323, 223191190, 227758276, 232371032, 237029916, 241735389, 246487917, 251287969, 256136023, 261032557,
+    265978056, 270973010, 276017914, 281113267, 286259573, 291457342, 296707089, 302009334, 307364601, 312773421,
+    318236329, 323753866, 329326578, 334955017, 340639741, 346381312, 352180299, 358037276, 363952822, 369927524,
+    375961973, 382056766, 388212507, 394429806, 400709278, 407051544, 413457233, 419926979, 426461423, 433061211,
+    439726997, 446459440, 453259208, 460126974, 467063417, 474069225, 481145091, 488291716, 495509807, 502800078,
+    510163253, 517600059, 525111233, 532697519, 540359668, 548098438, 555914596, 563808916, 571782179, 579835174,
+    587968700, 596183560, 604480570, 612860549, 621324328, 629872745, 638506646, 647226886, 656034329, 664929846,
+    673914318, 682988635, 692153695, 701410405, 710759683, 720202454, 729739652, 739372222, 749101118, 758927303,
+    768851749, 778875440, 788999369, 799224536, 809551955, 819982648, 830517648, 841157998, 851904752, 862758973,
+    873721737, 884794128, 895977243, 907272189, 918680084, 930202059, 941839253, 953592819, 965463921, 977453734,
+    989563445, 1001794253, 1014147369, 1026624017, 1039225430, 1051952858, 1064807561, 1077790810, 1090903892,
+    1104148104, 1117524759, 1131035180, 1144680706, 1158462686, 1172382487,
+]
+_LEVEL_TABLE = _LEVEL_CAVE + 156
+_LEVEL_MAX = len(_LEVEL_THRESHOLDS)  # 249
+
+
+def _level_disp(base_after_pop: int, minus: int) -> bytes:
+    # disp32 of [ecx+eax*4+disp] with ecx = the address after "call $+5 / pop ecx": the entry for level eax - minus/4
+    return (_LEVEL_TABLE - minus - base_after_pop).to_bytes(4, "little", signed=True)
+
+
+_LEVEL_NEED_CODE = (  # at _LEVEL_CAVE
+    bytes.fromhex(
+        "8b442404"          # mov eax,[esp+4]           level
+        "e800000000"        # call $+5
+        "59"                # pop ecx                   ecx = _LEVEL_CAVE + 9
+        "85c0"              # test eax,eax
+        "7e18"              # jle none
+        "3d") + _LEVEL_MAX.to_bytes(4, "little")   # cmp eax,249
+    + bytes.fromhex(
+        "7e05"              # jle ok
+        "b8") + _LEVEL_MAX.to_bytes(4, "little")   # mov eax,249
+    + bytes.fromhex("8b8481") + _level_disp(_LEVEL_CAVE + 9, 4)  # ok: mov eax,[ecx+eax*4+...]  thresholds[level-1]
+    + bytes.fromhex(
+        "31d2"              # xor edx,edx
+        "c20400"            # ret 4
+        "31c0"              # none: xor eax,eax
+        "31d2"              # xor edx,edx
+        "c20400")           # ret 4
+)
+_LEVEL_PERCENT_AT = _LEVEL_CAVE + 48
+_LEVEL_PERCENT_CODE = (  # at _LEVEL_CAVE + 48
+    bytes.fromhex(
+        "8b442404"          # mov eax,[esp+4]           level
+        "e800000000"        # call $+5
+        "59"                # pop ecx
+        "85c0"              # test eax,eax
+        "7e59"              # jle zero
+        "3d") + _LEVEL_MAX.to_bytes(4, "little")   # cmp eax,249
+    + bytes.fromhex(
+        "7e05"              # jle ok
+        "b8") + _LEVEL_MAX.to_bytes(4, "little")   # mov eax,249
+    + bytes.fromhex("8b9481") + _level_disp(_LEVEL_PERCENT_AT + 9, 4)  # ok: mov edx,[...]  next = thresholds[level-1]
+    + bytes.fromhex(
+        "83f801"            # cmp eax,1
+        "7e09"              # jle first
+        "8b8c81") + _level_disp(_LEVEL_PERCENT_AT + 9, 8)  # mov ecx,[...]  this level's start = thresholds[level-2]
+    + bytes.fromhex(
+        "eb02"              # jmp have
+        "31c9"              # first: xor ecx,ecx        level 1 starts at 0
+        "8b442408"          # have: mov eax,[esp+8]     the EXP (low dword)
+        "2bc1"              # sub eax,ecx               EXP into this level
+        "2bd1"              # sub edx,ecx               the level's EXP
+        "7e2c"              # jle zero
+        "85c0"              # test eax,eax
+        "7c28"              # jl zero
+        "3bc2"              # cmp eax,edx
+        "7d19"              # jge full
+        "52"                # push edx
+        "50"                # push eax
+        "db0424"            # fild dword [esp]
+        "da742404"          # fidiv dword [esp+4]
+        "c7042464000000"    # mov dword [esp],100
+        "da0c24"            # fimul dword [esp]
+        "83c408"            # add esp,8
+        "c20c00"            # ret 0xc
+        "6a64"              # full: push 100
+        "db0424"            # fild dword [esp]
+        "83c404"            # add esp,4
+        "c20c00"            # ret 0xc
+        "d9ee"              # zero: fldz
+        "c20c00")           # ret 0xc
+)
+_LEVEL_CAVE_BYTES = (_LEVEL_NEED_CODE.ljust(48, b"\xcc") + _LEVEL_PERCENT_CODE
+                     + b"".join(t.to_bytes(4, "little") for t in _LEVEL_THRESHOLDS))
+PATCHES += [
+    (
+        "hw.dll",
+        _LEVEL_NEED,
+        bytes.fromhex("558bec568b"),        # push ebp; mov ebp,esp; push esi; mov...
+        b"\xe9" + _rel32(_LEVEL_NEED + 5, _LEVEL_CAVE),
+        "Level EXP bar: the EXP for the next level is the server's threshold",
+    ),
+    (
+        "hw.dll",
+        _LEVEL_PERCENT,
+        bytes.fromhex("558bec568b"),
+        b"\xe9" + _rel32(_LEVEL_PERCENT + 5, _LEVEL_PERCENT_AT),
+        "Level EXP bar: the percent is the progress through the server's level",
+    ),
+    (
+        "hw.dll",
+        _LEVEL_CAVE,
+        b"\xcc" * len(_LEVEL_CAVE_BYTES),
+        _LEVEL_CAVE_BYTES,
+        "Level EXP bar: the server's level thresholds and the two functions that read them",
+    ),
+]
+
+
 # The field of view (launcher's More > Field of view, default_fov) only made the mouse slower (reports 2026-11-24/25,
 # as in Counter-Strike 1.6): the server sends the player's fov, 90 when not zoomed, and client.dll's CHud::Think
 # (0x2a70cb0) sets gHUD.m_iFOV (+0x80) to it and the sensitivity to sens * fov / default_fov whenever they differ;
