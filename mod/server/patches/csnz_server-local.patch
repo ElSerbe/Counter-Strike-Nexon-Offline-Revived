@@ -1312,7 +1312,7 @@ index 0000000..5c99d8e
 +
 +extern CBingoManager g_BingoManager;
 diff --git a/src/manager/channelmanager.cpp b/src/manager/channelmanager.cpp
-index 35561e8..1a72f96 100644
+index 35561e8..6ddab53 100644
 --- a/src/manager/channelmanager.cpp
 +++ b/src/manager/channelmanager.cpp
 @@ -1,4 +1,9 @@
@@ -1745,7 +1745,7 @@ index 35561e8..1a72f96 100644
  
  	CChannel* channel = user->GetCurrentChannel();
  	if (channel == NULL)
-@@ -1294,6 +1653,42 @@ bool CChannelManager::OnJoinRoomRequest(CReceivePacket* msg, IUser* user)
+@@ -1294,6 +1653,55 @@ bool CChannelManager::OnJoinRoomRequest(CReceivePacket* msg, IUser* user)
  		return false;
  	}
  
@@ -1753,6 +1753,19 @@ index 35561e8..1a72f96 100644
 +	// bridge, say): the last AI player of the joiner's side goes. During a match too: the host's game kicks the bot
 +	// that plays it (botassist polls GET /api/matchkicks), and the game's bot count doesn't add it again. That needs the
 +	// host's game on this PC (a host from another PC has its own server and botassist).
++	// Zombie Hide and Seek holds 22 players (room.h): a person joining its running match takes an AI player's place there
++	// past that, the AI player stays in the room's list
++	if (room->GetStatus() == RoomStatus::STATUS_INGAME && room->GetSettings()->gameModeId == MODE_HIDE_AND_SEEK_PLAYERS_MODE &&
++		!g_LastMatchBots.empty() && (int)(room->GetUsers().size() + g_LastMatchBots.size()) >= MODE_HIDE_AND_SEEK_MAX_PLAYERS &&
++		room->GetHostUser() && !ServerTransfer::IsRemote(room->GetHostUser()->GetID()) &&
++		(!room->HasPassword() || room->GetSettings()->password == password))
++	{
++		string name = g_LastMatchBots.back().name;
++		Logger().Info("Room %d: Zombie Hide and Seek holds %d players: '%s' leaves the match for '%s'\n", room->GetID(),
++			MODE_HIDE_AND_SEEK_MAX_PLAYERS, name.c_str(), user->GetLogName());
++		KickMatchBot(name);
++	}
++
 +	if (room->HasFreeSlots() == false && (!room->HasPassword() || room->GetSettings()->password == password))
 +	{
 +		CRoom* full = static_cast<CRoom*>(room);
@@ -1788,7 +1801,7 @@ index 35561e8..1a72f96 100644
  	if (room->HasFreeSlots() == false)
  	{
  		g_PacketManager.SendUMsgNoticeMsgBoxToUuid(user->GetExtendedSocket(), OBFUSCATE("ROOM_JOIN_FAILED_FULL"));
-@@ -1396,6 +1791,9 @@ bool CChannelManager::OnJoinRoomRequest(CReceivePacket* msg, IUser* user)
+@@ -1396,6 +1804,9 @@ bool CChannelManager::OnJoinRoomRequest(CReceivePacket* msg, IUser* user)
  
  	channel->SendUpdateRoomList(room);
  
@@ -1798,7 +1811,7 @@ index 35561e8..1a72f96 100644
  	Logger().Info("User '%s' joined a room (RID: %d)\n", user->GetLogName(), room->GetID());
  
  	return true;
-@@ -1450,6 +1848,22 @@ bool CChannelManager::OnSetTeamRequest(CReceivePacket* msg, IUser* user)
+@@ -1450,6 +1861,22 @@ bool CChannelManager::OnSetTeamRequest(CReceivePacket* msg, IUser* user)
  	return true;
  }
  
@@ -1821,7 +1834,7 @@ index 35561e8..1a72f96 100644
  bool CChannelManager::OnLeaveRoomRequest(IUser* user)
  {
  	IRoom* currentRoom = user->GetCurrentRoom();
-@@ -1501,6 +1915,10 @@ bool CChannelManager::OnLeaveRoomRequest(IUser* user)
+@@ -1501,6 +1928,10 @@ bool CChannelManager::OnLeaveRoomRequest(IUser* user)
  		}
  
  		currentRoom->RemoveUser(user);
@@ -1832,7 +1845,7 @@ index 35561e8..1a72f96 100644
  	}
  
  	currentChannel->SendFullUpdateRoomList(user);
-@@ -1705,13 +2123,43 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
+@@ -1705,13 +2136,43 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
  		return false;
  	}
  
@@ -1876,7 +1889,7 @@ index 35561e8..1a72f96 100644
  	if (newSettings.familyBattle)
  	{
  		CUserCharacter character = user->GetCharacter(UFLAG_LOW_CLAN);
-@@ -1787,6 +2235,7 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
+@@ -1787,6 +2248,7 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
  		}
  	}
  
@@ -1884,7 +1897,7 @@ index 35561e8..1a72f96 100644
  	currentRoom->UpdateSettings(newSettings);
  
  	// inform every user in the room of the changes
-@@ -1795,6 +2244,10 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
+@@ -1795,6 +2257,10 @@ bool CChannelManager::OnRoomUpdateSettings(CReceivePacket* msg, IUser* user)
  		currentRoom->SendUpdateRoomSettings(u, roomSettings, newSettings.lowFlag, newSettings.lowMidFlag, newSettings.highMidFlag, newSettings.highFlag);
  	}
  
@@ -1895,7 +1908,7 @@ index 35561e8..1a72f96 100644
  	currentChannel->SendUpdateRoomList(currentRoom);
  
  	Logger().Info("Host '%s' updated room settings (RID: %d)\n", user->GetLogName(), currentRoom->GetID());
-@@ -1921,7 +2374,12 @@ bool CChannelManager::OnRoomKickRequest(CReceivePacket* msg, IUser* user)
+@@ -1921,7 +2387,12 @@ bool CChannelManager::OnRoomKickRequest(CReceivePacket* msg, IUser* user)
  		return false;
  	}
  
@@ -1909,7 +1922,7 @@ index 35561e8..1a72f96 100644
  	if (destUser == NULL)
  	{
  		Logger().Warn("User '%s' tried to kick a user from a room, although destUser == NULL (RID: %d)\n", user->GetLogName(), currentRoom->GetID());
-@@ -2089,7 +2547,7 @@ bool CChannelManager::OnVoxelRoomListRequest(CReceivePacket* msg, IUser* user)
+@@ -2089,7 +2560,7 @@ bool CChannelManager::OnVoxelRoomListRequest(CReceivePacket* msg, IUser* user)
  {
  	string voxel_id = msg->ReadString();
  
@@ -14195,7 +14208,7 @@ index 68a4dc7..65874a9 100644
  	int m_nTerWinCount;
  	int m_nFirstPlaceUserId;
 diff --git a/src/room/room.cpp b/src/room/room.cpp
-index 616959e..5b9860f 100644
+index 616959e..c815657 100644
 --- a/src/room/room.cpp
 +++ b/src/room/room.cpp
 @@ -1,4 +1,5 @@
@@ -14227,7 +14240,7 @@ index 616959e..5b9860f 100644
  }
  
  int CRoom::GetFreeSlots()
-@@ -239,6 +241,341 @@ void CRoom::SetStatus(RoomStatus newStatus)
+@@ -239,6 +241,359 @@ void CRoom::SetStatus(RoomStatus newStatus)
  void CRoom::SendJoinNewRoom(IUser* user)
  {
  	g_PacketManager.SendRoomCreateAndJoin(user->GetExtendedSocket(), this);
@@ -14478,9 +14491,27 @@ index 616959e..5b9860f 100644
 +	g_LastMatchOptions = m_Options;
 +	if (m_Bots.empty())
 +		return;
++	// Zombie Hide and Seek (mode 37) keeps its players' data in fixed rows of the game rules that hold 22 players:
++	// from the 23rd on they ran into the rules' next fields (a list's pointer zeroed at round start -> the game
++	// crashed, 31 players, 2026-11-28). The AI players past 22 players sit this match out.
++	if (m_pSettings->gameModeId == MODE_HIDE_AND_SEEK_PLAYERS_MODE)
++	{
++		int cap = MODE_HIDE_AND_SEEK_MAX_PLAYERS - (int)m_Users.size();
++		if (cap < 0)
++			cap = 0;
++		if ((int)g_LastMatchBots.size() > cap)
++		{
++			int out = (int)g_LastMatchBots.size() - cap;
++			g_LastMatchBots.resize(cap);
++			for (auto u : m_Users)
++				g_PacketManager.SendUMsgNoticeMessageInChat(u->GetExtendedSocket(),
++					va("Zombie Hide and Seek holds %d players: %d AI player(s) sit this match out.", MODE_HIDE_AND_SEEK_MAX_PLAYERS, out));
++			Logger().Info("Room %d: Zombie Hide and Seek holds %d players, %d AI players left out\n", m_nID, MODE_HIDE_AND_SEEK_MAX_PLAYERS, out);
++		}
++	}
 +
 +	int friendly = 0, enemy = 0;
-+	for (auto& b : m_Bots)
++	for (auto& b : g_LastMatchBots)
 +		(b.team == hostTeam ? friendly : enemy)++;
 +	m_pSettings->lowMidFlag |= ROOM_LOWMID_BOT;
 +	m_pSettings->friendlyBots = friendly;
@@ -14569,7 +14600,7 @@ index 616959e..5b9860f 100644
  }
  
  void CRoom::UpdateSettings(CRoomSettings& newSettings)
-@@ -564,6 +901,13 @@ void CRoom::UpdateSettings(CRoomSettings& newSettings)
+@@ -564,6 +919,13 @@ void CRoom::UpdateSettings(CRoomSettings& newSettings)
  	if (newSettings.highFlag & ROOM_HIGH_UNK77) {
  		m_pSettings->unk77 = newSettings.unk77;
  	}
@@ -14583,7 +14614,7 @@ index 616959e..5b9860f 100644
  }
  
  void CRoom::OnUserMessage(CReceivePacket* msg, IUser* user)
-@@ -575,6 +919,9 @@ void CRoom::OnUserMessage(CReceivePacket* msg, IUser* user)
+@@ -575,6 +937,9 @@ void CRoom::OnUserMessage(CReceivePacket* msg, IUser* user)
  
  	Logger().Info("User '%s' write to room chat: '%s'\n", senderName.c_str(), message.c_str());
  
@@ -14593,7 +14624,7 @@ index 616959e..5b9860f 100644
  	CUserCharacterExtended characterExtended = user->GetCharacterExtended(EXT_UFLAG_GAMEMASTER);
  	if (characterExtended.gameMaster && m_pHostUser == user)
  	{
-@@ -1052,6 +1399,8 @@ void CRoom::HostStartGame()
+@@ -1052,6 +1417,8 @@ void CRoom::HostStartGame()
  		return;
  	}
  
@@ -14602,7 +14633,7 @@ index 616959e..5b9860f 100644
  	SendStartMatch(m_pHostUser);
  
  	OnGameStart();
-@@ -1092,10 +1441,16 @@ void CRoom::UserGameJoin(IUser* user)
+@@ -1092,10 +1459,16 @@ void CRoom::UserGameJoin(IUser* user)
  void CRoom::EndGame(bool forcedEnd)
  {
  	m_pGameMatch->OnGameMatchEnd();
@@ -14619,7 +14650,7 @@ index 616959e..5b9860f 100644
  	if (m_pServer)
  		g_PacketManager.SendHostStop(m_pServer->GetSocket());
  
-@@ -1223,7 +1578,7 @@ void CRoom::ChangeMap(int mapId)
+@@ -1223,7 +1596,7 @@ void CRoom::ChangeMap(int mapId)
  
  		if (m_pServer)
  			g_PacketManager.SendHostServerJoin(u->GetExtendedSocket(), m_pServer->GetIP(), m_pServer->GetPort(), u->GetID());
@@ -14629,10 +14660,10 @@ index 616959e..5b9860f 100644
  	}
  }
 diff --git a/src/room/room.h b/src/room/room.h
-index 13a4ee8..5340be2 100644
+index 13a4ee8..6c3b9f5 100644
 --- a/src/room/room.h
 +++ b/src/room/room.h
-@@ -25,6 +25,56 @@ public:
+@@ -25,6 +25,58 @@ public:
  	bool m_bIsIngame;
  };
  
@@ -14676,6 +14707,8 @@ index 13a4ee8..5340be2 100644
 +void KickMatchBot(const std::string& name);
 +std::vector<std::string> TakeMatchBotKicks();
 +extern int g_LastMatchMode;
++// Zombie Hide and Seek (mode 37): the game's rules hold 22 players (room.cpp ApplyBotsToSettings, channelmanager JoinRoom)
++const int MODE_HIDE_AND_SEEK_PLAYERS_MODE = 37, MODE_HIDE_AND_SEEK_MAX_PLAYERS = 22;
 +extern int g_LastMatchHostTeam;
 +extern int g_LastMatchHostID;
 +extern bool g_LastMatchWeaponBalance; // the room's weapon balance was on, in a mode it applies to
@@ -14689,7 +14722,7 @@ index 13a4ee8..5340be2 100644
  class CRoom : public IRoom
  {
  public:
-@@ -103,11 +153,37 @@ public:
+@@ -103,11 +155,37 @@ public:
  
  	bool IsUserInFamilyBattleUsers(int userId);
  
