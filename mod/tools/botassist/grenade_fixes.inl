@@ -30,6 +30,7 @@ typedef void(__fastcall* BarrelKilledFn)(void* self, void* edx, void* attackerPe
 typedef void* (*CreateNamedFn)(int name, int flag);
 typedef int (*PrecacheFn)(const char* name);
 static void SfLsgPrecache(PrecacheFn model, PrecacheFn sound);
+static void SgPrecache(PrecacheFn model, PrecacheFn sound); // studio_guns.inl
 static GrenadeThrowFn g_grenadeThrow;
 static ThisFn g_heGrenadePrecache, g_detonateVxl;
 
@@ -89,6 +90,7 @@ static void __fastcall HookedHeGrenadePrecache(void* self, void* edx)
         model("models/ef_beamgun_wingman.mdl"); // the Giga Break's Wingman (scifi_weapons.inl)
         model("models/ef_beamgunle_wingman.mdl"); // the Giga Break LE's
         SfLsgPrecache(model, sound); // the Gravity Repulsor's effects (scifi_weapons.inl)
+        SgPrecache(model, sound);    // the Studio guns' objects and blocks (studio_guns.inl)
         g_drumsMap = String(*(int*)((DWORD)*g_pGlobals + GV_MAPNAME));
     }
     __except (EXCEPTION_EXECUTE_HANDLER)

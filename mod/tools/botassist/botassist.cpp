@@ -5597,6 +5597,7 @@ static void InstallZtHooks(DWORD delta); // modes/zombie_tag.inl: what each play
 #include "gun_fixes.inl"
 #include "grenade_fixes.inl"
 #include "scifi_weapons.inl"
+#include "studio_guns.inl" // Studio's rifle, pistol and minigun outside Studio: exploding objects and blocks
 
 static void HookBotManager(DWORD delta)
 {
@@ -5606,6 +5607,7 @@ static void HookBotManager(DWORD delta)
     FixSciFiGuns();
     FixGunPrices();
     FixGrenades();
+    FixStudioGuns();
     FixPrismSwordAnims(delta);
     GuardZbSkillThinks(delta);
     FixCrossbowCls(delta);
@@ -6304,6 +6306,7 @@ static void HookedStartFrame()
         KnifeFixFrame();
         GrenadeFixFrame();
         SfFrame();
+        StudioGunsFrame();
         CrowdReport();
         MatchTeamsFrame();
         TutorialFrame();
