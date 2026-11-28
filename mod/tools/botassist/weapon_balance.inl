@@ -7,6 +7,8 @@
 // Zombies with a lot of health (Zombie War: 22500-37500) take more besides: health / WB_HP_REF times, at most
 // WB_HP_MAX. Off, nothing changes. (Until 2026-11-20 the target was the group's median, x0.25-2 and no health factor:
 // the user saw zombies nearly immortal, 200-400 damage a second against 30000 health.)
+// Bosses (monsters with WB_BOSS_HP health or more) are the other way round: no health factor, no weapon above its
+// normal damage, and WeaponBalanceBoss (0.5) of that.
 //
 // Where: every player's TakeDamage (CBasePlayer 0x114d7030 and the bots' overrides, vtable slot 0x44, thiscall
 // inflictor, attacker entvars, damage, bits, one more; ret 0x14) and in Zombie Scenario, Zombie Shelter and Zombie
@@ -22,7 +24,7 @@
 // measured its scale stays between WB_SOFT_MIN and WB_SOFT_MAX (the guesses can be far off).
 static const DWORD MP_PLAYER_TAKEDAMAGE = 0x114d7030;
 static const int VT_TAKEDAMAGE = 0x44 / 4;
-static const float WB_TARGET = 0.85f, WB_HP_REF = 10000.0f, WB_HP_MAX = 3.0f;
+static const float WB_TARGET = 0.85f, WB_HP_REF = 10000.0f, WB_HP_MAX = 3.0f, WB_BOSS_HP = 100000.0f;
 static const int WB_EV_MAX_HEALTH = 0x1dc;
 static const float WB_GAP = 2.5f, WB_PRIOR = 10.0f, WB_SURE = 30.0f, WB_SOFT_MIN = 0.75f, WB_SOFT_MAX = 2.0f,
                    WB_KEEP = 600.0f; // seconds of measures kept per weapon (older ones fade)
@@ -276,6 +278,21 @@ static float WbDamage(void* self, void* inflictor, void* attacker, float damage)
     WbWeapon& w = it->second;
     float maxHp = Readable(vpev + WB_EV_MAX_HEALTH, 4) ? *(float*)(vpev + WB_EV_MAX_HEALTH) : 0;
     float hpScale = (std::max)(1.0f, (std::min)(WB_HP_MAX, maxHp / WB_HP_REF));
+    if (!(vflags & FL_CLIENT) && maxHp >= WB_BOSS_HP)
+    {
+        // a boss (Zombie Scenario's: 3,000,000 health): no health factor and no weapon above its normal damage, then
+        // cfg.wbBoss of that. With x3 for its health and up to x4 for the weapon it went down in moments (user,
+        // 2026-11-28: "it should last easily 10 times longer")
+        float k = (std::min)(1.0f, w.scale) * cfg.wbBoss;
+        static unsigned char* reported = nullptr;
+        if (reported != vpev)
+        {
+            reported = vpev;
+            Log("weapon balance: a boss (%.0f health): weapons do x%.2f of their normal damage to it (%s: x%.2f)", maxHp, k,
+                key.c_str(), k);
+        }
+        return damage * k;
+    }
     if (!w.logged)
     {
         w.logged = true;

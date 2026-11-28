@@ -4,8 +4,9 @@
 // keeps its own menu; its chat words below work there too):
 //   1. A bot follows me: the nearest bot not already with you gets "cover me" with you as its leader (each press, one
 //      more); the others go on as they were
-//   2. Shoot my target: what's under your crosshair (or the nearest monster within SO_FOCUS_CONE degrees of it) becomes
-//      every bot's target while they can see it, until it dies or SO_FOCUS_TIME s pass
+//   2. Shoot my target: what's under your crosshair (a monster, a boss, an objective or anything breakable; or the one
+//      whose box the aim crosses before a wall; or the nearest within SO_FOCUS_CONE degrees of it) becomes every bot's
+//      target while they can see it, until it dies or SO_FOCUS_TIME s pass (a boss: 2 minutes)
 //   3. Hold position: every bot stays where it is (it still turns and shoots)
 //   4. Follow me: every bot back to following
 //   5. Hunt freely: every bot goes after the monsters
@@ -19,7 +20,7 @@ static const float SO_FOCUS_TIME = 20.0f, SO_FOCUS_CONE = 6.0f, SO_FOCUS_RANGE =
 static struct
 {
     void* e = nullptr;
-    float until = 0;
+    float until = 0, span = 20.0f;
 } g_soFocus;
 static std::set<void*> g_soMenuOpen;
 
@@ -28,13 +29,40 @@ static bool SoMenuMode()
     return CoopMode() && GameMode() != 28; // (Zombie Shelter: its own orders menu)
 }
 
+// what "shoot my target" can mark: a monster the bots fight, an objective they break (zbsbreak), or anything else
+// breakable the players can damage (func_breakable...). Until 2026-11-28 only monsters: the objects in the way could
+// never be marked (user's report)
+static bool SoMarkable(void* e)
+{
+    if (!e)
+        return false;
+    unsigned char* v = Vars(e);
+    int flags = F<int>(v, EV_FLAGS);
+    if (flags & FL_CLIENT)
+        return false;
+    const char* cls = ClassName(e);
+    if (IsLivingMonster(e))
+        return !(cls && IsIgnored(cls));
+    if (IsObjective(e))
+        return true;
+    if (F<float>(v, EV_HEALTH) <= 0 || F<float>(v, EV_TAKEDAMAGE) == 0.0f || !cls)
+        return false;
+    return !strncmp(cls, "func_breakable", 14) || !strncmp(cls, "func_pushable", 13) || !strcmp(cls, "zbsbreak");
+}
+static float SoMaxHealth(void* e)
+{
+    unsigned char* v = Vars(e);
+    float m = F<float>(v, 0x1dc); // max_health
+    return m > F<float>(v, EV_HEALTH) ? m : F<float>(v, EV_HEALTH);
+}
+
 // ScanMonsters: the players' focus target comes first for every bot that sees it
 static void* FocusTarget(void* bot, V3 eye, void* best)
 {
     void* f = g_soFocus.e;
     if (!f)
         return best;
-    if (Now() > g_soFocus.until || Now() < g_soFocus.until - SO_FOCUS_TIME - 1.0f || !IsLivingMonster(f))
+    if (Now() > g_soFocus.until || Now() < g_soFocus.until - g_soFocus.span - 1.0f || !SoMarkable(f))
     {
         g_soFocus.e = nullptr;
         return best;
@@ -42,20 +70,69 @@ static void* FocusTarget(void* bot, V3 eye, void* best)
     return Len(Center(f) - eye) < SO_FOCUS_RANGE && CanSee(bot, eye, f) ? f : best;
 }
 
-// what the player aims at: the entity under the crosshair, else the nearest living monster close to the aim
-static void* SoAimedMonster(void* player)
+static bool SoIsFocus(void* e)
+{
+    return e && e == g_soFocus.e && Now() <= g_soFocus.until && SoMarkable(e);
+}
+
+// distance along the ray (from, unit dir) to where it enters the box, or -1 if it misses
+static float SoRayBox(V3 from, V3 dir, V3 lo, V3 hi)
+{
+    float t0 = 0, t1 = 1e9f;
+    float o[3] = { from.x, from.y, from.z }, d[3] = { dir.x, dir.y, dir.z }, a[3] = { lo.x, lo.y, lo.z }, b[3] = { hi.x, hi.y, hi.z };
+    for (int i = 0; i < 3; i++)
+    {
+        if (fabsf(d[i]) < 1e-6f)
+        {
+            if (o[i] < a[i] || o[i] > b[i])
+                return -1;
+            continue;
+        }
+        float n = (a[i] - o[i]) / d[i], f = (b[i] - o[i]) / d[i];
+        if (n > f)
+            std::swap(n, f);
+        t0 = n > t0 ? n : t0;
+        t1 = f < t1 ? f : t1;
+        if (t0 > t1)
+            return -1;
+    }
+    return t0;
+}
+
+// what the player aims at: the entity under the crosshair; else one whose box the line of sight crosses before the
+// first wall (a boss's parts or hitboxes can stop the trace short of the boss itself: the user couldn't mark the
+// boss, 2026-11-28); else the nearest living monster close to the aim
+static void* SoAimedMonster(void* player, std::string* why)
 {
     unsigned char* v = Vars(player);
     V3 eye = Eye(player), va = Vec((float*)(v + EV_VANGLE)), punch = Vec((float*)(v + EV_PUNCHANGLE));
     V3 dir = Forward(va.x + punch.x, va.y + punch.y);
     TraceResult tr;
     Trace(eye, eye + dir * 8192.0f, player, 0, tr);
-    if (tr.pHit && IsLivingMonster(tr.pHit))
+    if (tr.pHit && SoMarkable(tr.pHit))
         return tr.pHit;
+    TraceResult wall;
+    Trace(eye, eye + dir * 8192.0f, player, 1, wall); // (the world only)
+    float wallDist = wall.flFraction * 8192.0f + 48.0f;
     void* best = nullptr;
+    float bestT = 1e30f;
+    ForEntitiesNear(eye, SO_FOCUS_RANGE, [&](void* e) {
+        if (!SoMarkable(e))
+            return;
+        unsigned char* ev = Vars(e);
+        V3 lo = Vec((float*)(ev + EV_ABSMIN)) - V3{ 8, 8, 8 }, hi = Vec((float*)(ev + EV_ABSMAX)) + V3{ 8, 8, 8 };
+        float t = SoRayBox(eye, dir, lo, hi);
+        if (t >= 0 && t < wallDist && t < bestT)
+        {
+            bestT = t;
+            best = e;
+        }
+    });
+    if (best)
+        return best;
     float bestAngle = SO_FOCUS_CONE;
     ForEntitiesNear(eye, SO_FOCUS_RANGE, [&](void* e) {
-        if (!IsLivingMonster(e))
+        if (!SoMarkable(e))
             return;
         V3 to = Center(e) - eye;
         float l = Len(to);
@@ -69,27 +146,46 @@ static void* SoAimedMonster(void* player)
             best = e;
         }
     });
+    if (!best && why)
+    {
+        char b[200];
+        if (tr.pHit && strcmp(ClassName(tr.pHit), "worldspawn"))
+        {
+            unsigned char* hv = Vars(tr.pHit);
+            snprintf(b, sizeof(b), "the aim hits %s (flags 0x%x, health %.0f, takedamage %.0f) %.0f u away", ClassName(tr.pHit),
+                     F<int>(hv, EV_FLAGS), F<float>(hv, EV_HEALTH), F<float>(hv, EV_TAKEDAMAGE), tr.flFraction * 8192.0f);
+        }
+        else
+            snprintf(b, sizeof(b), "the aim hits the world %.0f u away", tr.flFraction * 8192.0f);
+        *why = b;
+    }
     return best;
 }
 
 static void SoFocus(void* player)
 {
-    void* e = SoAimedMonster(player);
+    std::string why;
+    void* e = SoAimedMonster(player, &why);
     if (!e)
     {
-        ShPrint(player, "Bots: no monster where you aim");
+        ShPrint(player, "Bots: nothing to shoot where you aim");
+        Log("scenario orders: '%s' found nothing to mark: %s", String(F<int>(Vars(player), EV_NETNAME)), why.c_str());
         return;
     }
+    // a boss stays marked until it dies (2 minutes at most), anything else 20 s
+    float maxHp = SoMaxHealth(e);
     g_soFocus.e = e;
-    g_soFocus.until = Now() + SO_FOCUS_TIME;
+    g_soFocus.span = maxHp >= 100000.0f ? 120.0f : SO_FOCUS_TIME;
+    g_soFocus.until = Now() + g_soFocus.span;
     for (auto& b : g_bots)
         b.nextScan = 0; // pick it now
     const char* cls = ClassName(e);
+    const char* what = IsLivingMonster(e) ? (maxHp >= 100000.0f ? "boss" : "monster") : "object";
     char text[160];
-    snprintf(text, sizeof(text), "Bots: shoot that %s!", cls && *cls ? cls : "monster");
+    snprintf(text, sizeof(text), "Bots: shoot that %s!", what);
     ShPrint(player, text);
-    Log("scenario orders: '%s' marks %s (%.0f u away, %.0f health) as every bot's target",
-        String(F<int>(Vars(player), EV_NETNAME)), cls ? cls : "?", Len(Origin(e) - Origin(player)), F<float>(Vars(e), EV_HEALTH));
+    Log("scenario orders: '%s' marks %s %s (%.0f u away, %.0f health) as every bot's target",
+        String(F<int>(Vars(player), EV_NETNAME)), what, cls ? cls : "?", Len(Origin(e) - Origin(player)), F<float>(Vars(e), EV_HEALTH));
 }
 
 static void SoFollower(void* player)
@@ -307,6 +403,7 @@ static void SoBring(void* player)
         F<float>(Vars(b.edict), EV_VELOCITY) = F<float>(Vars(b.edict), EV_VELOCITY + 4) = F<float>(Vars(b.edict), EV_VELOCITY + 8) = 0;
         b.path.clear();
         b.lastPos = at;
+        b.buyingOrigin = at; // (not a respawn: UpdateBuying takes a jump this far for one)
         b.lastProgress = Now();
         b.hasRoam = false;
         if (b.order == ORDER_HOLD)

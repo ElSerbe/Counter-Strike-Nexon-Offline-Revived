@@ -572,7 +572,9 @@ Zombie Disaster Zone); `/api/matchbots` says `weaponBalance` 1 for a match with 
   monster is scaled by the weapon in hand (its entity class, `weapon_<res>`): its estimated damage per second against
   the top of its group (85% of the group does less; `botassist_balance.txt`: type x 10, +1 for slow guns), between
   `WeaponBalanceMin` (0.5) and `WeaponBalanceMax` (4); zombies with more than 10000 health take health / 10000 times
-  more besides (at most x3: Zombie War's 22500-37500). Grenades and mode weapons (hero's, Shelter's...) aren't touched.
+  more besides (at most x3: Zombie War's 22500-37500). Bosses (monsters with 100000 health or more, Zombie Scenario's
+  3,000,000) the other way round: no health factor, no weapon above its normal damage, and `WeaponBalanceBoss` (0.5) of
+  that (with x3 and up to x4 a boss went down in moments). Grenades and mode weapons (hero's, Shelter's...) aren't touched.
   (The first version aimed at the median, x0.25-2: zombies were nearly immortal.)
 - The estimates: a guess from the shop's numbers (gen_weapon_balance.py: zombie_damage x shots per second read from the
   FiringSpeed bar), scaled to the measured numbers and corrected by what's measured in every zombie match, balance on

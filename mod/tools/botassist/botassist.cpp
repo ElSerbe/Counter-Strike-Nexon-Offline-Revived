@@ -150,6 +150,7 @@ static struct
     bool randomCharacters = true; // any character of the game (botassist_characters.txt)
     float refillAfter = 6.0f;  // seconds of firing that empty about half of the ammo: then buy ammo in a buy zone
     float minArmor = 50.0f;    // below this armor, buy kevlar + helmet in a buy zone
+    float wbBoss = 0.5f; // weapon balance on a boss: its share of a weapon's normal damage (botassist.ini WeaponBalanceBoss)
     float wbMin = 0.5f, wbMax = 4.0f; // weapon balance (weapon_balance.inl): the least and most a weapon's damage is scaled
     bool sameTeam = true;      // where there are monsters, every bot joins the human team (no enemy bots under the map)
     std::vector<int> characters[3]; // by team: [1] TR, [2] CT
@@ -317,6 +318,7 @@ static void LoadSettings()
     cfg.followDistance = IniFloat(ini, "FollowDistance", "180");
     cfg.wbMin = (std::max)(0.05f, IniFloat(ini, "WeaponBalanceMin", "0.5"));
     cfg.wbMax = (std::max)(cfg.wbMin, IniFloat(ini, "WeaponBalanceMax", "4"));
+    cfg.wbBoss = (std::max)(0.05f, IniFloat(ini, "WeaponBalanceBoss", "0.5"));
     cfg.zgPlayers = GetPrivateProfileIntA("BotAssist", "ZombieGiantPlayers", -1, ini);
     cfg.zsrEventDivisor = IniFloat(ini, "ZSRiftEventDivisor", "3");
     cfg.zsrBotMoney = GetPrivateProfileIntA("BotAssist", "ZSRiftBotMoney", 10000, ini);
@@ -404,6 +406,9 @@ static bool IsIgnored(const char* classname)
 {
     if (ShelterFriendlyClass(classname))
         return true; // the shelter's turrets, walls... are the players'
+    if (!strcmp(classname, "zs_follower"))
+        return true; // Zombie Scenario's survivor the players lead and protect (zs_mschoi2: Choi Ji Yoon), a FL_MONSTER
+                     // the bots shot at (2026-11-28)
     if (HsIsEnemyClass(classname))
         return false;
     for (auto& s : cfg.ignore)
@@ -1751,6 +1756,7 @@ static void* HsMissileFirst(void* bot, V3 eye, void* best);
 static bool HsNoChase(void* threat, void* target, V3 eye);
 
 static void* FocusTarget(void* bot, V3 eye, void* best); // modes/scenario_orders.inl: the players' marked target
+static bool SoIsFocus(void* e); // modes/scenario_orders.inl: e is the players' marked target (an object too)
 
 static void ScanMonsters(void* bot, BotState& st, V3 eye)
 {
@@ -2703,7 +2709,7 @@ static void Drive(void* bot, BotState& st, Command& cmd, float dt)
         st.pitch = cmd.pitch;
         st.aimInit = true;
     }
-    if (now >= st.nextScan || (st.target && !IsLivingMonster(st.target) && !IsObjective(st.target)))
+    if (now >= st.nextScan || (st.target && !IsLivingMonster(st.target) && !IsObjective(st.target) && !SoIsFocus(st.target)))
     {
         ScanMonsters(bot, st, eye);
         st.nextScan = now + cfg.rescan;
@@ -3467,8 +3473,14 @@ static void UpdateBuying(void* bot, BotState& st)
     // jumps to a spawn point, farther than it can move in a frame
     V3 at = Origin(bot);
     bool teleported = st.buyingSeen > 0 && now - st.buyingSeen < 0.5f && Len(at - st.buyingOrigin) > 300.0f;
+    // (the scenario modes heal a lot: a supply box, a medic's skill... A heal counted as a new life there only when it
+    // fills the health up from below a third, else every heal had the bot buy again, swapping the gun in its hand
+    // 4 times; seen 2026-11-28 in Zombie Scenario. Bots brought to a player (scenario_orders.inl) aren't teleports.)
+    float maxHp = F<float>(Vars(bot), 0x1dc);
+    bool healed = hp > st.buyingHealth + 30.0f &&
+                  (!CoopMode() || (maxHp > 0 && hp >= maxHp - 1.0f && st.buyingHealth < maxHp * 0.34f));
     bool respawned = alive && st.wasAlive && st.buyingSeen > 0 &&
-                     (now - st.buyingSeen > 1.0f || now < st.buyingSeen || hp > st.buyingHealth + 30.0f || teleported);
+                     (now - st.buyingSeen > 1.0f || now < st.buyingSeen || healed || teleported);
     st.buyingSeen = now;
     st.buyingHealth = hp;
     st.buyingOrigin = at;
@@ -4804,6 +4816,13 @@ static void DebugCensus(void* anyBot)
     float now = Now();
     if (!cfg.debug)
         return;
+    // 10 times a second at most, whichever bot moves: it ran on every bot's move (a search over every entity of the
+    // map, a trace and a long text each time). With 31 bots in Soccer that was ~650 times a second and most of
+    // botassist's time (200-300 ms a second, the frame drops reported 2026-11-28)
+    static float nextLook = 0;
+    if (now < nextLook && now >= nextLook - 1.0f)
+        return;
+    nextLook = now + 0.1f;
     void* human = FindLeader(Origin(anyBot));
     if (!human)
         return;

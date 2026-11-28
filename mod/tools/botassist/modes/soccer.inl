@@ -52,6 +52,7 @@ struct ScGoal
 {
     bool ok = false;
     V3 center{}, aim{}, side{}; // side: across the goal mouth
+    V3 mouth{}, out{};          // the middle of its front (the goal line), and the way out to the field
     float width = 200.0f;
 };
 struct ScPlayer
@@ -84,6 +85,15 @@ struct ScBot
     float heldSince = 0, shootRange = 600.0f, aimSide = 0;
     int kick = 0;                // 0 none, 1 attack held (shot), 2 attack2 (pass)
     float kickUntil = 0, kickAt = -100, tackleAt = -100, dodge = 0, dodgeUntil = 0;
+    // like a person: the ball as last seen (looked at again every reaction time, in between where it was going then),
+    // the way it runs turning at a person's pace, a place off the exact spot, a goalkeeper's reaction to a shot
+    void* seenBall = nullptr;
+    V3 seenPos{}, seenVel{};
+    float seenAt = -100, seenNext = 0;
+    float runYaw = 0;
+    bool runInit = false;
+    V3 wander{};
+    float wanderUntil = 0, shotSeen = -1;
 };
 static std::unordered_map<void*, ScBot> g_scBots;
 
@@ -214,6 +224,8 @@ static void ScScan(float now)
             continue;
         g.center = (netBox[t][0] + netBox[t][1]) * 0.5f;
         g.aim = point[t] && Len2D(pointAt[t] - g.center) < 600.0f ? pointAt[t] : g.center;
+        g.mouth = g.center;
+        g.out = V3{ 0, 0, 0 };
     }
     if (g_sc.goal[1].ok && g_sc.goal[2].ok)
         for (int t = 1; t <= 2; t++)
@@ -228,6 +240,8 @@ static void ScScan(float now)
             g.side = V3{ -axis.y, axis.x, 0 };
             V3 size = netBox[t][1] - netBox[t][0];
             g.width = fabsf(size.x * g.side.x) + fabsf(size.y * g.side.y);
+            g.out = axis;
+            g.mouth = g.center + axis * ((fabsf(size.x * axis.x) + fabsf(size.y * axis.y)) * 0.5f);
             if (g.width < 60.0f)
                 g.width = 60.0f;
         }
@@ -313,7 +327,7 @@ static void ScWithBall(void* bot, ScBot& z, const ScBall& ball, int team, V3 me,
         z.heldBall = 1;
         z.heldSince = now;
         z.shootRange = 450.0f + skill * 350.0f + Rnd() * 200.0f;
-        z.aimSide = (Rnd() - 0.5f) * 0.6f; // where across the goal mouth
+        z.aimSide = (Rnd() - 0.5f) * (0.6f + (1.0f - skill) * 0.7f); // where across the goal mouth (a weak bot can miss wide)
     }
     // a kick under way: keep facing where it goes until the key is let go (a pass call cuts a shot's wind-up short)
     if (z.kick == 1 && g_scPassCall[team].player && Now() < g_scPassCall[team].until && g_scPassCall[team].player != bot)
@@ -753,6 +767,25 @@ static bool DriveSoccerBot(void* bot, float& yaw, float& pitch, float& fwd, floa
     }
     else if (z.kick && now >= z.kickUntil + 0.6f)
         z.kick = 0; // it didn't go: try again
+    // without the ball, it plays the ball as it last saw it: looked at again every 0.06-0.42 s (by skill), in between
+    // where it was going then. It reacted to every bounce and kick the moment it happened (the user: "they move too
+    // perfectly", 2026-11-28)
+    ScBall seen{};
+    if (ball && !holding)
+    {
+        if (z.seenBall != ball->e || now >= z.seenNext || now < z.seenAt)
+        {
+            z.seenBall = ball->e;
+            z.seenPos = ball->pos;
+            z.seenVel = ball->vel;
+            z.seenAt = now;
+            z.seenNext = now + (0.08f + (1.0f - skill) * 0.22f) * (0.7f + 0.6f * Rnd());
+        }
+        seen = *ball;
+        seen.pos = z.seenPos + z.seenVel * (now - z.seenAt);
+        seen.vel = z.seenVel;
+        ball = &seen;
+    }
     if (z.kick == 1 && now < z.kickUntil)
         b |= IN_ATTACK; // a charged shot: keep the key down
 
@@ -789,10 +822,61 @@ static bool DriveSoccerBot(void* bot, float& yaw, float& pitch, float& fwd, floa
         float toBall = Len2D(predicted - me);
         if (keeper)
         {
-            // between the ball and the goal; out for it when it comes close and nobody of ours has it
+            // on the line from the ball to the middle of the goal, off the goal line, towards the post on the ball's
+            // side; for a shot coming at the goal, to where it crosses the line (after its reaction time); out for the
+            // ball when it comes close and nobody of ours has it. It stood near the middle of the goal: on the wide goals
+            // of sc_soccer01 (340 u) the sides were open (user, 2026-11-28)
             float ballToGoal = Len2D(ball->pos - mine.center);
-            if (!ours && ballToGoal < 520.0f)
+            bool lined = Len2D(mine.out) > 0.5f;
+            V3 rel = ball->pos - mine.mouth;
+            float along = lined ? rel.x * mine.out.x + rel.y * mine.out.y : Len2D(rel);
+            float lat = lined ? rel.x * mine.side.x + rel.y * mine.side.y : 0.0f;
+            float half = mine.width * 0.5f;
+            float vAlong = lined ? ball->vel.x * mine.out.x + ball->vel.y * mine.out.y : 0.0f;
+            float vLat = lined ? ball->vel.x * mine.side.x + ball->vel.y * mine.side.y : 0.0f;
+            bool shot = lined && free && vAlong < -250.0f && along > -20.0f && along < 1800.0f;
+            float hitLat = 0;
+            if (shot)
+            {
+                float t = (along - 20.0f) / -vAlong;
+                hitLat = lat + vLat * (t > 0 ? t : 0);
+                shot = fabsf(hitLat) < half + 90.0f;
+            }
+            if (!shot)
+                z.shotSeen = -1;
+            else if (z.shotSeen < 0 || now < z.shotSeen)
+                z.shotSeen = now;
+            bool dive = shot && now - z.shotSeen >= 0.08f + (1.0f - skill) * 0.2f;
+            if (!ours && ballToGoal < 520.0f && !shot)
                 chaser = true;
+            else if (lined)
+            {
+                float depth, latPos;
+                if (dive)
+                {
+                    depth = 24.0f;
+                    latPos = hitLat > half + 10.0f ? half + 10.0f : hitLat < -half - 10.0f ? -half - 10.0f : hitLat;
+                    speed = 320.0f;
+                    arrive = 6.0f;
+                    z.doing = "keeper: going for the shot";
+                }
+                else
+                {
+                    depth = along * 0.12f;
+                    depth = depth < 30.0f ? 30.0f : depth > 120.0f ? 120.0f : depth;
+                    float k = 0.3f + 260.0f / (along > 60.0f ? along : 60.0f);
+                    latPos = lat * (k > 1.0f ? 1.0f : k);
+                    float edge = half - 28.0f > 0 ? half - 28.0f : 0;
+                    latPos = latPos > edge ? edge : latPos < -edge ? -edge : latPos;
+                    speed = 250.0f;
+                    arrive = 16.0f;
+                    z.doing = "keeping the goal";
+                }
+                goal = ScOnField(mine.mouth + mine.out * depth + mine.side * latPos);
+                hasGoal = true;
+                look = ball->pos;
+                hasLook = true;
+            }
             else
             {
                 V3 d = ball->pos - mine.aim;
@@ -870,6 +954,13 @@ static bool DriveSoccerBot(void* bot, float& yaw, float& pitch, float& fwd, floa
                 z.doing = order == SCO_ATTACK ? "up the field (told to attack)" : ours ? "running ahead for a pass" : "taking a place for the loose ball";
             }
             at = at + sideV * lateral;
+            // not on the exact spot: somewhere near it, another every few seconds
+            if (now >= z.wanderUntil || now < z.wanderUntil - 10.0f)
+            {
+                z.wanderUntil = now + 2.0f + Rnd() * 3.0f;
+                z.wander = V3{ (Rnd() - 0.5f) * 160.0f, (Rnd() - 0.5f) * 160.0f, 0 };
+            }
+            at = at + z.wander;
             // not into the nets
             if (Len2D(at - their.center) < 260.0f)
                 at = their.center + (at - their.center) * (260.0f / (Len2D(at - their.center) > 1 ? Len2D(at - their.center) : 1));
@@ -897,7 +988,15 @@ static bool DriveSoccerBot(void* bot, float& yaw, float& pitch, float& fwd, floa
         else
             moveYaw = YawOf(goal - me);
         move = true;
+        // the way it runs turns at a person's pace (it changed at once, at any angle)
+        if (!z.runInit)
+            z.runYaw = moveYaw, z.runInit = true;
+        float rate = (holding ? 300.0f : 450.0f) + skill * 300.0f + (keeper ? 400.0f : 0.0f);
+        z.runYaw = Approach(z.runYaw, moveYaw, rate * dt);
+        moveYaw = z.runYaw;
     }
+    else
+        z.runInit = false;
     float lookYaw = hasLook ? YawOf(look - Eye(bot)) : move ? moveYaw : z.yaw;
     float lookPitch = holding ? -4.0f : hasLook ? PitchOf(look - Eye(bot)) : 0.0f;
     z.yaw = Approach(z.yaw, lookYaw, (360.0f + skill * 360.0f) * dt);
