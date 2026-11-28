@@ -13,7 +13,7 @@ typedef void* (__fastcall* FsOpenFn)(void* self, void* edx, const char* name, co
 static FsOpenFn g_fsOpen = nullptr;
 static std::unordered_map<std::string, std::string> g_modelAliases; // "y19s4hammer" -> "hammer"
 // Files GameUI reads itself (its own CSV reader, not the hw.dll loaders of the table overrides): a file of
-// botassist_tablesesource\clan\ next to botassist.asi is opened instead of the game's, by its full path (the Family
+// botassist_tables\resource\clan\ next to botassist.asi is opened instead of the game's, by its full path (the Family
 // Achievements' offline targets: tables/resource/clan/ClanAchieve.csv, gen_family_achievements.py)
 static std::unordered_map<std::string, std::string> g_fileOverrides; // "resource/clan/clanachieve.csv" -> full path
 
@@ -126,8 +126,17 @@ static std::string ModelAlias(const char* name)
     return n.substr(0, p + 2) + it->second + ".mdl";
 }
 
+static std::string SgHudFile(void* self, const char* name, const char* pathID); // studio_guns.inl
+
 static void* __fastcall HookedFsOpen(void* self, void* edx, const char* name, const char* options, const char* pathID)
 {
+    if (name && options && options[0] == 'r' && !_strnicmp(name, "sprites/weapon_vxl", 18))
+    {
+        std::string path = SgHudFile(self, name, pathID); // the Studio guns' HUD with an ammo line
+        if (!path.empty())
+            if (void* o = g_fsOpen(self, edx, path.c_str(), options, pathID))
+                return o;
+    }
     if (name && !g_fileOverrides.empty() && options && options[0] == 'r')
     {
         std::string n = name;

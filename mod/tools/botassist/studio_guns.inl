@@ -721,6 +721,147 @@ static bool SgTakeRounds(void* player, void* weapon, int kind, int n)
     return true;
 }
 
+// ---------------------------------------------------------------- the rounds on the HUD (each player's own client)
+// client.dll's HUD is Half-Life's CHudAmmo: it draws a weapon's rounds only when the weapon's ammo type is set (its
+// Draw 0x2a1c2f2: return when iAmmoType < 0 and iAmmo2Type < 0; the numbers when iAmmoType > 0). The weapons' table is
+// at client 0x39f1348, 0x30c bytes an entry (index = the weapon id, under 0x2e7): name at +0, iAmmoType +0x80,
+// iAmmo2Type +0x84, the clip +0xa0 (CurWeapon). Only the WeaponList message sets the ammo types (client 0x2a24020: three
+// shorts, ammo type, ammo 2 type, weapon id), and of Studio's guns only the junk gun has one (it has rounds in Studio).
+// botassist gives the other five the junk gun's ammo types in its own client's table (every half second: a WeaponList
+// would set them back), and their HUD files (sprites/weapon_vxl*.txt, without an "ammo" line but the junk gun's) the
+// junk gun's ammo icon: made from the player's own game files into botassist_tables\sprites the first time they're
+// opened, so no game file is in the mod.
+static const DWORD CL_WEAPONS = 0x39f1348;
+static const int CL_WEAPON_SIZE = 0x30c, CL_WEAPONS_MAX = 0x2e7, CL_AMMO1 = 0x80, CL_AMMO2 = 0x84;
+static const char kSgAmmoLine[] = "ammo\t\t\t640 640hud304\t1\t231\t24\t24";
+
+static std::string SgHudFile(void* self, const char* name, const char* pathID)
+{
+    std::string n = name;
+    for (auto& ch : n)
+        ch = ch == '\\' ? '/' : (char)tolower((unsigned char)ch);
+    const char* file = strrchr(n.c_str(), '/') + 1;
+    bool ours = false;
+    for (int k = 0; k < SG_KINDS; k++)
+        if (k != SG_JUNK && n == std::string("sprites/") + kSgClass[k] + ".txt")
+            ours = true;
+    if (!ours || !g_fsOpen)
+        return "";
+    std::string dir = std::string(g_dir) + "botassist_tables\\sprites\\";
+    std::string path = dir + file;
+    if (GetFileAttributesA(path.c_str()) != INVALID_FILE_ATTRIBUTES)
+        return path;
+    void* h = g_fsOpen(self, nullptr, n.c_str(), "rb", pathID);
+    if (!h)
+        return "";
+    void** vt = *(void***)self;
+    unsigned int size = ((FsSizeFn)vt[0x44 / 4])(self, nullptr, h);
+    std::string text(size, '\0');
+    int got = size && size < 4096 ? ((FsReadFn)vt[0x5c / 4])(self, nullptr, &text[0], (int)size, h) : 0;
+    ((FsCloseFn)vt[0x34 / 4])(self, nullptr, h);
+    int count = 0;
+    if (got != (int)size || sscanf(text.c_str(), "%d", &count) != 1 || count < 1 || count > 30 ||
+        text.find("ammo") != std::string::npos)
+        return ""; // not the file expected, or it has its icon already
+    size_t eol = text.find('\n');
+    std::string out = std::to_string(count + 1) + (eol == std::string::npos ? "\n" : text.substr(eol));
+    while (!out.empty() && (out.back() == '\n' || out.back() == '\r' || out.back() == ' ' || out.back() == '\t'))
+        out.pop_back();
+    out += "\r\n";
+    out += kSgAmmoLine;
+    out += "\r\n";
+    CreateDirectoryA((std::string(g_dir) + "botassist_tables").c_str(), nullptr);
+    CreateDirectoryA(dir.c_str(), nullptr);
+    FILE* f = fopen(path.c_str(), "wb");
+    if (!f)
+        return "";
+    fwrite(out.data(), 1, out.size(), f);
+    fclose(f);
+    Log("file %s: made from the game's with the junk gun's ammo icon", n.c_str());
+    return path;
+}
+
+static void SgClientAmmoTick()
+{
+    static HMODULE seen = nullptr;
+    static DWORD delta = 0, lastScan = 0;
+    static int index[SG_KINDS];
+    static bool told = false;
+    HMODULE cl = GetModuleHandleA("client.dll");
+    if (!cl)
+        return;
+    __try
+    {
+        if (cl != seen)
+        {
+            seen = cl;
+            IMAGE_NT_HEADERS* nt = (IMAGE_NT_HEADERS*)((unsigned char*)cl + ((IMAGE_DOS_HEADER*)cl)->e_lfanew);
+            delta = (DWORD)cl - nt->OptionalHeader.ImageBase;
+            for (int& i : index)
+                i = -1;
+            lastScan = 0;
+            told = false;
+        }
+        unsigned char* table = (unsigned char*)(CL_WEAPONS + delta);
+        bool missing = false;
+        for (int i : index)
+            missing |= i < 0;
+        if (missing && GetTickCount() - lastScan > 5000) // (the names come with the connection)
+        {
+            lastScan = GetTickCount();
+            for (int id = 1; id < CL_WEAPONS_MAX; id++)
+            {
+                const char* nm = (const char*)(table + id * CL_WEAPON_SIZE);
+                if (strncmp(nm, "weapon_vxl", 10))
+                    continue;
+                for (int k = 0; k < SG_KINDS; k++)
+                    if (index[k] < 0 && !strcmp(nm, kSgClass[k]))
+                        index[k] = id;
+            }
+        }
+        if (index[SG_JUNK] < 0)
+            return;
+        unsigned char* junk = table + index[SG_JUNK] * CL_WEAPON_SIZE;
+        int a1 = *(int*)(junk + CL_AMMO1), a2 = *(int*)(junk + CL_AMMO2);
+        static int diag = 0;
+        if (diag < 2 && (diag == 0 || a1 > 0))
+        {
+            diag = a1 > 0 ? 2 : 1;
+            Log("Studio guns: client weapon table: junk gun id %d, ammo types %d/%d; rifle id %d ammo %d", index[SG_JUNK], a1,
+                a2, index[SG_RIFLE], index[SG_RIFLE] >= 0 ? *(int*)(table + index[SG_RIFLE] * CL_WEAPON_SIZE + CL_AMMO1) : 0);
+        }
+        if (a1 <= 0)
+            return;
+        int set = 0;
+        for (int k = 0; k < SG_KINDS; k++)
+        {
+            if (k == SG_JUNK || index[k] < 0)
+                continue;
+            unsigned char* w = table + index[k] * CL_WEAPON_SIZE;
+            if (*(int*)(w + CL_AMMO1) <= 0)
+            {
+                *(int*)(w + CL_AMMO1) = a1;
+                *(int*)(w + CL_AMMO2) = a2;
+                set++;
+            }
+        }
+        if (set && !told)
+        {
+            told = true;
+            Log("Studio guns: the HUD shows their rounds (the junk gun's ammo type %d/%d given to %d guns; ids %d %d %d %d %d, "
+                "junk gun %d)",
+                a1, a2, set, index[SG_RIFLE], index[SG_PISTOL], index[SG_MINIGUN], index[SG_SCANNER], index[SG_MARKER],
+                index[SG_JUNK]);
+        }
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        static int faults = 0;
+        if (faults++ < 3)
+            Log("Studio guns: exception 0x%08lX with the client's weapon table", GetExceptionCode());
+    }
+}
+
 // every frame: the rounds of the Studio gun each player holds go in its clip (shown, and read by the junk gun)
 static void SgRoundsFrame()
 {
@@ -977,6 +1118,7 @@ static void StudioGunsFrame()
     {
         if (!SgVoxelMap())
             SgRoundsFrame();
+        SgClientAmmoTick();
         for (size_t i = 0; i < g_sgObjects.size();)
             if (SgObjectFrame(g_sgObjects[i], now, dt))
                 i++;

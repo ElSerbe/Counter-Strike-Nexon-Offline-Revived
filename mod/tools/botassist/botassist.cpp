@@ -8782,6 +8782,7 @@ static DWORD WINAPI Watcher(LPVOID)
         }
         if (cfg.enabled)
             DecoderDiag();
+        SgClientAmmoTick(); // studio_guns.inl: the Studio guns' rounds on this client's HUD
         Sleep(500);
     }
 }
