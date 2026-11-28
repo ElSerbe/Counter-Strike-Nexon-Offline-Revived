@@ -50,6 +50,11 @@ EXTRA_FILES += [
     (f, "botassist_tables/resource/allstar/" + f.name, True)
     for f in sorted((MOD / "tools" / "botassist" / "tables" / "resource" / "allstar").glob("*.csv"))
 ]
+# the Random Rule maps' rule lists (gen_random_rules.py), dedicated-server files the game lacks
+EXTRA_FILES += [
+    (f, "botassist_tables/resource/ModeEvent/" + f.name, True)
+    for f in sorted((MOD / "tools" / "botassist" / "tables" / "resource" / "ModeEvent").glob("*.csv"))
+]
 # the Family Achievements window's offline targets (gen_family_achievements.py); botassist opens it instead of the game's
 EXTRA_FILES += [
     (f, "botassist_tables/resource/clan/" + f.name, True)
@@ -1138,6 +1143,24 @@ PATCHES += [
         + b"\x0f\x84" + _rel32(_ITEMREC_CAVE + 14, _ITEMREC_EXIT)        # jz exit
         + b"\xe9" + _rel32(_ITEMREC_CAVE + 19, _ITEMREC_BACK),           # jmp back
         "Item use check stub: no record, leave the function",
+    ),
+]
+
+# Random Rule's Big Head Mode (rule 28) closed the game on a listen server: the server (mp.dll 0x10794fb6, 0x1079835d)
+# puts each player's head size in SharedDataMgr's list (vfunc 0x634, hw.dll 0x25b5ef0: ids 0x455eb00, sizes 0x455ea00,
+# count 0x455ec00; emptied when a round's rules are set, vfunc 0x628 -> 0x62c). hw.dll's hitbox test 0x2461720 grows
+# a head hitbox for an entity in that list, reading the entity's id (+0x284) without checking that there is one, and
+# player move's studio hull 0x243a960 calls it with no entity (0x243aa58): client.dll's traces (event API
+# EV_PlayerTrace, +0x3c) crashed at address 0x284 when one crossed a head (a zombie skill's). Only the server fills the
+# list (client.dll never calls 0x634), so a client on Nexon's dedicated servers never got there. The test's own size code further on
+# (0x2461af0) checks the entity first; the lookup now does too, in place of its second check of the count (0x2461a9d).
+PATCHES += [
+    (
+        "hw.dll",
+        0x02461A9D,
+        bytes.fromhex("85c97e328b55d0"),       # test ecx,ecx; jle 0x2461ad3 (repeats 0x2461a97); mov edx,[ebp-0x30]
+        bytes.fromhex("8b55d0" "85d2" "742f"),  # mov edx,[ebp-0x30]; test edx,edx; je 0x2461ad3 (no entity: normal size)
+        "Big Head Mode: the head size lookup checks that the hitbox test has an entity",
     ),
 ]
 
