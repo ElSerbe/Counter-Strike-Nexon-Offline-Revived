@@ -15,6 +15,7 @@ static const DWORD MP_GAMERULES_PTR = 0x121d343c;
 static const int RULES_ROUND_ENDING = 0x309, RULES_CT_WINS = 0x278, RULES_T_WINS = 0x27a;
 typedef void(__cdecl* TerminateRoundFn)(float delay, int status);
 static TerminateRoundFn g_TerminateRoundTramp;
+static void BombRoundEnd(int status, bool ending); // match_events.inl: a bomb defused
 
 static bool RoundZombieModeBa(int mode)
 {
@@ -101,6 +102,14 @@ static void __cdecl HookedTerminateRound(float delay, int status)
     {
         rules = nullptr;
     }
+    __try
+    {
+        BombRoundEnd(status, ending);
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        Log("bomb: exception 0x%08lX at the round end (ignored)", GetExceptionCode());
+    }
     g_TerminateRoundTramp(delay, status);
     __try
     {
@@ -120,5 +129,5 @@ static void InstallRoundEndHook(DWORD delta)
     static const unsigned char code[] = { 0x55, 0x8b, 0xec, 0x6a, 0xff, 0x68 }; // push ebp; mov ebp, esp; push -1; push imm32
     if (Readable(fn, 10) && !memcmp(fn, code, sizeof(code)))
         g_TerminateRoundTramp = (TerminateRoundFn)DetourCdecl(fn, 10, (void*)HookedTerminateRound);
-    Log("round end hook: %s", g_TerminateRoundTramp ? "on (zombie rounds won go to the server)" : "NOT hooked (unexpected code)");
+    Log("round end hook: %s", g_TerminateRoundTramp ? "on (zombie rounds won and bombs defused go to the server)" : "NOT hooked (unexpected code)");
 }

@@ -6202,6 +6202,7 @@ static void CommandFile()
 
 #include "modes/zombie_humans.inl"
 #include "round_end.inl" // the zombie rounds' winner and each player's side, for the server's rounds won
+#include "match_events.inl" // Soccer's score and bombs planted / defused, for the server's orders and missions
 #include "weaponbox_list.inl" // the game's list of weapons on the ground emptied at each map (issues #35, #37)
 #include "tutorial.inl"    // Tutorial 1 and 2 finished: the tutorial window's bits
 #include "modes/zombie_holdout.inl"
@@ -6328,6 +6329,7 @@ static void HookedStartFrame()
         StudioGunsFrame();
         CrowdReport();
         TutorialFrame();
+        MatchEventsFrame();
         PendingKicksFrame();
         if (CoopMode())
         {
